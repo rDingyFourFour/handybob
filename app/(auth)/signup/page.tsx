@@ -1,47 +1,52 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+
 import { createClient } from "@/utils/supabase/client";
 
-export default function LoginPage() {
-  const router = useRouter();
+export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setError(null);
+    setSuccess(null);
     setLoading(true);
 
-    const formData = new FormData(e.currentTarget);
+    const formData = new FormData(event.currentTarget);
     const email = (formData.get("email") as string)?.trim();
     const password = formData.get("password") as string;
 
     const supabase = createClient();
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
     });
 
     setLoading(false);
 
-    if (signInError) {
-      setError(signInError.message);
+    if (signUpError) {
+      setError(signUpError.message);
       return;
     }
 
-    router.push("/");
+    setSuccess(
+      "Check your inbox to confirm your email and finish creating your account."
+    );
+    (event.currentTarget as HTMLFormElement).reset();
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Log in</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Sign up</h1>
           <p className="text-xs text-slate-400">
-            Access your HandyBob workspace.
+            Create your HandyBob workspace access.
           </p>
         </div>
 
@@ -68,17 +73,18 @@ export default function LoginPage() {
           </div>
 
           {error && <p className="text-xs text-red-400">{error}</p>}
+          {success && <p className="text-xs text-emerald-400">{success}</p>}
 
           <button type="submit" disabled={loading} className="hb-button w-full">
-            {loading ? "Logging in..." : "Log in"}
+            {loading ? "Creating account..." : "Sign up"}
           </button>
         </form>
 
         <p className="hb-muted">
-          Need an account?{" "}
-          <a href="/signup" className="underline underline-offset-2">
-            Sign up
-          </a>
+          Already have an account?{" "}
+          <Link href="/login" className="underline underline-offset-2">
+            Log in
+          </Link>
         </p>
       </div>
     </div>
