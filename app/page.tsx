@@ -1,45 +1,63 @@
+// app/page.tsx
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 
 export default async function HomePage() {
   const supabase = createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
 
-  if (!user) {
-    redirect("/login");
-  }
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
 
-  // TODO: later, fetch real data for this user
+  const [appointmentsRes, leadsRes, pendingQuotesRes, unpaidInvoicesRes] =
+    await Promise.all([
+      supabase
+        .from("appointments")
+        .select("id")
+        .gte("start_time", todayStart.toISOString())
+        .lte("start_time", todayEnd.toISOString()),
+
+      supabase.from("jobs").select("id").eq("status", "lead"),
+
+      supabase.from("quotes").select("id").eq("status", "sent"),
+
+      supabase
+        .from("invoices")
+        .select("id")
+        .in("status", ["sent", "overdue"]),
+    ]);
+
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <div className="hb-card">
         <h3>Today&apos;s appointments</h3>
-        <p className="hb-muted">
-          Scheduling not set up yet. This will show jobs you&apos;re doing today.
+        <p className="text-2xl font-semibold">
+          {appointmentsRes.data?.length ?? 0}
         </p>
       </div>
 
       <div className="hb-card">
         <h3>New leads</h3>
-        <p className="hb-muted">
-          Leads from web, phone, and manual entry will appear here.
+        <p className="text-2xl font-semibold">
+          {leadsRes.data?.length ?? 0}
         </p>
       </div>
 
       <div className="hb-card">
         <h3>Pending quotes</h3>
-        <p className="hb-muted">
-          Quotes waiting on customer decisions will show here.
+        <p className="text-2xl font-semibold">
+          {pendingQuotesRes.data?.length ?? 0}
         </p>
       </div>
 
       <div className="hb-card">
         <h3>Unpaid invoices</h3>
-        <p className="hb-muted">
-          Outstanding invoices and overdue payments will show here.
+        <p className="text-2xl font-semibold">
+          {unpaidInvoicesRes.data?.length ?? 0}
         </p>
       </div>
     </div>

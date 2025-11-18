@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "HandyBob",
@@ -27,19 +28,19 @@ export default function RootLayout({
               <div className="font-semibold text-slate-300 mb-2">Main</div>
               <ul className="space-y-1">
                 <li className="rounded-lg px-2 py-1 bg-slate-800/80">
-                  Dashboard
+                  <Link href="/">Dashboard</Link>
                 </li>
-                <li className="rounded-lg px-2 py-1 text-slate-400">
-                  Jobs
+                <li className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-800/60">
+                  <Link href="/jobs">Jobs</Link>
                 </li>
-                <li className="rounded-lg px-2 py-1 text-slate-400">
-                  Customers
+                <li className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-800/60">
+                  <Link href="/customers">Customers</Link>
                 </li>
-                <li className="rounded-lg px-2 py-1 text-slate-400">
-                  Appointments
+                <li className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-800/60">
+                  <Link href="/appointments">Appointments</Link>
                 </li>
-                <li className="rounded-lg px-2 py-1 text-slate-400">
-                  Invoices
+                <li className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-800/60">
+                  <Link href="/invoices">Invoices</Link>
                 </li>
               </ul>
             </nav>

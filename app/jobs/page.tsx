@@ -1,0 +1,82 @@
+// app/jobs/page.tsx
+import Link from "next/link";
+import { redirect } from "next/navigation";
+
+import { createServerClient } from "@/utils/supabase/server";
+
+type JobRow = {
+  id: string;
+  title: string | null;
+  status: string | null;
+  urgency: string | null;
+  created_at: string;
+  customer: {
+    name: string | null;
+  } | null;
+};
+
+export default async function JobsPage() {
+  const supabase = createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: jobs, error } = await supabase
+    .from("jobs")
+    .select(
+      "id, title, status, urgency, created_at, customer:customers(name)"
+    )
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) {
+    return (
+      <div className="hb-card">
+        <p className="text-sm text-red-400">
+          Failed to load jobs: {error.message}
+        </p>
+      </div>
+    );
+  }
+
+  const safeJobs: JobRow[] = (jobs ?? []) as JobRow[];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1>Jobs</h1>
+          <p className="hb-muted">Your active leads and jobs.</p>
+        </div>
+        <Link href="/jobs/new" className="hb-button">
+          New job
+        </Link>
+      </div>
+
+      <div className="hb-card">
+        {!safeJobs.length ? (
+          <p className="hb-muted">No jobs yet. Create your first one.</p>
+        ) : (
+          <div className="space-y-2">
+            {safeJobs.map((job) => (
+              <div
+                key={job.id}
+                className="border-b border-slate-800 last:border-0 pb-2 last:pb-0"
+              >
+                <div className="text-sm font-medium">
+                  {job.title || "Untitled job"}
+                </div>
+                <div className="text-xs text-slate-400">
+                  {job.customer?.name || "Unknown customer"}
+                </div>
+                <div className="text-xs text-slate-500">
+                  Status: {job.status} · Urgency: {job.urgency}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
