@@ -239,7 +239,10 @@ function normaliseQuote(raw: RawQuote): GeneratedQuote {
     : [];
 
   return {
-    scope_of_work: raw.scope_of_work ?? "Scope not provided",
+    scope_of_work:
+      typeof raw.scope_of_work === "string"
+        ? raw.scope_of_work
+        : "Scope not provided",
     labor_hours_estimate: Number(raw.labor_hours_estimate ?? 0),
     materials,
     subtotal: Number(raw.subtotal ?? 0),
