@@ -229,6 +229,15 @@ function extractQuoteFromResponse(payload: OpenAIResponseBody): GeneratedQuote {
   throw new Error("Unable to parse quote data from OpenAI response.");
 }
 
+function safeString(value: unknown, fallback: string): string {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : fallback;
+  }
+
+  return fallback;
+}
+
 function normaliseQuote(raw: RawQuote): GeneratedQuote {
   const materials = Array.isArray(raw.materials)
     ? raw.materials.map((material) => ({
@@ -239,18 +248,15 @@ function normaliseQuote(raw: RawQuote): GeneratedQuote {
     : [];
 
   return {
-    scope_of_work:
-      typeof raw.scope_of_work === "string"
-        ? raw.scope_of_work
-        : "Scope not provided",
+    scope_of_work: safeString(raw.scope_of_work, "Scope not provided"),
     labor_hours_estimate: Number(raw.labor_hours_estimate ?? 0),
     materials,
     subtotal: Number(raw.subtotal ?? 0),
     tax: Number(raw.tax ?? 0),
     total: Number(raw.total ?? 0),
-    client_message:
-      typeof raw.client_message === "string"
-        ? raw.client_message
-        : "Thanks for the opportunity! Please review and let me know if you have questions.",
+    client_message: safeString(
+      raw.client_message,
+      "Thanks for the opportunity! Please review and let me know if you have questions."
+    ),
   };
 }
