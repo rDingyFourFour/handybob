@@ -12,7 +12,7 @@ type JobRow = {
   created_at: string;
   customer: {
     name: string | null;
-  } | null;
+  }[] | null;
 };
 
 export default async function JobsPage() {
@@ -28,7 +28,8 @@ export default async function JobsPage() {
       "id, title, status, urgency, created_at, customer:customers(name)"
     )
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(50)
+    .returns<JobRow[]>();
   if (error) {
     return (
       <div className="hb-card">
@@ -39,7 +40,7 @@ export default async function JobsPage() {
     );
   }
 
-  const safeJobs: JobRow[] = (jobs ?? []) as JobRow[];
+  const safeJobs: JobRow[] = jobs ?? [];
 
   return (
     <div className="space-y-4">
@@ -67,7 +68,7 @@ export default async function JobsPage() {
                   {job.title || "Untitled job"}
                 </div>
                 <div className="text-xs text-slate-400">
-                  {job.customer?.name || "Unknown customer"}
+                  {job.customer?.[0]?.name || "Unknown customer"}
                 </div>
                 <div className="text-xs text-slate-500">
                   Status: {job.status} · Urgency: {job.urgency}
