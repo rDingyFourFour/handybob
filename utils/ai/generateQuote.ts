@@ -249,7 +249,8 @@ function normaliseQuote(raw: RawQuote): GeneratedQuote {
     tax: Number(raw.tax ?? 0),
     total: Number(raw.total ?? 0),
     client_message:
-      raw.client_message ??
-      "Thanks for the opportunity! Please review and let me know if you have questions.",
+      typeof raw.client_message === "string"
+        ? raw.client_message
+        : "Thanks for the opportunity! Please review and let me know if you have questions.",
   };
 }
