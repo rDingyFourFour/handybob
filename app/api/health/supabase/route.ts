@@ -26,9 +26,11 @@ export async function GET() {
     }
 
     return NextResponse.json({ ok: true, auth_enabled: !!data });
-  } catch (e: any) {
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { ok: false, error: e?.message ?? "Unknown error" },
+      { ok: false, error: message },
       { status: 500 }
     );
   }

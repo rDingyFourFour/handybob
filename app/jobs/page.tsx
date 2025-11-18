@@ -65,7 +65,12 @@ export default async function JobsPage() {
                 className="border-b border-slate-800 last:border-0 pb-2 last:pb-0"
               >
                 <div className="text-sm font-medium">
-                  {job.title || "Untitled job"}
+                  <Link
+                    href={`/jobs/${job.id}`}
+                    className="text-blue-400 hover:text-blue-300 underline-offset-2 hover:underline"
+                  >
+                    {job.title || "Untitled job"}
+                  </Link>
                 </div>
                 <div className="text-xs text-slate-400">
                   {job.customer?.[0]?.name || "Unknown customer"}

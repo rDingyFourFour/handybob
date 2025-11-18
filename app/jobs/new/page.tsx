@@ -1,4 +1,5 @@
 // app/jobs/new/page.tsx
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 
@@ -88,7 +89,9 @@ export default async function NewJobPage() {
         </div>
 
         <div className="flex justify-end gap-2">
-          <a href="/jobs" className="hb-button-ghost">Cancel</a>
+          <Link href="/jobs" className="hb-button-ghost">
+            Cancel
+          </Link>
           <button className="hb-button">Save job</button>
         </div>
       </form>
