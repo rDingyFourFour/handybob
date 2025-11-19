@@ -3,8 +3,6 @@
 
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 type SendQuoteEmailArgs = {
   to: string;
   customerName: string;
@@ -13,6 +11,19 @@ type SendQuoteEmailArgs = {
   publicUrl: string;
 };
 
+let resendClient: Resend | null = null;
+
+function getResendClient() {
+  if (!process.env.RESEND_API_KEY) {
+    return null;
+  }
+
+  if (!resendClient) {
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+  }
+
+  return resendClient;
+}
 
 export async function sendQuoteEmail({
   to,
@@ -21,14 +32,13 @@ export async function sendQuoteEmail({
   clientMessage,
   publicUrl,
 }: SendQuoteEmailArgs) {
-  if (!process.env.RESEND_API_KEY) {
+  const resend = getResendClient();
+  if (!resend) {
     console.warn("RESEND_API_KEY not set; skipping email send.");
     return;
   }
 
-  
   const from = process.env.QUOTE_FROM_EMAIL || "HandyBob <no-reply@example.com>";
-
 
   await resend.emails.send({
     from,
