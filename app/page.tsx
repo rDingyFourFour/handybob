@@ -1,4 +1,5 @@
 // app/page.tsx
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 
@@ -31,7 +32,14 @@ export default async function HomePage() {
     await Promise.all([
       supabase
         .from("appointments")
-        .select("id")
+        .select(
+          `
+            id,
+            title,
+            start_time,
+            jobs ( title )
+          `
+        )
         .gte("start_time", todayStart.toISOString())
         .lte("start_time", todayEnd.toISOString()),
 
@@ -75,8 +83,16 @@ export default async function HomePage() {
     0
   );
 
+  const todaysAppointments = (appointmentsRes.data ?? []) as {
+    id: string;
+    title: string | null;
+    start_time: string | null;
+    jobs: { title: string | null } | null;
+  }[];
+
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <div className="hb-card">
         <h3>Today&apos;s appointments</h3>
         <p className="text-2xl font-semibold">
@@ -131,6 +147,42 @@ export default async function HomePage() {
         <p className="text-2xl font-semibold">
           ${(collectedThisMonth + collectedInvoicesThisMonth).toFixed(2)}
         </p>
+      </div>
+      </div>
+
+      <div className="hb-card space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3>Today&apos;s appointments</h3>
+            <p className="hb-muted text-sm">Quick view of your day.</p>
+          </div>
+          <Link href="/appointments" className="hb-button-ghost text-xs">
+            View all
+          </Link>
+        </div>
+
+        {todaysAppointments.length === 0 ? (
+          <p className="hb-muted text-sm">No appointments scheduled for today.</p>
+        ) : (
+          <div className="space-y-2">
+            {todaysAppointments.map((appt) => (
+              <div key={appt.id} className="rounded border border-slate-800 px-3 py-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">{appt.title || "Appointment"}</span>
+                  <span className="hb-muted text-xs">
+                    {appt.start_time
+                      ? new Date(appt.start_time).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : ""}
+                  </span>
+                </div>
+                <p className="hb-muted text-xs">{appt.jobs?.title || "No job linked"}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
 create extension if not exists "uuid-ossp";
+create extension if not exists "pgcrypto";
 
 alter table public.invoices
-  add column if not exists public_token uuid not null default uuid_generate_v4(),
+  add column if not exists public_token uuid not null default gen_random_uuid(),
   add column if not exists invoice_number integer,
   add column if not exists issued_at timestamptz default timezone('utc', now()),
   add column if not exists paid_at timestamptz,
@@ -9,7 +10,7 @@ alter table public.invoices
   add column if not exists stripe_payment_link_url text;
 
 update public.invoices
-set public_token = coalesce(public_token, uuid_generate_v4())
+set public_token = coalesce(public_token, gen_random_uuid())
 where public_token is null;
 
 update public.invoices as inv

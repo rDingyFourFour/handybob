@@ -175,7 +175,7 @@ async function handleCheckoutSessionCompleted(
   // Ensure an invoice exists and is marked paid with Stripe metadata
   const { data: existingInvoice } = await supabase
     .from("invoices")
-    .select("id, status")
+    .select("id, status, public_token, invoice_number, customer_email")
     .eq("quote_id", quoteId)
     .maybeSingle();
 
