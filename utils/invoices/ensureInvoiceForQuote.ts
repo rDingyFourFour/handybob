@@ -48,7 +48,9 @@ type QuoteForInvoice = {
     | null;
 };
 
-type GenericSupabaseClient = SupabaseClient<unknown, "public", unknown>;
+// Use the base SupabaseClient type without schema generics to avoid build-time
+// schema constraints when Database types aren't generated.
+type GenericSupabaseClient = SupabaseClient;
 type QuoteLineItem = Record<string, unknown>;
 
 type EnsureInvoiceArgs = {
