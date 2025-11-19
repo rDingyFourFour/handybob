@@ -13,7 +13,20 @@ export default async function HomePage() {
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
 
-  const [appointmentsRes, leadsRes, pendingQuotesRes, unpaidInvoicesRes] =
+  const monthStart = new Date(todayStart);
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const nextMonthStart = new Date(monthStart);
+  nextMonthStart.setMonth(monthStart.getMonth() + 1);
+
+  const [
+    appointmentsRes,
+    leadsRes,
+    pendingQuotesRes,
+    unpaidInvoicesRes,
+    paidQuotesThisMonthRes,
+  ] =
     await Promise.all([
       supabase
         .from("appointments")
@@ -29,7 +42,22 @@ export default async function HomePage() {
         .from("invoices")
         .select("id")
         .in("status", ["sent", "overdue"]),
+
+      supabase
+        .from("quotes")
+        .select("id, total, paid_at")
+        .eq("status", "paid")
+        .gte("paid_at", monthStart.toISOString())
+        .lt("paid_at", nextMonthStart.toISOString()),
     ]);
+
+  const paidQuotes =
+    (paidQuotesThisMonthRes.data ?? []) as { id: string; total: number | null }[];
+  const paidQuotesCount = paidQuotes.length;
+  const collectedThisMonth = paidQuotes.reduce(
+    (sum, quote) => sum + Number(quote.total ?? 0),
+    0
+  );
 
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -58,6 +86,20 @@ export default async function HomePage() {
         <h3>Unpaid invoices</h3>
         <p className="text-2xl font-semibold">
           {unpaidInvoicesRes.data?.length ?? 0}
+        </p>
+      </div>
+
+      <div className="hb-card">
+        <h3>Paid quotes this month</h3>
+        <p className="text-2xl font-semibold">
+          {paidQuotesCount}
+        </p>
+      </div>
+
+      <div className="hb-card">
+        <h3>Collected this month</h3>
+        <p className="text-2xl font-semibold">
+          ${collectedThisMonth.toFixed(2)}
         </p>
       </div>
     </div>

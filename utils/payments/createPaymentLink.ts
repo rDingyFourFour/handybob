@@ -16,6 +16,8 @@ const stripe = stripeSecretKey
     })
   : null;
 
+// Server action hit from the quote detail page to spin up a Stripe Payment Link
+// for the contractor so they can share a Pay button with their customer.
 export async function createPaymentLinkForQuote(formData: FormData) {
   const quoteId = String(formData.get("quote_id"));
 
@@ -70,6 +72,8 @@ export async function createPaymentLinkForQuote(formData: FormData) {
     ],
     // Optional: collect customer name/email, supported in recent Payment Links versions  [oai_citation:7‡Stripe Docs](https://docs.stripe.com/changelog/clover/2025-10-29/payment-links-name-collection?utm_source=chatgpt.com)
     metadata: {
+      // Include quote + user identifiers so webhook handlers can reconcile
+      // payments back to the right Supabase rows.
       quote_id: quote.id,
       user_id: user.id,
     },
@@ -78,6 +82,8 @@ export async function createPaymentLinkForQuote(formData: FormData) {
   await supabase
     .from("quotes")
     .update({
+      // Store the Payment Link URL so the contractor dashboard and the public
+      // quote page can show the same Pay button.
       stripe_payment_link_url: paymentLink.url,
       updated_at: new Date().toISOString(),
     })

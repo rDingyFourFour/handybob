@@ -1,0 +1,221 @@
+// utils/invoices/ensureInvoiceForQuote.ts
+"use server";
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+type QuoteForInvoice = {
+  id: string;
+  total: number | null;
+  status: string | null;
+  user_id: string | null;
+  paid_at: string | null;
+  stripe_payment_link_url: string | null;
+  job_id: string | null;
+  subtotal: number | null;
+  tax: number | null;
+  line_items: QuoteLineItem[] | null;
+  jobs:
+    | {
+        title: string | null;
+        customers:
+          | {
+              name: string | null;
+              email: string | null;
+              phone?: string | null;
+            }
+          | {
+              name: string | null;
+              email: string | null;
+              phone?: string | null;
+            }[]
+          | null;
+      }
+    | {
+        title: string | null;
+        customers:
+          | {
+              name: string | null;
+              email: string | null;
+              phone?: string | null;
+            }
+          | {
+              name: string | null;
+              email: string | null;
+              phone?: string | null;
+            }[]
+          | null;
+      }[]
+    | null;
+};
+
+type GenericSupabaseClient = SupabaseClient<unknown, "public", unknown>;
+type QuoteLineItem = Record<string, unknown>;
+
+type EnsureInvoiceArgs = {
+  supabase: GenericSupabaseClient;
+  quoteId: string;
+  markPaid?: boolean;
+  paidAt?: string | null;
+  paymentIntentId?: string | null;
+};
+
+function firstCustomer(
+  job: QuoteForInvoice["jobs"]
+): { name: string | null; email: string | null } | null {
+  if (!job) return null;
+  const normalizedJob = Array.isArray(job) ? job[0] : job;
+  if (!normalizedJob?.customers) return null;
+  if (Array.isArray(normalizedJob.customers)) {
+    return normalizedJob.customers[0] ?? null;
+  }
+  return normalizedJob.customers;
+}
+
+export async function ensureInvoiceForQuote({
+  supabase,
+  quoteId,
+  markPaid = false,
+  paidAt,
+  paymentIntentId,
+}: EnsureInvoiceArgs) {
+  const { data: existingInvoice, error: existingError } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("quote_id", quoteId)
+    .maybeSingle();
+
+  if (existingError) {
+    console.error(
+      "[ensureInvoiceForQuote] Failed to check existing invoice",
+      quoteId,
+      existingError.message
+    );
+    return null;
+  }
+
+  const now = new Date().toISOString();
+
+  if (existingInvoice) {
+    if (!markPaid) {
+      return existingInvoice;
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      updated_at: now,
+    };
+
+    if (markPaid) {
+      updatePayload.status = "paid";
+      updatePayload.paid_at = paidAt ?? now;
+    }
+
+    if (paymentIntentId) {
+      updatePayload.stripe_payment_intent_id = paymentIntentId;
+    }
+
+    const { data: quoteForLink } = await supabase
+      .from("quotes")
+      .select("stripe_payment_link_url")
+      .eq("id", quoteId)
+      .maybeSingle();
+
+    if (quoteForLink?.stripe_payment_link_url) {
+      updatePayload.stripe_payment_link_url = quoteForLink.stripe_payment_link_url;
+    }
+
+    const { data: updatedInvoice, error: invoiceUpdateError } = await supabase
+      .from("invoices")
+      .update(updatePayload)
+      .eq("id", existingInvoice.id)
+      .select("*")
+      .maybeSingle();
+
+    if (invoiceUpdateError) {
+      console.error(
+        "[ensureInvoiceForQuote] Failed to update invoice",
+        existingInvoice.id,
+        invoiceUpdateError.message
+      );
+      return existingInvoice;
+    }
+
+    return updatedInvoice;
+  }
+
+  const { data: quote, error: quoteError } = await supabase
+    .from("quotes")
+    .select(
+      `
+        id,
+        total,
+        status,
+        user_id,
+        paid_at,
+        stripe_payment_link_url,
+        job_id,
+        subtotal,
+        tax,
+        line_items,
+        jobs (
+          title,
+          customers (
+            name,
+            email,
+            phone
+          )
+        )
+      `
+    )
+    .eq("id", quoteId)
+    .maybeSingle();
+
+  if (quoteError || !quote) {
+    console.error(
+      "[ensureInvoiceForQuote] Failed to load quote for invoice",
+      quoteId,
+      quoteError?.message
+    );
+    return null;
+  }
+
+  const customer = firstCustomer(quote.jobs);
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + 7);
+
+  const invoicePayload = {
+    quote_id: quote.id,
+    user_id: quote.user_id,
+    status: markPaid || quote.status === "paid" ? "paid" : "draft",
+    total: Number(quote.total ?? 0),
+    subtotal: Number(quote.subtotal ?? 0),
+    tax: Number(quote.tax ?? 0),
+    line_items: (quote.line_items as QuoteLineItem[] | null) ?? [],
+    job_id: quote.job_id ?? null,
+    issued_at: now,
+    due_at: dueDate.toISOString(),
+    paid_at: markPaid ? paidAt ?? now : quote.paid_at,
+    customer_name: customer?.name ?? null,
+    customer_email: customer?.email ?? null,
+    stripe_payment_intent_id: paymentIntentId ?? null,
+    stripe_payment_link_url: quote.stripe_payment_link_url ?? null,
+    created_at: now,
+    updated_at: now,
+  };
+
+  const { data: newInvoice, error: insertError } = await supabase
+    .from("invoices")
+    .insert(invoicePayload)
+    .select("*")
+    .maybeSingle();
+
+  if (insertError) {
+    console.error(
+      "[ensureInvoiceForQuote] Failed to create invoice",
+      quoteId,
+      insertError.message
+    );
+    return null;
+  }
+
+  return newInvoice;
+}

@@ -34,3 +34,11 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Stripe payments
+
+HandyBob now exposes a Stripe webhook at `/api/stripe/webhook`. The handler verifies incoming events with `STRIPE_WEBHOOK_SECRET`, marks the matching quote as `paid`, and records the payment in `quote_payments` for reporting.
+
+1. Create the `quote_payments` table by running the SQL in `supabase/migrations/20250128120000_add_quote_payments.sql` against your Supabase project.
+2. Add `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` to your environment.
+3. In development you can forward events with `stripe listen --forward-to localhost:3000/api/stripe/webhook`.

@@ -1,0 +1,383 @@
+// app/invoices/[id]/page.tsx
+import { redirect } from "next/navigation";
+
+import { sendInvoiceEmail } from "@/utils/email/sendInvoiceEmail";
+import { sendInvoiceSms } from "@/utils/sms/sendInvoiceSms";
+import { createServerClient } from "@/utils/supabase/server";
+
+type InvoiceWithRelations = {
+  id: string;
+  invoice_number: number | null;
+  status: string | null;
+  total: number | null;
+  issued_at: string | null;
+  due_at: string | null;
+  paid_at: string | null;
+  public_token: string | null;
+  customer_name: string | null;
+  customer_email: string | null;
+  stripe_payment_link_url: string | null;
+  quote_id: string;
+  quotes:
+    | {
+        id: string;
+        stripe_payment_link_url: string | null;
+        jobs:
+          | {
+              title: string | null;
+              customers:
+                | {
+                    name: string | null;
+                    email: string | null;
+                    phone: string | null;
+                  }
+                | {
+                    name: string | null;
+                    email: string | null;
+                    phone: string | null;
+                  }[]
+                | null;
+            }
+          | {
+              title: string | null;
+              customers:
+                | {
+                    name: string | null;
+                    email: string | null;
+                    phone: string | null;
+                  }
+                | {
+                    name: string | null;
+                    email: string | null;
+                    phone: string | null;
+                  }[]
+                | null;
+            }[]
+          | null;
+      }
+    | null;
+};
+
+type QuotePayment = {
+  id: string;
+  amount: number;
+  currency: string | null;
+  created_at: string;
+  stripe_payment_intent_id: string | null;
+  customer_email: string | null;
+};
+
+function extractJobTitle(invoice: InvoiceWithRelations) {
+  const job = invoice.quotes?.jobs;
+  if (!job) return null;
+  if (Array.isArray(job)) {
+    return job[0]?.title ?? null;
+  }
+  return job.title ?? null;
+}
+
+function extractCustomer(invoice: InvoiceWithRelations) {
+  const job = invoice.quotes?.jobs;
+  if (!job) return { name: invoice.customer_name, email: invoice.customer_email, phone: null };
+  const normalizedJob = Array.isArray(job) ? job[0] : job;
+  const customer = normalizedJob?.customers;
+  if (!customer) return { name: invoice.customer_name, email: invoice.customer_email, phone: null };
+  if (Array.isArray(customer)) {
+    return customer[0] ?? { name: invoice.customer_name, email: invoice.customer_email, phone: null };
+  }
+  return customer;
+}
+
+async function sendInvoiceEmailAction(formData: FormData) {
+  "use server";
+
+  const invoiceId = String(formData.get("invoice_id"));
+  const supabase = createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: invoice } = await supabase
+    .from("invoices")
+    .select(
+      `
+        *,
+        quotes (
+          id,
+          stripe_payment_link_url,
+          jobs (
+            title,
+            customers (
+              name,
+              email,
+              phone
+            )
+          )
+        )
+      `
+    )
+    .eq("id", invoiceId)
+    .single();
+
+  if (!invoice) {
+    console.warn("Invoice not found.");
+    return;
+  }
+
+  const customer = extractCustomer(invoice as InvoiceWithRelations);
+
+  if (!customer?.email) {
+    console.warn("No email available for this invoice.");
+    return;
+  }
+
+  const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL}/public/invoices/${invoice.public_token}`;
+
+  await sendInvoiceEmail({
+    to: customer.email,
+    customerName: customer.name,
+    invoiceTotal: Number(invoice.total ?? 0),
+    dueDate: invoice.due_at,
+    publicUrl,
+  });
+
+  if (invoice.status !== "paid") {
+    await supabase
+      .from("invoices")
+      .update({
+        status: "sent",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", invoice.id);
+  }
+
+  redirect(`/invoices/${invoice.id}`);
+}
+
+async function sendInvoiceSmsAction(formData: FormData) {
+  "use server";
+
+  const invoiceId = String(formData.get("invoice_id"));
+  const supabase = createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: invoice } = await supabase
+    .from("invoices")
+    .select(
+      `
+        *,
+        quotes (
+          id,
+          stripe_payment_link_url,
+          jobs (
+            title,
+            customers (
+              name,
+              email,
+              phone
+            )
+          )
+        )
+      `
+    )
+    .eq("id", invoiceId)
+    .single();
+
+  if (!invoice) {
+    console.warn("Invoice not found.");
+    return;
+  }
+
+  const customer = extractCustomer(invoice as InvoiceWithRelations);
+
+  if (!customer?.phone) {
+    console.warn("No phone number available for this invoice.");
+    return;
+  }
+
+  const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL}/public/invoices/${invoice.public_token}`;
+
+  await sendInvoiceSms({
+    to: customer.phone,
+    customerName: customer.name,
+    invoiceTotal: Number(invoice.total ?? 0),
+    publicUrl,
+  });
+
+  if (invoice.status !== "paid") {
+    await supabase
+      .from("invoices")
+      .update({
+        status: "sent",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", invoice.id);
+  }
+
+  redirect(`/invoices/${invoice.id}`);
+}
+
+export default async function InvoiceDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const supabase = createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: invoiceData } = await supabase
+    .from("invoices")
+    .select(
+      `
+        *,
+        quotes (
+          id,
+          stripe_payment_link_url,
+          jobs (
+            title,
+            customers (
+              name,
+              email,
+              phone
+            )
+          )
+        )
+      `
+    )
+    .eq("id", id)
+    .single();
+
+  const invoice = invoiceData as InvoiceWithRelations | null;
+  if (!invoice) redirect("/invoices");
+
+  const { data: payments } = await supabase
+    .from("quote_payments")
+    .select("id, amount, currency, created_at, stripe_payment_intent_id, customer_email")
+    .eq("quote_id", invoice.quote_id)
+    .order("created_at", { ascending: false });
+
+  // quote_payments references quote_id, so ensure we query using invoice.quote_id
+  const paymentsForQuote = (payments ?? []) as QuotePayment[];
+  const jobTitle = extractJobTitle(invoice) || "Untitled job";
+  const customer = extractCustomer(invoice);
+  const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL}/public/invoices/${invoice.public_token}`;
+  const quotePaymentLink =
+    invoice.stripe_payment_link_url ?? invoice.quotes?.stripe_payment_link_url ?? null;
+  const isPaid = invoice.status === "paid";
+
+  return (
+    <div className="space-y-4">
+      <div className="hb-card space-y-1">
+        <h1>Invoice</h1>
+        <p className="hb-muted text-sm">
+          Invoice #{invoice.invoice_number ?? invoice.id.slice(0, 8)}
+        </p>
+        <p className="hb-muted">Job: {jobTitle}</p>
+        <p className="hb-muted">Customer: {customer?.name || "Unknown"}</p>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="font-medium">Status:</span>
+          <span className={isPaid ? "text-emerald-400" : ""}>
+            {invoice.status}
+          </span>
+        </div>
+        {invoice.paid_at && (
+          <p className="hb-muted text-xs">
+            Paid on {new Date(invoice.paid_at).toLocaleDateString()}
+          </p>
+        )}
+        <p className="hb-muted text-xs">
+          Issued {invoice.issued_at ? new Date(invoice.issued_at).toLocaleDateString() : "—"} · Due{" "}
+          {invoice.due_at ? new Date(invoice.due_at).toLocaleDateString() : "No due date"}
+        </p>
+      </div>
+
+      <div className="hb-card space-y-2">
+        <h3>Total</h3>
+        <p className="text-2xl font-semibold">
+          ${Number(invoice.total ?? 0).toFixed(2)}
+        </p>
+        <a href={publicUrl} target="_blank" rel="noreferrer" className="hb-button-ghost text-sm">
+          Copy public invoice link
+        </a>
+      </div>
+
+      <div className="hb-card space-y-3">
+        <h3>Send to customer</h3>
+        <div className="flex flex-wrap gap-2">
+          <form action={sendInvoiceEmailAction}>
+            <input type="hidden" name="invoice_id" value={invoice.id} />
+            <button type="submit" className="hb-button" disabled={isPaid}>
+              Send invoice via email
+            </button>
+          </form>
+
+          <form action={sendInvoiceSmsAction}>
+            <input type="hidden" name="invoice_id" value={invoice.id} />
+            <button type="submit" className="hb-button-ghost" disabled={isPaid}>
+              Send invoice via SMS
+            </button>
+          </form>
+        </div>
+        {isPaid && (
+          <p className="hb-muted text-xs">
+            Invoice paid — sending options disabled.
+          </p>
+        )}
+      </div>
+
+      {quotePaymentLink && !isPaid && (
+        <div className="hb-card space-y-2">
+          <h3>Payment link</h3>
+          <a
+            href={quotePaymentLink}
+            className="hb-button w-full text-center"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open Stripe payment link
+          </a>
+        </div>
+      )}
+
+      <div className="hb-card space-y-2">
+        <h3>Payment history</h3>
+        {paymentsForQuote.length === 0 ? (
+          <p className="hb-muted text-sm">No payments recorded yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {paymentsForQuote.map((payment) => (
+              <div key={payment.id} className="rounded border border-slate-800 px-3 py-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="font-semibold">
+                    ${payment.amount.toFixed(2)} {payment.currency?.toUpperCase() || "USD"}
+                  </span>
+                  <span className="hb-muted text-xs">
+                    {new Date(payment.created_at).toLocaleString()}
+                  </span>
+                </div>
+                {payment.stripe_payment_intent_id && (
+                  <p className="hb-muted text-xs">
+                    Intent: {payment.stripe_payment_intent_id}
+                  </p>
+                )}
+                {payment.customer_email && (
+                  <p className="hb-muted text-xs">
+                    Customer: {payment.customer_email}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
