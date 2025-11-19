@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { sendQuoteEmail } from "@/utils/email/sendQuoteEmail";
 import { sendQuoteSms } from "@/utils/sms/sendQuoteSms";
 import { createServerClient } from "@/utils/supabase/server";
+// import { createPaymentLinkForQuote } from "@/utils/payments/createPaymentLink";
+
 
 type CustomerInfo = {
   name: string | null;
@@ -65,15 +67,27 @@ async function sendQuoteEmailAction(formData: FormData) {
     return;
   }
 
-  const quoteTotal = Number(quote.total ?? 0);
+  // const baseAppUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(
+    ///\/$/,
+    //"",
+//  );
+  // const publicUrl = quote.public_token
+  //   ? `${baseAppUrl}/public/quotes/${quote.public_token}`
+  //   : `${baseAppUrl}/quotes`;
+  // const quoteTotal = Number(quote.total ?? 0);
+
+  // const publicUrl = quote.public_token
+  // ? `${base}/public/quotes/${quote.public_token}`
+  // : `${base}/quotes`;
+
+  const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL}/public/quotes/${quote.public_token}`;
 
   await sendQuoteEmail({
-    to: customer.email,
-    customerName: customer.name || "",
-    quoteTotal,
-    clientMessage:
-      quote.client_message_template ||
-      "Here is your quote. Let me know if you have any questions.",
+    to: quote.jobs.customers.email,
+    customerName: quote.jobs.customers.name,
+    quoteTotal: quote.total,
+    clientMessage: quote.client_message_template || "...",
+    publicUrl,
   });
 
   // Mark as sent if still draft
@@ -261,7 +275,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
           Email uses the client message above. SMS sends a short summary & total.
         </p>
       </div>
-
+      
       <div className="flex justify-end">
         {quote.status !== "accepted" && (
           <form action={acceptQuoteAction}>
