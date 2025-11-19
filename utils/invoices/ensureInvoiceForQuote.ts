@@ -49,7 +49,9 @@ type QuoteForInvoice = {
 };
 
 // Use the base SupabaseClient type without schema generics to avoid build-time
-// schema constraints when Database types aren't generated.
+// schema constraints when Database types aren't generated. Called from
+// server-only contexts (actions + webhooks) where service-role access can
+// bypass RLS to create/update invoices tied to quotes.
 type GenericSupabaseClient = SupabaseClient;
 type QuoteLineItem = Record<string, unknown>;
 

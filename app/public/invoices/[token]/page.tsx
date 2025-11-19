@@ -42,6 +42,9 @@ export default async function PublicInvoicePage({
       ? invoice.stripe_payment_link_url || invoice.quotes?.stripe_payment_link_url
       : null;
 
+  const lineItems = (invoice.line_items as { scope?: string }[] | null) ?? [];
+  const scope = lineItems[0]?.scope ?? null;
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-slate-950">
       <div className="hb-card max-w-xl w-full space-y-4">
@@ -68,9 +71,16 @@ export default async function PublicInvoicePage({
               Due {new Date(invoice.due_at).toLocaleDateString()}
             </p>
           )}
+          {scope && (
+            <p className="hb-muted text-sm">
+              Work: {scope}
+            </p>
+          )}
         </div>
 
-        {payUrl ? (
+        {invoice.status === "paid" ? (
+          <p className="text-sm text-emerald-400">Paid. Thank you!</p>
+        ) : payUrl ? (
           <a
             href={payUrl as string}
             className="hb-button w-full text-center"
@@ -81,7 +91,7 @@ export default async function PublicInvoicePage({
           </a>
         ) : (
           <p className="hb-muted text-xs">
-            Payment is complete or not available online. Contact your contractor if you have questions.
+            Payment is not available online for this invoice. Contact your contractor if you have questions.
           </p>
         )}
 

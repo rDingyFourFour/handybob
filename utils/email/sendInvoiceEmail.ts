@@ -6,6 +6,7 @@ import { Resend } from "resend";
 type SendInvoiceEmailArgs = {
   to: string;
   customerName: string | null | undefined;
+  invoiceNumber: number | string | null | undefined;
   invoiceTotal: number;
   dueDate: string | null;
   publicUrl: string;
@@ -28,6 +29,7 @@ function getResendClient() {
 export async function sendInvoiceEmail({
   to,
   customerName,
+  invoiceNumber,
   invoiceTotal,
   dueDate,
   publicUrl,
@@ -48,8 +50,8 @@ export async function sendInvoiceEmail({
     : null;
 
   const subject = formattedDueDate
-    ? `Invoice due ${formattedDueDate}`
-    : "Invoice from HandyBob";
+    ? `Invoice ${invoiceNumber ? `#${invoiceNumber} ` : ""}due ${formattedDueDate}`
+    : `Invoice ${invoiceNumber ? `#${invoiceNumber} ` : ""}from HandyBob`;
 
   await resend.emails.send({
     from,
@@ -57,13 +59,15 @@ export async function sendInvoiceEmail({
     subject,
     text: `Hi ${customerName || ""}, your invoice total is $${invoiceTotal.toFixed(
       2
-    )}. View and pay online: ${publicUrl}${formattedDueDate ? `\nDue ${formattedDueDate}` : ""}`,
+    )}. View and pay online: ${publicUrl}${formattedDueDate ? `\nDue ${formattedDueDate}` : ""}${
+      invoiceNumber ? `\nInvoice #${invoiceNumber}` : ""
+    }`,
     html: `
       <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 16px;">
         <h2>Hi ${customerName || ""},</h2>
-        <p>Your invoice total is <strong>$${invoiceTotal.toFixed(2)}</strong>${
-          formattedDueDate ? ` and is due ${formattedDueDate}.` : "."
-        }</p>
+        <p>Your invoice ${invoiceNumber ? `#${invoiceNumber} ` : ""}total is <strong>$${invoiceTotal.toFixed(
+          2
+        )}</strong>${formattedDueDate ? ` and is due ${formattedDueDate}.` : "."}</p>
         <p style="margin-top: 16px;">
           <a href="${publicUrl}">View and pay your invoice</a>
         </p>

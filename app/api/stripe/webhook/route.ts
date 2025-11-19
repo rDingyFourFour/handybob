@@ -3,6 +3,7 @@ import Stripe from "stripe";
 
 import { createAdminClient } from "@/utils/supabase/admin";
 import { ensureInvoiceForQuote } from "@/utils/invoices/ensureInvoiceForQuote";
+import { sendReceiptEmail } from "@/utils/email/sendReceiptEmail";
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -12,7 +13,9 @@ const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 // Handled events & actions:
 // - checkout.session.completed: triggered when a Payment Link checkout succeeds.
 //   We find the quote via metadata, mark it paid in public.quotes, then insert a
-//   row into public.quote_payments for reporting/audit.
+//   row into public.quote_payments for reporting/audit. RLS is bypassed here via
+//   the service-role client. Public access is only via tokenized quote/invoice
+//   pages in `app/public/...`.
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
@@ -169,11 +172,76 @@ async function handleCheckoutSessionCompleted(
 
   console.log("[stripe-webhook] Recorded payment for quote", quoteId);
 
-  await ensureInvoiceForQuote({
-    supabase,
-    quoteId,
-    markPaid: true,
-    paidAt,
-    paymentIntentId,
-  });
+  // Ensure an invoice exists and is marked paid with Stripe metadata
+  const { data: existingInvoice } = await supabase
+    .from("invoices")
+    .select("id, status")
+    .eq("quote_id", quoteId)
+    .maybeSingle();
+
+  let invoiceForReceipt:
+    | {
+        id: string;
+        public_token: string | null;
+        invoice_number?: number | null;
+        customer_email?: string | null;
+      }
+    | null = null;
+
+  if (!existingInvoice) {
+    invoiceForReceipt = await ensureInvoiceForQuote({
+      supabase,
+      quoteId,
+      markPaid: true,
+      paidAt,
+      paymentIntentId,
+    });
+  } else {
+    invoiceForReceipt = existingInvoice;
+
+    if (existingInvoice.status !== "paid") {
+      const { error: invoiceUpdateError } = await supabase
+        .from("invoices")
+        .update({
+          status: "paid",
+          paid_at: paidAt,
+          stripe_payment_intent_id: paymentIntentId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingInvoice.id)
+        .select("id, public_token, invoice_number, customer_email")
+        .maybeSingle();
+
+      if (invoiceUpdateError) {
+        console.error(
+          "[stripe-webhook] Failed to mark invoice paid",
+          existingInvoice.id,
+          invoiceUpdateError.message
+        );
+      }
+    }
+  }
+
+  if (!invoiceForReceipt && quote.user_id) {
+    // Fallback: fetch invoice to deliver a receipt if created earlier.
+    const { data: invoiceRow } = await supabase
+      .from("invoices")
+      .select("id, public_token, invoice_number, customer_email")
+      .eq("quote_id", quoteId)
+      .maybeSingle();
+    invoiceForReceipt = invoiceRow ?? null;
+  }
+
+  const receiptEmail = session.customer_details?.email || invoiceForReceipt?.customer_email;
+  const invoiceToken = invoiceForReceipt?.public_token;
+
+  if (receiptEmail && invoiceToken) {
+    const publicInvoiceUrl = `${process.env.NEXT_PUBLIC_APP_URL}/public/invoices/${invoiceToken}`;
+    await sendReceiptEmail({
+      to: receiptEmail,
+      amount: amountTotal / 100,
+      invoiceNumber: invoiceForReceipt?.invoice_number ?? invoiceForReceipt?.id,
+      publicUrl: publicInvoiceUrl,
+    });
+  }
 }

@@ -137,6 +137,7 @@ async function sendInvoiceEmailAction(formData: FormData) {
   await sendInvoiceEmail({
     to: customer.email,
     customerName: customer.name,
+    invoiceNumber: invoice.invoice_number ?? invoice.id.slice(0, 8),
     invoiceTotal: Number(invoice.total ?? 0),
     dueDate: invoice.due_at,
     publicUrl,
@@ -204,6 +205,7 @@ async function sendInvoiceSmsAction(formData: FormData) {
   await sendInvoiceSms({
     to: customer.phone,
     customerName: customer.name,
+    invoiceNumber: invoice.invoice_number ?? invoice.id.slice(0, 8),
     invoiceTotal: Number(invoice.total ?? 0),
     publicUrl,
   });

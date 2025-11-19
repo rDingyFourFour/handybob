@@ -42,3 +42,10 @@ HandyBob now exposes a Stripe webhook at `/api/stripe/webhook`. The handler veri
 1. Create the `quote_payments` table by running the SQL in `supabase/migrations/20250128120000_add_quote_payments.sql` against your Supabase project.
 2. Add `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` to your environment.
 3. In development you can forward events with `stripe listen --forward-to localhost:3000/api/stripe/webhook`.
+
+### Payment + invoice flow
+- Quote → Payment Link → Stripe checkout → `checkout.session.completed` webhook.
+- Webhook (server-only) marks the quote `paid`, upserts `quote_payments`, ensures an invoice exists, marks the invoice paid, and emails a receipt.
+- Public access: customers view quotes at `app/public/quotes/[token]` and invoices at `app/public/invoices/[token]`; both use anonymous tokens and never expose secrets.
+- RLS: `quote_payments` and `invoices` enforce `user_id = auth.uid()` for selects/updates/inserts; webhooks bypass RLS via the service-role Supabase client.
+- Stripe metadata: Payment Links carry `quote_id` + `user_id`; webhook uses these to reconcile payments → quotes → invoices.

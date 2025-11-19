@@ -12,6 +12,7 @@ const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
 type SendInvoiceSmsArgs = {
   to: string;
   customerName: string | null | undefined;
+  invoiceNumber: number | string | null | undefined;
   invoiceTotal: number;
   publicUrl: string;
 };
@@ -19,6 +20,7 @@ type SendInvoiceSmsArgs = {
 export async function sendInvoiceSms({
   to,
   customerName,
+  invoiceNumber,
   invoiceTotal,
   publicUrl,
 }: SendInvoiceSmsArgs) {
@@ -27,9 +29,9 @@ export async function sendInvoiceSms({
     return;
   }
 
-  const body = `Hi ${customerName || ""}, your HandyBob invoice is $${invoiceTotal.toFixed(
-    2
-  )}. View/pay: ${publicUrl}`;
+  const body = `Hi ${customerName || ""}, your HandyBob invoice ${
+    invoiceNumber ? `#${invoiceNumber} ` : ""
+  }is $${invoiceTotal.toFixed(2)}. View/pay: ${publicUrl}`;
 
   await client.messages.create({
     from: fromNumber,

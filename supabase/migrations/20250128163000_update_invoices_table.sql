@@ -3,6 +3,7 @@ create extension if not exists "uuid-ossp";
 alter table public.invoices
   add column if not exists public_token uuid not null default uuid_generate_v4(),
   add column if not exists invoice_number integer,
+  add column if not exists issued_at timestamptz default timezone('utc', now()),
   add column if not exists paid_at timestamptz,
   add column if not exists stripe_payment_intent_id text,
   add column if not exists stripe_payment_link_url text;
@@ -15,7 +16,12 @@ update public.invoices as inv
 set invoice_number = seq.new_number
 from (
   select id,
-    row_number() over (partition by user_id order by issued_at, created_at, id) as new_number
+    row_number() over (
+      partition by user_id
+      order by coalesce(issued_at, created_at, timezone('utc', now())),
+        created_at,
+        id
+    ) as new_number
   from public.invoices
   where user_id is not null
 ) as seq

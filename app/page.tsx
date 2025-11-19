@@ -26,6 +26,7 @@ export default async function HomePage() {
     pendingQuotesRes,
     unpaidInvoicesRes,
     paidQuotesThisMonthRes,
+    paidInvoicesThisMonthRes,
   ] =
     await Promise.all([
       supabase
@@ -49,6 +50,13 @@ export default async function HomePage() {
         .eq("status", "paid")
         .gte("paid_at", monthStart.toISOString())
         .lt("paid_at", nextMonthStart.toISOString()),
+
+      supabase
+        .from("invoices")
+        .select("id, total, paid_at")
+        .eq("status", "paid")
+        .gte("paid_at", monthStart.toISOString())
+        .lt("paid_at", nextMonthStart.toISOString()),
     ]);
 
   const paidQuotes =
@@ -56,6 +64,14 @@ export default async function HomePage() {
   const paidQuotesCount = paidQuotes.length;
   const collectedThisMonth = paidQuotes.reduce(
     (sum, quote) => sum + Number(quote.total ?? 0),
+    0
+  );
+
+  const paidInvoices =
+    (paidInvoicesThisMonthRes.data ?? []) as { id: string; total: number | null }[];
+  const paidInvoicesCount = paidInvoices.length;
+  const collectedInvoicesThisMonth = paidInvoices.reduce(
+    (sum, invoice) => sum + Number(invoice.total ?? 0),
     0
   );
 
@@ -100,6 +116,20 @@ export default async function HomePage() {
         <h3>Collected this month</h3>
         <p className="text-2xl font-semibold">
           ${collectedThisMonth.toFixed(2)}
+        </p>
+      </div>
+
+      <div className="hb-card">
+        <h3>Invoices paid this month</h3>
+        <p className="text-2xl font-semibold">
+          {paidInvoicesCount}
+        </p>
+      </div>
+
+      <div className="hb-card">
+        <h3>Revenue collected this month</h3>
+        <p className="text-2xl font-semibold">
+          ${(collectedThisMonth + collectedInvoicesThisMonth).toFixed(2)}
         </p>
       </div>
     </div>

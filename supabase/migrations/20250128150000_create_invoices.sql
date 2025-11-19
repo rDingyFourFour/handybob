@@ -15,6 +15,9 @@ create table if not exists public.invoices (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+alter table public.invoices
+  add column if not exists public_token uuid not null default gen_random_uuid();
+
 create unique index if not exists invoices_quote_id_idx
   on public.invoices (quote_id);
 
