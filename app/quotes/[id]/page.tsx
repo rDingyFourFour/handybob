@@ -1,143 +1,276 @@
-import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+// app/quotes/[id]/page.tsx
+import { redirect } from "next/navigation";
 
+import { sendQuoteEmail } from "@/utils/email/sendQuoteEmail";
+import { sendQuoteSms } from "@/utils/sms/sendQuoteSms";
 import { createServerClient } from "@/utils/supabase/server";
 
-type MaterialLine = {
-  item: string;
-  quantity: number;
-  unit_cost: number;
+type CustomerInfo = {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
 };
 
-type QuoteLineItem = {
-  scope?: string;
-  hours?: number;
-  materials?: MaterialLine[];
+type JobWithCustomer = {
+  title: string | null;
+  customers: CustomerInfo | CustomerInfo[] | null;
 };
 
-type QuoteRecord = {
-  id: string;
-  job_id: string;
-  status: string;
-  subtotal: number | null;
-  tax: number | null;
-  total: number | null;
-  line_items: QuoteLineItem[] | null;
-  client_message_template: string | null;
-  job: {
-    title: string | null;
-  } | null;
-  customer: {
-    name: string | null;
-  } | null;
-};
+function normalizeSingle<T>(relation: T | T[] | null | undefined): T | null {
+  if (Array.isArray(relation)) {
+    return relation[0] ?? null;
+  }
+  return relation ?? null;
+}
 
-export default async function QuoteDetailPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+// --- SERVER ACTIONS ---
+
+async function sendQuoteEmailAction(formData: FormData) {
+  "use server";
+
+  const quoteId = String(formData.get("quote_id"));
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: quote, error } = await supabase
+  const { data: quote } = await supabase
     .from("quotes")
-    .select(
-      "id, job_id, status, subtotal, tax, total, line_items, client_message_template, job:jobs(title), customer:customers(name)"
-    )
-    .eq("id", params.id)
-    .single<QuoteRecord>();
+    .select(`
+      *,
+      jobs (
+        title,
+        customers (
+          name,
+          email,
+          phone
+        )
+      )
+    `)
+    .eq("id", quoteId)
+    .single();
 
-  if (error) throw new Error(error.message);
-  if (!quote) notFound();
+  if (!quote) {
+    console.warn("Quote not found.");
+    return;
+  }
 
-  const lineItems: QuoteLineItem[] = Array.isArray(quote.line_items)
-    ? quote.line_items
-    : [];
-  const primaryLine = lineItems[0];
-  const materials: MaterialLine[] = Array.isArray(primaryLine?.materials)
-    ? primaryLine.materials
-    : [];
+  const job = normalizeSingle<JobWithCustomer>(
+    (quote.jobs as JobWithCustomer | JobWithCustomer[] | null) ?? null,
+  );
+  const customer = normalizeSingle<CustomerInfo>(job?.customers);
+
+  if (!customer?.email) {
+    console.warn("No email available for this quote.");
+    return;
+  }
+
+  const quoteTotal = Number(quote.total ?? 0);
+
+  await sendQuoteEmail({
+    to: customer.email,
+    customerName: customer.name || "",
+    quoteTotal,
+    clientMessage:
+      quote.client_message_template ||
+      "Here is your quote. Let me know if you have any questions.",
+  });
+
+  // Mark as sent if still draft
+  if (quote.status === "draft") {
+    await supabase
+      .from("quotes")
+      .update({
+        status: "sent",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", quote.id);
+  }
+
+  redirect(`/quotes/${quote.id}`);
+}
+
+async function sendQuoteSmsAction(formData: FormData) {
+  "use server";
+
+  const quoteId = String(formData.get("quote_id"));
+  const supabase = createServerClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: quote } = await supabase
+    .from("quotes")
+    .select(`
+      *,
+      jobs (
+        title,
+        customers (
+          name,
+          phone
+        )
+      )
+    `)
+    .eq("id", quoteId)
+    .single();
+
+  if (!quote) {
+    console.warn("Quote not found.");
+    return;
+  }
+
+  const job = normalizeSingle<JobWithCustomer>(
+    (quote.jobs as JobWithCustomer | JobWithCustomer[] | null) ?? null,
+  );
+  const customer = normalizeSingle<CustomerInfo>(job?.customers);
+
+  if (!customer?.phone) {
+    console.warn("No phone number available for this quote.");
+    return;
+  }
+
+  await sendQuoteSms({
+    to: customer.phone,
+    customerName: customer.name || "",
+    quoteTotal: Number(quote.total ?? 0),
+  });
+
+  if (quote.status === "draft") {
+    await supabase
+      .from("quotes")
+      .update({
+        status: "sent",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", quote.id);
+  }
+
+  redirect(`/quotes/${quote.id}`);
+}
+
+async function acceptQuoteAction(formData: FormData) {
+  "use server";
+
+  const quoteId = String(formData.get("quote_id"));
+  const supabase = createServerClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  await supabase
+    .from("quotes")
+    .update({
+      status: "accepted",
+      accepted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", quoteId);
+
+  redirect(`/quotes/${quoteId}`);
+}
+
+// --- PAGE COMPONENT ---
+
+export default async function QuoteDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: quote } = await supabase
+    .from("quotes")
+    .select(`
+      *,
+      jobs (
+        title,
+        customers (
+          name,
+          email,
+          phone
+        )
+      )
+    `)
+    .eq("id", id)
+    .single();
+
+  if (!quote) redirect("/jobs");
+
+  const job = normalizeSingle<JobWithCustomer>(
+    (quote.jobs as JobWithCustomer | JobWithCustomer[] | null) ?? null,
+  );
+  const customer = normalizeSingle<CustomerInfo>(job?.customers);
+
+  const subtotal = Number(quote.subtotal ?? 0);
+  const tax = Number(quote.tax ?? 0);
+  const total = Number(quote.total ?? 0);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="hb-label text-xs uppercase tracking-wide text-slate-400">
-            Quote ID
-          </p>
-          <h1 className="text-2xl font-semibold">Quote #{quote.id}</h1>
-          <p className="hb-muted text-sm">
-            For {quote.customer?.name || "Unknown customer"} · Job:{" "}
-            <Link
-              href={`/jobs/${quote.job_id}`}
-              className="text-blue-400 hover:underline"
-            >
-              {quote.job?.title || "View job"}
-            </Link>
-          </p>
-        </div>
-        <span className="rounded-full border border-slate-700 px-3 py-1 text-xs uppercase tracking-wide text-slate-300">
-          {quote.status}
-        </span>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="hb-card space-y-3">
-          <h2 className="text-lg font-semibold">Scope of work</h2>
-          <p className="text-sm whitespace-pre-wrap">
-            {primaryLine?.scope || "Scope not provided."}
-          </p>
-          <div className="text-xs text-slate-400">
-            Labor hours estimate: {primaryLine?.hours ?? "n/a"}
-          </div>
-        </div>
-
-        <div className="hb-card space-y-2">
-          <h2 className="text-lg font-semibold">Totals</h2>
-          <p>Subtotal: ${Number(quote.subtotal ?? 0).toFixed(2)}</p>
-          <p>Tax: ${Number(quote.tax ?? 0).toFixed(2)}</p>
-          <p className="text-xl font-semibold">
-            Total: ${Number(quote.total ?? 0).toFixed(2)}
-          </p>
-        </div>
-      </div>
-
-      <div className="hb-card space-y-3">
-        <h2 className="text-lg font-semibold">Materials</h2>
-        {materials.length ? (
-          <ul className="space-y-2 text-sm">
-            {materials.map((material, index) => (
-              <li
-                key={`${material.item}-${index}`}
-                className="flex items-center justify-between"
-              >
-                <span>
-                  {material.item} · qty {material.quantity}
-                </span>
-                <span>${Number(material.unit_cost ?? 0).toFixed(2)}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="hb-muted text-sm">No materials listed.</p>
-        )}
+    <div className="space-y-4">
+      <div className="hb-card space-y-1">
+        <h1>Quote</h1>
+        <p className="hb-muted">
+          Job: {job?.title || "Untitled job"}
+        </p>
+        <p className="hb-muted">
+          Customer: {customer?.name || "Unknown"}
+        </p>
+        <p className="hb-muted">
+          Status: {quote.status}
+        </p>
       </div>
 
       <div className="hb-card space-y-2">
-        <h2 className="text-lg font-semibold">Client message</h2>
-        <p className="text-sm whitespace-pre-wrap">
-          {quote.client_message_template}
+        <h3>Scope of work</h3>
+        <p>{quote.line_items?.[0]?.scope || "No scope available."}</p>
+      </div>
+
+      <div className="hb-card space-y-2">
+        <h3>Totals</h3>
+        <p>Subtotal: ${subtotal.toFixed(2)}</p>
+        <p>Tax: ${tax.toFixed(2)}</p>
+        <p className="font-semibold">Total: ${total.toFixed(2)}</p>
+      </div>
+
+      <div className="hb-card space-y-2">
+        <h3>Client message</h3>
+        <p className="text-sm">
+          {quote.client_message_template ||
+            "Here is your quote. Let me know if this works for you."}
+        </p>
+      </div>
+
+      <div className="hb-card space-y-3">
+        <h3>Send to customer</h3>
+        <div className="flex flex-wrap gap-2">
+          <form action={sendQuoteEmailAction}>
+            <input type="hidden" name="quote_id" value={quote.id} />
+            <button type="submit" className="hb-button">
+              Send via email
+            </button>
+          </form>
+
+          <form action={sendQuoteSmsAction}>
+            <input type="hidden" name="quote_id" value={quote.id} />
+            <button type="submit" className="hb-button-ghost">
+              Send via SMS
+            </button>
+          </form>
+        </div>
+
+        <p className="hb-muted text-xs">
+          Email uses the client message above. SMS sends a short summary & total.
         </p>
       </div>
 
       <div className="flex justify-end">
-        <button className="hb-button opacity-60" disabled>
-          Send quote (coming soon)
-        </button>
+        {quote.status !== "accepted" && (
+          <form action={acceptQuoteAction}>
+            <input type="hidden" name="quote_id" value={quote.id} />
+            <button type="submit" className="hb-button">
+              Mark as accepted
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
