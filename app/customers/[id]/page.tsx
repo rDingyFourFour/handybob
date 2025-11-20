@@ -191,7 +191,7 @@ export default async function CustomerDetailPage({
   const timeline: TimelineEntry[] = [
     {
       id: `customer-${customer.id}`,
-      kind: "customer",
+      kind: "customer" as const,
       title: "Customer added",
       detail: customer.email || customer.phone,
       timestamp: (customer as Customer).created_at,
@@ -249,7 +249,7 @@ export default async function CustomerDetailPage({
       const events: TimelineEntry[] = [
         {
           id: `quote-${quote.id}-created`,
-          kind: "quote",
+          kind: "quote" as const,
           title: "Quote created",
           detail: baseDetail,
           timestamp: quote.created_at,
@@ -261,7 +261,7 @@ export default async function CustomerDetailPage({
       if (quote.status === "sent" && quote.updated_at && quote.updated_at !== quote.created_at) {
         events.push({
           id: `quote-${quote.id}-sent`,
-          kind: "quote",
+          kind: "quote" as const,
           title: "Quote sent",
           detail: baseDetail,
           timestamp: quote.updated_at,
@@ -273,7 +273,7 @@ export default async function CustomerDetailPage({
       if (quote.accepted_at) {
         events.push({
           id: `quote-${quote.id}-accepted`,
-          kind: "quote",
+          kind: "quote" as const,
           title: "Quote accepted",
           detail: baseDetail,
           timestamp: quote.accepted_at,
@@ -285,7 +285,7 @@ export default async function CustomerDetailPage({
       if (quote.paid_at) {
         events.push({
           id: `quote-${quote.id}-paid`,
-          kind: "quote",
+          kind: "quote" as const,
           title: "Quote paid",
           detail: baseDetail,
           timestamp: quote.paid_at,
@@ -305,7 +305,7 @@ export default async function CustomerDetailPage({
       const events: TimelineEntry[] = [
         {
           id: `invoice-${invoice.id}-created`,
-          kind: "invoice",
+          kind: "invoice" as const,
           title: "Invoice created",
           detail: baseDetail,
           timestamp: invoice.created_at ?? invoice.issued_at,
@@ -317,7 +317,7 @@ export default async function CustomerDetailPage({
       if (invoice.paid_at) {
         events.push({
           id: `invoice-${invoice.id}-paid`,
-          kind: "invoice",
+          kind: "invoice" as const,
           title: "Invoice paid",
           detail: baseDetail,
           timestamp: invoice.paid_at,
