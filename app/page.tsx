@@ -88,8 +88,8 @@ export default async function HomePage() {
     title: string | null;
     start_time: string | null;
     jobs:
-      | { title: string | null }
-      | { title: string | null }[]
+      | { title: string | null; customers?: { name: string | null } | { name: string | null }[] | null }
+      | { title: string | null; customers?: { name: string | null } | { name: string | null }[] | null }[]
       | null;
   }[];
 
