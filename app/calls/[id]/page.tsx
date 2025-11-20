@@ -20,7 +20,10 @@ type CallRow = {
   job_id?: string | null;
   customer_id?: string | null;
   jobs?: { id: string; title: string | null } | null;
-  customers?: { id: string; name: string | null; phone: string | null } | null;
+  customers?:
+    | { id: string; name: string | null; phone: string | null }
+    | { id: string; name: string | null; phone: string | null }[]
+    | null;
 };
 
 export default async function CallDetailPage({ params }: { params: { id: string } }) {
@@ -98,7 +101,7 @@ export default async function CallDetailPage({ params }: { params: { id: string 
           Duration {formatDuration(call.duration_seconds)} · Call ID {call.id.slice(0, 8)}
         </div>
         <div className="flex flex-wrap gap-3 text-xs text-slate-400">
-          {call.customers?.id && (
+          {call.customers && !Array.isArray(call.customers) && call.customers.id && (
             <Link href={`/customers/${call.customers.id}`} className="underline-offset-2 hover:underline">
               Customer: {call.customers.name || call.customers.phone || "View customer"}
             </Link>
