@@ -300,15 +300,19 @@ async function fetchRecordingBuffer(recordingUrl: string) {
   }
 }
 
-async function transcribeRecording(audio: Buffer | null) {
+async function transcribeRecording(audio: Buffer | Uint8Array | null) {
   if (!OPENAI_KEY) {
     console.warn("[voice-webhook] OPENAI_API_KEY not set; skipping transcription.");
     return null;
   }
   if (!audio) return null;
 
+  const fileBlob = new Blob([audio instanceof Uint8Array ? audio : new Uint8Array(audio)], {
+    type: "audio/mpeg",
+  });
+
   const formData = new FormData();
-  formData.append("file", new Blob([audio], { type: "audio/mpeg" }), "voicemail.mp3");
+  formData.append("file", fileBlob, "voicemail.mp3");
   formData.append("model", "whisper-1");
   formData.append("response_format", "text");
 
