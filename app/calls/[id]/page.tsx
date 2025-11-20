@@ -68,6 +68,8 @@ export default async function CallDetailPage({ params }: { params: { id: string 
   }
   if (!call) redirect("/calls");
 
+  const customerRecord = Array.isArray(call.customers) ? call.customers[0] : call.customers;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -101,9 +103,9 @@ export default async function CallDetailPage({ params }: { params: { id: string 
           Duration {formatDuration(call.duration_seconds)} · Call ID {call.id.slice(0, 8)}
         </div>
         <div className="flex flex-wrap gap-3 text-xs text-slate-400">
-          {call.customers && !Array.isArray(call.customers) && call.customers.id && (
-            <Link href={`/customers/${call.customers.id}`} className="underline-offset-2 hover:underline">
-              Customer: {call.customers.name || call.customers.phone || "View customer"}
+          {customerRecord?.id && (
+            <Link href={`/customers/${customerRecord.id}`} className="underline-offset-2 hover:underline">
+              Customer: {customerRecord.name || customerRecord.phone || "View customer"}
             </Link>
           )}
           {call.job_id && (
