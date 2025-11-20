@@ -106,6 +106,7 @@ async function sendQuoteEmailAction(formData: FormData) {
     userId: user.id,
     customerId: customer.id,
     jobId: job?.id ?? quote.job_id ?? null,
+    quoteId: quote.id,
     channel: "email",
     subject: "Quote sent",
     body: quote.client_message_template || `Quote total $${quoteTotal.toFixed(2)}`,
@@ -182,6 +183,7 @@ async function sendQuoteSmsAction(formData: FormData) {
     userId: user.id,
     customerId: customer.id,
     jobId: job?.id ?? quote.job_id ?? null,
+    quoteId: quote.id,
     channel: "sms",
     body: smsBody,
   });

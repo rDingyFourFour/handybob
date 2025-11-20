@@ -104,6 +104,9 @@ async function sendConversationMessage(formData: FormData) {
     user_id: user.id,
     customer_id: customerId,
     job_id: jobId,
+    // Convention: link to the most specific context; inbox sends only know customer/job.
+    quote_id: null,
+    invoice_id: null,
     direction: "outbound",
     via: channel,
     channel,

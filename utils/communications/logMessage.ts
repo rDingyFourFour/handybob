@@ -1,4 +1,6 @@
 // utils/communications/logMessage.ts
+// Convention: always link messages to the most specific context available
+// (quote_id/invoice_id first, then job_id + customer_id) so timelines stay rich.
 type LogMessageArgs = {
   supabase: {
     from: (table: string) => {
@@ -8,6 +10,8 @@ type LogMessageArgs = {
   userId: string;
   customerId?: string | null;
   jobId?: string | null;
+  quoteId?: string | null;
+  invoiceId?: string | null;
   channel: string;
   direction?: string;
   subject?: string | null;
@@ -21,6 +25,8 @@ export async function logMessage({
   userId,
   customerId,
   jobId,
+  quoteId,
+  invoiceId,
   channel,
   direction = "outbound",
   subject,
@@ -34,6 +40,8 @@ export async function logMessage({
     user_id: userId,
     customer_id: customerId ?? null,
     job_id: jobId ?? null,
+    quote_id: quoteId ?? null,
+    invoice_id: invoiceId ?? null,
     channel,
     direction,
     subject,

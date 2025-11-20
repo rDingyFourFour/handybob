@@ -193,6 +193,8 @@ async function sendInvoiceEmailAction(formData: FormData) {
     userId: user.id,
     customerId: customer.id,
     jobId: extractJobId(invoiceRecord),
+    quoteId: invoiceRecord.quote_id,
+    invoiceId: invoiceRecord.id,
     channel: "email",
     subject: `Invoice ${invoice.invoice_number ?? invoice.id.slice(0, 8)} sent`,
     body: `Invoice total $${invoiceTotal.toFixed(2)}. View: ${publicUrl}`,
@@ -278,6 +280,8 @@ async function sendInvoiceSmsAction(formData: FormData) {
     userId: user.id,
     customerId: customer.id,
     jobId: extractJobId(invoiceRecord),
+    quoteId: invoiceRecord.quote_id,
+    invoiceId: invoiceRecord.id,
     channel: "sms",
     body: smsBody,
   });

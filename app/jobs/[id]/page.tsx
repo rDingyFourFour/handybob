@@ -9,6 +9,9 @@ type QuoteRow = {
   status: string | null;
   total: number | null;
   created_at: string | null;
+  updated_at: string | null;
+  accepted_at?: string | null;
+  paid_at?: string | null;
 };
 
 type AppointmentRow = {
@@ -27,6 +30,7 @@ type MessageRow = {
   body: string | null;
   status: string | null;
   created_at: string | null;
+  sent_at?: string | null;
 };
 
 type CallRow = {
@@ -115,17 +119,11 @@ export default async function JobDetailPage({
   if (jobError) throw new Error(jobError.message);
   if (!job) redirect("/jobs");
 
-  const customerId = job.customer_id;
-
-  const messageFilter = customerId
-    ? `job_id.eq.${jobId},and(job_id.is.null,customer_id.eq.${customerId})`
-    : `job_id.eq.${jobId}`;
-
   const [quotesRes, appointmentsRes, messagesRes, callsRes, invoicesRes] =
     await Promise.all([
       supabase
         .from("quotes")
-        .select("id, status, total, created_at")
+        .select("id, status, total, created_at, updated_at, accepted_at, paid_at")
         .eq("job_id", jobId)
         .order("created_at", { ascending: false }),
       supabase
@@ -135,16 +133,16 @@ export default async function JobDetailPage({
         .order("start_time", { ascending: false }),
       supabase
         .from("messages")
-        .select("id, channel, direction, subject, body, status, created_at")
-        .or(messageFilter)
+        .select("id, channel, direction, subject, body, status, created_at, sent_at")
+        .eq("job_id", jobId)
         .order("created_at", { ascending: false })
-        .limit(25),
+        .limit(50),
       supabase
         .from("calls")
         .select("id, direction, status, started_at, duration_seconds, summary")
-        .or(messageFilter)
+        .eq("job_id", jobId)
         .order("started_at", { ascending: false })
-        .limit(25),
+        .limit(50),
       supabase
         .from("invoices")
         .select("id, invoice_number, status, total, created_at, issued_at, paid_at")
@@ -183,9 +181,9 @@ export default async function JobDetailPage({
     ...messages.map((message) => ({
       id: `msg-${message.id}`,
       kind: "message" as const,
-      title: `${message.direction === "inbound" ? "Inbound" : "Outbound"} ${message.channel || "message"}`,
+      title: `${message.direction === "inbound" ? "Inbound" : "Outbound"} message`,
       detail: message.body || message.subject || null,
-      timestamp: message.created_at,
+      timestamp: message.sent_at || message.created_at,
       status: message.status,
     })),
     ...calls.map((call) => ({
@@ -199,30 +197,88 @@ export default async function JobDetailPage({
     ...appointments.map((appt) => ({
       id: `appt-${appt.id}`,
       kind: "appointment" as const,
-      title: `Appointment: ${appt.title || "Visit"}`,
-      detail: appt.location ? `Location: ${appt.location}` : null,
+      title: `Appointment scheduled`,
+      detail: appt.title ? `${appt.title}${appt.location ? ` · ${appt.location}` : ""}` : (appt.location ? `Location: ${appt.location}` : null),
       timestamp: appt.start_time,
       status: appt.status,
       href: `/appointments/${appt.id}`,
     })),
-    ...safeQuotes.map((quote) => ({
-      id: `quote-${quote.id}`,
-      kind: "quote" as const,
-      title: `Quote ${quote.status}`,
-      detail: `Total ${formatCurrency(quote.total)}`,
-      timestamp: quote.created_at,
-      status: quote.status,
-      href: `/quotes/${quote.id}`,
-    })),
-    ...invoices.map((invoice) => ({
-      id: `invoice-${invoice.id}`,
-      kind: "invoice" as const,
-      title: `Invoice #${invoice.invoice_number ?? invoice.id.slice(0, 8)}`,
-      detail: `Total ${formatCurrency(invoice.total)}`,
-      timestamp: invoice.created_at ?? invoice.issued_at,
-      status: invoice.status,
-      href: `/invoices/${invoice.id}`,
-    })),
+    ...safeQuotes.flatMap((quote) => {
+      const events: TimelineEntry[] = [
+        {
+          id: `quote-${quote.id}-created`,
+          kind: "quote",
+          title: "Quote created",
+          detail: `Total ${formatCurrency(quote.total)}`,
+          timestamp: quote.created_at,
+          status: quote.status,
+          href: `/quotes/${quote.id}`,
+        },
+      ];
+
+      if (quote.status === "sent" && quote.updated_at && quote.updated_at !== quote.created_at) {
+        events.push({
+          id: `quote-${quote.id}-sent`,
+          kind: "quote",
+          title: "Quote sent",
+          detail: `Total ${formatCurrency(quote.total)}`,
+          timestamp: quote.updated_at,
+          status: "sent",
+          href: `/quotes/${quote.id}`,
+        });
+      }
+
+      if (quote.accepted_at) {
+        events.push({
+          id: `quote-${quote.id}-accepted`,
+          kind: "quote",
+          title: "Quote accepted",
+          detail: `Total ${formatCurrency(quote.total)}`,
+          timestamp: quote.accepted_at,
+          status: "accepted",
+          href: `/quotes/${quote.id}`,
+        });
+      }
+
+      if (quote.paid_at) {
+        events.push({
+          id: `quote-${quote.id}-paid`,
+          kind: "quote",
+          title: "Quote paid",
+          detail: `Total ${formatCurrency(quote.total)}`,
+          timestamp: quote.paid_at,
+          status: "paid",
+          href: `/quotes/${quote.id}`,
+        });
+      }
+
+      return events;
+    }),
+    ...invoices.flatMap((invoice) => {
+      const events: TimelineEntry[] = [
+        {
+          id: `invoice-${invoice.id}-created`,
+          kind: "invoice",
+          title: `Invoice created`,
+          detail: `Invoice #${invoice.invoice_number ?? invoice.id.slice(0, 8)} · ${formatCurrency(invoice.total)}`,
+          timestamp: invoice.created_at ?? invoice.issued_at,
+          status: invoice.status,
+          href: `/invoices/${invoice.id}`,
+        },
+      ];
+      if (invoice.paid_at) {
+        events.push({
+          id: `invoice-${invoice.id}-paid`,
+          kind: "invoice",
+          title: "Invoice paid",
+          detail: `Invoice #${invoice.invoice_number ?? invoice.id.slice(0, 8)} · ${formatCurrency(invoice.total)}`,
+          timestamp: invoice.paid_at,
+          status: "paid",
+          href: `/invoices/${invoice.id}`,
+        });
+      }
+      return events;
+    }),
     ...payments.map((payment) => ({
       id: `payment-${payment.id}`,
       kind: "payment" as const,
