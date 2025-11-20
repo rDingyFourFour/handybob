@@ -109,7 +109,7 @@ export default async function AppointmentsPage() {
                 <div className="space-y-1">
                   <p className="font-semibold">{appt.title || "Appointment"}</p>
                   <p className="hb-muted text-sm">
-                    {appt.jobs?.title || "No job linked"}
+                    {primaryJob?.title || "No job linked"}
                   </p>
                   <p className="hb-muted text-sm">
                     {customer?.name ? `Customer: ${customer.name}` : "Customer: Unknown"}
