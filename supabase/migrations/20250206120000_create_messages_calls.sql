@@ -63,6 +63,12 @@ create table if not exists public.calls (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+-- Backfill job_id on calls if the table predated this migration.
+alter table public.calls
+  add column if not exists job_id uuid references public.jobs(id) on delete set null;
+alter table public.calls
+  add column if not exists started_at timestamptz not null default timezone('utc', now());
+
 create index if not exists calls_user_id_idx on public.calls (user_id);
 create index if not exists calls_customer_id_idx on public.calls (customer_id);
 create index if not exists calls_job_id_idx on public.calls (job_id);

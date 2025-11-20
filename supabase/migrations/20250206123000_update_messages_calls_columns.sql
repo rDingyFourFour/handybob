@@ -1,5 +1,6 @@
 -- Extend messages with richer linkage and metadata
 alter table public.messages
+  add column if not exists channel text default 'email',
   add column if not exists quote_id uuid references public.quotes(id) on delete set null,
   add column if not exists invoice_id uuid references public.invoices(id) on delete set null,
   add column if not exists to_address text,
@@ -9,8 +10,8 @@ alter table public.messages
 
 -- Keep channel for backward compatibility; use via going forward
 update public.messages
-set via = coalesce(via, channel)
-where true;
+set via = coalesce(via, channel::message_via)
+where channel in ('email', 'sms', 'note') or channel is null;
 
 -- TODO: inbound email/SMS webhooks (e.g., /api/webhooks/email or /api/webhooks/sms) should:
 --  - Find/create customer by from_address/phone.

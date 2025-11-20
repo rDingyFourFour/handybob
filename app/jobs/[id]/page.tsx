@@ -11,6 +11,7 @@ import { generateJobSummary } from "./jobSummaryAction";
 import { generateNextActions } from "./nextActionsAction";
 import { generateFollowupDraft, sendFollowupMessage } from "./followupActions";
 import { runJobAssistant } from "./assistantActions";
+import { JobMediaGallery, type MediaItem } from "./JobMediaGallery";
 
 type QuoteRow = {
   id: string;
@@ -69,6 +70,15 @@ type PaymentRow = {
   created_at: string;
 };
 
+type MediaRow = {
+  id: string;
+  bucket_id?: string | null;
+  storage_path: string | null;
+  file_name: string | null;
+  mime_type: string | null;
+  created_at: string | null;
+};
+
 type TimelineEntry = {
   id: string;
   kind: "job" | "message" | "call" | "appointment" | "quote" | "invoice" | "payment";
@@ -81,6 +91,7 @@ type TimelineEntry = {
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MEDIA_BUCKET_ID = "job-media";
 
 function formatDateTime(date: string | null) {
   if (!date) return "";
@@ -177,6 +188,42 @@ export default async function JobDetailPage({
       .order("created_at", { ascending: false });
     payments = (paymentRows ?? []) as PaymentRow[];
   }
+
+  const { data: mediaRowsRaw, error: mediaError } = await supabase
+    .from("media")
+    .select("id, bucket_id, storage_path, file_name, mime_type, created_at")
+    .eq("job_id", jobId)
+    .order("created_at", { ascending: false });
+
+  const mediaRows = (mediaRowsRaw ?? []) as MediaRow[];
+  const mediaItems: MediaItem[] = await Promise.all(
+    mediaRows.map(async (media) => {
+      const bucketId = media.bucket_id || MEDIA_BUCKET_ID;
+      const path = media.storage_path || "";
+
+      if (!path) {
+        return {
+          id: media.id,
+          file_name: media.file_name ?? "File",
+          mime_type: media.mime_type ?? null,
+          created_at: media.created_at ?? null,
+          signed_url: null,
+        };
+      }
+
+      const { data: signedData } = await supabase.storage
+        .from(bucketId)
+        .createSignedUrl(path, 60 * 60); // 1 hour access
+
+      return {
+        id: media.id,
+        file_name: media.file_name ?? "File",
+        mime_type: media.mime_type ?? null,
+        created_at: media.created_at ?? null,
+        signed_url: signedData?.signedUrl ?? null,
+      };
+    }),
+  );
 
   const timeline: TimelineEntry[] = [
     {
@@ -340,6 +387,12 @@ export default async function JobDetailPage({
       <JobSummaryPanel jobId={job.id} action={generateJobSummary} />
 
       <NextActionsPanel jobId={job.id} action={generateNextActions} />
+
+      <JobMediaGallery
+        jobId={job.id}
+        items={mediaItems}
+        loadError={mediaError?.message ?? null}
+      />
 
       <JobFollowupHelper
         jobId={job.id}
