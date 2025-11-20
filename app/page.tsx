@@ -159,9 +159,14 @@ export default async function HomePage() {
             <h3>Today&apos;s appointments</h3>
             <p className="hb-muted text-sm">Quick view of your day.</p>
           </div>
-          <Link href="/appointments" className="hb-button-ghost text-xs">
-            View all
-          </Link>
+          <div className="flex gap-2 text-xs">
+            <Link href="/appointments" className="hb-button-ghost">
+              View all
+            </Link>
+            <Link href="/calendar" className="hb-button-ghost">
+              Calendar
+            </Link>
+          </div>
         </div>
 
         {todaysAppointments.length === 0 ? (

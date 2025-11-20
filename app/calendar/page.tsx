@@ -104,10 +104,13 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
     <div className="space-y-4">
       <div className="hb-card flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1>Week view</h1>
+          <h1>Calendar</h1>
           <p className="hb-muted">Appointments grouped by day.</p>
         </div>
         <div className="flex flex-wrap gap-2 text-sm">
+          <Link href="/appointments" className="hb-button-ghost">
+            Appointments list
+          </Link>
           <Link href={`/calendar?weekStart=${prevWeek.toISOString().slice(0, 10)}`} className="hb-button-ghost">
             Previous week
           </Link>
@@ -119,6 +122,8 @@ export default async function CalendarPage({ searchParams }: { searchParams?: { 
 
       {error ? (
         <p className="text-sm text-red-400">Failed to load appointments: {error.message}</p>
+      ) : appointments.length === 0 ? (
+        <p className="hb-muted text-sm">No appointments this week.</p>
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {days.map((day) => {

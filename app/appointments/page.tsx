@@ -68,14 +68,20 @@ async function updateAppointmentStatusAction(formData: FormData) {
   revalidatePath("/appointments");
 }
 
-export default async function AppointmentsPage() {
+export default async function AppointmentsPage({
+  searchParams,
+}: {
+  searchParams?: { job_id?: string };
+}) {
   const supabase = createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: appts, error } = await supabase
+  const filterJobId = searchParams?.job_id?.trim() || null;
+
+  let appointmentsQuery = supabase
     .from("appointments")
     .select(
       `
@@ -89,6 +95,12 @@ export default async function AppointmentsPage() {
       `
     )
     .order("start_time", { ascending: false });
+
+  if (filterJobId) {
+    appointmentsQuery = appointmentsQuery.eq("job_id", filterJobId);
+  }
+
+  const { data: appts, error } = await appointmentsQuery;
 
   const appointments = (appts ?? []) as AppointmentListItem[];
 
@@ -139,7 +151,13 @@ export default async function AppointmentsPage() {
                 <div className="space-y-1">
                   <p className="font-semibold">{appt.title || "Appointment"}</p>
                   <p className="hb-muted text-sm">
-                    {primaryJob?.title || "No job linked"}
+                    {primaryJob?.id ? (
+                      <Link href={`/jobs/${primaryJob.id}`} className="underline-offset-2 hover:underline">
+                        {primaryJob.title || "No job linked"}
+                      </Link>
+                    ) : (
+                      primaryJob?.title || "No job linked"
+                    )}
                   </p>
                   <p className="hb-muted text-sm">
                     {customer?.name ? `Customer: ${customer.name}` : "Customer: Unknown"}
@@ -183,7 +201,11 @@ export default async function AppointmentsPage() {
             );
           })
         ) : (
-          <p className="hb-muted text-sm">No appointments scheduled. Create one to get started.</p>
+          <p className="hb-muted text-sm">
+            {filterJobId
+              ? "No appointments scheduled for this job yet."
+              : "You haven’t scheduled any appointments yet."}
+          </p>
         )}
       </div>
     </div>
