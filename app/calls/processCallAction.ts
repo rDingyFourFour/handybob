@@ -169,7 +169,7 @@ async function ensureJobForCall({
   transcript,
   summary,
 }: {
-  supabase: SupabaseClientLike;
+  supabase: SupabaseClient;
   call: {
     id: string;
     user_id: string;
