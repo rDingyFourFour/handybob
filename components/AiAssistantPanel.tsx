@@ -29,7 +29,10 @@ export function AiAssistantPanel({
   fieldName,
   fieldValue,
 }: Props) {
-  const [state, formAction, pending] = useActionState<AssistantState, FormData>(action, null);
+  const [state, formAction, pending] = useActionState<AssistantState, FormData>(
+    action,
+    {} as AssistantState,
+  );
 
   return (
     <div className="hb-card space-y-3">

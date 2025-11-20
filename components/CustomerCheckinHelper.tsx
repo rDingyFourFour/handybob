@@ -43,11 +43,11 @@ export function CustomerCheckinHelper({
   const [toValue, setToValue] = useState(customerEmail || "");
   const [draftState, draftFormAction, drafting] = useActionState<CustomerCheckinDraftState, FormData>(
     generateAction,
-    null,
+    {} as CustomerCheckinDraftState,
   );
   const [sendState, sendFormAction, sending] = useActionState<SendState, FormData>(
     sendAction,
-    null,
+    {} as SendState,
   );
 
   const draftKey = useMemo(() => JSON.stringify(draftState ?? {}) + channel, [draftState, channel]);

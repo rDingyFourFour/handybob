@@ -181,7 +181,7 @@ function extractDraft(payload: OpenAIResponseBody): FollowupDraftState | null {
     : undefined;
 
   if (jsonChunk?.json) {
-    return normalizeDraft(jsonChunk.json);
+    return normalizeDraft(jsonChunk.json as Record<string, unknown>);
   }
 
   const textChunk = Array.isArray(content)

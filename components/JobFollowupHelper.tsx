@@ -55,11 +55,11 @@ export function JobFollowupHelper({
 
   const [draftState, draftFormAction, drafting] = useActionState<FollowupDraftState, FormData>(
     generateAction,
-    null,
+    {} as FollowupDraftState,
   );
   const [sendState, sendFormAction, sending] = useActionState<SendFollowupState, FormData>(
     sendAction,
-    null,
+    {} as SendFollowupState,
   );
 
   const placeholder = useMemo(() => {

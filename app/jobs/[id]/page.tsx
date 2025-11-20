@@ -181,7 +181,7 @@ export default async function JobDetailPage({
   const timeline: TimelineEntry[] = [
     {
       id: `job-${job.id}`,
-      kind: "job",
+      kind: "job" as const,
       title: "Job created",
       detail: job.description_raw || null,
       timestamp: job.created_at,
@@ -219,7 +219,7 @@ export default async function JobDetailPage({
       const events: TimelineEntry[] = [
         {
           id: `quote-${quote.id}-created`,
-          kind: "quote",
+          kind: "quote" as const,
           title: "Quote created",
           detail: `Total ${formatCurrency(quote.total)}`,
           timestamp: quote.created_at,
@@ -231,7 +231,7 @@ export default async function JobDetailPage({
       if (quote.status === "sent" && quote.updated_at && quote.updated_at !== quote.created_at) {
         events.push({
           id: `quote-${quote.id}-sent`,
-          kind: "quote",
+          kind: "quote" as const,
           title: "Quote sent",
           detail: `Total ${formatCurrency(quote.total)}`,
           timestamp: quote.updated_at,
@@ -243,7 +243,7 @@ export default async function JobDetailPage({
       if (quote.accepted_at) {
         events.push({
           id: `quote-${quote.id}-accepted`,
-          kind: "quote",
+          kind: "quote" as const,
           title: "Quote accepted",
           detail: `Total ${formatCurrency(quote.total)}`,
           timestamp: quote.accepted_at,
@@ -255,7 +255,7 @@ export default async function JobDetailPage({
       if (quote.paid_at) {
         events.push({
           id: `quote-${quote.id}-paid`,
-          kind: "quote",
+          kind: "quote" as const,
           title: "Quote paid",
           detail: `Total ${formatCurrency(quote.total)}`,
           timestamp: quote.paid_at,

@@ -85,22 +85,22 @@ function extractNextActions(payload: OpenAIResponseBody): string[] {
   const primary = payload?.output?.[0];
   const content = primary?.content;
 
-  const jsonChunk =
-    Array.isArray(content) &&
-    content.find(
-      (chunk: OpenAIContentChunk) =>
-        chunk?.type === "output_json" ||
-        chunk?.type === "json" ||
-        typeof chunk?.json === "object",
-    );
+  const jsonChunk = Array.isArray(content)
+    ? content.find(
+        (chunk: OpenAIContentChunk) =>
+          chunk?.type === "output_json" ||
+          chunk?.type === "json" ||
+          typeof chunk?.json === "object",
+      )
+    : undefined;
 
   if (jsonChunk?.json) {
-    return normalizeActions(jsonChunk.json);
+    return normalizeActions(jsonChunk.json as Record<string, unknown>);
   }
 
-  const textChunk =
-    Array.isArray(content) &&
-    content.find((chunk: OpenAIContentChunk) => Array.isArray(chunk?.text) && chunk.text.length > 0);
+  const textChunk = Array.isArray(content)
+    ? content.find((chunk: OpenAIContentChunk) => Array.isArray(chunk?.text) && chunk.text.length > 0)
+    : undefined;
 
   if (textChunk?.text?.[0]) {
     try {

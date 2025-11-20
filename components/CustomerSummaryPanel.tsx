@@ -18,7 +18,10 @@ type Props = {
 };
 
 export function CustomerSummaryPanel({ customerId, action }: Props) {
-  const [state, formAction, pending] = useActionState<CustomerSummaryState, FormData>(action, null);
+  const [state, formAction, pending] = useActionState<CustomerSummaryState, FormData>(
+    action,
+    {} as CustomerSummaryState,
+  );
 
   return (
     <div className="hb-card space-y-3">

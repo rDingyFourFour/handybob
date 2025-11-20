@@ -18,7 +18,10 @@ type Props = {
 };
 
 export function NextActionsPanel({ jobId, action }: Props) {
-  const [state, formAction, pending] = useActionState<NextActionsState, FormData>(action, null);
+  const [state, formAction, pending] = useActionState<NextActionsState, FormData>(
+    action,
+    {} as NextActionsState,
+  );
 
   return (
     <div className="hb-card space-y-3">

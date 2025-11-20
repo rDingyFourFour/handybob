@@ -18,7 +18,10 @@ type Props = {
 };
 
 export function JobSummaryPanel({ jobId, action }: Props) {
-  const [state, formAction, pending] = useActionState<JobSummaryState, FormData>(action, null);
+  const [state, formAction, pending] = useActionState<JobSummaryState, FormData>(
+    action,
+    {} as JobSummaryState,
+  );
 
   return (
     <div className="hb-card space-y-3">
