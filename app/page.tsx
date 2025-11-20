@@ -168,28 +168,32 @@ export default async function HomePage() {
           <p className="hb-muted text-sm">No appointments scheduled for today.</p>
         ) : (
           <div className="space-y-2">
-          {todaysAppointments.map((appt) => (
-            <div key={appt.id} className="rounded border border-slate-800 px-3 py-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold">{appt.title || "Appointment"}</span>
-                <span className="hb-muted text-xs">
-                    {appt.start_time
-                      ? new Date(appt.start_time).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      : ""}
-                  </span>
+            {todaysAppointments.slice(0, 3).map((appt) => {
+              const start = appt.start_time
+                ? new Date(appt.start_time).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "";
+              const job = Array.isArray(appt.jobs) ? appt.jobs[0] ?? null : appt.jobs;
+              const jobTitle = job?.title || "No job linked";
+              const customer = Array.isArray(job?.customers) ? job?.customers[0] : job?.customers;
+
+              return (
+                <div key={appt.id} className="rounded border border-slate-800 px-3 py-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">{appt.title || "Appointment"}</span>
+                    <span className="hb-muted text-xs">{start}</span>
+                  </div>
+                  <p className="hb-muted text-xs">{jobTitle}</p>
+                  <p className="hb-muted text-[11px]">
+                    {customer?.name ? `Customer: ${customer.name}` : "Customer: Unknown"}
+                  </p>
                 </div>
-                <p className="hb-muted text-xs">
-                  {Array.isArray(appt.jobs)
-                    ? appt.jobs[0]?.title || "No job linked"
-                    : appt.jobs?.title || "No job linked"}
-                </p>
-            </div>
-          ))}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -64,7 +64,14 @@ async function createAppointmentAction(formData: FormData) {
   redirect("/appointments");
 }
 
-export default async function NewAppointmentPage() {
+export default async function NewAppointmentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ job_id?: string }>;
+}) {
+  const resolvedParams = await searchParams;
+  const preselectedJobId = resolvedParams?.job_id || "";
+
   const supabase = createServerClient();
   const {
     data: { user },
@@ -105,7 +112,7 @@ export default async function NewAppointmentPage() {
 
         <div>
           <label className="hb-label" htmlFor="job_id">Job (optional)</label>
-          <select id="job_id" name="job_id" className="hb-input">
+          <select id="job_id" name="job_id" className="hb-input" defaultValue={preselectedJobId}>
             <option value="">No job selected</option>
             {jobOptions.map((job) => (
               <option key={job.id} value={job.id}>

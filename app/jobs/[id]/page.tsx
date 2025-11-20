@@ -61,6 +61,15 @@ export default async function JobDetailPage({
         <div className="text-xs text-slate-400">
           Urgency: {job.urgency ?? "not set"}
         </div>
+
+        <div className="pt-2">
+          <Link
+            href={`/appointments/new?job_id=${job.id}`}
+            className="hb-button-ghost text-xs"
+          >
+            Schedule appointment
+          </Link>
+        </div>
       </div>
 
       <div className="hb-card space-y-4">
