@@ -1,8 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AiAssistantPanel } from "@/components/AiAssistantPanel";
+import { JobFollowupHelper } from "@/components/JobFollowupHelper";
+import { JobSummaryPanel } from "@/components/JobSummaryPanel";
+import { NextActionsPanel } from "@/components/NextActionsPanel";
 import { generateQuoteForJob } from "@/utils/ai/generateQuote";
 import { createServerClient } from "@/utils/supabase/server";
+import { generateJobSummary } from "./jobSummaryAction";
+import { generateNextActions } from "./nextActionsAction";
+import { generateFollowupDraft, sendFollowupMessage } from "./followupActions";
+import { runJobAssistant } from "./assistantActions";
 
 type QuoteRow = {
   id: string;
@@ -328,6 +336,27 @@ export default async function JobDetailPage({
           </Link>
         </div>
       </div>
+
+      <JobSummaryPanel jobId={job.id} action={generateJobSummary} />
+
+      <NextActionsPanel jobId={job.id} action={generateNextActions} />
+
+      <JobFollowupHelper
+        jobId={job.id}
+        customerId={job.customers?.id ?? null}
+        customerEmail={job.customers?.email ?? null}
+        customerPhone={job.customers?.phone ?? null}
+        generateAction={generateFollowupDraft}
+        sendAction={sendFollowupMessage}
+      />
+
+      <AiAssistantPanel
+        title="Job brief & next steps"
+        description="Summarizes this job's history, drafts a customer follow-up, and suggests what to do next."
+        action={runJobAssistant}
+        fieldName="job_id"
+        fieldValue={job.id}
+      />
 
       <div className="hb-card space-y-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">

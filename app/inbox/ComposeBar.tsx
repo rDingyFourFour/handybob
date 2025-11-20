@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 
 type ComposeBarProps = {
   action: (formData: FormData) => Promise<void>;
@@ -28,9 +28,10 @@ export function ComposeBar({
   const [subject, setSubject] = useState("");
   const [isPending, startTransition] = useTransition();
 
-  useEffect(() => {
-    setToValue(channel === "email" ? customerEmail || "" : customerPhone || "");
-  }, [channel, customerEmail, customerPhone]);
+  const handleChannelChange = (value: "email" | "sms") => {
+    setChannel(value);
+    setToValue(value === "email" ? customerEmail || "" : customerPhone || "");
+  };
 
   const handleSubmit = (formData: FormData) => {
     startTransition(() => action(formData));
@@ -46,7 +47,7 @@ export function ComposeBar({
           <select
             name="channel"
             value={channel}
-            onChange={(e) => setChannel(e.target.value as "email" | "sms")}
+            onChange={(e) => handleChannelChange(e.target.value as "email" | "sms")}
             className="hb-input mt-1"
             disabled={isPending}
           >

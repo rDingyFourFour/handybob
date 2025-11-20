@@ -1,7 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AiAssistantPanel } from "@/components/AiAssistantPanel";
+import { CustomerCheckinHelper } from "@/components/CustomerCheckinHelper";
+import { CustomerSummaryPanel } from "@/components/CustomerSummaryPanel";
 import { createServerClient } from "@/utils/supabase/server";
+import {
+  generateCustomerCheckinDraft,
+  generateCustomerSummary,
+  sendCustomerCheckinMessage,
+} from "./customerAiActions";
+import { runCustomerAssistant } from "./assistantActions";
 
 type Customer = {
   id: string;
@@ -346,6 +355,24 @@ export default async function CustomerDetailPage({
           </Link>
         </div>
       </div>
+
+      <CustomerSummaryPanel customerId={customer.id} action={generateCustomerSummary} />
+
+      <CustomerCheckinHelper
+        customerId={customer.id}
+        customerEmail={customer.email}
+        customerPhone={customer.phone}
+        generateAction={generateCustomerCheckinDraft}
+        sendAction={sendCustomerCheckinMessage}
+      />
+
+      <AiAssistantPanel
+        title="Customer brief & suggestions"
+        description="Summarizes history across this customer, drafts a follow-up, and suggests next actions."
+        action={runCustomerAssistant}
+        fieldName="customer_id"
+        fieldValue={customer.id}
+      />
 
       <div className="hb-card space-y-4">
         <div className="flex items-center justify-between">
