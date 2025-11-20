@@ -77,14 +77,17 @@ export function JobMediaGallery({
 
   useEffect(() => {
     if (state?.ok) {
-      router.refresh();
-      setCaption("");
-      setKind("auto");
-      setSelectedFiles([]);
-      setDeleteError(null);
-      setDeletingId(null);
-      setVisibilityError(null);
-      setVisibilityId(null);
+      // Defer state resets to avoid synchronous cascades inside the effect.
+      setTimeout(() => {
+        router.refresh();
+        setCaption("");
+        setKind("auto");
+        setSelectedFiles([]);
+        setDeleteError(null);
+        setDeletingId(null);
+        setVisibilityError(null);
+        setVisibilityId(null);
+      }, 0);
     }
   }, [state?.ok, router]);
 
