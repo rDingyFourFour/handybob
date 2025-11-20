@@ -20,11 +20,18 @@ type JobRow = {
   status: string | null;
   customer_id: string | null;
   created_at: string | null;
-  customers?: {
-    name: string | null;
-    email: string | null;
-    phone: string | null;
-  } | null;
+  customers?:
+    | {
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+      }
+    | {
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+      }[]
+    | null;
 };
 
 type MessageRow = {
@@ -105,6 +112,8 @@ export async function runJobAssistant(
       .single();
 
     if (!job) return { error: "Job not found." };
+    const jobCustomer = normalizeCustomer(job.customers);
+    const safeJob: JobRow = { ...job, customers: jobCustomer };
 
     const [messagesRes, callsRes, appointmentsRes, quotesRes, invoicesRes] = await Promise.all([
       supabase
@@ -159,7 +168,7 @@ export async function runJobAssistant(
     }
 
     const historyLines = buildJobHistory({
-      job,
+      job: safeJob,
       messages: (messagesRes.data ?? []) as MessageRow[],
       calls: (callsRes.data ?? []) as CallRow[],
       appointments: (appointmentsRes.data ?? []) as AppointmentRow[],
@@ -168,7 +177,7 @@ export async function runJobAssistant(
       payments,
     });
 
-    const prompt = buildJobPrompt(job, historyLines);
+    const prompt = buildJobPrompt(safeJob, historyLines);
     const reply = await requestAssistantReply(prompt);
 
     return reply;
@@ -287,7 +296,7 @@ function buildJobHistory({
 }
 
 function buildJobPrompt(job: JobRow, history: string[]) {
-  const customer = job.customers;
+  const customer = normalizeCustomer(job.customers);
   const historyText = history.length ? history.map((line) => `- ${line}`).join("\n") : "- No history yet.";
 
   return `
@@ -323,4 +332,23 @@ function snippet(text?: string | null, max = 180) {
   if (!text) return "No content";
   const trimmed = text.trim();
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
+}
+
+function normalizeCustomer(
+  customer:
+    | {
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+      }
+    | {
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+      }[]
+    | null
+    | undefined,
+) {
+  if (Array.isArray(customer)) return customer[0] ?? null;
+  return customer ?? null;
 }
