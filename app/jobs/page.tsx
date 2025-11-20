@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { createSignedMediaUrl } from "@/utils/supabase/storage";
 
 type JobRow = {
   id: string;
@@ -13,6 +14,11 @@ type JobRow = {
   customer: {
     name: string | null;
   }[] | null;
+};
+
+type MediaPreview = {
+  job_id: string;
+  signed_url: string | null;
 };
 
 export default async function JobsPage() {
@@ -41,6 +47,35 @@ export default async function JobsPage() {
   }
 
   const safeJobs: JobRow[] = jobs ?? [];
+
+  const jobIds = safeJobs.map((job) => job.id);
+  let mediaPreviews: Record<string, MediaPreview> = {};
+
+  if (jobIds.length) {
+    const { data: mediaRows } = await supabase
+      .from("media")
+      .select("id, job_id, storage_path, bucket_id, url, mime_type")
+      .in("job_id", jobIds)
+      .order("created_at", { ascending: false });
+
+    const firstByJob = new Map<string, MediaPreview>();
+
+    if (mediaRows) {
+      for (const row of mediaRows) {
+        if (firstByJob.has(row.job_id)) continue;
+        if (row.mime_type && !row.mime_type.startsWith("image/")) continue;
+        const path = row.storage_path || "";
+        let signed_url: string | null = row.url ?? null;
+        if (path) {
+          const { signedUrl } = await createSignedMediaUrl(path, 60 * 30);
+          signed_url = signedUrl ?? signed_url;
+        }
+        firstByJob.set(row.job_id, { job_id: row.job_id, signed_url });
+      }
+    }
+
+    mediaPreviews = Object.fromEntries(firstByJob.entries());
+  }
 
   return (
     <div className="space-y-4">
@@ -78,6 +113,16 @@ export default async function JobsPage() {
                 <div className="text-xs text-slate-500">
                   Status: {job.status} · Urgency: {job.urgency}
                 </div>
+                {mediaPreviews[job.id]?.signed_url && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <img
+                      src={mediaPreviews[job.id].signed_url!}
+                      alt="Latest job media"
+                      className="h-12 w-16 rounded-md border border-slate-800 object-cover"
+                    />
+                    <span className="text-[11px] text-slate-400">Latest photo</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>

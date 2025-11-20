@@ -81,6 +81,9 @@ type MediaRow = {
   url?: string | null;
   caption?: string | null;
   kind?: string | null;
+  quote_id?: string | null;
+  invoice_id?: string | null;
+  is_public?: boolean | null;
 };
 
 type TimelineEntry = {
@@ -194,7 +197,7 @@ export default async function JobDetailPage({
 
   const { data: mediaRowsRaw, error: mediaError } = await supabase
     .from("media")
-    .select("id, bucket_id, storage_path, file_name, mime_type, created_at, url, caption, kind")
+    .select("id, bucket_id, storage_path, file_name, mime_type, created_at, url, caption, kind, quote_id, invoice_id, is_public")
     .eq("job_id", jobId)
     .order("created_at", { ascending: false });
 
@@ -225,9 +228,22 @@ export default async function JobDetailPage({
         signed_url: signedUrl ?? media.url ?? null,
         caption: media.caption ?? null,
         kind: media.kind ?? null,
+        quote_id: media.quote_id ?? null,
+        invoice_id: media.invoice_id ?? null,
+        is_public: media.is_public ?? false,
       };
     }),
   );
+
+  const quoteOptions = safeQuotes.map((quote) => ({
+    id: quote.id,
+    label: `Quote ${quote.id.slice(0, 8)}${quote.status ? ` · ${quote.status}` : ""}`,
+  }));
+
+  const invoiceOptions = invoices.map((invoice) => ({
+    id: invoice.id,
+    label: `Invoice ${invoice.invoice_number ?? invoice.id.slice(0, 8)}${invoice.status ? ` · ${invoice.status}` : ""}`,
+  }));
 
   const timeline: TimelineEntry[] = [
     {
@@ -375,6 +391,30 @@ export default async function JobDetailPage({
           Urgency: {job.urgency ?? "not set"}
         </div>
 
+        {mediaItems.length > 0 && (
+          <div className="pt-2 space-y-1">
+            <div className="text-xs text-slate-400 flex items-center justify-between">
+              <span>Latest media</span>
+              <Link href="#job-media" className="underline-offset-2 hover:underline text-blue-300">
+                View all
+              </Link>
+            </div>
+            <div className="flex gap-2 overflow-auto">
+              {mediaItems
+                .filter((m) => m.mime_type?.startsWith("image/"))
+                .slice(0, 4)
+                .map((m) => (
+                  <img
+                    key={m.id}
+                    src={m.signed_url || ""}
+                    alt={m.file_name || "Media"}
+                    className="h-16 w-24 rounded-md border border-slate-800 object-cover"
+                  />
+                ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2 pt-2">
           <Link
             href={`/appointments/new?job_id=${job.id}`}
@@ -396,6 +436,8 @@ export default async function JobDetailPage({
         jobId={job.id}
         items={mediaItems}
         loadError={mediaError?.message ?? null}
+        quoteOptions={quoteOptions}
+        invoiceOptions={invoiceOptions}
       />
 
       <JobFollowupHelper

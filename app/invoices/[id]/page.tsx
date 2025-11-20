@@ -5,6 +5,7 @@ import { sendInvoiceEmail } from "@/utils/email/sendInvoiceEmail";
 import { sendInvoiceSms } from "@/utils/sms/sendInvoiceSms";
 import { createServerClient } from "@/utils/supabase/server";
 import { logMessage } from "@/utils/communications/logMessage";
+import { createSignedMediaUrl } from "@/utils/supabase/storage";
 
 type InvoiceWithRelations = {
   id: string;
@@ -75,6 +76,17 @@ type QuotePayment = {
   created_at: string;
   stripe_payment_intent_id: string | null;
   customer_email: string | null;
+};
+
+type MediaItem = {
+  id: string;
+  file_name: string | null;
+  mime_type: string | null;
+  created_at: string | null;
+  signed_url: string | null;
+  caption?: string | null;
+  kind?: string | null;
+  storage_path?: string | null;
 };
 
 function extractJobTitle(invoice: InvoiceWithRelations) {
@@ -345,6 +357,33 @@ export default async function InvoiceDetailPage({
     .eq("quote_id", invoice.quote_id)
     .order("created_at", { ascending: false });
 
+  const { data: mediaRows } = await supabase
+    .from("media")
+    .select("id, file_name, mime_type, created_at, caption, kind, storage_path, bucket_id, url")
+    .eq("invoice_id", invoice.id)
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+
+  const mediaItems: MediaItem[] = await Promise.all(
+    (mediaRows ?? []).map(async (media) => {
+      const path = media.storage_path || "";
+      if (!path) {
+        return { ...media, signed_url: media.url ?? null };
+      }
+      const { signedUrl } = await createSignedMediaUrl(path, 60 * 60);
+      return {
+        id: media.id,
+        file_name: media.file_name,
+        mime_type: media.mime_type,
+        created_at: media.created_at,
+        caption: media.caption,
+        kind: media.kind,
+        storage_path: media.storage_path,
+        signed_url: signedUrl ?? media.url ?? null,
+      };
+    }),
+  );
+
   // quote_payments references quote_id, so ensure we query using invoice.quote_id
   const paymentsForQuote = (payments ?? []) as QuotePayment[];
   const jobTitle = extractJobTitle(invoice) || "Untitled job";
@@ -389,6 +428,54 @@ export default async function InvoiceDetailPage({
           Copy public invoice link
         </a>
       </div>
+
+      {mediaItems.length > 0 && (
+        <div className="hb-card space-y-2">
+          <h3>Media</h3>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {mediaItems.map((media) => {
+              const isImage = media.mime_type?.startsWith("image/");
+              return (
+                <div key={media.id} className="rounded-lg border border-slate-800 bg-slate-900/60">
+                  <div className="aspect-video w-full bg-slate-950/60">
+                    {media.signed_url ? (
+                      isImage ? (
+                        <img
+                          src={media.signed_url}
+                          alt={media.file_name || "Media"}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full flex-col items-center justify-center gap-2 p-3 text-center">
+                          <div className="rounded-full border border-slate-800 px-3 py-1 text-xs uppercase tracking-wide text-slate-200">
+                            {(media.file_name?.split(".").pop() || "file").toUpperCase()}
+                          </div>
+                          <a
+                            href={media.signed_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="hb-button-ghost text-xs"
+                          >
+                            Open
+                          </a>
+                        </div>
+                      )
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-slate-500">
+                        Preview unavailable
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-2">
+                    <p className="text-sm font-semibold truncate">{media.file_name || "Untitled file"}</p>
+                    {media.caption && <p className="hb-muted text-xs truncate">{media.caption}</p>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="hb-card space-y-3">
         <h3>Send to customer</h3>

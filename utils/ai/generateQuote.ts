@@ -260,3 +260,25 @@ function normaliseQuote(raw: RawQuote): GeneratedQuote {
     ),
   };
 }
+
+/**
+ * FUTURE ENHANCEMENT: media-aware quoting (do not implement yet).
+ *
+ * Goal: Given job media (e.g., photos) and the job description, generate a more accurate
+ * scope of work or a nicer customer-facing description. This should plug into the quote
+ * generation pipeline above without sending images today.
+ *
+ * Suggested integration point:
+ * - Before building the prompt in generateQuoteForJob, fetch job media metadata/URLs.
+ * - Pass a distilled summary of media (file names, captions, is_public flags) into the prompt.
+ * - When/if image processing is allowed, add a separate step to derive structured details
+ *   from images and feed those into the prompt.
+ *
+ * Explicitly do NOT send images to OpenAI or add image-processing code yet.
+ */
+export async function prepareMediaInsightsForQuote(_jobId: string) {
+  // Placeholder: in the future, pull media rows for the job and derive a text summary
+  // to enrich quote prompts. Keep this server-only and respect media.is_public if using
+  // customer-visible flows.
+  return null;
+}

@@ -12,6 +12,21 @@ export type UploadMediaState = {
   error?: string;
 };
 
+export type DeleteMediaState = {
+  ok?: boolean;
+  error?: string;
+};
+
+export type LinkMediaState = {
+  ok?: boolean;
+  error?: string;
+};
+
+export type VisibilityState = {
+  ok?: boolean;
+  error?: string;
+};
+
 function buildStoragePath(userId: string, jobId: string, fileName: string) {
   const safeName = fileName?.trim() || "upload";
   const extension = safeName.includes(".") ? safeName.slice(safeName.lastIndexOf(".")).toLowerCase() : "";
@@ -96,6 +111,95 @@ export async function uploadJobMedia(
       return { error: insertError.message };
     }
   }
+
+  revalidatePath(`/jobs/${jobId}`);
+  return { ok: true };
+}
+
+export async function deleteJobMedia(formData: FormData): Promise<DeleteMediaState> {
+  const supabase = createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
+  const mediaId = String(formData.get("media_id") || "");
+  const jobId = String(formData.get("job_id") || "");
+  if (!mediaId || !jobId) return { error: "Invalid media reference." };
+
+  const { data: mediaRow, error: fetchError } = await supabase
+    .from("media")
+    .select("id, user_id, bucket_id, storage_path")
+    .eq("id", mediaId)
+    .eq("job_id", jobId)
+    .eq("user_id", user.id)
+    .single();
+
+  if (fetchError) return { error: fetchError.message };
+  if (!mediaRow?.storage_path) return { error: "Media not found or missing path." };
+
+  const bucket = mediaRow.bucket_id || MEDIA_BUCKET_ID;
+  const path = mediaRow.storage_path;
+
+  const { error: storageError } = await supabase.storage.from(bucket).remove([path]);
+  if (storageError) return { error: storageError.message };
+
+  const { error: deleteError } = await supabase.from("media").delete().eq("id", mediaId).eq("user_id", user.id);
+  if (deleteError) return { error: deleteError.message };
+
+  revalidatePath(`/jobs/${jobId}`);
+  return { ok: true };
+}
+
+export async function linkJobMedia(_prev: LinkMediaState | null, formData: FormData): Promise<LinkMediaState> {
+  const supabase = createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
+  const mediaId = String(formData.get("media_id") || "");
+  const jobId = String(formData.get("job_id") || "");
+  const quoteId = (formData.get("quote_id") || "").toString().trim() || null;
+  const invoiceId = (formData.get("invoice_id") || "").toString().trim() || null;
+
+  if (!mediaId || !jobId) return { error: "Invalid media reference." };
+  if (!quoteId && !invoiceId) return { error: "Choose a quote or invoice to attach." };
+
+  const { error: updateError } = await supabase
+    .from("media")
+    .update({ quote_id: quoteId || null, invoice_id: invoiceId || null })
+    .eq("id", mediaId)
+    .eq("job_id", jobId)
+    .eq("user_id", user.id);
+
+  if (updateError) return { error: updateError.message };
+
+  revalidatePath(`/jobs/${jobId}`);
+  return { ok: true };
+}
+
+export async function toggleMediaVisibility(formData: FormData): Promise<VisibilityState> {
+  const supabase = createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
+  const mediaId = String(formData.get("media_id") || "");
+  const jobId = String(formData.get("job_id") || "");
+  const isPublic = String(formData.get("is_public") || "false") === "true";
+
+  if (!mediaId || !jobId) return { error: "Invalid media reference." };
+
+  const { error } = await supabase
+    .from("media")
+    .update({ is_public: isPublic })
+    .eq("id", mediaId)
+    .eq("job_id", jobId)
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
 
   revalidatePath(`/jobs/${jobId}`);
   return { ok: true };

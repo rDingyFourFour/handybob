@@ -1,9 +1,15 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { uploadJobMedia, type UploadMediaState } from "./mediaActions";
+import {
+  deleteJobMedia,
+  uploadJobMedia,
+  linkJobMedia,
+  toggleMediaVisibility,
+  type UploadMediaState,
+} from "./mediaActions";
 
 export type MediaItem = {
   id: string;
@@ -13,12 +19,18 @@ export type MediaItem = {
   signed_url: string | null;
   caption?: string | null;
   kind?: string | null;
+  quote_id?: string | null;
+  invoice_id?: string | null;
+  is_public?: boolean | null;
 };
 
 type Props = {
   jobId: string;
   items: MediaItem[];
   loadError?: string | null;
+  canDelete?: boolean;
+  quoteOptions?: { id: string; label: string }[];
+  invoiceOptions?: { id: string; label: string }[];
 };
 
 function formatDate(value: string | null) {
@@ -33,11 +45,25 @@ function getExtension(fileName: string | null) {
   return parts.pop()?.toUpperCase() || "file";
 }
 
-export function JobMediaGallery({ jobId, items, loadError }: Props) {
+export function JobMediaGallery({
+  jobId,
+  items,
+  loadError,
+  canDelete = true,
+  quoteOptions = [],
+  invoiceOptions = [],
+}: Props) {
   const router = useRouter();
   const [caption, setCaption] = useState("");
   const [kind, setKind] = useState("auto");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeleting, startDelete] = useTransition();
+  const [linkingId, setLinkingId] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [visibilityError, setVisibilityError] = useState<string | null>(null);
+  const [visibilityId, setVisibilityId] = useState<string | null>(null);
   const [state, formAction, pending] = useActionState<UploadMediaState, FormData>(
     uploadJobMedia,
     {} as UploadMediaState,
@@ -55,6 +81,10 @@ export function JobMediaGallery({ jobId, items, loadError }: Props) {
       setCaption("");
       setKind("auto");
       setSelectedFiles([]);
+      setDeleteError(null);
+      setDeletingId(null);
+      setVisibilityError(null);
+      setVisibilityId(null);
     }
   }, [state?.ok, router]);
 
@@ -72,8 +102,53 @@ export function JobMediaGallery({ jobId, items, loadError }: Props) {
     formAction(formData);
   };
 
+  const handleDelete = (mediaId: string) => (formData: FormData) => {
+    if (!confirm("Are you sure you want to delete this media item?")) return;
+    setDeleteError(null);
+    setDeletingId(mediaId);
+    startDelete(async () => {
+      const res = await deleteJobMedia(formData);
+      if (res?.error) {
+        setDeleteError(res.error);
+        setDeletingId(null);
+        return;
+      }
+      setDeletingId(null);
+      router.refresh();
+    });
+  };
+
+  const handleLink =
+    (mediaId: string, target: "quote" | "invoice") => async (formData: FormData) => {
+      setLinkError(null);
+      setLinkingId(mediaId);
+      const result = await linkJobMedia(null, formData);
+      if (result?.error) {
+        setLinkError(result.error);
+        setLinkingId(null);
+        return;
+      }
+      setLinkingId(null);
+      router.refresh();
+    };
+
+  const handleVisibility =
+    (mediaId: string, currentPublic: boolean | null | undefined) => async (formData: FormData) => {
+      setVisibilityError(null);
+      setVisibilityId(mediaId);
+      formData.set("is_public", String(!currentPublic));
+      const res = await toggleMediaVisibility(formData);
+      if (res?.error) {
+        setVisibilityError(res.error);
+        setVisibilityId(null);
+        return;
+      }
+      setVisibilityId(null);
+      router.refresh();
+    };
+
   return (
-    <div className="hb-card space-y-3">
+    <div className="hb-card space-y-3" id="job-media">
       <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="hb-label text-xs uppercase tracking-wide text-slate-400">
@@ -137,7 +212,7 @@ export function JobMediaGallery({ jobId, items, loadError }: Props) {
         </button>
         {state?.error && (
           <p className="text-sm text-red-400">
-            Could not upload. {state.error}
+            Upload failed. {state.error}
           </p>
         )}
         {loadError && (
@@ -193,13 +268,118 @@ export function JobMediaGallery({ jobId, items, loadError }: Props) {
                 <div className="p-3 space-y-1">
                   <p className="text-sm font-semibold truncate">{item.file_name || "Untitled file"}</p>
                   {item.caption && <p className="hb-muted text-sm truncate">{item.caption}</p>}
-                  <p className="hb-muted text-xs">{formatDate(item.created_at)}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="hb-muted text-xs">{formatDate(item.created_at)}</p>
+                    <span className="text-[10px] uppercase tracking-wide rounded-full border border-slate-800 px-2 py-0.5">
+                      {item.is_public ? "Public" : "Internal"}
+                    </span>
+                  </div>
+                  {canDelete && (
+                    <form
+                      className="pt-2 flex items-center gap-2"
+                      action={handleVisibility(item.id, item.is_public)}
+                    >
+                      <input type="hidden" name="job_id" value={jobId} />
+                      <input type="hidden" name="media_id" value={item.id} />
+                      <input type="hidden" name="is_public" value={item.is_public ? "true" : "false"} />
+                      <button
+                        type="submit"
+                        className="hb-button-ghost text-xs"
+                        disabled={visibilityId === item.id}
+                      >
+                        {visibilityId === item.id
+                          ? "Updating..."
+                          : item.is_public
+                            ? "Make internal only"
+                            : "Make public on quote/invoice"}
+                      </button>
+                    </form>
+                  )}
+                  {canDelete && (
+                    <form
+                      action={handleDelete(item.id)}
+                      className="pt-2"
+                    >
+                      <input type="hidden" name="job_id" value={jobId} />
+                      <input type="hidden" name="media_id" value={item.id} />
+                      <button
+                        type="submit"
+                        className="hb-button-ghost text-xs text-red-300"
+                        disabled={isDeleting && deletingId === item.id}
+                      >
+                        {isDeleting && deletingId === item.id ? "Deleting..." : "Delete"}
+                      </button>
+                    </form>
+                  )}
+                  {(quoteOptions.length > 0 || invoiceOptions.length > 0) && (
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      {quoteOptions.length > 0 && (
+                        <form className="flex items-center gap-2" action={handleLink(item.id, "quote")}>
+                          <input type="hidden" name="job_id" value={jobId} />
+                          <input type="hidden" name="media_id" value={item.id} />
+                          <select
+                            name="quote_id"
+                            className="hb-input text-xs"
+                            defaultValue={item.quote_id || quoteOptions[0]?.id}
+                            disabled={linkingId === item.id}
+                          >
+                            {quoteOptions.map((q) => (
+                              <option key={q.id} value={q.id}>
+                                {q.label}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="submit"
+                            className="hb-button-ghost text-xs"
+                            disabled={linkingId === item.id}
+                          >
+                            {linkingId === item.id ? "Attaching..." : "Attach to quote"}
+                          </button>
+                        </form>
+                      )}
+                      {invoiceOptions.length > 0 && (
+                        <form className="flex items-center gap-2" action={handleLink(item.id, "invoice")}>
+                          <input type="hidden" name="job_id" value={jobId} />
+                          <input type="hidden" name="media_id" value={item.id} />
+                          <select
+                            name="invoice_id"
+                            className="hb-input text-xs"
+                            defaultValue={item.invoice_id || invoiceOptions[0]?.id}
+                            disabled={linkingId === item.id}
+                          >
+                            {invoiceOptions.map((inv) => (
+                              <option key={inv.id} value={inv.id}>
+                                {inv.label}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="submit"
+                            className="hb-button-ghost text-xs"
+                            disabled={linkingId === item.id}
+                          >
+                            {linkingId === item.id ? "Attaching..." : "Attach to invoice"}
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
       )}
+      {deleteError && (
+        <p className="text-sm text-red-400">Could not delete media. {deleteError}</p>
+      )}
+        {linkError && (
+          <p className="text-sm text-red-400">Could not attach media. {linkError}</p>
+        )}
+        {visibilityError && (
+          <p className="text-sm text-red-400">Could not update visibility. {visibilityError}</p>
+        )}
     </div>
   );
 }

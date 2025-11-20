@@ -71,7 +71,7 @@ async function updateAppointmentStatusAction(formData: FormData) {
 export default async function AppointmentsPage({
   searchParams,
 }: {
-  searchParams?: { job_id?: string };
+  searchParams: Promise<{ job_id?: string }>;
 }) {
   const supabase = createServerClient();
   const {
@@ -79,7 +79,8 @@ export default async function AppointmentsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const filterJobId = searchParams?.job_id?.trim() || null;
+  const resolvedSearch = await searchParams;
+  const filterJobId = resolvedSearch?.job_id?.trim() || null;
 
   let appointmentsQuery = supabase
     .from("appointments")
