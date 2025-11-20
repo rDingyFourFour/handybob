@@ -257,7 +257,7 @@ async function downloadRecording(url: string) {
       return null;
     }
     const arrayBuffer = await res.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    return new Uint8Array(arrayBuffer);
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown fetch error";
     console.warn("[processCallRecording] Error downloading recording:", message);
@@ -265,9 +265,10 @@ async function downloadRecording(url: string) {
   }
 }
 
-async function transcribeAudio(audio: Buffer) {
+async function transcribeAudio(audio: Uint8Array) {
+  const buffer = audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength) as ArrayBuffer;
   const formData = new FormData();
-  formData.append("file", new Blob([audio], { type: "audio/mpeg" }), "voicemail.mp3");
+  formData.append("file", new Blob([buffer], { type: "audio/mpeg" }), "voicemail.mp3");
   formData.append("model", "whisper-1");
   formData.append("response_format", "text");
 
