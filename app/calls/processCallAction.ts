@@ -77,7 +77,7 @@ async function processCallCore({
   enforceUserId,
   userIdFilter,
 }: {
-  supabase: SupabaseClient<unknown, "public", unknown>;
+  supabase: SupabaseClient;
   callId: string;
   enforceUserId: boolean;
   userIdFilter?: string;
