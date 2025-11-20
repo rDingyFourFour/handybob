@@ -12,21 +12,25 @@ const OPENAI_KEY = process.env.OPENAI_API_KEY;
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 
-type ActionResult = {
-  ok?: boolean;
-  error?: string;
-};
-
-export async function processCallRecording(formData: FormData): Promise<ActionResult> {
+export async function processCallRecording(formData: FormData): Promise<void> {
   const callId = formData.get("call_id");
-  if (typeof callId !== "string") return { error: "call_id is required." };
-  if (!OPENAI_KEY) return { error: "OPENAI_API_KEY is not configured." };
+  if (typeof callId !== "string") {
+    console.warn("[processCallRecording] Missing call_id.");
+    return;
+  }
+  if (!OPENAI_KEY) {
+    console.warn("[processCallRecording] OPENAI_API_KEY is not configured.");
+    return;
+  }
 
   const supabase = createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
+  if (!user) {
+    console.warn("[processCallRecording] User not signed in.");
+    return;
+  }
 
   const result = await processCallCore({
     supabase,
@@ -35,14 +39,15 @@ export async function processCallRecording(formData: FormData): Promise<ActionRe
     userIdFilter: user.id,
   });
 
-  if (result.error) return { error: result.error };
+  if (result.error) {
+    console.warn("[processCallRecording] Failed to process:", result.error);
+    return;
+  }
 
   // Refresh calls UI
   revalidatePath("/calls");
   if (result.jobId) revalidatePath(`/jobs/${result.jobId}`);
   if (result.customerId) revalidatePath(`/customers/${result.customerId}`);
-
-  return { ok: true };
 }
 
 // Automation hook: can be called from webhooks/scheduled jobs using the service-role client.
