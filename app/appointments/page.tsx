@@ -23,6 +23,18 @@ type AppointmentListItem = {
             }[]
           | null;
       }
+    | {
+        id: string;
+        title: string | null;
+        customers:
+          | {
+              name: string | null;
+            }
+          | {
+              name: string | null;
+            }[]
+          | null;
+      }[]
     | null;
 };
 
@@ -80,9 +92,10 @@ export default async function AppointmentsPage() {
             const end = endDate
               ? endDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
               : null;
-            const customer = Array.isArray(appt.jobs?.customers)
-              ? appt.jobs?.customers[0]
-              : appt.jobs?.customers;
+            const primaryJob = Array.isArray(appt.jobs) ? appt.jobs[0] ?? null : appt.jobs;
+            const customer = Array.isArray(primaryJob?.customers)
+              ? primaryJob?.customers[0]
+              : primaryJob?.customers;
             const statusTone = appt.status === "completed"
               ? "text-emerald-400"
               : appt.status === "cancelled"
