@@ -307,7 +307,12 @@ async function transcribeRecording(audio: Uint8Array | null) {
   }
   if (!audio) return null;
 
-  const fileBlob = new Blob([audio], {
+  // Convert to a plain ArrayBuffer slice to satisfy BlobPart typing in strict TS.
+  const buffer = audio.buffer.slice(
+    audio.byteOffset,
+    audio.byteOffset + audio.byteLength,
+  ) as ArrayBuffer;
+  const fileBlob = new Blob([buffer], {
     type: "audio/mpeg",
   });
 
