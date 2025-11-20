@@ -19,10 +19,13 @@ type CallRow = {
   to_number?: string | null;
   job_id?: string | null;
   customer_id?: string | null;
-  jobs?: { id: string; title: string | null } | null;
   customers?:
     | { id: string; name: string | null; phone: string | null }
     | { id: string; name: string | null; phone: string | null }[]
+    | null;
+  jobs?:
+    | { id: string; title: string | null }
+    | { id: string; title: string | null }[]
     | null;
 };
 
@@ -69,6 +72,7 @@ export default async function CallDetailPage({ params }: { params: { id: string 
   if (!call) redirect("/calls");
 
   const customerRecord = Array.isArray(call.customers) ? call.customers[0] : call.customers;
+  const jobRecord = Array.isArray(call.jobs) ? call.jobs[0] : call.jobs;
 
   return (
     <div className="space-y-4">
@@ -110,7 +114,7 @@ export default async function CallDetailPage({ params }: { params: { id: string 
           )}
           {call.job_id && (
             <Link href={`/jobs/${call.job_id}`} className="underline-offset-2 hover:underline">
-              Job: {call.jobs?.title || call.job_id}
+              Job: {jobRecord?.title || call.job_id}
             </Link>
           )}
         </div>
