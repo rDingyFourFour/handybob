@@ -1,7 +1,7 @@
 create extension if not exists "uuid-ossp";
 create extension if not exists "pgcrypto";
 
--- Bucket for job media (photos + documents). Private by default.
+-- Bucket for job media (photos + documents). Private by default; objects use user_id/job_id/file.ext prefixes and are served via signed URLs.
 insert into storage.buckets (id, name, public)
 values ('job-media', 'job-media', false)
 on conflict (id) do nothing;

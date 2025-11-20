@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { uploadJobMedia, type UploadMediaState } from "./mediaActions";
@@ -11,6 +11,8 @@ export type MediaItem = {
   mime_type: string | null;
   created_at: string | null;
   signed_url: string | null;
+  caption?: string | null;
+  kind?: string | null;
 };
 
 type Props = {
@@ -33,16 +35,42 @@ function getExtension(fileName: string | null) {
 
 export function JobMediaGallery({ jobId, items, loadError }: Props) {
   const router = useRouter();
+  const [caption, setCaption] = useState("");
+  const [kind, setKind] = useState("auto");
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [state, formAction, pending] = useActionState<UploadMediaState, FormData>(
     uploadJobMedia,
     {} as UploadMediaState,
   );
 
+  const selectionLabel = useMemo(() => {
+    if (!selectedFiles.length) return "No file chosen";
+    if (selectedFiles.length === 1) return selectedFiles[0].name;
+    return `${selectedFiles.length} files selected`;
+  }, [selectedFiles]);
+
   useEffect(() => {
     if (state?.ok) {
       router.refresh();
+      setCaption("");
+      setKind("auto");
+      setSelectedFiles([]);
     }
   }, [state?.ok, router]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setSelectedFiles(files);
+  };
+
+  const handleSubmit = (formData: FormData) => {
+    // ensure kind/caption propagate with current UI state
+    formData.set("caption", caption);
+    formData.set("kind", kind);
+    formData.delete("file");
+    selectedFiles.forEach((file) => formData.append("file", file));
+    formAction(formData);
+  };
 
   return (
     <div className="hb-card space-y-3">
@@ -58,20 +86,55 @@ export function JobMediaGallery({ jobId, items, loadError }: Props) {
         </div>
       </div>
 
-      <form action={formAction} className="space-y-2" encType="multipart/form-data">
+      <form action={handleSubmit} className="space-y-3" encType="multipart/form-data">
         <input type="hidden" name="job_id" value={jobId} />
-        <div className="flex flex-col gap-2 md:flex-row md:items-center">
-          <input
-            type="file"
-            name="file"
-            required
-            className="hb-input max-w-xl"
-            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-          />
-          <button className="hb-button" disabled={pending}>
-            {pending ? "Uploading..." : "Upload media"}
-          </button>
+        <div className="grid gap-3 md:grid-cols-[1fr,220px] md:items-center">
+          <div className="space-y-2">
+            <label className="block text-sm hb-muted">
+              Files
+              <input
+                type="file"
+                name="file"
+                multiple
+                required
+                onChange={handleFileChange}
+                className="hb-input mt-1"
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.mp3,.wav"
+              />
+            </label>
+            <p className="text-xs text-slate-400">{selectionLabel}</p>
+          </div>
+          <div className="space-y-2">
+            <label className="block text-sm hb-muted">
+              Kind
+              <select
+                name="kind"
+                className="hb-input mt-1"
+                value={kind}
+                onChange={(e) => setKind(e.target.value)}
+              >
+                <option value="auto">Auto-detect</option>
+                <option value="photo">Photo</option>
+                <option value="document">Document</option>
+                <option value="audio">Audio</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+          </div>
         </div>
+        <label className="block text-sm hb-muted">
+          Caption (optional, applies to all selected files)
+          <input
+            name="caption"
+            className="hb-input mt-1"
+            placeholder="e.g. Kitchen before photo"
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+          />
+        </label>
+        <button className="hb-button" disabled={pending || !selectedFiles.length}>
+          {pending ? "Uploading..." : "Upload media"}
+        </button>
         {state?.error && (
           <p className="text-sm text-red-400">
             Could not upload. {state.error}
@@ -129,6 +192,7 @@ export function JobMediaGallery({ jobId, items, loadError }: Props) {
                 </div>
                 <div className="p-3 space-y-1">
                   <p className="text-sm font-semibold truncate">{item.file_name || "Untitled file"}</p>
+                  {item.caption && <p className="hb-muted text-sm truncate">{item.caption}</p>}
                   <p className="hb-muted text-xs">{formatDate(item.created_at)}</p>
                 </div>
               </div>

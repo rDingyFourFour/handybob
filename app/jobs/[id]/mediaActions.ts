@@ -3,9 +3,9 @@
 import { revalidatePath } from "next/cache";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { MEDIA_BUCKET_ID, createSignedMediaUrl } from "@/utils/supabase/storage";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50MB, aligned with Supabase storage default
-const MEDIA_BUCKET_ID = "job-media";
 
 export type UploadMediaState = {
   ok?: boolean;
@@ -19,6 +19,16 @@ function buildStoragePath(userId: string, jobId: string, fileName: string) {
   return `${userId}/${jobId}/${uniqueId}${extension}`;
 }
 
+function inferKind(mime: string | undefined | null): "photo" | "document" | "audio" | "other" {
+  if (!mime) return "other";
+  if (mime.startsWith("image/")) return "photo";
+  if (mime.startsWith("audio/")) return "audio";
+  if (mime.includes("pdf") || mime.includes("msword") || mime.includes("spreadsheet") || mime.includes("officedocument")) {
+    return "document";
+  }
+  return "other";
+}
+
 export async function uploadJobMedia(
   _prev: UploadMediaState | null,
   formData: FormData,
@@ -30,12 +40,12 @@ export async function uploadJobMedia(
   if (!user) return { error: "You must be signed in." };
 
   const jobId = String(formData.get("job_id") || "");
-  const file = formData.get("file");
+  const caption = (formData.get("caption") || "").toString().trim() || null;
+  const requestedKind = (formData.get("kind") || "auto").toString().trim();
+  const files = formData.getAll("file").filter((value) => value instanceof File) as File[];
 
   if (!jobId) return { error: "Job ID is required." };
-  if (!(file instanceof File)) return { error: "Please choose a file to upload." };
-  if (file.size === 0) return { error: "File is empty." };
-  if (file.size > MAX_FILE_BYTES) return { error: "Max file size is 50MB." };
+  if (!files.length) return { error: "Please choose at least one file to upload." };
 
   // Ensure the job belongs to the current user (RLS also enforces this).
   const { data: job } = await supabase
@@ -45,31 +55,46 @@ export async function uploadJobMedia(
     .single();
   if (!job) return { error: "Job not found or inaccessible." };
 
-  const objectPath = buildStoragePath(user.id, jobId, file.name);
+  const now = new Date().toISOString();
 
-  const { error: uploadError } = await supabase.storage.from(MEDIA_BUCKET_ID).upload(objectPath, file, {
-    cacheControl: "3600",
-    upsert: false,
-    contentType: file.type || undefined,
-  });
-  if (uploadError) {
-    return { error: uploadError.message };
+  for (const file of files) {
+    if (file.size === 0) return { error: `File ${file.name} is empty.` };
+    if (file.size > MAX_FILE_BYTES) return { error: `File ${file.name} exceeds 50MB.` };
   }
 
-  const { error: insertError } = await supabase.from("media").insert({
-    user_id: user.id,
-    job_id: jobId,
-    bucket_id: MEDIA_BUCKET_ID,
-    storage_path: objectPath,
-    file_name: file.name || "upload",
-    mime_type: file.type || null,
-    size_bytes: file.size,
-    created_at: new Date().toISOString(),
-  });
+  for (const file of files) {
+    const kind = requestedKind === "auto" ? inferKind(file.type) : (requestedKind as "photo" | "document" | "audio" | "other");
+    const storagePath = buildStoragePath(user.id, jobId, file.name);
 
-  if (insertError) {
-    await supabase.storage.from(MEDIA_BUCKET_ID).remove([objectPath]);
-    return { error: insertError.message };
+    const { error: uploadError } = await supabase.storage.from(MEDIA_BUCKET_ID).upload(storagePath, file, {
+      cacheControl: "3600",
+      upsert: false,
+      contentType: file.type || undefined,
+    });
+    if (uploadError) {
+      return { error: uploadError.message };
+    }
+
+    const { signedUrl } = await createSignedMediaUrl(storagePath, 60 * 60); // store a usable URL; will be refreshed on read
+
+    const { error: insertError } = await supabase.from("media").insert({
+      user_id: user.id,
+      job_id: jobId,
+      bucket_id: MEDIA_BUCKET_ID,
+      storage_path: storagePath,
+      file_name: file.name || "upload",
+      mime_type: file.type || null,
+      size_bytes: file.size,
+      created_at: now,
+      url: signedUrl || storagePath,
+      kind,
+      caption: caption || null,
+    });
+
+    if (insertError) {
+      await supabase.storage.from(MEDIA_BUCKET_ID).remove([storagePath]);
+      return { error: insertError.message };
+    }
   }
 
   revalidatePath(`/jobs/${jobId}`);

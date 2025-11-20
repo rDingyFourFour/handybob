@@ -11,6 +11,7 @@ import { generateJobSummary } from "./jobSummaryAction";
 import { generateNextActions } from "./nextActionsAction";
 import { generateFollowupDraft, sendFollowupMessage } from "./followupActions";
 import { runJobAssistant } from "./assistantActions";
+import { createSignedMediaUrl, MEDIA_BUCKET_ID } from "@/utils/supabase/storage";
 import { JobMediaGallery, type MediaItem } from "./JobMediaGallery";
 
 type QuoteRow = {
@@ -77,6 +78,9 @@ type MediaRow = {
   file_name: string | null;
   mime_type: string | null;
   created_at: string | null;
+  url?: string | null;
+  caption?: string | null;
+  kind?: string | null;
 };
 
 type TimelineEntry = {
@@ -91,7 +95,6 @@ type TimelineEntry = {
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const MEDIA_BUCKET_ID = "job-media";
 
 function formatDateTime(date: string | null) {
   if (!date) return "";
@@ -191,7 +194,7 @@ export default async function JobDetailPage({
 
   const { data: mediaRowsRaw, error: mediaError } = await supabase
     .from("media")
-    .select("id, bucket_id, storage_path, file_name, mime_type, created_at")
+    .select("id, bucket_id, storage_path, file_name, mime_type, created_at, url, caption, kind")
     .eq("job_id", jobId)
     .order("created_at", { ascending: false });
 
@@ -211,16 +214,17 @@ export default async function JobDetailPage({
         };
       }
 
-      const { data: signedData } = await supabase.storage
-        .from(bucketId)
-        .createSignedUrl(path, 60 * 60); // 1 hour access
+      // job-media bucket is private; serve via signed URLs
+      const { signedUrl } = await createSignedMediaUrl(path, 60 * 60);
 
       return {
         id: media.id,
         file_name: media.file_name ?? "File",
         mime_type: media.mime_type ?? null,
         created_at: media.created_at ?? null,
-        signed_url: signedData?.signedUrl ?? null,
+        signed_url: signedUrl ?? media.url ?? null,
+        caption: media.caption ?? null,
+        kind: media.kind ?? null,
       };
     }),
   );
