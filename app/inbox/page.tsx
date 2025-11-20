@@ -324,6 +324,16 @@ export default async function InboxPage({
                             <p className="text-sm whitespace-pre-wrap">
                               {message.body || message.subject || "No content"}
                             </p>
+                            {message.job_id && (
+                              <div className="mt-2 text-[11px]">
+                                <Link
+                                  href={`/jobs/${message.job_id}`}
+                                  className="underline-offset-2 hover:underline"
+                                >
+                                  View job timeline
+                                </Link>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

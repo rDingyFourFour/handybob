@@ -24,6 +24,7 @@ type AppointmentRow = {
 
 type MessageRow = {
   id: string;
+  customer_id?: string | null;
   channel: string | null;
   direction: string | null;
   subject: string | null;
@@ -133,7 +134,7 @@ export default async function JobDetailPage({
         .order("start_time", { ascending: false }),
       supabase
         .from("messages")
-        .select("id, channel, direction, subject, body, status, created_at, sent_at")
+        .select("id, customer_id, channel, direction, subject, body, status, created_at, sent_at")
         .eq("job_id", jobId)
         .order("created_at", { ascending: false })
         .limit(50),
@@ -185,6 +186,9 @@ export default async function JobDetailPage({
       detail: message.body || message.subject || null,
       timestamp: message.sent_at || message.created_at,
       status: message.status,
+      href: message.customer_id
+        ? `/inbox?customer_id=${message.customer_id}`
+        : `/inbox`,
     })),
     ...calls.map((call) => ({
       id: `call-${call.id}`,

@@ -14,6 +14,9 @@ export default async function HomePage() {
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
 
+  const dayAgo = new Date();
+  dayAgo.setHours(dayAgo.getHours() - 24);
+
   const monthStart = new Date(todayStart);
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
@@ -28,6 +31,7 @@ export default async function HomePage() {
     unpaidInvoicesRes,
     paidQuotesThisMonthRes,
     paidInvoicesThisMonthRes,
+    inboundMessagesRes,
   ] =
     await Promise.all([
       supabase
@@ -65,6 +69,12 @@ export default async function HomePage() {
         .eq("status", "paid")
         .gte("paid_at", monthStart.toISOString())
         .lt("paid_at", nextMonthStart.toISOString()),
+
+      supabase
+        .from("messages")
+        .select("id")
+        .eq("direction", "inbound")
+        .gte("sent_at", dayAgo.toISOString()),
     ]);
 
   const paidQuotes =
@@ -74,6 +84,8 @@ export default async function HomePage() {
     (sum, quote) => sum + Number(quote.total ?? 0),
     0
   );
+
+  const inboundMessagesCount = inboundMessagesRes.data?.length ?? 0;
 
   const paidInvoices =
     (paidInvoicesThisMonthRes.data ?? []) as { id: string; total: number | null }[];
@@ -166,6 +178,9 @@ export default async function HomePage() {
             <Link href="/calendar" className="hb-button-ghost">
               Calendar
             </Link>
+            <Link href="/inbox" className="hb-button-ghost">
+              Inbox
+            </Link>
           </div>
         </div>
 
@@ -199,6 +214,23 @@ export default async function HomePage() {
             })}
           </div>
         )}
+      </div>
+
+      <div className="hb-card flex items-center justify-between">
+        <div>
+          <h3>Inbox</h3>
+          <p className="hb-muted text-sm">
+            Inbound messages in the last 24 hours.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <p className="text-2xl font-semibold">
+            {inboundMessagesCount}
+          </p>
+          <Link href="/inbox" className="hb-button">
+            View inbox
+          </Link>
+        </div>
       </div>
     </div>
   );
