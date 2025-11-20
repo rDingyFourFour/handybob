@@ -87,7 +87,10 @@ export default async function HomePage() {
     id: string;
     title: string | null;
     start_time: string | null;
-    jobs: { title: string | null } | null;
+    jobs:
+      | { title: string | null }
+      | { title: string | null }[]
+      | null;
   }[];
 
   return (
@@ -165,11 +168,11 @@ export default async function HomePage() {
           <p className="hb-muted text-sm">No appointments scheduled for today.</p>
         ) : (
           <div className="space-y-2">
-            {todaysAppointments.map((appt) => (
-              <div key={appt.id} className="rounded border border-slate-800 px-3 py-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold">{appt.title || "Appointment"}</span>
-                  <span className="hb-muted text-xs">
+          {todaysAppointments.map((appt) => (
+            <div key={appt.id} className="rounded border border-slate-800 px-3 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold">{appt.title || "Appointment"}</span>
+                <span className="hb-muted text-xs">
                     {appt.start_time
                       ? new Date(appt.start_time).toLocaleTimeString([], {
                           hour: "2-digit",
@@ -178,11 +181,15 @@ export default async function HomePage() {
                       : ""}
                   </span>
                 </div>
-                <p className="hb-muted text-xs">{appt.jobs?.title || "No job linked"}</p>
-              </div>
-            ))}
-          </div>
-        )}
+                <p className="hb-muted text-xs">
+                  {Array.isArray(appt.jobs)
+                    ? appt.jobs[0]?.title || "No job linked"
+                    : appt.jobs?.title || "No job linked"}
+                </p>
+            </div>
+          ))}
+        </div>
+      )}
       </div>
     </div>
   );
