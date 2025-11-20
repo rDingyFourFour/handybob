@@ -187,7 +187,7 @@ export default async function CustomerDetailPage({
       detail: customer.email || customer.phone,
       timestamp: (customer as Customer).created_at,
     },
-    ...jobList.map((job) => ({
+    ...jobList.map((job): TimelineEntry => ({
       id: `job-${job.id}`,
       kind: "job" as const,
       title: `Job created: ${job.title || "Untitled job"}`,
@@ -195,7 +195,7 @@ export default async function CustomerDetailPage({
       timestamp: job.created_at,
       href: `/jobs/${job.id}`,
     })),
-    ...messages.map((message) => {
+    ...messages.map((message): TimelineEntry => {
       const jobTitle = message.job_id ? jobTitleMap.get(message.job_id) : null;
       return {
         id: `msg-${message.id}`,
@@ -208,7 +208,7 @@ export default async function CustomerDetailPage({
         status: message.status,
       };
     }),
-    ...calls.map((call) => {
+    ...calls.map((call): TimelineEntry => {
       const jobTitle = call.job_id ? jobTitleMap.get(call.job_id) : null;
       return {
         id: `call-${call.id}`,
@@ -219,7 +219,7 @@ export default async function CustomerDetailPage({
         status: call.status,
       };
     }),
-    ...appointments.map((appt) => {
+    ...appointments.map((appt): TimelineEntry => {
       const jobTitle = appt.job_id ? jobTitleMap.get(appt.job_id) : null;
       return {
         id: `appt-${appt.id}`,
@@ -233,7 +233,7 @@ export default async function CustomerDetailPage({
         href: `/appointments/${appt.id}`,
       };
     }),
-    ...quotes.flatMap((quote) => {
+    ...quotes.flatMap((quote): TimelineEntry[] => {
       const jobTitle = quote.job_id ? jobTitleMap.get(quote.job_id) : null;
       const baseDetail = [`Total ${formatCurrency(quote.total)}`, jobTitle].filter(Boolean).join(" · ");
 
@@ -283,11 +283,11 @@ export default async function CustomerDetailPage({
           status: "paid",
           href: `/quotes/${quote.id}`,
         });
-      }
+        }
 
-      return events;
-    }),
-    ...invoices.flatMap((invoice) => {
+        return events;
+      }),
+    ...invoices.flatMap((invoice): TimelineEntry[] => {
       const jobTitle = invoice.job_id ? jobTitleMap.get(invoice.job_id) : null;
       const baseDetail = [`Invoice #${invoice.invoice_number ?? invoice.id.slice(0, 8)}`, formatCurrency(invoice.total), jobTitle]
         .filter(Boolean)
