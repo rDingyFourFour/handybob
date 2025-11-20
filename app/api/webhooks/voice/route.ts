@@ -292,7 +292,7 @@ async function fetchRecordingBuffer(recordingUrl: string) {
     }
 
     const arrayBuffer = await res.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    return new Uint8Array(arrayBuffer);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown fetch error";
     console.warn("[voice-webhook] Error fetching recording audio:", message);
@@ -300,14 +300,14 @@ async function fetchRecordingBuffer(recordingUrl: string) {
   }
 }
 
-async function transcribeRecording(audio: Buffer | Uint8Array | null) {
+async function transcribeRecording(audio: Uint8Array | null) {
   if (!OPENAI_KEY) {
     console.warn("[voice-webhook] OPENAI_API_KEY not set; skipping transcription.");
     return null;
   }
   if (!audio) return null;
 
-  const fileBlob = new Blob([audio instanceof Uint8Array ? audio : new Uint8Array(audio)], {
+  const fileBlob = new Blob([audio], {
     type: "audio/mpeg",
   });
 
