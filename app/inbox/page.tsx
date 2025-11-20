@@ -135,7 +135,7 @@ export default async function InboxPage() {
         normalizeCustomer(job?.customers ?? null);
       return {
         id: `msg-${message.id}`,
-        type: "message",
+        type: "message" as const,
         channel: message.channel || "email",
         direction: message.direction || "outbound",
         status: message.status,
@@ -154,7 +154,7 @@ export default async function InboxPage() {
         normalizeCustomer(job?.customers ?? null);
       return {
         id: `call-${call.id}`,
-        type: "call",
+        type: "call" as const,
         channel: "call",
         direction: call.direction || "outbound",
         status: call.status,
