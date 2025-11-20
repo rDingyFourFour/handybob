@@ -2,6 +2,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -63,32 +64,6 @@ export async function processCallById(callId: string): Promise<{ ok?: boolean; e
   return result.error ? { error: result.error } : { ok: true };
 }
 
-type SupabaseClientLike = {
-  from: (table: string) => {
-    select: (selection: string) => SupabaseQueryLike;
-    eq: (col: string, val: unknown) => SupabaseQueryLike;
-    is?: (col: string, val: unknown) => SupabaseQueryLike;
-    update: (values: Record<string, unknown>) => SupabaseQueryLike;
-    insert: (values: Record<string, unknown>) => SupabaseQueryLike;
-    maybeSingle?: () => Promise<{ data: unknown; error: { message: string } | null }>;
-    single?: () => Promise<{ data: unknown; error: { message: string } | null }>;
-    order?: (col: string, opts?: { ascending?: boolean }) => SupabaseQueryLike;
-    limit?: (n: number) => SupabaseQueryLike;
-  };
-};
-
-type SupabaseQueryLike = {
-  select?: (selection: string) => SupabaseQueryLike;
-  eq?: (col: string, val: unknown) => SupabaseQueryLike;
-  is?: (col: string, val: unknown) => SupabaseQueryLike;
-  update?: (values: Record<string, unknown>) => SupabaseQueryLike;
-  insert?: (values: Record<string, unknown>) => SupabaseQueryLike;
-  maybeSingle?: () => Promise<{ data: unknown; error: { message: string } | null }>;
-  single?: () => Promise<{ data: unknown; error: { message: string } | null }>;
-  order?: (col: string, opts?: { ascending?: boolean }) => SupabaseQueryLike;
-  limit?: (n: number) => SupabaseQueryLike;
-};
-
 type ProcessCallCoreResult = {
   ok?: boolean;
   error?: string;
@@ -102,7 +77,7 @@ async function processCallCore({
   enforceUserId,
   userIdFilter,
 }: {
-  supabase: SupabaseClientLike;
+  supabase: SupabaseClient<unknown, "public", unknown>;
   callId: string;
   enforceUserId: boolean;
   userIdFilter?: string;
@@ -118,8 +93,8 @@ async function processCallCore({
   }
 
   const { data: call, error: loadError } =
-    (await (query as SupabaseQueryLike).maybeSingle?.()) ??
-    (await (query as SupabaseQueryLike).single?.()) ??
+    (await query.maybeSingle?.()) ??
+    (await query.single?.()) ??
     { data: null, error: { message: "Call not found." } };
 
   if (loadError || !call) {
