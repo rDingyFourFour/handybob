@@ -6,6 +6,20 @@ import { createServerClient } from "@/utils/supabase/server";
 type JobOption = {
   id: string;
   title: string | null;
+  customerName: string | null;
+};
+
+type JobRow = {
+  id: string;
+  title: string | null;
+  customers:
+    | {
+        name: string | null;
+      }
+    | {
+        name: string | null;
+      }[]
+    | null;
 };
 
 async function createAppointmentAction(formData: FormData) {
@@ -19,21 +33,28 @@ async function createAppointmentAction(formData: FormData) {
 
   const title = String(formData.get("title") || "").trim();
   const jobId = String(formData.get("job_id") || "").trim() || null;
-  const startTime = String(formData.get("start_time") || "");
-  const endTime = String(formData.get("end_time") || "");
+  const date = String(formData.get("date") || "").trim();
+  const startTime = String(formData.get("start_time") || "").trim();
+  const endTime = String(formData.get("end_time") || "").trim();
+  const location = String(formData.get("location") || "").trim();
   const notes = String(formData.get("notes") || "").trim();
 
-  if (!title || !startTime) {
-    throw new Error("Title and start time are required");
+  if (!title || !date || !startTime) {
+    throw new Error("Title, date, and start time are required");
   }
+
+  const startDateTime = new Date(`${date}T${startTime}`);
+  const endDateTime = endTime ? new Date(`${date}T${endTime}`) : null;
 
   const { error } = await supabase.from("appointments").insert({
     title,
     job_id: jobId,
     user_id: user.id,
-    start_time: new Date(startTime).toISOString(),
-    end_time: endTime ? new Date(endTime).toISOString() : null,
+    start_time: startDateTime.toISOString(),
+    end_time: endDateTime ? endDateTime.toISOString() : null,
+    location: location || null,
     notes: notes || null,
+    status: "scheduled",
   });
 
   if (error) {
@@ -52,10 +73,22 @@ export default async function NewAppointmentPage() {
 
   const { data: jobs } = await supabase
     .from("jobs")
-    .select("id, title")
+    .select(
+      `
+        id,
+        title,
+        customers ( name )
+      `
+    )
     .order("title", { ascending: true });
 
-  const jobOptions = (jobs ?? []) as JobOption[];
+  const jobOptions: JobOption[] = ((jobs ?? []) as JobRow[]).map((job) => ({
+    id: job.id,
+    title: job.title,
+    customerName: Array.isArray(job.customers)
+      ? job.customers[0]?.name ?? null
+      : job.customers?.name ?? null,
+  }));
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -77,6 +110,7 @@ export default async function NewAppointmentPage() {
             {jobOptions.map((job) => (
               <option key={job.id} value={job.id}>
                 {job.title || "Untitled job"}
+                {job.customerName ? ` · ${job.customerName}` : ""}
               </option>
             ))}
           </select>
@@ -84,12 +118,23 @@ export default async function NewAppointmentPage() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="hb-label" htmlFor="start_time">Start time</label>
-            <input id="start_time" name="start_time" type="datetime-local" className="hb-input" required />
+            <label className="hb-label" htmlFor="date">Date</label>
+            <input id="date" name="date" type="date" className="hb-input" required />
           </div>
           <div>
+            <label className="hb-label" htmlFor="start_time">Start time</label>
+            <input id="start_time" name="start_time" type="time" className="hb-input" required />
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
             <label className="hb-label" htmlFor="end_time">End time</label>
-            <input id="end_time" name="end_time" type="datetime-local" className="hb-input" />
+            <input id="end_time" name="end_time" type="time" className="hb-input" />
+          </div>
+          <div>
+            <label className="hb-label" htmlFor="location">Location</label>
+            <input id="location" name="location" className="hb-input" placeholder="Client address or notes" />
           </div>
         </div>
 

@@ -9,10 +9,19 @@ type AppointmentListItem = {
   status: string | null;
   start_time: string | null;
   end_time: string | null;
+  location: string | null;
   jobs:
     | {
         id: string;
         title: string | null;
+        customers:
+          | {
+              name: string | null;
+            }
+          | {
+              name: string | null;
+            }[]
+          | null;
       }
     | null;
 };
@@ -24,7 +33,6 @@ export default async function AppointmentsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const now = new Date();
   const { data: appts, error } = await supabase
     .from("appointments")
     .select(
@@ -34,11 +42,11 @@ export default async function AppointmentsPage() {
         status,
         start_time,
         end_time,
-        jobs ( id, title )
+        location,
+        jobs ( id, title, customers ( name ) )
       `
     )
-    .gte("start_time", new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString())
-    .order("start_time", { ascending: true });
+    .order("start_time", { ascending: false });
 
   const appointments = (appts ?? []) as AppointmentListItem[];
 
@@ -64,10 +72,22 @@ export default async function AppointmentsPage() {
           <p className="text-sm text-red-400">Failed to load appointments: {error.message}</p>
         ) : appointments.length ? (
           appointments.map((appt) => {
-            const start = appt.start_time
-              ? new Date(appt.start_time).toLocaleString()
+            const startDate = appt.start_time ? new Date(appt.start_time) : null;
+            const endDate = appt.end_time ? new Date(appt.end_time) : null;
+            const start = startDate
+              ? startDate.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
               : "";
-            const end = appt.end_time ? new Date(appt.end_time).toLocaleTimeString() : null;
+            const end = endDate
+              ? endDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : null;
+            const customer = Array.isArray(appt.jobs?.customers)
+              ? appt.jobs?.customers[0]
+              : appt.jobs?.customers;
+            const statusTone = appt.status === "completed"
+              ? "text-emerald-400"
+              : appt.status === "cancelled"
+              ? "text-red-400"
+              : "text-sky-300";
             return (
               <div
                 key={appt.id}
@@ -78,11 +98,19 @@ export default async function AppointmentsPage() {
                   <p className="hb-muted text-sm">
                     {appt.jobs?.title || "No job linked"}
                   </p>
+                  <p className="hb-muted text-sm">
+                    {customer?.name ? `Customer: ${customer.name}` : "Customer: Unknown"}
+                  </p>
                   <p className="hb-muted text-xs">
                     {start}
                     {end ? ` – ${end}` : ""}
                   </p>
-                  <p className="hb-muted text-xs">Status: {appt.status}</p>
+                  {appt.location && (
+                    <p className="hb-muted text-xs">Location: {appt.location}</p>
+                  )}
+                  <p className={`text-xs font-semibold ${statusTone}`}>
+                    {appt.status || "scheduled"}
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-3">

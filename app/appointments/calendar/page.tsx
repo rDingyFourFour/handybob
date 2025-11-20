@@ -11,6 +11,9 @@ type CalendarAppointment = {
     | {
         title: string | null;
       }
+    | {
+        title: string | null;
+      }[]
     | null;
 };
 
@@ -102,8 +105,17 @@ export default async function CalendarPage() {
                       >
                         <div className="font-semibold">{appt.title || "Appointment"}</div>
                         <div className="hb-muted">
-                          {new Date(appt.start_time!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          {appt.jobs?.title ? ` · ${appt.jobs.title}` : ""}
+                          {new Date(appt.start_time!).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          {Array.isArray(appt.jobs)
+                            ? appt.jobs[0]?.title
+                              ? ` · ${appt.jobs[0].title}`
+                              : ""
+                            : appt.jobs?.title
+                            ? ` · ${appt.jobs.title}`
+                            : ""}
                         </div>
                       </Link>
                     ))}
