@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 import { createServerClient } from "@/utils/supabase/server";
 
@@ -37,6 +38,31 @@ type AppointmentListItem = {
       }[]
     | null;
 };
+
+async function updateAppointmentStatusAction(formData: FormData) {
+  "use server";
+
+  const supabase = createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const apptId = String(formData.get("appointment_id") || "");
+  const nextStatus = String(formData.get("status") || "");
+  const allowed = ["scheduled", "completed", "cancelled"];
+
+  if (!apptId || !allowed.includes(nextStatus)) {
+    throw new Error("Invalid appointment update");
+  }
+
+  await supabase
+    .from("appointments")
+    .update({ status: nextStatus, updated_at: new Date().toISOString() })
+    .eq("id", apptId);
+
+  revalidatePath("/appointments");
+}
 
 export default async function AppointmentsPage() {
   const supabase = createServerClient();
@@ -126,10 +152,28 @@ export default async function AppointmentsPage() {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <Link href={`/appointments/${appt.id}`} className="hb-button">
                     View
                   </Link>
+                  {appt.status === "scheduled" && (
+                    <>
+                      <form action={updateAppointmentStatusAction}>
+                        <input type="hidden" name="appointment_id" value={appt.id} />
+                        <input type="hidden" name="status" value="completed" />
+                        <button type="submit" className="hb-button-ghost text-xs">
+                          Mark completed
+                        </button>
+                      </form>
+                      <form action={updateAppointmentStatusAction}>
+                        <input type="hidden" name="appointment_id" value={appt.id} />
+                        <input type="hidden" name="status" value="cancelled" />
+                        <button type="submit" className="hb-button-ghost text-xs text-red-300">
+                          Cancel
+                        </button>
+                      </form>
+                    </>
+                  )}
                 </div>
               </div>
             );
