@@ -31,6 +31,7 @@ type CallRow = {
   started_at: string | null;
   duration_seconds: number | null;
   summary: string | null;
+  ai_summary?: string | null;
   transcript?: string | null;
 };
 
@@ -141,7 +142,7 @@ export async function buildCustomerTimelinePayload(customerId: string, userId: s
       .limit(200),
     supabase
       .from("calls")
-      .select("job_id, direction, status, started_at, duration_seconds, summary, transcript")
+      .select("job_id, direction, status, started_at, duration_seconds, summary, ai_summary, transcript")
       .eq("customer_id", customer.id)
       .eq("user_id", userId)
       .order("started_at", { ascending: false })
@@ -224,7 +225,7 @@ export async function buildCustomerTimelinePayload(customerId: string, userId: s
       type: "call",
       timestamp: call.started_at,
       title: `${call.direction === "inbound" ? "Inbound" : "Outbound"} call`,
-      detail: `Summary: ${truncate(call.summary, 160)} Transcript: ${truncate(call.transcript, 160)}`,
+      detail: `Summary: ${truncate(call.ai_summary || call.summary, 160)} Transcript: ${truncate(call.transcript, 160)}`,
       status: call.status,
       job_title: call.job_id ? jobNameLookup.get(call.job_id) || null : null,
     })

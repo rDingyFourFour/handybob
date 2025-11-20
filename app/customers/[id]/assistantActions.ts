@@ -44,6 +44,8 @@ type CallRow = {
   started_at: string | null;
   duration_seconds: number | null;
   summary: string | null;
+  ai_summary?: string | null;
+  transcript?: string | null;
 };
 
 type AppointmentRow = {
@@ -130,7 +132,7 @@ export async function runCustomerAssistant(
         .limit(150),
       supabase
         .from("calls")
-        .select("job_id, direction, status, started_at, duration_seconds, summary")
+        .select("job_id, direction, status, started_at, duration_seconds, summary, ai_summary, transcript")
         .eq("customer_id", customer.id)
         .eq("user_id", user.id)
         .order("started_at", { ascending: false })
@@ -245,7 +247,7 @@ function buildCustomerHistory({
       text: `Call (${call.direction ?? "direction unknown"} · ${call.status ?? "status unknown"})${formatJob(
         call.job_id,
         jobNameLookup,
-      )}: ${snippet(call.summary)} Duration ${Number(call.duration_seconds ?? 0)}s.`,
+      )}: ${snippet(call.ai_summary || call.summary || call.transcript)} Duration ${Number(call.duration_seconds ?? 0)}s.`,
     }),
   );
 

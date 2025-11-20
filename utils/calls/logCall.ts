@@ -20,6 +20,8 @@ type LogCallArgs = {
   toNumber?: string | null;
   summary?: string | null;
   recordingUrl?: string | null;
+  transcript?: string | null;
+  aiSummary?: string | null;
 };
 
 export async function logCall({
@@ -33,6 +35,8 @@ export async function logCall({
   toNumber,
   summary,
   recordingUrl,
+  transcript,
+  aiSummary,
 }: LogCallArgs) {
   if (!userId) return;
 
@@ -46,6 +50,8 @@ export async function logCall({
     to_number: toNumber ?? null,
     summary: summary ?? null,
     recording_url: recordingUrl ?? null,
+    transcript: transcript ?? null,
+    ai_summary: aiSummary ?? null,
   });
 
   if (error) {

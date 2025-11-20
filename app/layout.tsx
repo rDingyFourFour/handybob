@@ -34,6 +34,9 @@ export default function RootLayout({
                   <Link href="/inbox">Inbox</Link>
                 </li>
                 <li className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-800/60">
+                  <Link href="/calls">Calls</Link>
+                </li>
+                <li className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-800/60">
                   <Link href="/jobs">Jobs</Link>
                 </li>
                 <li className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-800/60">

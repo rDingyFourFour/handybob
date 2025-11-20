@@ -58,7 +58,7 @@ export async function buildJobTimelinePayload(jobId: string, userId: string) {
       .limit(100),
     supabase
       .from("calls")
-      .select("direction, status, started_at, duration_seconds, summary, transcript")
+      .select("direction, status, started_at, duration_seconds, summary, ai_summary, transcript")
       .eq("job_id", jobId)
       .eq("user_id", userId)
       .order("started_at", { ascending: false })
@@ -114,7 +114,7 @@ export async function buildJobTimelinePayload(jobId: string, userId: string) {
       type: "call",
       timestamp: call.started_at,
       title: `${call.direction === "inbound" ? "Inbound" : "Outbound"} call`,
-      detail: `Summary: ${truncate(call.summary, 200)} Transcript: ${truncate(call.transcript, 200)}`,
+      detail: `Summary: ${truncate(call.ai_summary || call.summary, 200)} Transcript: ${truncate(call.transcript, 200)}`,
       status: call.status,
     })
   );

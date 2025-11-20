@@ -49,8 +49,13 @@ type CallRow = {
   direction: string | null;
   status: string | null;
   started_at: string | null;
+  created_at?: string | null;
   duration_seconds: number | null;
   summary: string | null;
+  ai_summary?: string | null;
+  transcript?: string | null;
+  recording_url?: string | null;
+  from_number?: string | null;
 };
 
 type InvoiceRow = {
@@ -94,6 +99,9 @@ type TimelineEntry = {
   timestamp: string | null;
   status?: string | null;
   href?: string | null;
+  callSummary?: string | null;
+  callTranscript?: string | null;
+  recordingUrl?: string | null;
 };
 
 const UUID_REGEX =
@@ -115,6 +123,12 @@ function formatCurrency(amount: number | null | undefined) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function snippet(text: string | null | undefined, max = 180) {
+  if (!text) return null;
+  const trimmed = text.trim();
+  return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
 }
 
 export default async function JobDetailPage({
@@ -165,9 +179,9 @@ export default async function JobDetailPage({
         .limit(50),
       supabase
         .from("calls")
-        .select("id, direction, status, started_at, duration_seconds, summary")
+        .select("id, direction, status, started_at, created_at, duration_seconds, summary, ai_summary, transcript, recording_url, from_number")
         .eq("job_id", jobId)
-        .order("started_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(50),
       supabase
         .from("invoices")
@@ -268,10 +282,17 @@ export default async function JobDetailPage({
     ...calls.map((call) => ({
       id: `call-${call.id}`,
       kind: "call" as const,
-      title: `${call.direction === "inbound" ? "Inbound" : "Outbound"} call`,
-      detail: call.summary,
-      timestamp: call.started_at,
+      title: `Voicemail from ${job.customers?.name || call.from_number || "Unknown caller"}`,
+      detail:
+        snippet(call.ai_summary, 200) ||
+        snippet(call.summary, 200) ||
+        (call.transcript ? `Transcript: ${snippet(call.transcript, 160)}` : null),
+      timestamp: call.created_at || call.started_at,
       status: call.status,
+      href: `/calls/${call.id}`,
+      callSummary: call.ai_summary || call.summary || null,
+      callTranscript: call.transcript || null,
+      recordingUrl: call.recording_url || null,
     })),
     ...appointments.map((appt) => ({
       id: `appt-${appt.id}`,
@@ -487,6 +508,36 @@ export default async function JobDetailPage({
                   </div>
                   {entry.detail && (
                     <p className="hb-muted text-sm mt-1">{entry.detail}</p>
+                  )}
+                  {entry.kind === "call" && (entry.callSummary || entry.callTranscript || entry.recordingUrl) && (
+                    <div className="mt-2 space-y-2 text-sm text-slate-200">
+                      {entry.callSummary && (
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <p className="hb-label">AI Summary</p>
+                            <span className="text-[11px] text-slate-400">AI-generated · double-check key details.</span>
+                          </div>
+                          <p className="text-slate-200">{entry.callSummary}</p>
+                        </div>
+                      )}
+                      {entry.callTranscript && (
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <p className="hb-label">Transcript</p>
+                            <span className="text-[11px] text-slate-400">Auto-captured; verify names/addresses/times.</span>
+                          </div>
+                          <p className="text-slate-200 whitespace-pre-wrap">{entry.callTranscript}</p>
+                        </div>
+                      )}
+                      {entry.recordingUrl && (
+                        <div className="flex items-center gap-2 text-xs text-blue-300">
+                          <audio controls src={entry.recordingUrl} className="w-full" />
+                          <Link href={entry.recordingUrl} className="underline-offset-2 hover:underline">
+                            Open recording
+                          </Link>
+                        </div>
+                      )}
+                    </div>
                   )}
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-400">
                     <span className="rounded-full border border-slate-800 px-2 py-1 text-[11px] uppercase tracking-wide">
