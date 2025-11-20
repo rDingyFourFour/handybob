@@ -55,6 +55,9 @@ async function createAppointmentAction(formData: FormData) {
     location: location || null,
     notes: notes || null,
     status: "scheduled",
+    // In a future Google Calendar integration, this is where we'd create the
+    // Google event and stash its id in external_event_id so webhooks/polling
+    // can reconcile updates.
   });
 
   if (error) {

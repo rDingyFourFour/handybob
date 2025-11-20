@@ -61,6 +61,10 @@ async function updateAppointmentStatusAction(formData: FormData) {
     .update({ status: nextStatus, updated_at: new Date().toISOString() })
     .eq("id", apptId);
 
+  // Future Google Calendar sync point: when status changes, push updates to the
+  // linked Google event (external_event_id) and listen for inbound changes via
+  // Google webhook notifications or a polling job to keep Supabase in sync.
+
   revalidatePath("/appointments");
 }
 
