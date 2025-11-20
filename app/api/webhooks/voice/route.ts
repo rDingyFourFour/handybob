@@ -93,12 +93,12 @@ async function handleVoicemailCallback(formData: FormData) {
   const toNumber = normalizePhone(getString(formData, "To"));
   const recordingDuration = parseInt(getString(formData, "RecordingDuration") ?? "0", 10);
   const callStartedAt = parseTimestamp(getString(formData, "Timestamp")) ?? new Date().toISOString();
-  const canonicalRecordingUrl = recordingUrl.endsWith(".mp3") ? recordingUrl : `${recordingUrl}.mp3`;
 
   if (!recordingUrl) {
     console.warn("[voice-webhook] Missing RecordingUrl; nothing to save.");
     return;
   }
+  const canonicalRecordingUrl = recordingUrl.endsWith(".mp3") ? recordingUrl : `${recordingUrl}.mp3`;
 
   const existingCustomer = await findCustomerByPhone(supabase, fromNumber);
   const userId =
