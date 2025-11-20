@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { sendInvoiceEmail } from "@/utils/email/sendInvoiceEmail";
 import { sendInvoiceSms } from "@/utils/sms/sendInvoiceSms";
 import { createServerClient } from "@/utils/supabase/server";
+import { logMessage } from "@/utils/communications/logMessage";
 
 type InvoiceWithRelations = {
   id: string;
@@ -17,6 +18,7 @@ type InvoiceWithRelations = {
   customer_name: string | null;
   customer_email: string | null;
   stripe_payment_link_url: string | null;
+  job_id: string | null;
   quote_id: string;
   quotes:
     | {
@@ -24,14 +26,18 @@ type InvoiceWithRelations = {
         stripe_payment_link_url: string | null;
         jobs:
           | {
+              id: string;
+              customer_id?: string | null;
               title: string | null;
               customers:
                 | {
+                    id: string | null;
                     name: string | null;
                     email: string | null;
                     phone: string | null;
                   }
                 | {
+                    id: string | null;
                     name: string | null;
                     email: string | null;
                     phone: string | null;
@@ -39,14 +45,18 @@ type InvoiceWithRelations = {
                 | null;
             }
           | {
+              id: string;
+              customer_id?: string | null;
               title: string | null;
               customers:
                 | {
+                    id: string | null;
                     name: string | null;
                     email: string | null;
                     phone: string | null;
                   }
                 | {
+                    id: string | null;
                     name: string | null;
                     email: string | null;
                     phone: string | null;
@@ -76,14 +86,44 @@ function extractJobTitle(invoice: InvoiceWithRelations) {
   return job.title ?? null;
 }
 
+function extractJobId(invoice: InvoiceWithRelations) {
+  const job = invoice.quotes?.jobs;
+  if (!job) return invoice.job_id ?? null;
+  if (Array.isArray(job)) {
+    return job[0]?.id ?? invoice.job_id ?? null;
+  }
+  return job.id ?? invoice.job_id ?? null;
+}
+
 function extractCustomer(invoice: InvoiceWithRelations) {
   const job = invoice.quotes?.jobs;
-  if (!job) return { name: invoice.customer_name, email: invoice.customer_email, phone: null };
+  if (!job) {
+    return {
+      id: null,
+      name: invoice.customer_name,
+      email: invoice.customer_email,
+      phone: null,
+    };
+  }
   const normalizedJob = Array.isArray(job) ? job[0] : job;
   const customer = normalizedJob?.customers;
-  if (!customer) return { name: invoice.customer_name, email: invoice.customer_email, phone: null };
+  if (!customer) {
+    return {
+      id: null,
+      name: invoice.customer_name,
+      email: invoice.customer_email,
+      phone: null,
+    };
+  }
   if (Array.isArray(customer)) {
-    return customer[0] ?? { name: invoice.customer_name, email: invoice.customer_email, phone: null };
+    return (
+      customer[0] ?? {
+        id: null,
+        name: invoice.customer_name,
+        email: invoice.customer_email,
+        phone: null,
+      }
+    );
   }
   return customer;
 }
@@ -107,8 +147,11 @@ async function sendInvoiceEmailAction(formData: FormData) {
           id,
           stripe_payment_link_url,
           jobs (
+            id,
+            customer_id,
             title,
             customers (
+              id,
               name,
               email,
               phone
@@ -125,7 +168,8 @@ async function sendInvoiceEmailAction(formData: FormData) {
     return;
   }
 
-  const customer = extractCustomer(invoice as InvoiceWithRelations);
+  const invoiceRecord = invoice as InvoiceWithRelations;
+  const customer = extractCustomer(invoiceRecord);
 
   if (!customer?.email) {
     console.warn("No email available for this invoice.");
@@ -133,14 +177,25 @@ async function sendInvoiceEmailAction(formData: FormData) {
   }
 
   const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL}/public/invoices/${invoice.public_token}`;
+  const invoiceTotal = Number(invoice.total ?? 0);
 
   await sendInvoiceEmail({
     to: customer.email,
     customerName: customer.name,
     invoiceNumber: invoice.invoice_number ?? invoice.id.slice(0, 8),
-    invoiceTotal: Number(invoice.total ?? 0),
+    invoiceTotal,
     dueDate: invoice.due_at,
     publicUrl,
+  });
+
+  await logMessage({
+    supabase,
+    userId: user.id,
+    customerId: customer.id,
+    jobId: extractJobId(invoiceRecord),
+    channel: "email",
+    subject: `Invoice ${invoice.invoice_number ?? invoice.id.slice(0, 8)} sent`,
+    body: `Invoice total $${invoiceTotal.toFixed(2)}. View: ${publicUrl}`,
   });
 
   if (invoice.status !== "paid") {
@@ -175,8 +230,11 @@ async function sendInvoiceSmsAction(formData: FormData) {
           id,
           stripe_payment_link_url,
           jobs (
+            id,
+            customer_id,
             title,
             customers (
+              id,
               name,
               email,
               phone
@@ -193,7 +251,8 @@ async function sendInvoiceSmsAction(formData: FormData) {
     return;
   }
 
-  const customer = extractCustomer(invoice as InvoiceWithRelations);
+  const invoiceRecord = invoice as InvoiceWithRelations;
+  const customer = extractCustomer(invoiceRecord);
 
   if (!customer?.phone) {
     console.warn("No phone number available for this invoice.");
@@ -201,13 +260,26 @@ async function sendInvoiceSmsAction(formData: FormData) {
   }
 
   const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL}/public/invoices/${invoice.public_token}`;
+  const invoiceTotal = Number(invoice.total ?? 0);
+  const smsBody = `Hi ${customer.name || ""}, your HandyBob invoice ${
+    invoice.invoice_number ? `#${invoice.invoice_number} ` : ""
+  }is $${invoiceTotal.toFixed(2)}. View/pay: ${publicUrl}`;
 
   await sendInvoiceSms({
     to: customer.phone,
     customerName: customer.name,
     invoiceNumber: invoice.invoice_number ?? invoice.id.slice(0, 8),
-    invoiceTotal: Number(invoice.total ?? 0),
+    invoiceTotal,
     publicUrl,
+  });
+
+  await logMessage({
+    supabase,
+    userId: user.id,
+    customerId: customer.id,
+    jobId: extractJobId(invoiceRecord),
+    channel: "sms",
+    body: smsBody,
   });
 
   if (invoice.status !== "paid") {
@@ -244,8 +316,11 @@ export default async function InvoiceDetailPage({
           id,
           stripe_payment_link_url,
           jobs (
+            id,
+            customer_id,
             title,
             customers (
+              id,
               name,
               email,
               phone

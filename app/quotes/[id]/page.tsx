@@ -7,15 +7,19 @@ import { sendQuoteSms } from "@/utils/sms/sendQuoteSms";
 import { createServerClient } from "@/utils/supabase/server";
 import { createPaymentLinkForQuote } from "@/utils/payments/createPaymentLink";
 import { ensureInvoiceForQuote } from "@/utils/invoices/ensureInvoiceForQuote";
+import { logMessage } from "@/utils/communications/logMessage";
 
 
 type CustomerInfo = {
+  id: string | null;
   name: string | null;
   email: string | null;
   phone: string | null;
 };
 
 type JobWithCustomer = {
+  id: string | null;
+  customer_id?: string | null;
   title: string | null;
   customers: CustomerInfo | CustomerInfo[] | null;
 };
@@ -57,8 +61,11 @@ async function sendQuoteEmailAction(formData: FormData) {
     .select(`
       *,
       jobs (
+        id,
         title,
+        customer_id,
         customers (
+          id,
           name,
           email,
           phone
@@ -83,27 +90,25 @@ async function sendQuoteEmailAction(formData: FormData) {
     return;
   }
 
-  // const baseAppUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(
-    ///\/$/,
-    //"",
-//  );
-  // const publicUrl = quote.public_token
-  //   ? `${baseAppUrl}/public/quotes/${quote.public_token}`
-  //   : `${baseAppUrl}/quotes`;
-  // const quoteTotal = Number(quote.total ?? 0);
-
-  // const publicUrl = quote.public_token
-  // ? `${base}/public/quotes/${quote.public_token}`
-  // : `${base}/quotes`;
-
   const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL}/public/quotes/${quote.public_token}`;
+  const quoteTotal = Number(quote.total ?? 0);
 
   await sendQuoteEmail({
-    to: quote.jobs.customers.email,
-    customerName: quote.jobs.customers.name,
-    quoteTotal: quote.total,
+    to: customer.email,
+    customerName: customer.name || "",
+    quoteTotal,
     clientMessage: quote.client_message_template || "...",
     publicUrl,
+  });
+
+  await logMessage({
+    supabase,
+    userId: user.id,
+    customerId: customer.id,
+    jobId: job?.id ?? quote.job_id ?? null,
+    channel: "email",
+    subject: "Quote sent",
+    body: quote.client_message_template || `Quote total $${quoteTotal.toFixed(2)}`,
   });
 
   // Mark as sent if still draft
@@ -134,8 +139,11 @@ async function sendQuoteSmsAction(formData: FormData) {
     .select(`
       *,
       jobs (
+        id,
         title,
+        customer_id,
         customers (
+          id,
           name,
           phone
         )
@@ -159,10 +167,23 @@ async function sendQuoteSmsAction(formData: FormData) {
     return;
   }
 
+  const smsBody = `Hi ${customer.name || ""}, your quote total is $${Number(
+    quote.total ?? 0
+  ).toFixed(2)}.`;
+
   await sendQuoteSms({
     to: customer.phone,
     customerName: customer.name || "",
     quoteTotal: Number(quote.total ?? 0),
+  });
+
+  await logMessage({
+    supabase,
+    userId: user.id,
+    customerId: customer.id,
+    jobId: job?.id ?? quote.job_id ?? null,
+    channel: "sms",
+    body: smsBody,
   });
 
   if (quote.status === "draft") {

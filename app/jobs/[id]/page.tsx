@@ -4,8 +4,88 @@ import { redirect } from "next/navigation";
 import { generateQuoteForJob } from "@/utils/ai/generateQuote";
 import { createServerClient } from "@/utils/supabase/server";
 
+type QuoteRow = {
+  id: string;
+  status: string | null;
+  total: number | null;
+  created_at: string | null;
+};
+
+type AppointmentRow = {
+  id: string;
+  title: string | null;
+  start_time: string | null;
+  status: string | null;
+  location: string | null;
+};
+
+type MessageRow = {
+  id: string;
+  channel: string | null;
+  direction: string | null;
+  subject: string | null;
+  body: string | null;
+  status: string | null;
+  created_at: string | null;
+};
+
+type CallRow = {
+  id: string;
+  direction: string | null;
+  status: string | null;
+  started_at: string | null;
+  duration_seconds: number | null;
+  summary: string | null;
+};
+
+type InvoiceRow = {
+  id: string;
+  invoice_number: number | null;
+  status: string | null;
+  total: number | null;
+  created_at: string | null;
+  issued_at: string | null;
+  paid_at: string | null;
+};
+
+type PaymentRow = {
+  id: string;
+  quote_id: string;
+  amount: number;
+  currency: string | null;
+  created_at: string;
+};
+
+type TimelineEntry = {
+  id: string;
+  kind: "job" | "message" | "call" | "appointment" | "quote" | "invoice" | "payment";
+  title: string;
+  detail?: string | null;
+  timestamp: string | null;
+  status?: string | null;
+  href?: string | null;
+};
+
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function formatDateTime(date: string | null) {
+  if (!date) return "";
+  return new Date(date).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatCurrency(amount: number | null | undefined) {
+  const value = Number(amount ?? 0);
+  return `$${value.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
 
 export default async function JobDetailPage({
   params,
@@ -35,13 +115,127 @@ export default async function JobDetailPage({
   if (jobError) throw new Error(jobError.message);
   if (!job) redirect("/jobs");
 
-  const { data: quotes, error: quotesError } = await supabase
-    .from("quotes")
-    .select("id, status, total, created_at")
-    .eq("job_id", jobId)
-    .order("created_at", { ascending: false });
+  const customerId = job.customer_id;
 
-  const safeQuotes = quotes ?? [];
+  const messageFilter = customerId
+    ? `job_id.eq.${jobId},and(job_id.is.null,customer_id.eq.${customerId})`
+    : `job_id.eq.${jobId}`;
+
+  const [quotesRes, appointmentsRes, messagesRes, callsRes, invoicesRes] =
+    await Promise.all([
+      supabase
+        .from("quotes")
+        .select("id, status, total, created_at")
+        .eq("job_id", jobId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("appointments")
+        .select("id, title, start_time, status, location")
+        .eq("job_id", jobId)
+        .order("start_time", { ascending: false }),
+      supabase
+        .from("messages")
+        .select("id, channel, direction, subject, body, status, created_at")
+        .or(messageFilter)
+        .order("created_at", { ascending: false })
+        .limit(25),
+      supabase
+        .from("calls")
+        .select("id, direction, status, started_at, duration_seconds, summary")
+        .or(messageFilter)
+        .order("started_at", { ascending: false })
+        .limit(25),
+      supabase
+        .from("invoices")
+        .select("id, invoice_number, status, total, created_at, issued_at, paid_at")
+        .eq("job_id", jobId)
+        .order("created_at", { ascending: false }),
+    ]);
+
+  const safeQuotes = (quotesRes.data ?? []) as QuoteRow[];
+  const appointments = (appointmentsRes.data ?? []) as AppointmentRow[];
+  const messages = (messagesRes.data ?? []) as MessageRow[];
+  const calls = (callsRes.data ?? []) as CallRow[];
+  const invoices = (invoicesRes.data ?? []) as InvoiceRow[];
+  const quotesError = quotesRes.error;
+
+  const quoteIds = safeQuotes.map((quote) => quote.id);
+  let payments: PaymentRow[] = [];
+
+  if (quoteIds.length) {
+    const { data: paymentRows } = await supabase
+      .from("quote_payments")
+      .select("id, quote_id, amount, currency, created_at")
+      .in("quote_id", quoteIds)
+      .order("created_at", { ascending: false });
+    payments = (paymentRows ?? []) as PaymentRow[];
+  }
+
+  const timeline: TimelineEntry[] = [
+    {
+      id: `job-${job.id}`,
+      kind: "job",
+      title: "Job created",
+      detail: job.description_raw || null,
+      timestamp: job.created_at,
+      status: job.status,
+    },
+    ...messages.map((message) => ({
+      id: `msg-${message.id}`,
+      kind: "message" as const,
+      title: `${message.direction === "inbound" ? "Inbound" : "Outbound"} ${message.channel || "message"}`,
+      detail: message.body || message.subject || null,
+      timestamp: message.created_at,
+      status: message.status,
+    })),
+    ...calls.map((call) => ({
+      id: `call-${call.id}`,
+      kind: "call" as const,
+      title: `${call.direction === "inbound" ? "Inbound" : "Outbound"} call`,
+      detail: call.summary,
+      timestamp: call.started_at,
+      status: call.status,
+    })),
+    ...appointments.map((appt) => ({
+      id: `appt-${appt.id}`,
+      kind: "appointment" as const,
+      title: `Appointment: ${appt.title || "Visit"}`,
+      detail: appt.location ? `Location: ${appt.location}` : null,
+      timestamp: appt.start_time,
+      status: appt.status,
+      href: `/appointments/${appt.id}`,
+    })),
+    ...safeQuotes.map((quote) => ({
+      id: `quote-${quote.id}`,
+      kind: "quote" as const,
+      title: `Quote ${quote.status}`,
+      detail: `Total ${formatCurrency(quote.total)}`,
+      timestamp: quote.created_at,
+      status: quote.status,
+      href: `/quotes/${quote.id}`,
+    })),
+    ...invoices.map((invoice) => ({
+      id: `invoice-${invoice.id}`,
+      kind: "invoice" as const,
+      title: `Invoice #${invoice.invoice_number ?? invoice.id.slice(0, 8)}`,
+      detail: `Total ${formatCurrency(invoice.total)}`,
+      timestamp: invoice.created_at ?? invoice.issued_at,
+      status: invoice.status,
+      href: `/invoices/${invoice.id}`,
+    })),
+    ...payments.map((payment) => ({
+      id: `payment-${payment.id}`,
+      kind: "payment" as const,
+      title: "Payment received",
+      detail: `${formatCurrency(payment.amount)} ${payment.currency?.toUpperCase() || "USD"}`,
+      timestamp: payment.created_at,
+      status: "paid",
+    })),
+  ].sort((a, b) => {
+    const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    return bTime - aTime;
+  });
 
   return (
     <div className="space-y-6">
@@ -62,14 +256,69 @@ export default async function JobDetailPage({
           Urgency: {job.urgency ?? "not set"}
         </div>
 
-        <div className="pt-2">
+        <div className="flex flex-wrap gap-2 pt-2">
           <Link
             href={`/appointments/new?job_id=${job.id}`}
             className="hb-button-ghost text-xs"
           >
             Schedule appointment
           </Link>
+          <Link href="/inbox" className="hb-button-ghost text-xs">
+            Open inbox
+          </Link>
         </div>
+      </div>
+
+      <div className="hb-card space-y-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Timeline</h2>
+            <p className="hb-muted text-sm">
+              Unified activity for this job and customer.
+            </p>
+          </div>
+        </div>
+        {timeline.length === 0 ? (
+          <p className="hb-muted text-sm">No activity yet for this job.</p>
+        ) : (
+          <div className="space-y-3">
+            {timeline.map((entry, index) => (
+              <div key={entry.id} className="flex gap-3">
+                <div className="flex flex-col items-center">
+                  <div className="h-2 w-2 rounded-full bg-sky-400" />
+                  {index !== timeline.length - 1 && (
+                    <div className="flex-1 w-px bg-slate-800" />
+                  )}
+                </div>
+                <div className="flex-1 border-b border-slate-800 pb-3 last:border-0 last:pb-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-semibold">{entry.title}</p>
+                    <span className="text-xs text-slate-400">
+                      {formatDateTime(entry.timestamp)}
+                    </span>
+                  </div>
+                  {entry.detail && (
+                    <p className="hb-muted text-sm mt-1">{entry.detail}</p>
+                  )}
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                    <span className="rounded-full border border-slate-800 px-2 py-1 text-[11px] uppercase tracking-wide">
+                      {entry.kind}
+                    </span>
+                    {entry.status && <span>Status: {entry.status}</span>}
+                    {entry.href && (
+                      <Link
+                        href={entry.href}
+                        className="underline-offset-2 hover:underline"
+                      >
+                        Open
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="hb-card space-y-4">
@@ -112,11 +361,7 @@ export default async function JobDetailPage({
                 </div>
                 <div className="flex items-center gap-4">
                   <span className="text-sm font-semibold">
-                    $
-                    {Number(quote.total ?? 0).toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                    {formatCurrency(quote.total)}
                   </span>
                   <Link href={`/quotes/${quote.id}`} className="hb-button">
                     View
