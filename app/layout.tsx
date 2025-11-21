@@ -16,10 +16,20 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const workspaceContext = user ? await getCurrentWorkspace({ supabase }) : null;
+  let workspaceContext: Awaited<ReturnType<typeof getCurrentWorkspace>> | null = null;
+  let user = null as Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"] | null;
+
+  try {
+    const {
+      data: { user: fetchedUser },
+    } = await supabase.auth.getUser();
+    user = fetchedUser;
+    if (user) {
+      workspaceContext = await getCurrentWorkspace({ supabase });
+    }
+  } catch (error) {
+    console.warn("[layout] Failed to resolve user/workspace context:", error);
+  }
 
   return (
     <html lang="en">

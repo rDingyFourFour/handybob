@@ -1,6 +1,6 @@
 // app/settings/activity/page.tsx
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace, requireOwner } from "@/utils/workspaces";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 type AuditRow = {
   id: string;
@@ -81,8 +81,19 @@ export default async function ActivityPage({
 }) {
   const supabase = createServerClient();
   const workspaceContext = await getCurrentWorkspace({ supabase });
-  requireOwner(workspaceContext);
-  const { workspace } = workspaceContext;
+  const { workspace, role } = workspaceContext;
+
+  if (role !== "owner") {
+    return (
+      <div className="hb-card space-y-2">
+        <h1>Activity</h1>
+        <p className="hb-muted text-sm">You don’t have permission to view workspace activity.</p>
+        <p className="text-[11px] uppercase text-slate-500">
+          Workspace settings for {workspace.name || "Workspace"}
+        </p>
+      </div>
+    );
+  }
 
   const filters = await filterParams(searchParams);
 
