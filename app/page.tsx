@@ -50,7 +50,7 @@ type StaleQuoteRow = {
   total: number | null;
   created_at: string | null;
   job_id?: string | null;
-  job?: { title: string | null } | null;
+  job?: { title: string | null } | { title: string | null }[] | null;
 };
 
 type AppointmentRow = {
@@ -296,7 +296,11 @@ export default async function HomePage() {
     ...inv,
     job: Array.isArray(inv.job) ? inv.job[0] ?? null : inv.job ?? null,
   }));
-  const staleQuotes = (staleQuotesRes.data ?? []) as StaleQuoteRow[];
+  const staleQuotesRaw = (staleQuotesRes.data ?? []) as StaleQuoteRow[];
+  const staleQuotes = staleQuotesRaw.map((quote) => ({
+    ...quote,
+    job: Array.isArray(quote.job) ? quote.job[0] ?? null : quote.job ?? null,
+  }));
 
   const attentionCount =
     (leadsRes.data?.length ?? 0) +
