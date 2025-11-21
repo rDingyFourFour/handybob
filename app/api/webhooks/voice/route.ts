@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
 
 import { createAdminClient } from "@/utils/supabase/admin";
+import { classifyJobWithAi } from "@/utils/ai/classifyJob";
+import { inferAttentionSignals, type AttentionSignals } from "@/utils/attention/inferAttentionSignals";
+import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
 
 // Inbound call flow (current: single route; future: split inbound vs recording callback)
 // 1) Customer calls Twilio # (per-user number).
@@ -150,8 +153,24 @@ async function handleVoicemailCallback(formData: FormData) {
           transcript,
           leadTitle: aiInsights?.lead_title,
           leadDescription: aiInsights?.lead_description,
+          signals: inferAttentionSignals({
+            text: transcript ?? undefined,
+            summary: aiInsights?.summary ?? undefined,
+            direction: "inbound",
+            status: "voicemail",
+            hasJob: Boolean(activeJob?.id),
+          }),
         })
       : null);
+
+  const attentionSignals =
+    inferAttentionSignals({
+      text: transcript ?? undefined,
+      summary: aiInsights?.summary ?? undefined,
+      direction: "inbound",
+      status: "voicemail",
+      hasJob: Boolean(jobId ?? activeJob?.id),
+    });
 
   await supabase.from("calls").insert({
     user_id: userId,
@@ -167,7 +186,34 @@ async function handleVoicemailCallback(formData: FormData) {
     recording_url: canonicalRecordingUrl,
     from_number: fromNumber ?? null,
     to_number: toNumber ?? null,
+    priority: attentionSignals.priority,
+    needs_followup: attentionSignals.needsFollowup || !jobId,
+    attention_score: attentionSignals.attentionScore,
+    attention_reason: attentionSignals.reason,
+    ai_category: attentionSignals.category,
+    ai_urgency: attentionSignals.urgency,
   });
+
+  if (jobId) {
+    const classification = await classifyJobWithAi({
+      jobId,
+      userId,
+      title: aiInsights?.lead_title ?? summaryText,
+      description: aiInsights?.summary ?? transcript ?? undefined,
+      transcript: transcript ?? undefined,
+    });
+
+    if (classification?.ai_urgency === "emergency") {
+      await runLeadAutomations({
+        userId,
+        jobId,
+        title: aiInsights?.lead_title ?? summaryText,
+        customerName: customer?.name ?? null,
+        summary: aiInsights?.summary ?? transcript ?? null,
+        aiUrgency: classification.ai_urgency,
+      });
+    }
+  }
 }
 
 async function findCustomerByPhone(supabase: SupabaseAdminClient, phone: string | null) {
@@ -231,6 +277,7 @@ async function createLeadFromVoicemail({
   transcript,
   leadTitle,
   leadDescription,
+  signals,
 }: {
   supabase: SupabaseAdminClient;
   userId: string;
@@ -240,6 +287,7 @@ async function createLeadFromVoicemail({
   transcript?: string | null;
   leadTitle?: string | null;
   leadDescription?: string | null;
+  signals?: AttentionSignals | null;
 }) {
   const title =
     leadTitle?.trim() ||
@@ -260,6 +308,11 @@ async function createLeadFromVoicemail({
       description_raw: description,
       status: "lead",
       source: "voicemail",
+      category: signals?.category ?? null,
+      urgency: signals?.urgency ?? null,
+      priority: signals?.priority ?? "normal",
+      attention_score: signals?.attentionScore ?? 0,
+      attention_reason: signals?.reason ?? null,
     })
     .select("id")
     .single();

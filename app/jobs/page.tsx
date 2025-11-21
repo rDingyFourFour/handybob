@@ -10,6 +10,8 @@ type JobRow = {
   title: string | null;
   status: string | null;
   urgency: string | null;
+  ai_category?: string | null;
+  ai_urgency?: string | null;
   created_at: string;
   customer: {
     name: string | null;
@@ -21,21 +23,51 @@ type MediaPreview = {
   signed_url: string | null;
 };
 
-export default async function JobsPage() {
+function getParam(
+  searchParams: Record<string, string | string[] | undefined> | undefined,
+  key: string,
+) {
+  const value = searchParams?.[key];
+  if (Array.isArray(value)) return value[0];
+  return value ?? null;
+}
+
+export default async function JobsPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const supabase = createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: jobs, error } = await supabase
+  const statusFilter = getParam(searchParams, "status") ?? "all";
+  const aiCategoryFilter = getParam(searchParams, "ai_category") ?? "all";
+  const aiUrgencyFilter = getParam(searchParams, "ai_urgency") ?? "all";
+
+  let jobsQuery = supabase
     .from("jobs")
-    .select(
-      "id, title, status, urgency, created_at, customer:customers(name)"
-    )
+    .select("id, title, status, urgency, ai_category, ai_urgency, created_at, customer:customers(name)")
     .order("created_at", { ascending: false })
-    .limit(50)
-    .returns<JobRow[]>();
+    .limit(50);
+
+  if (statusFilter !== "all") {
+    jobsQuery = jobsQuery.eq("status", statusFilter);
+  }
+  if (aiCategoryFilter === "uncategorized") {
+    jobsQuery = jobsQuery.is("ai_category", null);
+  } else if (aiCategoryFilter !== "all") {
+    jobsQuery = jobsQuery.eq("ai_category", aiCategoryFilter);
+  }
+  if (aiUrgencyFilter === "uncategorized") {
+    jobsQuery = jobsQuery.is("ai_urgency", null);
+  } else if (aiUrgencyFilter !== "all") {
+    jobsQuery = jobsQuery.eq("ai_urgency", aiUrgencyFilter);
+  }
+
+  const { data: jobs, error } = await jobsQuery.returns<JobRow[]>();
   if (error) {
     return (
       <div className="hb-card">
@@ -89,6 +121,52 @@ export default async function JobsPage() {
         </Link>
       </div>
 
+      <form className="hb-card flex flex-wrap items-center gap-3 text-sm" method="get">
+        <div className="flex flex-col">
+          <label className="hb-label text-xs" htmlFor="status-filter">Status</label>
+          <select id="status-filter" name="status" defaultValue={statusFilter} className="hb-input">
+            <option value="all">All</option>
+            <option value="lead">Lead</option>
+            <option value="quoted">Quoted</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="in_progress">In progress</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
+        <div className="flex flex-col">
+          <label className="hb-label text-xs" htmlFor="ai-category-filter">AI category</label>
+          <select id="ai-category-filter" name="ai_category" defaultValue={aiCategoryFilter} className="hb-input">
+            <option value="all">All</option>
+            <option value="plumbing">Plumbing</option>
+            <option value="electrical">Electrical</option>
+            <option value="carpentry">Carpentry</option>
+            <option value="hvac">HVAC</option>
+            <option value="roofing">Roofing</option>
+            <option value="painting">Painting</option>
+            <option value="landscaping">Landscaping</option>
+            <option value="general">General</option>
+            <option value="other">Other</option>
+            <option value="uncategorized">Uncategorized</option>
+          </select>
+        </div>
+        <div className="flex flex-col">
+          <label className="hb-label text-xs" htmlFor="ai-urgency-filter">AI urgency</label>
+          <select id="ai-urgency-filter" name="ai_urgency" defaultValue={aiUrgencyFilter} className="hb-input">
+            <option value="all">All</option>
+            <option value="emergency">Emergency</option>
+            <option value="this_week">This week</option>
+            <option value="flexible">Flexible</option>
+            <option value="uncategorized">Uncategorized</option>
+          </select>
+        </div>
+        <button className="hb-button text-sm" type="submit">
+          Apply filters
+        </button>
+        <Link href="/jobs" className="hb-button-ghost text-xs">
+          Reset
+        </Link>
+      </form>
+
       <div className="hb-card">
         {!safeJobs.length ? (
           <p className="hb-muted">No jobs yet. Create your first one.</p>
@@ -99,19 +177,29 @@ export default async function JobsPage() {
                 key={job.id}
                 className="border-b border-slate-800 last:border-0 pb-2 last:pb-0"
               >
-                <div className="text-sm font-medium">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-medium">
                   <Link
                     href={`/jobs/${job.id}`}
                     className="text-blue-400 hover:text-blue-300 underline-offset-2 hover:underline"
                   >
                     {job.title || "Untitled job"}
                   </Link>
+                  </div>
+                  {job.ai_urgency === "emergency" && (
+                    <span className="rounded-full bg-red-500/10 px-2 py-1 text-[11px] uppercase tracking-wide text-red-300 border border-red-500/30">
+                      Urgent
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-slate-400">
                   {job.customer?.[0]?.name || "Unknown customer"}
                 </div>
                 <div className="text-xs text-slate-500">
                   Status: {job.status} · Urgency: {job.urgency}
+                </div>
+                <div className="text-[11px] text-amber-300">
+                  AI category: {job.ai_category || "Uncategorized"} · AI urgency: {job.ai_urgency || "Uncategorized"}
                 </div>
                 {mediaPreviews[job.id]?.signed_url && (
                   <div className="mt-2 flex items-center gap-2">

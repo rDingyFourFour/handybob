@@ -6,6 +6,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { inferAttentionSignals } from "@/utils/attention/inferAttentionSignals";
+import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
+import { classifyJobWithAi } from "@/utils/ai/classifyJob";
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1";
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
@@ -69,6 +72,7 @@ type ProcessCallCoreResult = {
   error?: string;
   jobId?: string | null;
   customerId?: string | null;
+  customerName?: string | null;
 };
 
 async function processCallCore({
@@ -85,7 +89,7 @@ async function processCallCore({
   // Load call (optionally scoped to user when called from UI)
   let query = supabase
     .from("calls")
-    .select("id, user_id, recording_url, from_number, to_number, job_id, customer_id, status")
+    .select("id, user_id, recording_url, from_number, to_number, job_id, customer_id, status, direction")
     .eq("id", callId);
 
   if (enforceUserId && userIdFilter) {
@@ -106,6 +110,7 @@ async function processCallCore({
 
   let linkedJobId: string | null | undefined = call.job_id;
   let linkedCustomerId: string | null | undefined = call.customer_id;
+  let linkedCustomerName: string | null | undefined = null;
 
   const audioBuffer = await downloadRecording(call.recording_url);
   if (!audioBuffer) return { error: "Failed to download recording audio." };
@@ -116,12 +121,26 @@ async function processCallCore({
   const summary = await summarizeTranscript(transcript);
   if (!summary) return { error: "AI summary failed." };
 
+  const signals = inferAttentionSignals({
+    text: transcript,
+    summary,
+    direction: call.direction,
+    status: call.status,
+    hasJob: Boolean(call.job_id),
+  });
+
   const { error: updateError } = await supabase
     .from("calls")
     .update({
       transcript,
       ai_summary: summary,
       status: "processed",
+      priority: signals.priority,
+      needs_followup: signals.needsFollowup || !call.job_id,
+      attention_score: signals.attentionScore,
+      attention_reason: signals.reason,
+      ai_category: signals.category,
+      ai_urgency: signals.urgency,
     })
     .eq("id", call.id);
 
@@ -131,7 +150,7 @@ async function processCallCore({
 
   // If no job is attached yet, auto-create a lead + customer linkage.
   if (!call.job_id) {
-    const { jobId, customerId, error: linkError } = await ensureJobForCall({
+    const { jobId, customerId, customerName, error: linkError } = await ensureJobForCall({
       supabase,
       call,
       transcript,
@@ -157,6 +176,32 @@ async function processCallCore({
       if (patchError) {
         return { error: patchError.message };
       }
+    }
+
+    linkedCustomerName = customerName ?? linkedCustomerName;
+  }
+
+  if (linkedJobId) {
+    const classification = await classifyJobWithAi({
+      jobId: linkedJobId,
+      userId: call.user_id,
+      title: summary?.split(".")?.[0] ?? call.recording_url ?? undefined,
+      description: transcript,
+      transcript,
+    }).catch((err) => {
+      console.warn("[processCallCore] classifyJob failed:", err);
+      return null;
+    });
+
+    if (classification?.ai_urgency === "emergency") {
+      await runLeadAutomations({
+        userId: call.user_id,
+        jobId: linkedJobId,
+        title: summary?.split(".")?.[0] ?? "Lead",
+        customerName: linkedCustomerName ?? undefined,
+        summary: summary,
+        aiUrgency: classification.ai_urgency ?? undefined,
+      });
     }
   }
 
@@ -184,14 +229,16 @@ async function ensureJobForCall({
   const phone = call.from_number?.trim() || null;
 
   let customerId = call.customer_id ?? null;
+  let customerName: string | null = null;
   if (!customerId && phone) {
     const { data: existingCustomer } = await supabase
       .from("customers")
-      .select("id")
+      .select("id, name")
       .eq("phone", phone)
       .eq("user_id", call.user_id)
       .maybeSingle();
     customerId = existingCustomer?.id ?? null;
+    customerName = existingCustomer?.name ?? null;
   }
 
   if (!customerId) {
@@ -211,11 +258,20 @@ async function ensureJobForCall({
     }
 
     customerId = newCustomer?.id ?? null;
+    customerName = newCustomer?.name ?? name;
   }
 
   const leadTitle =
     summary?.split(".")?.[0]?.trim() ||
     (phone ? `Voicemail from ${phone}` : "Voicemail lead");
+
+  const signals = inferAttentionSignals({
+    text: transcript,
+    summary,
+    direction: "inbound",
+    status: "voicemail",
+    hasJob: Boolean(call.job_id),
+  });
 
   const jobInsert: Record<string, unknown> = {
     user_id: call.user_id,
@@ -225,6 +281,11 @@ async function ensureJobForCall({
     description_ai_summary: summary,
     status: "lead",
     source: "phone_call",
+    category: signals.category,
+    urgency: signals.urgency,
+    priority: signals.priority,
+    attention_score: signals.attentionScore,
+    attention_reason: signals.reason,
   };
 
   const { data: newJob, error: jobError } = await supabase
@@ -237,7 +298,7 @@ async function ensureJobForCall({
     return { error: jobError.message };
   }
 
-  return { jobId: newJob?.id ?? null, customerId };
+  return { jobId: newJob?.id ?? null, customerId, customerName };
 }
 
 async function downloadRecording(url: string) {

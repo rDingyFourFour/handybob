@@ -13,6 +13,7 @@ import { generateFollowupDraft, sendFollowupMessage } from "./followupActions";
 import { runJobAssistant } from "./assistantActions";
 import { createSignedMediaUrl, MEDIA_BUCKET_ID } from "@/utils/supabase/storage";
 import { JobMediaGallery, type MediaItem } from "./JobMediaGallery";
+import { classifyJobAction } from "./classifyJobAction";
 
 type QuoteRow = {
   id: string;
@@ -56,6 +57,9 @@ type CallRow = {
   transcript?: string | null;
   recording_url?: string | null;
   from_number?: string | null;
+  ai_category?: string | null;
+  ai_urgency?: string | null;
+  ai_confidence?: number | null;
 };
 
 type InvoiceRow = {
@@ -179,7 +183,7 @@ export default async function JobDetailPage({
         .limit(50),
       supabase
         .from("calls")
-        .select("id, direction, status, started_at, created_at, duration_seconds, summary, ai_summary, transcript, recording_url, from_number")
+        .select("id, direction, status, started_at, created_at, duration_seconds, summary, ai_summary, transcript, recording_url, from_number, ai_category, ai_urgency, ai_confidence")
         .eq("job_id", jobId)
         .order("created_at", { ascending: false })
         .limit(50),
@@ -218,7 +222,6 @@ export default async function JobDetailPage({
   const mediaRows = (mediaRowsRaw ?? []) as MediaRow[];
   const mediaItems: MediaItem[] = await Promise.all(
     mediaRows.map(async (media) => {
-      const bucketId = media.bucket_id || MEDIA_BUCKET_ID;
       const path = media.storage_path || "";
 
       if (!path) {
@@ -410,6 +413,33 @@ export default async function JobDetailPage({
         <div className="text-xs text-slate-400">Status: {job.status}</div>
         <div className="text-xs text-slate-400">
           Urgency: {job.urgency ?? "not set"}
+        </div>
+        <div className="text-xs text-slate-400">
+          AI category: {job.ai_category ?? "—"} · AI urgency: {job.ai_urgency ?? "—"} · Confidence:{" "}
+          {job.ai_confidence != null ? job.ai_confidence.toFixed(2) : "—"}
+        </div>
+        {job.status === "lead" && job.ai_urgency === "emergency" && (
+          <p className="text-[11px] text-red-200">
+            Marked as urgent based on voicemail/message content.
+          </p>
+        )}
+
+        <div className="flex flex-wrap gap-2 pt-2">
+          <Link
+            href={`/appointments/new?job_id=${job.id}`}
+            className="hb-button-ghost text-xs"
+          >
+            Schedule appointment
+          </Link>
+          <Link href="/inbox" className="hb-button-ghost text-xs">
+            Open inbox
+          </Link>
+          <form action={classifyJobAction}>
+            <input type="hidden" name="job_id" value={job.id} />
+            <button className="hb-button-ghost text-xs" type="submit">
+              Re-classify with AI
+            </button>
+          </form>
         </div>
 
         {mediaItems.length > 0 && (
