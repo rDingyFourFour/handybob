@@ -9,7 +9,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 //  - Insert messages with direction = 'inbound' plus sender metadata so timelines include customer replies.
 type LogMessageArgs = {
   supabase: SupabaseClient;
-  userId: string;
+  workspaceId: string;
+  userId?: string | null;
   customerId?: string | null;
   jobId?: string | null;
   quoteId?: string | null;
@@ -24,6 +25,7 @@ type LogMessageArgs = {
 
 export async function logMessage({
   supabase,
+  workspaceId,
   userId,
   customerId,
   jobId,
@@ -36,9 +38,13 @@ export async function logMessage({
   status = "sent",
   externalId,
 }: LogMessageArgs) {
-  if (!userId) return;
+  if (!workspaceId || !userId) {
+    console.warn("[logMessage] Missing workspaceId or userId; skipping log.");
+    return;
+  }
 
   const { error } = await supabase.from("messages").insert({
+    workspace_id: workspaceId,
     user_id: userId,
     customer_id: customerId ?? null,
     job_id: jobId ?? null,

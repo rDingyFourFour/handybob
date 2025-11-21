@@ -8,6 +8,7 @@ type QuoteForInvoice = {
   total: number | null;
   status: string | null;
   user_id: string | null;
+  workspace_id: string | null;
   paid_at: string | null;
   stripe_payment_link_url: string | null;
   job_id: string | null;
@@ -154,6 +155,7 @@ export async function ensureInvoiceForQuote({
         total,
         status,
         user_id,
+        workspace_id,
         paid_at,
         stripe_payment_link_url,
         job_id,
@@ -189,6 +191,7 @@ export async function ensureInvoiceForQuote({
   const invoicePayload = {
     quote_id: quote.id,
     user_id: quote.user_id,
+    workspace_id: quote.workspace_id,
     status: markPaid || quote.status === "paid" ? "paid" : "draft",
     total: Number(quote.total ?? 0),
     subtotal: Number(quote.subtotal ?? 0),

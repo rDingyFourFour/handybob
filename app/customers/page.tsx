@@ -2,14 +2,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 async function createCustomer(formData: FormData) {
   "use server";
 
   const supabase = createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
+  const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim() || null;
@@ -19,6 +18,7 @@ async function createCustomer(formData: FormData) {
 
   const { error } = await supabase.from("customers").insert({
     user_id: user.id,
+    workspace_id: workspace.id,
     name,
     email,
     phone,
@@ -31,9 +31,7 @@ async function createCustomer(formData: FormData) {
 
 export default async function NewCustomerPage() {
   const supabase = createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
+  await getCurrentWorkspace({ supabase });
 
   return (
     <div className="max-w-xl space-y-6">

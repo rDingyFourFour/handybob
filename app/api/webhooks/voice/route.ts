@@ -24,6 +24,7 @@ export const dynamic = "force-dynamic";
 type CustomerRow = {
   id: string;
   user_id: string;
+  workspace_id?: string | null;
   name: string | null;
   phone: string | null;
 };
@@ -114,15 +115,29 @@ async function handleVoicemailCallback(formData: FormData) {
     return;
   }
 
-  const customer = existingCustomer ?? (await createCustomerFromCall(supabase, userId, fromNumber));
+  const workspaceId = await getWorkspaceIdForUser(supabase, userId);
+  if (!workspaceId) {
+    console.warn("[voice-webhook] No workspace found for user:", userId);
+    return;
+  }
+
+  const scopedCustomer =
+    existingCustomer && (!existingCustomer.workspace_id || existingCustomer.workspace_id === workspaceId)
+      ? existingCustomer
+      : null;
+
+  const customer =
+    scopedCustomer ??
+    (await createCustomerFromCall(supabase, userId, workspaceId, fromNumber));
   const activeJob = customer
-    ? await findOpenJobForCustomer(supabase, userId, customer.id)
+    ? await findOpenJobForCustomer(supabase, userId, workspaceId, customer.id)
     : null;
 
   const { data: existingCall } = await supabase
     .from("calls")
     .select("id")
     .eq("recording_url", canonicalRecordingUrl)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
 
   if (existingCall?.id) {
@@ -147,6 +162,7 @@ async function handleVoicemailCallback(formData: FormData) {
       ? await createLeadFromVoicemail({
           supabase,
           userId,
+          workspaceId,
           customerId: customer.id,
           fromNumber,
           aiSummary: aiInsights?.summary,
@@ -174,6 +190,7 @@ async function handleVoicemailCallback(formData: FormData) {
 
   await supabase.from("calls").insert({
     user_id: userId,
+    workspace_id: workspaceId,
     customer_id: customer?.id ?? null,
     job_id: jobId ?? null,
     direction: "inbound",
@@ -198,6 +215,7 @@ async function handleVoicemailCallback(formData: FormData) {
     const classification = await classifyJobWithAi({
       jobId,
       userId,
+      workspaceId,
       title: aiInsights?.lead_title ?? summaryText,
       description: aiInsights?.summary ?? transcript ?? undefined,
       transcript: transcript ?? undefined,
@@ -206,6 +224,7 @@ async function handleVoicemailCallback(formData: FormData) {
     if (classification?.ai_urgency === "emergency") {
       await runLeadAutomations({
         userId,
+        workspaceId,
         jobId,
         title: aiInsights?.lead_title ?? summaryText,
         customerName: customer?.name ?? null,
@@ -220,7 +239,7 @@ async function findCustomerByPhone(supabase: SupabaseAdminClient, phone: string 
   if (!phone) return null;
   const { data } = await supabase
     .from("customers")
-    .select("id, user_id, name, phone")
+    .select("id, user_id, workspace_id, name, phone")
     .eq("phone", phone)
     .limit(1);
   return (data?.[0] as CustomerRow | undefined) ?? null;
@@ -229,6 +248,7 @@ async function findCustomerByPhone(supabase: SupabaseAdminClient, phone: string 
 async function createCustomerFromCall(
   supabase: SupabaseAdminClient,
   userId: string,
+  workspaceId: string,
   phone: string | null,
 ) {
   const placeholderName = phone ? `Caller ${phone}` : "New voicemail lead";
@@ -236,6 +256,7 @@ async function createCustomerFromCall(
     .from("customers")
     .insert({
       user_id: userId,
+      workspace_id: workspaceId,
       phone,
       name: placeholderName,
     })
@@ -253,6 +274,7 @@ async function createCustomerFromCall(
 async function findOpenJobForCustomer(
   supabase: SupabaseAdminClient,
   userId: string,
+  workspaceId: string,
   customerId: string,
 ) {
   const CLOSED_STATUSES = ["completed", "cancelled", "closed", "lost", "done"];
@@ -260,7 +282,7 @@ async function findOpenJobForCustomer(
     .from("jobs")
     .select("id, status, title")
     .eq("customer_id", customerId)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
     .limit(5);
 
@@ -271,6 +293,7 @@ async function findOpenJobForCustomer(
 async function createLeadFromVoicemail({
   supabase,
   userId,
+  workspaceId,
   customerId,
   fromNumber,
   aiSummary,
@@ -281,6 +304,7 @@ async function createLeadFromVoicemail({
 }: {
   supabase: SupabaseAdminClient;
   userId: string;
+  workspaceId: string;
   customerId: string;
   fromNumber: string | null;
   aiSummary?: string | null;
@@ -303,6 +327,7 @@ async function createLeadFromVoicemail({
     .from("jobs")
     .insert({
       user_id: userId,
+      workspace_id: workspaceId,
       customer_id: customerId,
       title,
       description_raw: description,
@@ -485,6 +510,32 @@ function parseSummaryResponse(payload: OpenAIResponseBody): SummaryResponse | nu
   }
 
   return null;
+}
+
+async function getWorkspaceIdForUser(supabase: SupabaseAdminClient, userId: string) {
+  try {
+    const { data } = await supabase
+      .from("workspace_members")
+      .select("workspace_id")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .limit(1);
+
+    const workspaceId = data?.[0]?.workspace_id as string | undefined;
+    if (workspaceId) return workspaceId;
+
+    const { data: workspaceRow } = await supabase
+      .from("workspaces")
+      .insert({ owner_id: userId, name: "Workspace" })
+      .select("id")
+      .single();
+
+    return (workspaceRow as { id: string } | null)?.id ?? null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown";
+    console.warn("[voice-webhook] Unable to resolve workspace:", message);
+    return null;
+  }
 }
 
 async function getFirstUserId(supabase: SupabaseAdminClient) {

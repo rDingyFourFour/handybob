@@ -9,6 +9,7 @@ import { sendCustomerSms } from "@/utils/sms/sendCustomerSms";
 
 type LeadAutomationArgs = {
   userId: string;
+  workspaceId: string;
   jobId: string;
   title?: string | null;
   customerName?: string | null;
@@ -18,6 +19,7 @@ type LeadAutomationArgs = {
 
 export async function runLeadAutomations({
   userId,
+  workspaceId,
   jobId,
   title,
   customerName,
@@ -31,7 +33,7 @@ export async function runLeadAutomations({
   const { data: settings } = await supabase
     .from("automation_settings")
     .select("email_new_urgent_lead, sms_new_urgent_lead, sms_alert_number")
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
 
   if (!settings) return;
@@ -62,6 +64,7 @@ export async function runLeadAutomations({
     });
       await logAutomationEvent({
         userId,
+        workspaceId,
         jobId,
         type: "urgent_lead_alert",
         channel,
@@ -72,6 +75,7 @@ export async function runLeadAutomations({
     } catch (err) {
       await logAutomationEvent({
         userId,
+        workspaceId,
         jobId,
         type: "urgent_lead_alert",
         channel,
@@ -90,6 +94,7 @@ export async function runLeadAutomations({
       });
       await logAutomationEvent({
         userId,
+        workspaceId,
         jobId,
         type: "urgent_lead_alert",
         channel: emailEnabled ? "both" : "sms",
@@ -100,6 +105,7 @@ export async function runLeadAutomations({
     } catch (err) {
       await logAutomationEvent({
         userId,
+        workspaceId,
         jobId,
         type: "urgent_lead_alert",
         channel: emailEnabled ? "both" : "sms",
@@ -113,6 +119,7 @@ export async function runLeadAutomations({
 
 type LogArgs = {
   userId: string;
+  workspaceId: string;
   jobId?: string | null;
   callId?: string | null;
   type: string;
@@ -124,6 +131,7 @@ type LogArgs = {
 
 async function logAutomationEvent({
   userId,
+  workspaceId,
   jobId,
   callId,
   type,
@@ -134,6 +142,7 @@ async function logAutomationEvent({
 }: LogArgs) {
   await supabase.from("automation_events").insert({
     user_id: userId,
+    workspace_id: workspaceId,
     job_id: jobId ?? null,
     call_id: callId ?? null,
     type,

@@ -4,6 +4,7 @@ import { buildCustomerTimelinePayload } from "@/utils/ai/customerTimelinePayload
 import { sendCustomerMessageEmail } from "@/utils/email/sendCustomerMessage";
 import { sendCustomerSms } from "@/utils/sms/sendCustomerSms";
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses"; // OpenAI Responses API endpoint
 const DEFAULT_MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini"; // used for summaries + drafts
@@ -46,12 +47,9 @@ export async function generateCustomerSummary(
 
   try {
     const supabase = createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { error: "You must be signed in." };
+    const { workspace } = await getCurrentWorkspace({ supabase });
 
-    const payload = await buildCustomerTimelinePayload(customerId, user.id); // scoped to owner + capped history
+    const payload = await buildCustomerTimelinePayload(customerId, workspace.id); // scoped to workspace + capped history
 
     const prompt = `
 You are HandyBob's assistant. Summarize this customer relationship in 3–6 sentences:
@@ -104,12 +102,9 @@ export async function generateCustomerCheckinDraft(
 
   try {
     const supabase = createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { error: "You must be signed in." };
+    const { workspace } = await getCurrentWorkspace({ supabase });
 
-    const payload = await buildCustomerTimelinePayload(customerId, user.id); // scoped to owner + capped history
+    const payload = await buildCustomerTimelinePayload(customerId, workspace.id); // scoped to workspace + capped history
     const toneInstruction = tone ? `Tone: ${tone}.` : "";
 
     const prompt = `
@@ -168,10 +163,7 @@ export async function sendCustomerCheckinMessage(
 
   try {
     const supabase = createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { error: "You must be signed in." };
+    const { workspace } = await getCurrentWorkspace({ supabase });
 
     let fromAddress: string | null = null;
     if (channel === "email") {
@@ -183,6 +175,7 @@ export async function sendCustomerCheckinMessage(
     const sentAt = new Date().toISOString();
     const { error: insertError } = await supabase.from("messages").insert({
       user_id: user.id,
+      workspace_id: workspace.id,
       customer_id: customerId,
       job_id: null,
       quote_id: null,

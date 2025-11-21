@@ -4,6 +4,7 @@
 import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 type QuoteLineItem = Record<string, unknown>;
 
@@ -30,10 +31,7 @@ export async function createInvoiceFromQuote(formData: FormData) {
   const quoteId = String(formData.get("quote_id"));
   const supabase = createServerClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: quote } = await supabase
     .from("quotes")
@@ -41,6 +39,7 @@ export async function createInvoiceFromQuote(formData: FormData) {
       `
         id,
         user_id,
+        workspace_id,
         job_id,
         status,
         subtotal,
@@ -59,7 +58,7 @@ export async function createInvoiceFromQuote(formData: FormData) {
       `
     )
     .eq("id", quoteId)
-    .eq("user_id", user.id)
+    .eq("workspace_id", workspace.id)
     .maybeSingle();
 
   if (!quote) {
@@ -79,6 +78,7 @@ export async function createInvoiceFromQuote(formData: FormData) {
     .insert({
       quote_id: quote.id,
       user_id: quote.user_id ?? user.id,
+      workspace_id: quote.workspace_id ?? workspace.id,
       job_id: quote.job_id ?? null,
       status,
       subtotal: Number(quote.subtotal ?? 0),

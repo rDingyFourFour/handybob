@@ -6,6 +6,7 @@ import { sendInvoiceSms } from "@/utils/sms/sendInvoiceSms";
 import { createServerClient } from "@/utils/supabase/server";
 import { logMessage } from "@/utils/communications/logMessage";
 import { createSignedMediaUrl } from "@/utils/supabase/storage";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 type InvoiceWithRelations = {
   id: string;
@@ -145,10 +146,7 @@ async function sendInvoiceEmailAction(formData: FormData) {
 
   const invoiceId = String(formData.get("invoice_id"));
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: invoice } = await supabase
     .from("invoices")
@@ -173,6 +171,7 @@ async function sendInvoiceEmailAction(formData: FormData) {
       `
     )
     .eq("id", invoiceId)
+    .eq("workspace_id", workspace.id)
     .single();
 
   if (!invoice) {
@@ -203,6 +202,7 @@ async function sendInvoiceEmailAction(formData: FormData) {
   await logMessage({
     supabase,
     userId: user.id,
+    workspaceId: workspace.id,
     customerId: customer.id,
     jobId: extractJobId(invoiceRecord),
     quoteId: invoiceRecord.quote_id,
@@ -230,10 +230,7 @@ async function sendInvoiceSmsAction(formData: FormData) {
 
   const invoiceId = String(formData.get("invoice_id"));
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: invoice } = await supabase
     .from("invoices")
@@ -258,6 +255,7 @@ async function sendInvoiceSmsAction(formData: FormData) {
       `
     )
     .eq("id", invoiceId)
+    .eq("workspace_id", workspace.id)
     .single();
 
   if (!invoice) {
@@ -290,6 +288,7 @@ async function sendInvoiceSmsAction(formData: FormData) {
   await logMessage({
     supabase,
     userId: user.id,
+    workspaceId: workspace.id,
     customerId: customer.id,
     jobId: extractJobId(invoiceRecord),
     quoteId: invoiceRecord.quote_id,
@@ -318,10 +317,7 @@ export default async function InvoiceDetailPage({
 }) {
   const { id } = await params;
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: invoiceData } = await supabase
     .from("invoices")
@@ -346,6 +342,7 @@ export default async function InvoiceDetailPage({
       `
     )
     .eq("id", id)
+    .eq("workspace_id", workspace.id)
     .single();
 
   const invoice = invoiceData as InvoiceWithRelations | null;
@@ -355,13 +352,14 @@ export default async function InvoiceDetailPage({
     .from("quote_payments")
     .select("id, amount, currency, created_at, stripe_payment_intent_id, customer_email")
     .eq("quote_id", invoice.quote_id)
+    .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: false });
 
   const { data: mediaRows } = await supabase
     .from("media")
     .select("id, file_name, mime_type, created_at, caption, kind, storage_path, bucket_id, url")
     .eq("invoice_id", invoice.id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: false });
 
   const mediaItems: MediaItem[] = await Promise.all(

@@ -1,10 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 export type PricingSettings = {
-  id: string;
-  user_id: string;
+  workspace_id: string;
   hourly_rate: number;
   minimum_job_fee: number | null;
   travel_fee: number | null;
@@ -12,16 +12,15 @@ export type PricingSettings = {
   updated_at?: string;
 };
 
-export const DEFAULT_PRICING_SETTINGS: Omit<PricingSettings, "id" | "user_id"> =
-  {
-    hourly_rate: 125,
-    minimum_job_fee: 0,
-    travel_fee: 0,
-  };
+export const DEFAULT_PRICING_SETTINGS: Omit<PricingSettings, "workspace_id"> = {
+  hourly_rate: 125,
+  minimum_job_fee: 0,
+  travel_fee: 0,
+};
 
 type EnsurePricingOptions = {
   supabase?: SupabaseClient;
-  userId?: string;
+  workspaceId?: string;
 };
 
 /**
@@ -33,25 +32,17 @@ export async function ensurePricingSettings(
 ) {
   const supabase = options.supabase ?? createServerClient();
 
-  let resolvedUserId = options.userId;
+  let resolvedWorkspaceId = options.workspaceId;
 
-  if (!resolvedUserId) {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError) throw userError;
-    if (!user)
-      throw new Error("You must be signed in to load pricing settings.");
-
-    resolvedUserId = user.id;
+  if (!resolvedWorkspaceId) {
+    const { workspace } = await getCurrentWorkspace({ supabase });
+    resolvedWorkspaceId = workspace.id;
   }
 
   const { data: existing, error } = await supabase
     .from("pricing_settings")
     .select("*")
-    .eq("user_id", resolvedUserId)
+    .eq("workspace_id", resolvedWorkspaceId)
     .maybeSingle<PricingSettings>();
 
   if (error && error.code !== "PGRST116") {
@@ -65,7 +56,7 @@ export async function ensurePricingSettings(
   const { data: inserted, error: insertError } = await supabase
     .from("pricing_settings")
     .insert({
-      user_id: resolvedUserId,
+      workspace_id: resolvedWorkspaceId,
       ...DEFAULT_PRICING_SETTINGS,
     })
     .select()

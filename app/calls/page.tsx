@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 import { processCallRecording } from "./processCallAction";
 
 type CallRow = {
@@ -67,10 +67,7 @@ export default async function CallsPage({
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const needsProcessing = searchParams?.filter === "needs_processing";
   const newLeads = searchParams?.filter === "new_leads";
@@ -105,7 +102,7 @@ export default async function CallsPage({
         ai_urgency
       `
     )
-    .eq("user_id", user.id);
+    .eq("workspace_id", workspace.id);
 
   if (needsProcessing) {
     query = query.is("transcript", null);

@@ -2,6 +2,7 @@
 
 import { buildJobTimelinePayload } from "@/utils/ai/jobTimelinePayload";
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses"; // OpenAI Responses API
 const DEFAULT_MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini"; // JSON-style responses, fast
@@ -32,12 +33,9 @@ export async function generateNextActions(
 
   try {
     const supabase = createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { error: "You must be signed in." };
+    const { workspace } = await getCurrentWorkspace({ supabase });
 
-    const payload = await buildJobTimelinePayload(jobId, user.id);
+    const payload = await buildJobTimelinePayload(jobId, workspace.id);
     // payload is already trimmed (events capped, text truncated) to avoid leaking other jobs/users.
 
     const prompt = `

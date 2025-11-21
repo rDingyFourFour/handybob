@@ -9,6 +9,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { inferAttentionSignals } from "@/utils/attention/inferAttentionSignals";
 import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
 import { classifyJobWithAi } from "@/utils/ai/classifyJob";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1";
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
@@ -28,19 +29,13 @@ export async function processCallRecording(formData: FormData): Promise<void> {
   }
 
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    console.warn("[processCallRecording] User not signed in.");
-    return;
-  }
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const result = await processCallCore({
     supabase,
     callId,
-    enforceUserId: true,
-    userIdFilter: user.id,
+    enforceWorkspaceId: true,
+    workspaceIdFilter: workspace.id,
   });
 
   if (result.error) {
@@ -62,7 +57,7 @@ export async function processCallById(callId: string): Promise<{ ok?: boolean; e
   const result = await processCallCore({
     supabase,
     callId,
-    enforceUserId: false, // Service role bypasses RLS; we load by call.id directly.
+    enforceWorkspaceId: false, // Service role bypasses RLS; we load by call.id directly.
   });
   return result.error ? { error: result.error } : { ok: true };
 }
@@ -78,22 +73,22 @@ type ProcessCallCoreResult = {
 async function processCallCore({
   supabase,
   callId,
-  enforceUserId,
-  userIdFilter,
+  enforceWorkspaceId,
+  workspaceIdFilter,
 }: {
   supabase: SupabaseClient;
   callId: string;
-  enforceUserId: boolean;
-  userIdFilter?: string;
+  enforceWorkspaceId: boolean;
+  workspaceIdFilter?: string;
 }): Promise<ProcessCallCoreResult> {
   // Load call (optionally scoped to user when called from UI)
   let query = supabase
     .from("calls")
-    .select("id, user_id, recording_url, from_number, to_number, job_id, customer_id, status, direction")
+    .select("id, user_id, workspace_id, recording_url, from_number, to_number, job_id, customer_id, status, direction")
     .eq("id", callId);
 
-  if (enforceUserId && userIdFilter) {
-    query = query.eq("user_id", userIdFilter);
+  if (enforceWorkspaceId && workspaceIdFilter) {
+    query = query.eq("workspace_id", workspaceIdFilter);
   }
 
   const { data: call, error: loadError } =
@@ -111,6 +106,10 @@ async function processCallCore({
   let linkedJobId: string | null | undefined = call.job_id;
   let linkedCustomerId: string | null | undefined = call.customer_id;
   let linkedCustomerName: string | null | undefined = null;
+  const workspaceId = call.workspace_id || workspaceIdFilter || null;
+  if (!workspaceId) {
+    return { error: "Workspace missing for call." };
+  }
 
   const audioBuffer = await downloadRecording(call.recording_url);
   if (!audioBuffer) return { error: "Failed to download recording audio." };
@@ -155,6 +154,7 @@ async function processCallCore({
       call,
       transcript,
       summary,
+      workspaceId,
     });
 
     if (linkError) {
@@ -185,6 +185,7 @@ async function processCallCore({
     const classification = await classifyJobWithAi({
       jobId: linkedJobId,
       userId: call.user_id,
+      workspaceId: workspaceId ?? undefined,
       title: summary?.split(".")?.[0] ?? call.recording_url ?? undefined,
       description: transcript,
       transcript,
@@ -196,6 +197,7 @@ async function processCallCore({
     if (classification?.ai_urgency === "emergency") {
       await runLeadAutomations({
         userId: call.user_id,
+        workspaceId: workspaceId ?? call.workspace_id ?? "",
         jobId: linkedJobId,
         title: summary?.split(".")?.[0] ?? "Lead",
         customerName: linkedCustomerName ?? undefined,
@@ -218,12 +220,14 @@ async function ensureJobForCall({
   call: {
     id: string;
     user_id: string;
+    workspace_id?: string | null;
     from_number?: string | null;
     job_id?: string | null;
     customer_id?: string | null;
   };
   transcript: string;
   summary: string;
+  workspaceId: string | null;
 }) {
   // Future: enrich job with AI-derived category/urgency/location once we trust the model outputs.
   const phone = call.from_number?.trim() || null;
@@ -235,7 +239,7 @@ async function ensureJobForCall({
       .from("customers")
       .select("id, name")
       .eq("phone", phone)
-      .eq("user_id", call.user_id)
+      .eq("workspace_id", workspaceId ?? call.workspace_id ?? "")
       .maybeSingle();
     customerId = existingCustomer?.id ?? null;
     customerName = existingCustomer?.name ?? null;
@@ -247,6 +251,7 @@ async function ensureJobForCall({
       .from("customers")
       .insert({
         user_id: call.user_id,
+        workspace_id: workspaceId ?? call.workspace_id ?? undefined,
         name,
         phone,
       })
@@ -275,6 +280,7 @@ async function ensureJobForCall({
 
   const jobInsert: Record<string, unknown> = {
     user_id: call.user_id,
+    workspace_id: workspaceId ?? call.workspace_id ?? undefined,
     customer_id: customerId,
     title: leadTitle,
     description_raw: transcript,

@@ -2,13 +2,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 async function createJob(formData: FormData) {
   "use server";
 
   const supabase = createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const customer_id = String(formData.get("customer_id"));
   const title = String(formData.get("title") || "").trim() || null;
@@ -28,6 +28,7 @@ async function createJob(formData: FormData) {
     urgency,
     status: "lead",
     source: "manual",
+    workspace_id: workspace.id,
   });
 
   if (error) throw new Error(error.message);
@@ -37,12 +38,12 @@ async function createJob(formData: FormData) {
 
 export default async function NewJobPage() {
   const supabase = createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: customers } = await supabase
     .from("customers")
     .select("id, name")
+    .eq("workspace_id", workspace.id)
     .order("name");
 
   return (

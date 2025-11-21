@@ -108,14 +108,14 @@ export type CustomerTimelinePayload = {
  * appointments, quotes, invoices, payments). Returns a compact object safe to
  * JSON.stringify for LLM prompts.
  */
-export async function buildCustomerTimelinePayload(customerId: string, userId: string) {
+export async function buildCustomerTimelinePayload(customerId: string, workspaceId: string) {
   const supabase = createServerClient();
 
   const { data: customer } = await supabase
     .from("customers")
-    .select("id, user_id, name, email, phone, created_at")
+    .select("id, workspace_id, name, email, phone, created_at")
     .eq("id", customerId)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .single();
 
   if (!customer) {
@@ -126,7 +126,7 @@ export async function buildCustomerTimelinePayload(customerId: string, userId: s
     .from("jobs")
     .select("id, title, status, urgency, created_at")
     .eq("customer_id", customer.id)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false });
 
   const jobList = (jobs ?? []) as JobRow[];
@@ -137,14 +137,14 @@ export async function buildCustomerTimelinePayload(customerId: string, userId: s
       .from("messages")
       .select("job_id, direction, subject, body, status, sent_at, created_at")
       .eq("customer_id", customer.id)
-      .eq("user_id", userId)
+      .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false })
       .limit(200),
     supabase
       .from("calls")
       .select("job_id, direction, status, started_at, duration_seconds, summary, ai_summary, transcript")
       .eq("customer_id", customer.id)
-      .eq("user_id", userId)
+      .eq("workspace_id", workspaceId)
       .order("started_at", { ascending: false })
       .limit(150),
     jobIds.length
@@ -152,7 +152,7 @@ export async function buildCustomerTimelinePayload(customerId: string, userId: s
           .from("appointments")
           .select("job_id, title, start_time, status, location")
           .in("job_id", jobIds)
-          .eq("user_id", userId)
+          .eq("workspace_id", workspaceId)
           .order("start_time", { ascending: false })
           .limit(150)
       : { data: [], error: null },
@@ -161,7 +161,7 @@ export async function buildCustomerTimelinePayload(customerId: string, userId: s
           .from("quotes")
           .select("id, job_id, status, total, created_at, updated_at, accepted_at, paid_at")
           .in("job_id", jobIds)
-          .eq("user_id", userId)
+          .eq("workspace_id", workspaceId)
           .order("created_at", { ascending: false })
           .limit(80)
       : { data: [], error: null },
@@ -170,7 +170,7 @@ export async function buildCustomerTimelinePayload(customerId: string, userId: s
           .from("invoices")
           .select("id, job_id, invoice_number, status, total, created_at, issued_at, paid_at")
           .in("job_id", jobIds)
-          .eq("user_id", userId)
+          .eq("workspace_id", workspaceId)
           .order("created_at", { ascending: false })
           .limit(80)
       : { data: [], error: null },
@@ -185,7 +185,7 @@ export async function buildCustomerTimelinePayload(customerId: string, userId: s
       .from("quote_payments")
       .select("quote_id, amount, currency, created_at")
       .in("quote_id", quoteIds)
-      .eq("user_id", userId)
+      .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false });
     payments = (paymentRows ?? []) as PaymentRow[];
   }

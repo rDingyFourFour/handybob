@@ -20,16 +20,16 @@ import { createServerClient } from "@/utils/supabase/server";
  *
  * The returned object is safe to JSON.stringify and send to the OpenAI Responses API.
  */
-export async function buildJobTimelinePayload(jobId: string, userId: string) {
+export async function buildJobTimelinePayload(jobId: string, workspaceId: string) {
   const supabase = createServerClient();
 
   const { data: job } = await supabase
     .from("jobs")
     .select(
-      "id, user_id, title, description_raw, category, urgency, status, customer_id, created_at, customers(name, email, phone)"
+      "id, workspace_id, title, description_raw, category, urgency, status, customer_id, created_at, customers(name, email, phone)"
     )
     .eq("id", jobId)
-    .eq("user_id", userId)
+    .eq("workspace_id", workspaceId)
     .single();
 
   if (!job) {
@@ -41,33 +41,33 @@ export async function buildJobTimelinePayload(jobId: string, userId: string) {
       .from("quotes")
       .select("id, status, total, created_at, updated_at, accepted_at, paid_at")
       .eq("job_id", jobId)
-      .eq("user_id", userId)
+      .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false }),
     supabase
       .from("appointments")
       .select("title, start_time, status, location")
       .eq("job_id", jobId)
-      .eq("user_id", userId)
+      .eq("workspace_id", workspaceId)
       .order("start_time", { ascending: false }),
     supabase
       .from("messages")
       .select("direction, subject, body, status, created_at, sent_at")
       .eq("job_id", jobId)
-      .eq("user_id", userId)
+      .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false })
       .limit(100),
     supabase
       .from("calls")
       .select("direction, status, started_at, duration_seconds, summary, ai_summary, transcript")
       .eq("job_id", jobId)
-      .eq("user_id", userId)
+      .eq("workspace_id", workspaceId)
       .order("started_at", { ascending: false })
       .limit(100),
     supabase
       .from("invoices")
       .select("invoice_number, status, total, created_at, issued_at, paid_at")
       .eq("job_id", jobId)
-      .eq("user_id", userId)
+      .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false }),
   ]);
 
@@ -84,7 +84,7 @@ export async function buildJobTimelinePayload(jobId: string, userId: string) {
       .from("quote_payments")
       .select("quote_id, amount, currency, created_at")
       .in("quote_id", quoteIds)
-      .eq("user_id", userId)
+      .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false });
     payments = paymentRows ?? [];
   }

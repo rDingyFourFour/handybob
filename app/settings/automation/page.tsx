@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
-
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 import { saveAutomationSettings } from "./saveAutomationSettings";
 
 type SettingsRow = {
@@ -22,21 +21,18 @@ type AutomationEvent = {
 
 export default async function AutomationSettingsPage() {
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const { data } = await supabase
     .from("automation_settings")
     .select("email_new_urgent_lead, sms_new_urgent_lead, sms_alert_number")
-    .eq("user_id", user.id)
+    .eq("workspace_id", workspace.id)
     .maybeSingle();
 
   const { data: events } = await supabase
     .from("automation_events")
     .select("id, type, channel, status, message, created_at, job_id, call_id")
-    .eq("user_id", user.id)
+    .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: false })
     .limit(10);
 

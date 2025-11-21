@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { classifyJobWithAi } from "@/utils/ai/classifyJob";
 import { createServerClient } from "@/utils/supabase/server";
 import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 type JobRow = {
   id: string;
@@ -24,16 +25,13 @@ export async function classifyJobAction(formData: FormData) {
   if (typeof jobId !== "string") return;
 
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  const { workspace, user } = await getCurrentWorkspace({ supabase });
 
   const { data: job } = await supabase
     .from("jobs")
     .select("id, title, description_raw, description_ai_summary, status, customers(name)")
     .eq("id", jobId)
-    .eq("user_id", user.id)
+    .eq("workspace_id", workspace.id)
     .maybeSingle<JobRow>();
 
   if (!job) return;
@@ -41,6 +39,7 @@ export async function classifyJobAction(formData: FormData) {
   const classification = await classifyJobWithAi({
     jobId,
     userId: user.id,
+    workspaceId: workspace.id,
     title: job.title,
     description: job.description_ai_summary || job.description_raw,
   });
@@ -52,6 +51,7 @@ export async function classifyJobAction(formData: FormData) {
 
     await runLeadAutomations({
       userId: user.id,
+      workspaceId: workspace.id,
       jobId,
       title: job.title,
       customerName,

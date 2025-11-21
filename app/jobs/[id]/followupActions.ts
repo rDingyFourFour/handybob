@@ -4,6 +4,7 @@ import { buildJobTimelinePayload } from "@/utils/ai/jobTimelinePayload";
 import { sendCustomerMessageEmail } from "@/utils/email/sendCustomerMessage";
 import { sendCustomerSms } from "@/utils/sms/sendCustomerSms";
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses"; // OpenAI Responses API endpoint
 const DEFAULT_MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini"; // JSON responses, fast/cheap
@@ -54,12 +55,9 @@ export async function generateFollowupDraft(
 
   try {
     const supabase = createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { error: "You must be signed in." };
+    const { workspace } = await getCurrentWorkspace({ supabase });
 
-    const timelinePayload = await buildJobTimelinePayload(jobId, user.id); // already scoped + truncated
+    const timelinePayload = await buildJobTimelinePayload(jobId, workspace.id); // already scoped + truncated
     const goalLabel = GOAL_LABELS[String(goal)] ?? "Follow up after sending a quote";
     const toneInstruction = tone ? `Tone: ${tone}.` : "";
 
@@ -126,10 +124,7 @@ export async function sendFollowupMessage(
 
   try {
     const supabase = createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { error: "You must be signed in." };
+    const { workspace } = await getCurrentWorkspace({ supabase });
 
     let fromAddress: string | null = null;
     if (channel === "email") {
@@ -141,6 +136,7 @@ export async function sendFollowupMessage(
     const sentAt = new Date().toISOString();
     const { error: insertError } = await supabase.from("messages").insert({
       user_id: user.id,
+      workspace_id: workspace.id,
       customer_id: customerId || null,
       job_id: jobId,
       quote_id: null,

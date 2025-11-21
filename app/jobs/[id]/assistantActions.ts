@@ -2,6 +2,7 @@
 
 import { requestAssistantReply } from "@/utils/ai/assistant";
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 type JobAssistantState = {
   summary?: string;
@@ -99,18 +100,15 @@ export async function runJobAssistant(
 
   try {
     const supabase = createServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { error: "You must be signed in." };
+    const { workspace } = await getCurrentWorkspace({ supabase });
 
     const { data: job } = await supabase
       .from("jobs")
       .select(
-        "id, user_id, title, description_raw, category, urgency, status, customer_id, created_at, customers(name, email, phone)",
+        "id, user_id, workspace_id, title, description_raw, category, urgency, status, customer_id, created_at, customers(name, email, phone)",
       )
       .eq("id", jobId)
-      .eq("user_id", user.id)
+      .eq("workspace_id", workspace.id)
       .single();
 
     if (!job) return { error: "Job not found." };
@@ -122,35 +120,35 @@ export async function runJobAssistant(
         .from("messages")
         .select("direction, subject, body, status, sent_at, created_at")
         .eq("job_id", job.id)
-        .eq("user_id", user.id)
+        .eq("workspace_id", workspace.id)
         .order("created_at", { ascending: false })
         .limit(50),
       supabase
         .from("calls")
         .select("direction, status, started_at, duration_seconds, summary, ai_summary, transcript")
         .eq("job_id", job.id)
-        .eq("user_id", user.id)
+        .eq("workspace_id", workspace.id)
         .order("started_at", { ascending: false })
         .limit(30),
       supabase
         .from("appointments")
         .select("title, start_time, status, location")
         .eq("job_id", job.id)
-        .eq("user_id", user.id)
+        .eq("workspace_id", workspace.id)
         .order("start_time", { ascending: false })
         .limit(30),
       supabase
         .from("quotes")
         .select("id, status, total, created_at, updated_at, accepted_at, paid_at")
         .eq("job_id", job.id)
-        .eq("user_id", user.id)
+        .eq("workspace_id", workspace.id)
         .order("created_at", { ascending: false })
         .limit(20),
       supabase
         .from("invoices")
         .select("invoice_number, status, total, created_at, issued_at, paid_at")
         .eq("job_id", job.id)
-        .eq("user_id", user.id)
+        .eq("workspace_id", workspace.id)
         .order("created_at", { ascending: false })
         .limit(20),
     ]);
@@ -164,7 +162,7 @@ export async function runJobAssistant(
         .from("quote_payments")
         .select("quote_id, amount, currency, created_at")
         .in("quote_id", quoteIds)
-        .eq("user_id", user.id)
+        .eq("workspace_id", workspace.id)
         .order("created_at", { ascending: false });
       payments = (paymentRows ?? []) as PaymentRow[];
     }

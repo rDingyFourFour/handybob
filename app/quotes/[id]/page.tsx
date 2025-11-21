@@ -9,6 +9,7 @@ import { createPaymentLinkForQuote } from "@/utils/payments/createPaymentLink";
 import { ensureInvoiceForQuote } from "@/utils/invoices/ensureInvoiceForQuote";
 import { logMessage } from "@/utils/communications/logMessage";
 import { createSignedMediaUrl } from "@/utils/supabase/storage";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 
 type CustomerInfo = {
@@ -64,9 +65,7 @@ async function sendQuoteEmailAction(formData: FormData) {
 
   const quoteId = String(formData.get("quote_id"));
   const supabase = createServerClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: quote } = await supabase
     .from("quotes")
@@ -85,6 +84,7 @@ async function sendQuoteEmailAction(formData: FormData) {
       )
     `)
     .eq("id", quoteId)
+    .eq("workspace_id", workspace.id)
     .single();
 
   if (!quote) {
@@ -115,6 +115,7 @@ async function sendQuoteEmailAction(formData: FormData) {
 
   await logMessage({
     supabase,
+    workspaceId: workspace.id,
     userId: user.id,
     customerId: customer.id,
     jobId: job?.id ?? quote.job_id ?? null,
@@ -144,8 +145,7 @@ async function sendQuoteSmsAction(formData: FormData) {
   const quoteId = String(formData.get("quote_id"));
   const supabase = createServerClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: quote } = await supabase
     .from("quotes")
@@ -163,6 +163,7 @@ async function sendQuoteSmsAction(formData: FormData) {
       )
     `)
     .eq("id", quoteId)
+    .eq("workspace_id", workspace.id)
     .single();
 
   if (!quote) {
@@ -192,6 +193,7 @@ async function sendQuoteSmsAction(formData: FormData) {
 
   await logMessage({
     supabase,
+    workspaceId: workspace.id,
     userId: user.id,
     customerId: customer.id,
     jobId: job?.id ?? quote.job_id ?? null,
@@ -219,8 +221,7 @@ async function acceptQuoteAction(formData: FormData) {
   const quoteId = String(formData.get("quote_id"));
   const supabase = createServerClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   await supabase
     .from("quotes")
@@ -229,7 +230,8 @@ async function acceptQuoteAction(formData: FormData) {
       accepted_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq("id", quoteId);
+    .eq("id", quoteId)
+    .eq("workspace_id", workspace.id);
 
   await ensureInvoiceForQuote({
     supabase,
@@ -252,8 +254,7 @@ async function createPaymentLinkAction(formData: FormData) {
 export default async function QuoteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const [quoteRes, paymentsRes] = await Promise.all([
     supabase
@@ -270,11 +271,13 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
         )
       `)
       .eq("id", id)
+      .eq("workspace_id", workspace.id)
       .single(),
     supabase
       .from("quote_payments")
       .select("*")
       .eq("quote_id", id)
+      .eq("workspace_id", workspace.id)
       .order("created_at", { ascending: false }),
   ]);
 
@@ -296,7 +299,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
     .from("media")
     .select("id, file_name, mime_type, created_at, caption, kind, storage_path, bucket_id, url")
     .eq("quote_id", id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: false });
 
   const mediaItems: MediaItem[] = await Promise.all(

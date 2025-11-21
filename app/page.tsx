@@ -1,9 +1,9 @@
 // app/page.tsx
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 import { newLeadCutoff, overdueInvoiceCutoff, staleQuoteCutoff } from "@/utils/attention/attentionModel";
 
 type AutomationPrefs = {
@@ -66,10 +66,7 @@ type AppointmentRow = {
 export async function updateAutomationPreferences(formData: FormData) {
   "use server";
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const notifyUrgentLeads = formData.get("notifyUrgentLeads") === "on";
   const showOverdueWork = formData.get("showOverdueWork") === "on";
@@ -77,11 +74,11 @@ export async function updateAutomationPreferences(formData: FormData) {
   await supabase
     .from("automation_preferences")
     .upsert({
-      user_id: user.id,
+      workspace_id: workspace.id,
       notify_urgent_leads: notifyUrgentLeads,
       show_overdue_work: showOverdueWork,
     })
-    .select("user_id")
+    .select("workspace_id")
     .single();
 
   revalidatePath("/");
@@ -120,10 +117,7 @@ function aiUrgencyRank(value?: string | null) {
 
 export default async function HomePage() {
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -170,6 +164,7 @@ export default async function HomePage() {
           jobs ( title )
         `
       )
+      .eq("workspace_id", workspace.id)
       .lte("start_time", todayEnd.toISOString())
       .neq("status", "completed")
       .order("start_time", { ascending: true })
@@ -178,19 +173,22 @@ export default async function HomePage() {
     supabase
       .from("jobs")
       .select("id")
+      .eq("workspace_id", workspace.id)
       .eq("status", "lead")
       .gte("created_at", newLeadWindowStart.toISOString()),
 
-    supabase.from("quotes").select("id").eq("status", "sent"),
+    supabase.from("quotes").select("id").eq("workspace_id", workspace.id).eq("status", "sent"),
 
     supabase
       .from("invoices")
       .select("id")
+      .eq("workspace_id", workspace.id)
       .in("status", ["sent", "overdue"]),
 
     supabase
       .from("quotes")
       .select("id, total, paid_at")
+      .eq("workspace_id", workspace.id)
       .eq("status", "paid")
       .gte("paid_at", monthStart.toISOString())
       .lt("paid_at", nextMonthStart.toISOString()),
@@ -198,6 +196,7 @@ export default async function HomePage() {
     supabase
       .from("invoices")
       .select("id, total, paid_at")
+      .eq("workspace_id", workspace.id)
       .eq("status", "paid")
       .gte("paid_at", monthStart.toISOString())
       .lt("paid_at", nextMonthStart.toISOString()),
@@ -205,12 +204,14 @@ export default async function HomePage() {
     supabase
       .from("messages")
       .select("id")
+      .eq("workspace_id", workspace.id)
       .eq("direction", "inbound")
       .gte("sent_at", dayAgo.toISOString()),
 
     supabase
       .from("jobs")
       .select("id, title, urgency, ai_urgency, priority, attention_score, attention_reason, customer:customers(name)")
+      .eq("workspace_id", workspace.id)
       .eq("status", "lead")
       .gte("created_at", newLeadWindowStart.toISOString())
       .order("created_at", { ascending: false })
@@ -233,6 +234,7 @@ export default async function HomePage() {
           customers ( id, name )
         `
       )
+      .eq("workspace_id", workspace.id)
       .or("transcript.is.null,ai_summary.is.null,job_id.is.null,needs_followup.eq.true")
       .order("created_at", { ascending: false })
       .limit(5),
@@ -240,6 +242,7 @@ export default async function HomePage() {
     supabase
       .from("invoices")
       .select("id, status, total, due_at, job_id, job:jobs(title)")
+      .eq("workspace_id", workspace.id)
       .in("status", ["sent", "overdue"])
       .lt("due_at", invoiceOverdueThreshold.toISOString())
       .order("due_at", { ascending: true })
@@ -248,6 +251,7 @@ export default async function HomePage() {
     supabase
       .from("quotes")
       .select("id, status, total, created_at, job_id, job:jobs(title)")
+      .eq("workspace_id", workspace.id)
       .eq("status", "sent")
       .lt("created_at", quoteStaleThreshold.toISOString())
       .order("created_at", { ascending: true })
@@ -256,6 +260,7 @@ export default async function HomePage() {
     supabase
       .from("automation_preferences")
       .select("notify_urgent_leads, show_overdue_work")
+      .eq("workspace_id", workspace.id)
       .maybeSingle(),
   ]);
 

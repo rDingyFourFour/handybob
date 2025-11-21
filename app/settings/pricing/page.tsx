@@ -1,22 +1,16 @@
 // app/settings/pricing/page.tsx
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 import { ensurePricingSettings } from "@/utils/ensurePricingSettings";
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 async function updatePricingSettings(formData: FormData) {
   "use server";
 
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const hourlyRate = Number(formData.get("hourly_rate"));
   const minimumFee = Number(formData.get("minimum_job_fee"));
@@ -31,7 +25,7 @@ async function updatePricingSettings(formData: FormData) {
   const { error } = await supabase
     .from("pricing_settings")
     .update(payload)
-    .eq("user_id", user.id);
+    .eq("workspace_id", workspace.id);
 
   if (error) {
     throw new Error(error.message);
@@ -41,7 +35,9 @@ async function updatePricingSettings(formData: FormData) {
 }
 
 export default async function PricingSettingsPage() {
-  const settings = await ensurePricingSettings();
+  const supabase = createServerClient();
+  const { workspace } = await getCurrentWorkspace({ supabase });
+  const settings = await ensurePricingSettings({ supabase, workspaceId: workspace.id });
 
   return (
     <div className="max-w-2xl space-y-6">

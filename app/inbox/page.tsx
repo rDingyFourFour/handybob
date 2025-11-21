@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { sendCustomerMessageEmail } from "@/utils/email/sendCustomerMessage";
 import { sendCustomerSms } from "@/utils/sms/sendCustomerSms";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 import { ComposeBar } from "./ComposeBar";
 
 type CustomerRow = {
@@ -77,10 +78,7 @@ async function sendConversationMessage(formData: FormData) {
   }
 
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const sentAt = new Date().toISOString();
   let fromAddress: string | null = null;
@@ -102,6 +100,7 @@ async function sendConversationMessage(formData: FormData) {
 
   const { error: insertError } = await supabase.from("messages").insert({
     user_id: user.id,
+    workspace_id: workspace.id,
     customer_id: customerId,
     job_id: jobId,
     // Convention: link to the most specific context; inbox sends only know customer/job.
@@ -132,10 +131,7 @@ export default async function InboxPage({
   searchParams?: { customerId?: string; customer_id?: string };
 }) {
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: messageRows, error } = await supabase
     .from("messages")
@@ -154,6 +150,7 @@ export default async function InboxPage({
         customers ( id, name, email, phone )
       `
     )
+    .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: false })
     .limit(200);
 

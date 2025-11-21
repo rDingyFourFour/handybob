@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { MEDIA_BUCKET_ID, createSignedMediaUrl } from "@/utils/supabase/storage";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50MB, aligned with Supabase storage default
 
@@ -27,11 +28,11 @@ export type VisibilityState = {
   error?: string;
 };
 
-function buildStoragePath(userId: string, jobId: string, fileName: string) {
+function buildStoragePath(workspaceId: string, jobId: string, fileName: string) {
   const safeName = fileName?.trim() || "upload";
   const extension = safeName.includes(".") ? safeName.slice(safeName.lastIndexOf(".")).toLowerCase() : "";
   const uniqueId = crypto.randomUUID();
-  return `${userId}/${jobId}/${uniqueId}${extension}`;
+  return `${workspaceId}/${jobId}/${uniqueId}${extension}`;
 }
 
 function inferKind(mime: string | undefined | null): "photo" | "document" | "audio" | "other" {
@@ -49,10 +50,7 @@ export async function uploadJobMedia(
   formData: FormData,
 ): Promise<UploadMediaState> {
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
+  const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const jobId = String(formData.get("job_id") || "");
   const caption = (formData.get("caption") || "").toString().trim() || null;
@@ -67,6 +65,7 @@ export async function uploadJobMedia(
     .from("jobs")
     .select("id")
     .eq("id", jobId)
+    .eq("workspace_id", workspace.id)
     .single();
   if (!job) return { error: "Job not found or inaccessible." };
 
@@ -79,7 +78,7 @@ export async function uploadJobMedia(
 
   for (const file of files) {
     const kind = requestedKind === "auto" ? inferKind(file.type) : (requestedKind as "photo" | "document" | "audio" | "other");
-    const storagePath = buildStoragePath(user.id, jobId, file.name);
+    const storagePath = buildStoragePath(workspace.id, jobId, file.name);
 
     const { error: uploadError } = await supabase.storage.from(MEDIA_BUCKET_ID).upload(storagePath, file, {
       cacheControl: "3600",
@@ -93,6 +92,7 @@ export async function uploadJobMedia(
     const { signedUrl } = await createSignedMediaUrl(storagePath, 60 * 60); // store a usable URL; will be refreshed on read
 
     const { error: insertError } = await supabase.from("media").insert({
+      workspace_id: workspace.id,
       user_id: user.id,
       job_id: jobId,
       bucket_id: MEDIA_BUCKET_ID,
@@ -118,10 +118,7 @@ export async function uploadJobMedia(
 
 export async function deleteJobMedia(formData: FormData): Promise<DeleteMediaState> {
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const mediaId = String(formData.get("media_id") || "");
   const jobId = String(formData.get("job_id") || "");
@@ -132,7 +129,7 @@ export async function deleteJobMedia(formData: FormData): Promise<DeleteMediaSta
     .select("id, user_id, bucket_id, storage_path")
     .eq("id", mediaId)
     .eq("job_id", jobId)
-    .eq("user_id", user.id)
+    .eq("workspace_id", workspace.id)
     .single();
 
   if (fetchError) return { error: fetchError.message };
@@ -144,7 +141,11 @@ export async function deleteJobMedia(formData: FormData): Promise<DeleteMediaSta
   const { error: storageError } = await supabase.storage.from(bucket).remove([path]);
   if (storageError) return { error: storageError.message };
 
-  const { error: deleteError } = await supabase.from("media").delete().eq("id", mediaId).eq("user_id", user.id);
+  const { error: deleteError } = await supabase
+    .from("media")
+    .delete()
+    .eq("id", mediaId)
+    .eq("workspace_id", workspace.id);
   if (deleteError) return { error: deleteError.message };
 
   revalidatePath(`/jobs/${jobId}`);
@@ -153,10 +154,7 @@ export async function deleteJobMedia(formData: FormData): Promise<DeleteMediaSta
 
 export async function linkJobMedia(_prev: LinkMediaState | null, formData: FormData): Promise<LinkMediaState> {
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const mediaId = String(formData.get("media_id") || "");
   const jobId = String(formData.get("job_id") || "");
@@ -171,7 +169,7 @@ export async function linkJobMedia(_prev: LinkMediaState | null, formData: FormD
     .update({ quote_id: quoteId || null, invoice_id: invoiceId || null })
     .eq("id", mediaId)
     .eq("job_id", jobId)
-    .eq("user_id", user.id);
+    .eq("workspace_id", workspace.id);
 
   if (updateError) return { error: updateError.message };
 
@@ -181,10 +179,7 @@ export async function linkJobMedia(_prev: LinkMediaState | null, formData: FormD
 
 export async function toggleMediaVisibility(formData: FormData): Promise<VisibilityState> {
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const mediaId = String(formData.get("media_id") || "");
   const jobId = String(formData.get("job_id") || "");
@@ -197,7 +192,7 @@ export async function toggleMediaVisibility(formData: FormData): Promise<Visibil
     .update({ is_public: isPublic })
     .eq("id", mediaId)
     .eq("job_id", jobId)
-    .eq("user_id", user.id);
+    .eq("workspace_id", workspace.id);
 
   if (error) return { error: error.message };
 

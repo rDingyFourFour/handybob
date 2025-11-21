@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 type JobOption = {
   id: string;
@@ -26,10 +27,7 @@ async function createAppointmentAction(formData: FormData) {
   "use server";
 
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const title = String(formData.get("title") || "").trim();
   const jobId = String(formData.get("job_id") || "").trim() || null;
@@ -50,6 +48,7 @@ async function createAppointmentAction(formData: FormData) {
     title,
     job_id: jobId,
     user_id: user.id,
+    workspace_id: workspace.id,
     start_time: startDateTime.toISOString(),
     end_time: endDateTime ? endDateTime.toISOString() : null,
     location: location || null,
@@ -76,10 +75,7 @@ export default async function NewAppointmentPage({
   const preselectedJobId = resolvedParams?.job_id || "";
 
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: jobs } = await supabase
     .from("jobs")
@@ -90,6 +86,7 @@ export default async function NewAppointmentPage({
         customers ( name )
       `
     )
+    .eq("workspace_id", workspace.id)
     .order("title", { ascending: true });
 
   const jobOptions: JobOption[] = ((jobs ?? []) as JobRow[]).map((job) => ({

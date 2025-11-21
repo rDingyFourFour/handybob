@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { ensurePricingSettings } from "@/utils/ensurePricingSettings";
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 type GeneratedQuote = {
   scope_of_work: string;
@@ -58,19 +59,13 @@ export async function generateQuoteForJob(formData: FormData) {
   }
 
   const supabase = createServerClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError) throw userError;
-  if (!user) {
-    redirect("/login");
-  }
+  const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: job, error: jobError } = await supabase
     .from("jobs")
     .select("id, title, description_raw, category, customer_id")
     .eq("id", jobId)
+    .eq("workspace_id", workspace.id)
     .single();
 
   if (jobError) throw new Error(jobError.message);
@@ -78,7 +73,7 @@ export async function generateQuoteForJob(formData: FormData) {
 
   const settings = await ensurePricingSettings({
     supabase,
-    userId: user.id,
+    workspaceId: workspace.id,
   });
 
   const openAiKey = process.env.OPENAI_API_KEY;
@@ -118,6 +113,7 @@ export async function generateQuoteForJob(formData: FormData) {
     .from("quotes")
     .insert({
       user_id: user.id,
+      workspace_id: workspace.id,
       job_id: job.id,
       customer_id: job.customer_id,
       line_items: [
@@ -276,7 +272,7 @@ function normaliseQuote(raw: RawQuote): GeneratedQuote {
  *
  * Explicitly do NOT send images to OpenAI or add image-processing code yet.
  */
-export async function prepareMediaInsightsForQuote(_jobId: string) {
+export async function prepareMediaInsightsForQuote() {
   // Placeholder: in the future, pull media rows for the job and derive a text summary
   // to enrich quote prompts. Keep this server-only and respect media.is_public if using
   // customer-visible flows.

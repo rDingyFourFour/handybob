@@ -96,7 +96,7 @@ async function handleCheckoutSessionCompleted(
 
   const { data: quote, error: fetchError } = await supabase
     .from("quotes")
-    .select("id, status, user_id")
+    .select("id, status, user_id, workspace_id")
     .eq("id", quoteId)
     .maybeSingle();
 
@@ -143,6 +143,7 @@ async function handleCheckoutSessionCompleted(
   const paymentRecord = {
     quote_id: quoteId,
     user_id: quote.user_id,
+    workspace_id: quote.workspace_id,
     amount: amountTotal / 100,
     currency: currency.toUpperCase(),
     stripe_payment_intent_id: paymentIntentId,
@@ -209,6 +210,7 @@ async function handleCheckoutSessionCompleted(
           updated_at: new Date().toISOString(),
         })
         .eq("id", existingInvoice.id)
+        .eq("workspace_id", quote.workspace_id ?? undefined)
         .select("id, public_token, invoice_number, customer_email")
         .maybeSingle();
 
@@ -228,6 +230,7 @@ async function handleCheckoutSessionCompleted(
       .from("invoices")
       .select("id, public_token, invoice_number, customer_email")
       .eq("quote_id", quoteId)
+      .eq("workspace_id", quote.workspace_id ?? undefined)
       .maybeSingle();
     invoiceForReceipt = invoiceRow ?? null;
   }

@@ -3,6 +3,7 @@
 
 import Stripe from "stripe";
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
@@ -22,13 +23,7 @@ export async function createPaymentLinkForQuote(formData: FormData) {
   const quoteId = String(formData.get("quote_id"));
 
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    throw new Error("Not authenticated");
-  }
+  const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   if (!stripe) {
     throw new Error("Stripe not configured");
@@ -47,7 +42,7 @@ export async function createPaymentLinkForQuote(formData: FormData) {
     `
     )
     .eq("id", quoteId)
-    .eq("user_id", user.id) // reinforce per-user ownership
+    .eq("workspace_id", workspace.id)
     .single();
 
   if (error || !quote) {
@@ -76,6 +71,7 @@ export async function createPaymentLinkForQuote(formData: FormData) {
       // payments back to the right Supabase rows.
       quote_id: quote.id,
       user_id: user.id,
+      workspace_id: workspace.id,
     },
   });
 
@@ -87,7 +83,8 @@ export async function createPaymentLinkForQuote(formData: FormData) {
       stripe_payment_link_url: paymentLink.url,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", quote.id);
+    .eq("id", quote.id)
+    .eq("workspace_id", workspace.id);
 
   return paymentLink.url;
 }

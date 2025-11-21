@@ -13,6 +13,7 @@ export type AiClassification = {
 type ClassificationArgs = {
   jobId: string;
   userId?: string;
+  workspaceId?: string;
   title?: string | null;
   description?: string | null;
   transcript?: string | null;
@@ -46,7 +47,7 @@ export async function classifyJobWithAi(args: ClassificationArgs): Promise<AiCla
     return null;
   }
 
-  const { jobId, userId, title, description, transcript, messages } = args;
+  const { jobId, userId, workspaceId, title, description, transcript, messages } = args;
   const supabase = createAdminClient();
 
   const inputText = [
@@ -93,7 +94,10 @@ export async function classifyJobWithAi(args: ClassificationArgs): Promise<AiCla
       ai_confidence,
     })
     .eq("id", jobId)
-    .match(userId ? { user_id: userId } : {});
+    .match({
+      ...(workspaceId ? { workspace_id: workspaceId } : {}),
+      ...(userId ? { user_id: userId } : {}),
+    });
 
   if (error) {
     console.warn("[classifyJobWithAi] Failed to persist classification:", error.message);

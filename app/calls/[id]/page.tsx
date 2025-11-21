@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
 import { processCallRecording } from "../processCallAction";
 
 type CallRow = {
@@ -31,10 +32,7 @@ type CallRow = {
 
 export default async function CallDetailPage({ params }: { params: { id: string } }) {
   const supabase = createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: call, error } = await supabase
     .from("calls")
@@ -59,7 +57,7 @@ export default async function CallDetailPage({ params }: { params: { id: string 
       `
     )
     .eq("id", params.id)
-    .eq("user_id", user.id)
+    .eq("workspace_id", workspace.id)
     .maybeSingle();
 
   if (error) {
