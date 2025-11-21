@@ -250,7 +250,7 @@ async function ensureJobForCall({
         name,
         phone,
       })
-      .select("id")
+      .select("id, name")
       .single();
 
     if (createCustomerError) {
