@@ -1,8 +1,15 @@
--- Introduce workspace/business layer, shared settings, and audit logging.
 -- Adds workspaces + membership with roles, moves settings to workspace scope,
 -- and records important changes via audit_logs triggers.
 
-create type if not exists public.workspace_role as enum ('owner', 'staff');
+do $$
+begin
+  if not exists (
+    select 1 from pg_type where typname = 'workspace_role'
+  ) then
+    create type public.workspace_role as enum ('owner', 'staff');
+  end if;
+end;
+$$;
 
 create table if not exists public.workspaces (
   id uuid primary key default gen_random_uuid(),
@@ -521,6 +528,11 @@ where ap.workspace_id is null
 
 alter table public.automation_preferences alter column workspace_id set not null;
 
+-- Drop old policies that depend on user_id before removing the column.
+drop policy if exists "Allow select own automation preferences" on public.automation_preferences;
+drop policy if exists "Allow insert own automation preferences" on public.automation_preferences;
+drop policy if exists "Allow update own automation preferences" on public.automation_preferences;
+
 do $$
 begin
   if exists (
@@ -538,10 +550,6 @@ alter table public.automation_preferences
   add constraint automation_preferences_pkey primary key (workspace_id);
 
 create index if not exists automation_preferences_workspace_id_idx on public.automation_preferences (workspace_id);
-
-drop policy if exists "Allow select own automation preferences" on public.automation_preferences;
-drop policy if exists "Allow insert own automation preferences" on public.automation_preferences;
-drop policy if exists "Allow update own automation preferences" on public.automation_preferences;
 
 create policy "Allow workspace members to read automation preferences"
 on public.automation_preferences
@@ -566,6 +574,11 @@ where ap.workspace_id is null
 
 alter table public.automation_settings alter column workspace_id set not null;
 
+-- Drop old policies that depend on user_id before removing the column.
+drop policy if exists "Allow select own automation settings" on public.automation_settings;
+drop policy if exists "Allow insert own automation settings" on public.automation_settings;
+drop policy if exists "Allow update own automation settings" on public.automation_settings;
+
 do $$
 begin
   if exists (
@@ -583,10 +596,6 @@ alter table public.automation_settings
   add constraint automation_settings_pkey primary key (workspace_id);
 
 create index if not exists automation_settings_workspace_id_idx on public.automation_settings (workspace_id);
-
-drop policy if exists "Allow select own automation settings" on public.automation_settings;
-drop policy if exists "Allow insert own automation settings" on public.automation_settings;
-drop policy if exists "Allow update own automation settings" on public.automation_settings;
 
 create policy "Allow workspace members to read automation settings"
 on public.automation_settings
@@ -647,6 +656,67 @@ create table if not exists public.pricing_settings (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+-- Legacy table used user_id + id; migrate it to workspace_id shape.
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'pricing_settings' and column_name = 'workspace_id'
+  ) then
+    alter table public.pricing_settings
+      add column workspace_id uuid,
+      add column if not exists minimum_job_fee numeric,
+      add column if not exists travel_fee numeric,
+      add column if not exists created_at timestamptz not null default timezone('utc', now()),
+      add column if not exists updated_at timestamptz not null default timezone('utc', now());
+  end if;
+end;
+$$;
+
+update public.pricing_settings ps
+set workspace_id = w.id
+from public.workspaces w
+where ps.workspace_id is null
+  and ps.user_id is not null
+  and w.owner_id = ps.user_id;
+
+alter table public.pricing_settings
+  alter column workspace_id set default public.default_workspace_id();
+
+alter table public.pricing_settings
+  alter column workspace_id set not null;
+
+-- Remove legacy policy that depended on user_id before dropping the column.
+drop policy if exists pricing_settings_owner_all on public.pricing_settings;
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.table_constraints
+    where table_schema = 'public' and table_name = 'pricing_settings' and constraint_name = 'pricing_settings_user_id_fkey'
+  ) then
+    alter table public.pricing_settings drop constraint pricing_settings_user_id_fkey;
+  end if;
+  if exists (
+    select 1 from information_schema.table_constraints
+    where table_schema = 'public' and table_name = 'pricing_settings' and constraint_name = 'pricing_settings_pkey'
+  ) then
+    alter table public.pricing_settings drop constraint pricing_settings_pkey;
+  end if;
+end;
+$$;
+
+drop index if exists pricing_settings_user_id_key;
+
+alter table public.pricing_settings
+  drop column if exists id,
+  drop column if exists user_id;
+
+alter table public.pricing_settings
+  add constraint pricing_settings_pkey primary key (workspace_id);
+
+create unique index if not exists pricing_settings_workspace_id_idx on public.pricing_settings (workspace_id);
+
 create or replace function public.touch_pricing_settings_updated_at()
 returns trigger as $$
 begin
@@ -663,6 +733,7 @@ execute function public.touch_pricing_settings_updated_at();
 
 alter table public.pricing_settings enable row level security;
 
+drop policy if exists pricing_settings_owner_all on public.pricing_settings;
 drop policy if exists "Allow workspace members to read pricing settings" on public.pricing_settings;
 drop policy if exists "Allow workspace members to upsert pricing settings" on public.pricing_settings;
 

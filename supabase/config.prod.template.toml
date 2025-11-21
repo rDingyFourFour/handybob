@@ -1,0 +1,61 @@
+# Production-safe Supabase config template.
+# Fill in values that match the live project before running:
+#   supabase config push --project-ref tkyjduckqhmqyqulbnut --config supabase/config.prod.template.toml
+
+[auth]
+enabled = true
+site_url = "https://handybob.vercel.app"
+# Add all exact redirect URLs used in production (OAuth/magic links/reset):
+additional_redirect_urls = [
+  "https://handybob.vercel.app",
+  "https://handybob.vercel.app/login",
+  "https://handybob.vercel.app/signup"
+]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+enable_anonymous_sign_ins = false
+enable_manual_linking = false
+minimum_password_length = 6
+password_requirements = ""
+
+[auth.rate_limit]
+email_sent = 2
+sms_sent = 30
+anonymous_users = 30
+token_refresh = 150
+sign_in_sign_ups = 30
+token_verifications = 30
+web3 = 30
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+# In production you likely want confirmations enabled; set to true if required:
+enable_confirmations = true
+secure_password_change = false
+max_frequency = "1m0s"
+otp_length = 6
+otp_expiry = 3600
+
+[auth.mfa]
+max_enrolled_factors = 10
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+[auth.mfa.phone]
+enroll_enabled = false
+verify_enabled = false
+[auth.mfa.recovery_codes]
+enabled = true
+
+# Uncomment and configure SMTP for production email sending:
+# [auth.email.smtp]
+# enabled = true
+# host = "smtp.sendgrid.net"
+# port = 587
+# user = "apikey"
+# pass = "env(SENDGRID_API_KEY)"
+# admin_email = "you@example.com"
+# sender_name = "HandyBob"

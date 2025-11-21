@@ -55,24 +55,26 @@ declare
   payload jsonb;
 begin
   actor := auth.uid();
+  row_id := coalesce(
+    to_jsonb(new)->>'id',
+    to_jsonb(old)->>'id',
+    gen_random_uuid()::text
+  );
 
   if TG_OP = 'INSERT' then
     target_workspace := new.workspace_id;
-    row_id := coalesce(new.id::text, gen_random_uuid()::text);
     payload := jsonb_build_object('new', to_jsonb(new));
     insert into public.audit_logs (workspace_id, actor_user_id, action, entity_type, entity_id, metadata)
     values (target_workspace, actor, 'insert', TG_TABLE_NAME, row_id, payload);
     return new;
   elsif TG_OP = 'UPDATE' then
     target_workspace := coalesce(new.workspace_id, old.workspace_id);
-    row_id := coalesce(new.id::text, old.id::text);
     payload := jsonb_build_object('old', to_jsonb(old), 'new', to_jsonb(new));
     insert into public.audit_logs (workspace_id, actor_user_id, action, entity_type, entity_id, metadata)
     values (target_workspace, actor, 'update', TG_TABLE_NAME, row_id, payload);
     return new;
   elsif TG_OP = 'DELETE' then
     target_workspace := old.workspace_id;
-    row_id := old.id::text;
     payload := jsonb_build_object('old', to_jsonb(old));
     insert into public.audit_logs (workspace_id, actor_user_id, action, entity_type, entity_id, metadata)
     values (target_workspace, actor, 'delete', TG_TABLE_NAME, row_id, payload);
