@@ -124,7 +124,7 @@ export async function sendFollowupMessage(
 
   try {
     const supabase = createServerClient();
-    const { workspace } = await getCurrentWorkspace({ supabase });
+    const { user, workspace } = await getCurrentWorkspace({ supabase });
 
     let fromAddress: string | null = null;
     if (channel === "email") {
