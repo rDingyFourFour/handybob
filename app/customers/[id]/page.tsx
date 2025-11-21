@@ -78,6 +78,7 @@ type CallRow = {
   direction: string | null;
   status: string | null;
   started_at: string | null;
+  from_number?: string | null;
   created_at?: string | null;
   duration_seconds: number | null;
   summary: string | null;
