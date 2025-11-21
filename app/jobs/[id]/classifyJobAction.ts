@@ -7,6 +7,18 @@ import { classifyJobWithAi } from "@/utils/ai/classifyJob";
 import { createServerClient } from "@/utils/supabase/server";
 import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
 
+type JobRow = {
+  id: string;
+  title: string | null;
+  description_raw: string | null;
+  description_ai_summary: string | null;
+  status: string | null;
+  customers?:
+    | { name: string | null }
+    | { name: string | null }[]
+    | null;
+};
+
 export async function classifyJobAction(formData: FormData) {
   const jobId = formData.get("job_id");
   if (typeof jobId !== "string") return;
@@ -22,7 +34,7 @@ export async function classifyJobAction(formData: FormData) {
     .select("id, title, description_raw, description_ai_summary, status, customers(name)")
     .eq("id", jobId)
     .eq("user_id", user.id)
-    .maybeSingle();
+    .maybeSingle<JobRow>();
 
   if (!job) return;
 
@@ -34,11 +46,15 @@ export async function classifyJobAction(formData: FormData) {
   });
 
   if (job.status === "lead" && classification?.ai_urgency === "emergency") {
+    const customerName = Array.isArray(job.customers)
+      ? job.customers[0]?.name ?? null
+      : job.customers?.name ?? null;
+
     await runLeadAutomations({
       userId: user.id,
       jobId,
       title: job.title,
-      customerName: job.customers?.name ?? null,
+      customerName,
       summary: job.description_ai_summary || job.description_raw || null,
       aiUrgency: classification.ai_urgency,
     });
