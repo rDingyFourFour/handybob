@@ -196,6 +196,8 @@ export async function buildJobTimelinePayload(jobId: string, userId: string) {
     })
   );
 
+  const customerRecord = Array.isArray(job.customers) ? job.customers[0] : job.customers;
+
   const normalized: JobTimelinePayload = {
     job: {
       title: job.title,
@@ -206,9 +208,9 @@ export async function buildJobTimelinePayload(jobId: string, userId: string) {
       created_at: job.created_at,
     },
     customer: {
-      name: job.customers?.name,
-      email: job.customers?.email,
-      phone: job.customers?.phone,
+      name: customerRecord?.name,
+      email: customerRecord?.email,
+      phone: customerRecord?.phone,
     },
     events: events
       .sort((a, b) => {
