@@ -52,7 +52,7 @@ export async function getCurrentWorkspace(
     ? membership?.workspace[0]
     : membership?.workspace;
 
-  if (workspaceRow) {
+  if (workspaceRow && membership) {
     // Role meanings:
     // - owner: can manage workspace-level settings (billing, automation, pricing, membership) and all data.
     // - staff: can work with jobs/customers/quotes/invoices/appointments/messages/calls/media but not admin settings.
