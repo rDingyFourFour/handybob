@@ -48,13 +48,17 @@ export async function getCurrentWorkspace(
     .limit(1)
     .maybeSingle();
 
-  if (membership?.workspace) {
+  const workspaceRow = Array.isArray(membership?.workspace)
+    ? membership?.workspace[0]
+    : membership?.workspace;
+
+  if (workspaceRow) {
     // Role meanings:
     // - owner: can manage workspace-level settings (billing, automation, pricing, membership) and all data.
     // - staff: can work with jobs/customers/quotes/invoices/appointments/messages/calls/media but not admin settings.
     return {
       user,
-      workspace: membership.workspace,
+      workspace: workspaceRow as { id: string; name: string | null; owner_id: string | null },
       role: (membership.role as "owner" | "staff") ?? "staff",
     };
   }
