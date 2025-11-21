@@ -145,18 +145,6 @@ export async function ensureInvoiceForQuote({
       return existingInvoice;
     }
 
-    if (markPaid) {
-      await logAuditEvent({
-        supabase,
-        workspaceId: quote.workspace_id ?? "",
-        actorUserId: quote.user_id,
-        action: "invoice_paid",
-        entityType: "invoice",
-        entityId: existingInvoice.id,
-        metadata: { quote_id: quote.id, payment_intent: paymentIntentId, paid_at: updatePayload.paid_at },
-      });
-    }
-
     return updatedInvoice;
   }
 
@@ -247,6 +235,19 @@ export async function ensureInvoiceForQuote({
     entityId: newInvoice?.id ?? null,
     metadata: { quote_id: quote.id, total: invoicePayload.total, status: invoicePayload.status },
   });
+
+  // If we created a paid invoice, log the payment as well
+  if (invoicePayload.status === "paid") {
+    await logAuditEvent({
+      supabase,
+      workspaceId: quote.workspace_id ?? "",
+      actorUserId: quote.user_id,
+      action: "invoice_paid",
+      entityType: "invoice",
+      entityId: newInvoice?.id ?? null,
+      metadata: { quote_id: quote.id, payment_intent: paymentIntentId, paid_at: invoicePayload.paid_at },
+    });
+  }
 
   return newInvoice;
 }
