@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/utils/workspaces";
+import { logAuditEvent } from "@/utils/audit/log";
 
 async function createJob(formData: FormData) {
   "use server";
@@ -19,7 +20,7 @@ async function createJob(formData: FormData) {
   if (!customer_id) throw new Error("Customer is required");
   if (!description_raw) throw new Error("Job description is required");
 
-  const { error } = await supabase.from("jobs").insert({
+  const { data: inserted, error } = await supabase.from("jobs").insert({
     user_id: user.id,
     customer_id,
     title,
@@ -29,9 +30,20 @@ async function createJob(formData: FormData) {
     status: "lead",
     source: "manual",
     workspace_id: workspace.id,
-  });
+  }).select("id").maybeSingle();
 
   if (error) throw new Error(error.message);
+
+  // Audit: job created manually
+  await logAuditEvent({
+    supabase,
+    workspaceId: workspace.id,
+    actorUserId: user.id,
+    action: "job_created",
+    entityType: "job",
+    entityId: inserted?.id ?? null,
+    metadata: { source: "manual" },
+  });
 
   redirect("/jobs");
 }

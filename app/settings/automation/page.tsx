@@ -21,7 +21,7 @@ type AutomationEvent = {
 
 export default async function AutomationSettingsPage() {
   const supabase = createServerClient();
-  const { workspace } = await getCurrentWorkspace({ supabase });
+  const { workspace, role } = await getCurrentWorkspace({ supabase });
 
   const { data } = await supabase
     .from("automation_settings")
@@ -43,12 +43,27 @@ export default async function AutomationSettingsPage() {
   };
   const safeEvents: AutomationEvent[] = events ?? [];
 
+  if (role !== "owner") {
+    return (
+      <div className="hb-card space-y-2">
+        <h1>Notifications & automation</h1>
+        <p className="hb-muted text-sm">You don’t have permission to manage workspace settings.</p>
+        <p className="text-[11px] uppercase text-slate-500">
+          Workspace settings for {workspace.name || "Workspace"}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="hb-card space-y-2">
         <div>
           <h1>Notifications & automation</h1>
           <p className="hb-muted text-sm">Configure alerts for urgent leads (AI urgency = emergency).</p>
+          <p className="text-[11px] uppercase text-slate-500">
+            Workspace settings for {workspace.name || "Workspace"}
+          </p>
         </div>
         <form action={saveAutomationSettings} className="space-y-3">
           <div className="flex flex-col gap-2">

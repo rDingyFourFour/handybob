@@ -4,6 +4,7 @@ import Stripe from "stripe";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { ensureInvoiceForQuote } from "@/utils/invoices/ensureInvoiceForQuote";
 import { sendReceiptEmail } from "@/utils/email/sendReceiptEmail";
+import { logAuditEvent } from "@/utils/audit/log";
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -132,6 +133,17 @@ async function handleCheckoutSessionCompleted(
 
   console.log("[stripe-webhook] Quote marked paid", quoteId);
 
+  // Audit: quote paid (system actor via webhook)
+  await logAuditEvent({
+    supabase,
+    workspaceId: quote.workspace_id,
+    actorUserId: null,
+    action: "quote_paid",
+    entityType: "quote",
+    entityId: quoteId,
+    metadata: { payment_intent: paymentIntentId },
+  });
+
   const amountTotal = session.amount_total ?? null;
   const currency = session.currency ?? null;
 
@@ -220,6 +232,16 @@ async function handleCheckoutSessionCompleted(
           existingInvoice.id,
           invoiceUpdateError.message
         );
+      } else {
+        await logAuditEvent({
+          supabase,
+          workspaceId: quote.workspace_id,
+          actorUserId: null,
+          action: "invoice_paid",
+          entityType: "invoice",
+          entityId: existingInvoice.id,
+          metadata: { payment_intent: paymentIntentId, amount: amountTotal / 100, currency: currency.toUpperCase() },
+        });
       }
     }
   }

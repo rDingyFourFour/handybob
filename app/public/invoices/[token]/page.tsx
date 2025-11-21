@@ -29,6 +29,14 @@ export default async function PublicInvoicePage({
           jobs (
             title
           )
+        ),
+        workspaces (
+          name,
+          brand_name,
+          brand_tagline,
+          business_email,
+          business_phone,
+          business_address
         )
       `
     )
@@ -44,6 +52,7 @@ export default async function PublicInvoicePage({
       ? invoice.quotes.jobs[0]?.title
       : invoice.quotes.jobs.title
     : null;
+  const workspace = invoice.workspaces;
 
   const payUrl =
     invoice.status !== "paid"
@@ -84,7 +93,7 @@ export default async function PublicInvoicePage({
         <div>
           <h1>Invoice</h1>
           <p className="hb-muted">
-            From: HandyBob contractor
+            From: {workspace?.brand_name || workspace?.name || "HandyBob contractor"}
           </p>
           <p className="hb-muted">
             Job: {jobTitle || "Handyman work"}
@@ -175,6 +184,18 @@ export default async function PublicInvoicePage({
             </div>
           </div>
         )}
+
+        <div className="rounded border border-slate-800 bg-slate-900/70 p-3 text-sm">
+          <p className="font-semibold text-slate-100">Business info</p>
+          <p className="hb-muted text-xs">Shared across workspace members.</p>
+          <div className="mt-2 space-y-1 text-slate-200">
+            <div>{workspace?.brand_name || workspace?.name || "HandyBob"}</div>
+            {workspace?.brand_tagline && <div className="text-slate-400">{workspace.brand_tagline}</div>}
+            {workspace?.business_email && <div className="text-slate-400">Email: {workspace.business_email}</div>}
+            {workspace?.business_phone && <div className="text-slate-400">Phone: {workspace.business_phone}</div>}
+            {workspace?.business_address && <div className="text-slate-400">{workspace.business_address}</div>}
+          </div>
+        </div>
 
         <p className="hb-muted text-[10px] text-center">
           Powered by HandyBob – full support office in an app.

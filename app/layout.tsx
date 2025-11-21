@@ -2,16 +2,25 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Link from "next/link";
 
+import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/utils/workspaces";
+
 export const metadata: Metadata = {
   title: "HandyBob",
   description: "Full support office in an app for independent handypeople and small crews.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const supabase = createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const workspaceContext = user ? await getCurrentWorkspace({ supabase }) : null;
+
   return (
     <html lang="en">
       <body className="min-h-screen bg-slate-950 text-slate-100">
@@ -60,12 +69,24 @@ export default function RootLayout({
                   HandyBob Dashboard
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Your full support office in an app.
+                  Workspace: {workspaceContext?.workspace.name || "—"}
                 </p>
               </div>
-              <div className="text-xs text-slate-400">
-                {/* Placeholder for user menu / account */}
-                Not signed in
+              <div className="flex items-center gap-3 text-xs text-slate-300">
+                {workspaceContext ? (
+                  <Link href="/settings/workspace" className="hb-button-ghost text-xs">
+                    Settings
+                  </Link>
+                ) : null}
+                <div className="rounded border border-slate-800 px-2 py-1">
+                  {user ? (
+                    <span className="text-slate-200">
+                      {user.email || "Signed in"} • {workspaceContext?.workspace.name || "Workspace"}
+                    </span>
+                  ) : (
+                    <Link href="/login" className="text-slate-400 hover:text-slate-200">Sign in</Link>
+                  )}
+                </div>
               </div>
             </header>
             <div className="flex-1 p-4">{children}</div>

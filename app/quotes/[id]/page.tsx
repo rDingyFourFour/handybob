@@ -10,6 +10,8 @@ import { ensureInvoiceForQuote } from "@/utils/invoices/ensureInvoiceForQuote";
 import { logMessage } from "@/utils/communications/logMessage";
 import { createSignedMediaUrl } from "@/utils/supabase/storage";
 import { getCurrentWorkspace } from "@/utils/workspaces";
+import { getWorkspaceProfile } from "@/utils/workspaces";
+import { logAuditEvent } from "@/utils/audit/log";
 
 
 type CustomerInfo = {
@@ -66,6 +68,7 @@ async function sendQuoteEmailAction(formData: FormData) {
   const quoteId = String(formData.get("quote_id"));
   const supabase = createServerClient();
   const { user, workspace } = await getCurrentWorkspace({ supabase });
+  const workspaceProfile = await getWorkspaceProfile({ supabase });
 
   const { data: quote } = await supabase
     .from("quotes")
@@ -111,6 +114,7 @@ async function sendQuoteEmailAction(formData: FormData) {
     quoteTotal,
     clientMessage: quote.client_message_template || "...",
     publicUrl,
+    workspace: workspaceProfile,
   });
 
   await logMessage({
@@ -135,6 +139,17 @@ async function sendQuoteEmailAction(formData: FormData) {
       })
       .eq("id", quote.id);
   }
+
+  // Audit: quote sent (email)
+  await logAuditEvent({
+    supabase,
+    workspaceId: workspace.id,
+    actorUserId: user.id,
+    action: "quote_sent",
+    entityType: "quote",
+    entityId: quote.id,
+    metadata: { channel: "email", job_id: quote.job_id, total: quoteTotal },
+  });
 
   redirect(`/quotes/${quote.id}`);
 }
@@ -202,6 +217,16 @@ async function sendQuoteSmsAction(formData: FormData) {
     body: smsBody,
   });
 
+  await logAuditEvent({
+    supabase,
+    workspaceId: workspace.id,
+    actorUserId: user.id,
+    action: "quote_sent",
+    entityType: "quote",
+    entityId: quote.id,
+    metadata: { channel: "sms", job_id: quote.job_id, total: Number(quote.total ?? 0) },
+  });
+
   if (quote.status === "draft") {
     await supabase
       .from("quotes")
@@ -221,7 +246,7 @@ async function acceptQuoteAction(formData: FormData) {
   const quoteId = String(formData.get("quote_id"));
   const supabase = createServerClient();
 
-  const { workspace } = await getCurrentWorkspace({ supabase });
+  const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   await supabase
     .from("quotes")
@@ -236,6 +261,15 @@ async function acceptQuoteAction(formData: FormData) {
   await ensureInvoiceForQuote({
     supabase,
     quoteId,
+  });
+
+  await logAuditEvent({
+    supabase,
+    workspaceId: workspace.id,
+    actorUserId: user.id,
+    action: "quote_accepted",
+    entityType: "quote",
+    entityId: quoteId,
   });
 
   redirect(`/quotes/${quoteId}`);

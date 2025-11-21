@@ -29,6 +29,14 @@ export default async function PublicQuotePage({
           email,
           phone
         )
+      ),
+      workspaces (
+        name,
+        brand_name,
+        brand_tagline,
+        business_email,
+        business_phone,
+        business_address
       )
     `
     )
@@ -53,6 +61,7 @@ export default async function PublicQuotePage({
   }
 
   const customer = quote.jobs?.customers;
+  const workspace = quote.workspaces;
   const canPay = Boolean(quote.stripe_payment_link_url);
   const { data: mediaRows } = await supabase
     .from("media")
@@ -85,7 +94,7 @@ export default async function PublicQuotePage({
         <div>
           <h1>Quote</h1>
           <p className="hb-muted">
-            From: HandyBob contractor
+            From: {workspace?.brand_name || workspace?.name || "HandyBob contractor"}
           </p>
           <p className="hb-muted">
             For: {customer?.name || "Customer"}
@@ -172,6 +181,20 @@ export default async function PublicQuotePage({
             </div>
           </div>
         )}
+
+        <div className="rounded border border-slate-800 bg-slate-900/70 p-3 text-sm">
+          <p className="font-semibold text-slate-100">Business info</p>
+          <p className="hb-muted text-xs">
+            These details are shared by all members of this workspace.
+          </p>
+          <div className="mt-2 space-y-1 text-slate-200">
+            <div>{workspace?.brand_name || workspace?.name || "HandyBob"}</div>
+            {workspace?.brand_tagline && <div className="text-slate-400">{workspace.brand_tagline}</div>}
+            {workspace?.business_email && <div className="text-slate-400">Email: {workspace.business_email}</div>}
+            {workspace?.business_phone && <div className="text-slate-400">Phone: {workspace.business_phone}</div>}
+            {workspace?.business_address && <div className="text-slate-400">{workspace.business_address}</div>}
+          </div>
+        </div>
 
         <p className="hb-muted text-[10px] text-center">
           Powered by HandyBob – full support office in an app.

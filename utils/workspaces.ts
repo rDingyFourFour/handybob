@@ -9,6 +9,17 @@ export type WorkspaceContext = {
   role: "owner" | "staff";
 };
 
+export type WorkspaceProfile = {
+  id: string;
+  name: string | null;
+  owner_id: string | null;
+  brand_name: string | null;
+  brand_tagline: string | null;
+  business_email: string | null;
+  business_phone: string | null;
+  business_address: string | null;
+};
+
 type WorkspaceOptions = {
   supabase?: SupabaseClient;
 };
@@ -38,6 +49,9 @@ export async function getCurrentWorkspace(
     .maybeSingle();
 
   if (membership?.workspace) {
+    // Role meanings:
+    // - owner: can manage workspace-level settings (billing, automation, pricing, membership) and all data.
+    // - staff: can work with jobs/customers/quotes/invoices/appointments/messages/calls/media but not admin settings.
     return {
       user,
       workspace: membership.workspace,
@@ -60,4 +74,36 @@ export async function getCurrentWorkspace(
     workspace,
     role: "owner",
   };
+}
+
+export function requireOwner(context: WorkspaceContext) {
+  if (context.role !== "owner") {
+    throw new Error("You don’t have permission to manage workspace settings.");
+  }
+}
+
+export async function getWorkspaceProfile(options: WorkspaceOptions = {}) {
+  const supabase = options.supabase ?? createServerClient();
+  const { workspace } = await getCurrentWorkspace({ supabase });
+
+  const { data } = await supabase
+    .from("workspaces")
+    .select(
+      "id, name, owner_id, brand_name, brand_tagline, business_email, business_phone, business_address"
+    )
+    .eq("id", workspace.id)
+    .maybeSingle<WorkspaceProfile>();
+
+  return (
+    data ?? {
+      id: workspace.id,
+      name: workspace.name,
+      owner_id: workspace.owner_id,
+      brand_name: workspace.name,
+      brand_tagline: null,
+      business_email: null,
+      business_phone: null,
+      business_address: null,
+    }
+  );
 }

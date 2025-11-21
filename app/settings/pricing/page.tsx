@@ -4,13 +4,16 @@ import { revalidatePath } from "next/cache";
 
 import { ensurePricingSettings } from "@/utils/ensurePricingSettings";
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { getCurrentWorkspace, requireOwner } from "@/utils/workspaces";
+import { logAuditEvent } from "@/utils/audit/log";
 
 async function updatePricingSettings(formData: FormData) {
   "use server";
 
   const supabase = createServerClient();
-  const { workspace } = await getCurrentWorkspace({ supabase });
+  const workspaceContext = await getCurrentWorkspace({ supabase });
+  requireOwner(workspaceContext);
+  const workspace = workspaceContext.workspace;
 
   const hourlyRate = Number(formData.get("hourly_rate"));
   const minimumFee = Number(formData.get("minimum_job_fee"));
@@ -31,13 +34,37 @@ async function updatePricingSettings(formData: FormData) {
     throw new Error(error.message);
   }
 
+  // Audit: pricing settings updated
+  await logAuditEvent({
+    supabase,
+    workspaceId: workspace.id,
+    actorUserId: workspaceContext.user.id,
+    action: "settings_updated",
+    entityType: "pricing_settings",
+    entityId: workspace.id,
+    metadata: payload,
+  });
+
   revalidatePath("/settings/pricing");
 }
 
 export default async function PricingSettingsPage() {
   const supabase = createServerClient();
-  const { workspace } = await getCurrentWorkspace({ supabase });
+  const workspaceContext = await getCurrentWorkspace({ supabase });
+  const { workspace, role } = workspaceContext;
   const settings = await ensurePricingSettings({ supabase, workspaceId: workspace.id });
+
+  if (role !== "owner") {
+    return (
+      <div className="hb-card space-y-2">
+        <h1>Pricing settings</h1>
+        <p className="hb-muted">You don’t have permission to manage workspace settings.</p>
+        <p className="text-[11px] uppercase text-slate-500">
+          Workspace settings for {workspace.name || "Workspace"}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -45,6 +72,9 @@ export default async function PricingSettingsPage() {
         <h1>Pricing settings</h1>
         <p className="hb-muted">
           Manage your default hourly rate and fees for new jobs.
+        </p>
+        <p className="text-[11px] uppercase text-slate-500">
+          Workspace settings for {workspace.name || "Workspace"}
         </p>
       </div>
 

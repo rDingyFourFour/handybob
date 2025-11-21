@@ -10,6 +10,7 @@ import { inferAttentionSignals } from "@/utils/attention/inferAttentionSignals";
 import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
 import { classifyJobWithAi } from "@/utils/ai/classifyJob";
 import { getCurrentWorkspace } from "@/utils/workspaces";
+import { logAuditEvent } from "@/utils/audit/log";
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1";
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
@@ -302,6 +303,19 @@ async function ensureJobForCall({
 
   if (jobError) {
     return { error: jobError.message };
+  }
+
+  // Audit: job created from call/voicemail
+  if (workspaceId) {
+    await logAuditEvent({
+      supabase,
+      workspaceId,
+      actorUserId: call.user_id,
+      action: "job_created",
+      entityType: "job",
+      entityId: newJob?.id ?? null,
+      metadata: { source: "phone_call", call_id: call.id },
+    });
   }
 
   return { jobId: newJob?.id ?? null, customerId, customerName };

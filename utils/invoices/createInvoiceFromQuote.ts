@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/utils/workspaces";
+import { logAuditEvent } from "@/utils/audit/log";
 
 type QuoteLineItem = Record<string, unknown>;
 
@@ -95,6 +96,16 @@ export async function createInvoiceFromQuote(formData: FormData) {
   if (error || !invoice) {
     throw new Error(error?.message || "Failed to create invoice");
   }
+
+  await logAuditEvent({
+    supabase,
+    workspaceId: quote.workspace_id ?? workspace.id,
+    actorUserId: user.id,
+    action: "invoice_created",
+    entityType: "invoice",
+    entityId: invoice.id,
+    metadata: { quote_id: quote.id, total: quote.total },
+  });
 
   redirect(`/invoices/${invoice.id}`);
 }

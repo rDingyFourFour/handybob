@@ -2,6 +2,7 @@
 "use server";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { logAuditEvent } from "@/utils/audit/log";
 
 type QuoteForInvoice = {
   id: string;
@@ -144,6 +145,18 @@ export async function ensureInvoiceForQuote({
       return existingInvoice;
     }
 
+    if (markPaid) {
+      await logAuditEvent({
+        supabase,
+        workspaceId: quote.workspace_id ?? "",
+        actorUserId: quote.user_id,
+        action: "invoice_paid",
+        entityType: "invoice",
+        entityId: existingInvoice.id,
+        metadata: { quote_id: quote.id, payment_intent: paymentIntentId, paid_at: updatePayload.paid_at },
+      });
+    }
+
     return updatedInvoice;
   }
 
@@ -223,6 +236,17 @@ export async function ensureInvoiceForQuote({
     );
     return null;
   }
+
+  // Audit: invoice created (may already be paid)
+  await logAuditEvent({
+    supabase,
+    workspaceId: quote.workspace_id ?? "",
+    actorUserId: quote.user_id,
+    action: "invoice_created",
+    entityType: "invoice",
+    entityId: newInvoice?.id ?? null,
+    metadata: { quote_id: quote.id, total: invoicePayload.total, status: invoicePayload.status },
+  });
 
   return newInvoice;
 }

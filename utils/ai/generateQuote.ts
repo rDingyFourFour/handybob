@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { ensurePricingSettings } from "@/utils/ensurePricingSettings";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/utils/workspaces";
+import { logAuditEvent } from "@/utils/audit/log";
 
 type GeneratedQuote = {
   scope_of_work: string;
@@ -135,6 +136,17 @@ export async function generateQuoteForJob(formData: FormData) {
   if (insertError) {
     throw new Error(insertError.message);
   }
+
+  // Audit: quote created via AI
+  await logAuditEvent({
+    supabase,
+    workspaceId: workspace.id,
+    actorUserId: user.id,
+    action: "quote_created",
+    entityType: "quote",
+    entityId: quoteRow.id,
+    metadata: { job_id: job.id, total: quote.total },
+  });
 
   redirect(`/quotes/${quoteRow.id}`);
 }

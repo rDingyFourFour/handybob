@@ -5,6 +5,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { classifyJobWithAi } from "@/utils/ai/classifyJob";
 import { inferAttentionSignals, type AttentionSignals } from "@/utils/attention/inferAttentionSignals";
 import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
+import { logAuditEvent } from "@/utils/audit/log";
 
 // Inbound call flow (current: single route; future: split inbound vs recording callback)
 // 1) Customer calls Twilio # (per-user number).
@@ -346,6 +347,17 @@ async function createLeadFromVoicemail({
     console.error("[voice-webhook] Failed to create lead from voicemail:", error.message);
     return null;
   }
+
+  // Audit: job created from voicemail
+  await logAuditEvent({
+    supabase,
+    workspaceId,
+    actorUserId: userId,
+    action: "job_created",
+    entityType: "job",
+    entityId: (data as { id?: string } | null)?.id ?? null,
+    metadata: { source: "voicemail", call_from: fromNumber },
+  });
 
   return data?.id as string | null;
 }

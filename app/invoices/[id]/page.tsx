@@ -6,7 +6,8 @@ import { sendInvoiceSms } from "@/utils/sms/sendInvoiceSms";
 import { createServerClient } from "@/utils/supabase/server";
 import { logMessage } from "@/utils/communications/logMessage";
 import { createSignedMediaUrl } from "@/utils/supabase/storage";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { getCurrentWorkspace, getWorkspaceProfile } from "@/utils/workspaces";
+import { logAuditEvent } from "@/utils/audit/log";
 
 type InvoiceWithRelations = {
   id: string;
@@ -147,6 +148,7 @@ async function sendInvoiceEmailAction(formData: FormData) {
   const invoiceId = String(formData.get("invoice_id"));
   const supabase = createServerClient();
   const { user, workspace } = await getCurrentWorkspace({ supabase });
+  const workspaceProfile = await getWorkspaceProfile({ supabase });
 
   const { data: invoice } = await supabase
     .from("invoices")
@@ -197,6 +199,7 @@ async function sendInvoiceEmailAction(formData: FormData) {
     invoiceTotal,
     dueDate: invoice.due_at,
     publicUrl,
+    workspace: workspaceProfile,
   });
 
   await logMessage({
@@ -210,6 +213,16 @@ async function sendInvoiceEmailAction(formData: FormData) {
     channel: "email",
     subject: `Invoice ${invoice.invoice_number ?? invoice.id.slice(0, 8)} sent`,
     body: `Invoice total $${invoiceTotal.toFixed(2)}. View: ${publicUrl}`,
+  });
+
+  await logAuditEvent({
+    supabase,
+    workspaceId: workspace.id,
+    actorUserId: user.id,
+    action: "invoice_sent",
+    entityType: "invoice",
+    entityId: invoice.id,
+    metadata: { channel: "email", total: invoiceTotal },
   });
 
   if (invoice.status !== "paid") {
@@ -295,6 +308,16 @@ async function sendInvoiceSmsAction(formData: FormData) {
     invoiceId: invoiceRecord.id,
     channel: "sms",
     body: smsBody,
+  });
+
+  await logAuditEvent({
+    supabase,
+    workspaceId: workspace.id,
+    actorUserId: user.id,
+    action: "invoice_sent",
+    entityType: "invoice",
+    entityId: invoice.id,
+    metadata: { channel: "sms", total: invoiceTotal },
   });
 
   if (invoice.status !== "paid") {
