@@ -41,7 +41,7 @@ type OverdueInvoiceRow = {
   total: number | null;
   due_at: string | null;
   job_id?: string | null;
-  job?: { title: string | null } | null;
+  job?: { title: string | null } | { title: string | null }[] | null;
 };
 
 type StaleQuoteRow = {
@@ -291,7 +291,11 @@ export default async function HomePage() {
     jobs: Array.isArray(call.jobs) ? call.jobs[0] ?? null : call.jobs ?? null,
     customers: Array.isArray(call.customers) ? call.customers[0] ?? null : call.customers ?? null,
   }));
-  const overdueInvoices = (overdueInvoicesRes.data ?? []) as OverdueInvoiceRow[];
+  const overdueInvoicesRaw = (overdueInvoicesRes.data ?? []) as OverdueInvoiceRow[];
+  const overdueInvoices = overdueInvoicesRaw.map((inv) => ({
+    ...inv,
+    job: Array.isArray(inv.job) ? inv.job[0] ?? null : inv.job ?? null,
+  }));
   const staleQuotes = (staleQuotesRes.data ?? []) as StaleQuoteRow[];
 
   const attentionCount =
