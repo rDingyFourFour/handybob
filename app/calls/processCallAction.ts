@@ -232,6 +232,7 @@ async function ensureJobForCall({
 }) {
   // Future: enrich job with AI-derived category/urgency/location once we trust the model outputs.
   const phone = call.from_number?.trim() || null;
+  const resolvedWorkspaceId = workspaceId ?? call.workspace_id ?? null;
 
   let customerId = call.customer_id ?? null;
   let customerName: string | null = null;
@@ -240,7 +241,7 @@ async function ensureJobForCall({
       .from("customers")
       .select("id, name")
       .eq("phone", phone)
-      .eq("workspace_id", workspaceId ?? call.workspace_id ?? "")
+      .eq("workspace_id", resolvedWorkspaceId ?? "")
       .maybeSingle();
     customerId = existingCustomer?.id ?? null;
     customerName = existingCustomer?.name ?? null;
@@ -252,7 +253,7 @@ async function ensureJobForCall({
       .from("customers")
       .insert({
         user_id: call.user_id,
-        workspace_id: workspaceId ?? call.workspace_id ?? undefined,
+        workspace_id: resolvedWorkspaceId ?? undefined,
         name,
         phone,
       })
@@ -281,7 +282,7 @@ async function ensureJobForCall({
 
   const jobInsert: Record<string, unknown> = {
     user_id: call.user_id,
-    workspace_id: workspaceId ?? call.workspace_id ?? undefined,
+    workspace_id: resolvedWorkspaceId ?? undefined,
     customer_id: customerId,
     title: leadTitle,
     description_raw: transcript,
