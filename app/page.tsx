@@ -31,8 +31,8 @@ type CallReviewRow = {
   needs_followup?: boolean | null;
   attention_reason?: string | null;
   ai_urgency?: string | null;
-  jobs?: { id: string; title: string | null } | null;
-  customers?: { id: string; name: string | null } | null;
+  jobs?: { id: string; title: string | null } | { id: string; title: string | null }[] | null;
+  customers?: { id: string; name: string | null } | { id: string; name: string | null }[] | null;
 };
 
 type OverdueInvoiceRow = {
@@ -285,7 +285,12 @@ export default async function HomePage() {
   };
 
   const urgentLeads = (urgentLeadsRes.data ?? []) as UrgentLeadRow[];
-  const callsNeedingReview = (callsNeedingReviewRes.data ?? []) as CallReviewRow[];
+  const callsNeedingReviewRaw = (callsNeedingReviewRes.data ?? []) as CallReviewRow[];
+  const callsNeedingReview = callsNeedingReviewRaw.map((call) => ({
+    ...call,
+    jobs: Array.isArray(call.jobs) ? call.jobs[0] ?? null : call.jobs ?? null,
+    customers: Array.isArray(call.customers) ? call.customers[0] ?? null : call.customers ?? null,
+  }));
   const overdueInvoices = (overdueInvoicesRes.data ?? []) as OverdueInvoiceRow[];
   const staleQuotes = (staleQuotesRes.data ?? []) as StaleQuoteRow[];
 
