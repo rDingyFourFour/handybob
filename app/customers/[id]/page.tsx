@@ -231,7 +231,12 @@ export default async function CustomerDetailPage({
         id: `call-${call.id}`,
         kind: "call" as const,
         title: `Voicemail from ${call.from_number || customer.name || "Unknown caller"}`,
-        detail: [jobTitle, snippet(call.ai_summary, 180) || snippet(call.summary, 180) || (call.transcript ? `Transcript: ${snippet(call.transcript, 140)}` : null)]
+        detail: [
+          jobTitle,
+          snippet(call.ai_summary ?? null, 180) ||
+            snippet(call.summary ?? null, 180) ||
+            (call.transcript ? `Transcript: ${snippet(call.transcript, 140)}` : null),
+        ]
           .filter(Boolean)
           .join(" · "),
         timestamp: call.created_at || call.started_at,
