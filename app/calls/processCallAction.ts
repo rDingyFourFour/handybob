@@ -216,6 +216,7 @@ async function ensureJobForCall({
   call,
   transcript,
   summary,
+  workspaceId,
 }: {
   supabase: SupabaseClient;
   call: {
