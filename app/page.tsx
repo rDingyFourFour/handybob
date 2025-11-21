@@ -6,6 +6,8 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/utils/workspaces";
 import { newLeadCutoff, overdueInvoiceCutoff, staleQuoteCutoff } from "@/utils/attention/attentionModel";
 
+export const dynamic = "force-dynamic";
+
 type AutomationPrefs = {
   notifyUrgentLeads: boolean;
   showOverdueWork: boolean;
