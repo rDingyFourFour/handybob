@@ -130,7 +130,23 @@ export default async function HomePage() {
   }
 
   let workspace;
+  let user;
   try {
+    const {
+      data: { user: fetchedUser },
+    } = await supabase.auth.getUser();
+    user = fetchedUser;
+    if (!user) {
+      return (
+        <div className="hb-card space-y-2">
+          <h1>Welcome to HandyBob</h1>
+          <p className="hb-muted text-sm">Please sign in to view your dashboard.</p>
+          <Link href="/login" className="hb-button text-sm w-fit">
+            Sign in
+          </Link>
+        </div>
+      );
+    }
     workspace = (await getCurrentWorkspace({ supabase })).workspace;
   } catch (error) {
     console.error("[home] Failed to resolve workspace:", error);
