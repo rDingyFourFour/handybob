@@ -116,8 +116,31 @@ function aiUrgencyRank(value?: string | null) {
 }
 
 export default async function HomePage() {
-  const supabase = createServerClient();
-  const { workspace } = await getCurrentWorkspace({ supabase });
+  let supabase;
+  try {
+    supabase = createServerClient();
+  } catch (error) {
+    console.error("[home] Failed to init Supabase client:", error);
+    return (
+      <div className="hb-card">
+        <h1>Dashboard unavailable</h1>
+        <p className="hb-muted text-sm">Could not connect to Supabase. Check environment keys.</p>
+      </div>
+    );
+  }
+
+  let workspace;
+  try {
+    workspace = (await getCurrentWorkspace({ supabase })).workspace;
+  } catch (error) {
+    console.error("[home] Failed to resolve workspace:", error);
+    return (
+      <div className="hb-card">
+        <h1>Dashboard unavailable</h1>
+        <p className="hb-muted text-sm">Unable to resolve workspace. Please sign in again.</p>
+      </div>
+    );
+  }
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -140,8 +163,7 @@ export default async function HomePage() {
   const quoteStaleThreshold = staleQuoteCutoff(todayStart);
   const invoiceOverdueThreshold = overdueInvoiceCutoff(todayStart);
 
-  const [
-    appointmentsRes,
+  let appointmentsRes,
     leadsRes,
     pendingQuotesRes,
     unpaidInvoicesRes,
@@ -152,117 +174,141 @@ export default async function HomePage() {
     callsNeedingReviewRes,
     overdueInvoicesRes,
     staleQuotesRes,
-    automationPrefsRes,
-  ] = await Promise.all([
-    supabase
-      .from("appointments")
-      .select(
-        `
-          id,
-          title,
-          start_time,
-          jobs ( title )
-        `
-      )
-      .eq("workspace_id", workspace.id)
-      .lte("start_time", todayEnd.toISOString())
-      .neq("status", "completed")
-      .order("start_time", { ascending: true })
-      .limit(15),
+    automationPrefsRes;
 
-    supabase
-      .from("jobs")
-      .select("id")
-      .eq("workspace_id", workspace.id)
-      .eq("status", "lead")
-      .gte("created_at", newLeadWindowStart.toISOString()),
+  try {
+    [
+      appointmentsRes,
+      leadsRes,
+      pendingQuotesRes,
+      unpaidInvoicesRes,
+      paidQuotesThisMonthRes,
+      paidInvoicesThisMonthRes,
+      inboundMessagesRes,
+      urgentLeadsRes,
+      callsNeedingReviewRes,
+      overdueInvoicesRes,
+      staleQuotesRes,
+      automationPrefsRes,
+    ] = await Promise.all([
+      supabase
+        .from("appointments")
+        .select(
+          `
+            id,
+            title,
+            start_time,
+            jobs ( title )
+          `
+        )
+        .eq("workspace_id", workspace.id)
+        .lte("start_time", todayEnd.toISOString())
+        .neq("status", "completed")
+        .order("start_time", { ascending: true })
+        .limit(15),
 
-    supabase.from("quotes").select("id").eq("workspace_id", workspace.id).eq("status", "sent"),
+      supabase
+        .from("jobs")
+        .select("id")
+        .eq("workspace_id", workspace.id)
+        .eq("status", "lead")
+        .gte("created_at", newLeadWindowStart.toISOString()),
 
-    supabase
-      .from("invoices")
-      .select("id")
-      .eq("workspace_id", workspace.id)
-      .in("status", ["sent", "overdue"]),
+      supabase.from("quotes").select("id").eq("workspace_id", workspace.id).eq("status", "sent"),
 
-    supabase
-      .from("quotes")
-      .select("id, total, paid_at")
-      .eq("workspace_id", workspace.id)
-      .eq("status", "paid")
-      .gte("paid_at", monthStart.toISOString())
-      .lt("paid_at", nextMonthStart.toISOString()),
+      supabase
+        .from("invoices")
+        .select("id")
+        .eq("workspace_id", workspace.id)
+        .in("status", ["sent", "overdue"]),
 
-    supabase
-      .from("invoices")
-      .select("id, total, paid_at")
-      .eq("workspace_id", workspace.id)
-      .eq("status", "paid")
-      .gte("paid_at", monthStart.toISOString())
-      .lt("paid_at", nextMonthStart.toISOString()),
+      supabase
+        .from("quotes")
+        .select("id, total, paid_at")
+        .eq("workspace_id", workspace.id)
+        .eq("status", "paid")
+        .gte("paid_at", monthStart.toISOString())
+        .lt("paid_at", nextMonthStart.toISOString()),
 
-    supabase
-      .from("messages")
-      .select("id")
-      .eq("workspace_id", workspace.id)
-      .eq("direction", "inbound")
-      .gte("sent_at", dayAgo.toISOString()),
+      supabase
+        .from("invoices")
+        .select("id, total, paid_at")
+        .eq("workspace_id", workspace.id)
+        .eq("status", "paid")
+        .gte("paid_at", monthStart.toISOString())
+        .lt("paid_at", nextMonthStart.toISOString()),
 
-    supabase
-      .from("jobs")
-      .select("id, title, urgency, ai_urgency, priority, attention_score, attention_reason, customer:customers(name)")
-      .eq("workspace_id", workspace.id)
-      .eq("status", "lead")
-      .gte("created_at", newLeadWindowStart.toISOString())
-      .order("created_at", { ascending: false })
-      .limit(15),
+      supabase
+        .from("messages")
+        .select("id")
+        .eq("workspace_id", workspace.id)
+        .eq("direction", "inbound")
+        .gte("sent_at", dayAgo.toISOString()),
 
-    supabase
-      .from("calls")
-      .select(
-        `
-          id,
-          status,
-          created_at,
-          from_number,
-          priority,
-          needs_followup,
-          attention_reason,
-          ai_urgency,
-          job_id,
-          jobs ( id, title ),
-          customers ( id, name )
-        `
-      )
-      .eq("workspace_id", workspace.id)
-      .or("transcript.is.null,ai_summary.is.null,job_id.is.null,needs_followup.eq.true")
-      .order("created_at", { ascending: false })
-      .limit(5),
+      supabase
+        .from("jobs")
+        .select("id, title, urgency, ai_urgency, priority, attention_score, attention_reason, customer:customers(name)")
+        .eq("workspace_id", workspace.id)
+        .eq("status", "lead")
+        .gte("created_at", newLeadWindowStart.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(15),
 
-    supabase
-      .from("invoices")
-      .select("id, status, total, due_at, job_id, job:jobs(title)")
-      .eq("workspace_id", workspace.id)
-      .in("status", ["sent", "overdue"])
-      .lt("due_at", invoiceOverdueThreshold.toISOString())
-      .order("due_at", { ascending: true })
-      .limit(10),
+      supabase
+        .from("calls")
+        .select(
+          `
+            id,
+            status,
+            created_at,
+            from_number,
+            priority,
+            needs_followup,
+            attention_reason,
+            ai_urgency,
+            job_id,
+            jobs ( id, title ),
+            customers ( id, name )
+          `
+        )
+        .eq("workspace_id", workspace.id)
+        .or("transcript.is.null,ai_summary.is.null,job_id.is.null,needs_followup.eq.true")
+        .order("created_at", { ascending: false })
+        .limit(5),
 
-    supabase
-      .from("quotes")
-      .select("id, status, total, created_at, job_id, job:jobs(title)")
-      .eq("workspace_id", workspace.id)
-      .eq("status", "sent")
-      .lt("created_at", quoteStaleThreshold.toISOString())
-      .order("created_at", { ascending: true })
-      .limit(10),
+      supabase
+        .from("invoices")
+        .select("id, status, total, due_at, job_id, job:jobs(title)")
+        .eq("workspace_id", workspace.id)
+        .in("status", ["sent", "overdue"])
+        .lt("due_at", invoiceOverdueThreshold.toISOString())
+        .order("due_at", { ascending: true })
+        .limit(10),
 
-    supabase
-      .from("automation_preferences")
-      .select("notify_urgent_leads, show_overdue_work")
-      .eq("workspace_id", workspace.id)
-      .maybeSingle(),
-  ]);
+      supabase
+        .from("quotes")
+        .select("id, status, total, created_at, job_id, job:jobs(title)")
+        .eq("workspace_id", workspace.id)
+        .eq("status", "sent")
+        .lt("created_at", quoteStaleThreshold.toISOString())
+        .order("created_at", { ascending: true })
+        .limit(10),
+
+      supabase
+        .from("automation_preferences")
+        .select("notify_urgent_leads, show_overdue_work")
+        .eq("workspace_id", workspace.id)
+        .maybeSingle(),
+    ]);
+  } catch (error) {
+    console.error("[home] Failed to load dashboard data:", error);
+    return (
+      <div className="hb-card">
+        <h1>Dashboard unavailable</h1>
+        <p className="hb-muted text-sm">Could not load workspace data. Please retry.</p>
+      </div>
+    );
+  }
 
   const paidQuotes =
     (paidQuotesThisMonthRes.data ?? []) as { id: string; total: number | null }[];
