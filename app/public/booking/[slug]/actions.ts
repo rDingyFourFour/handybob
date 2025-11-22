@@ -45,7 +45,7 @@ export async function submitPublicBooking(
   _prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const hdrs = headers();
+  const hdrs = await headers();
   const ip = getClientIp(hdrs);
   const ipHash = ip ? hashValue(ip) : null;
   const userAgent = hdrs.get("user-agent") ?? null;
@@ -337,7 +337,7 @@ function normalizeUrgency(raw: string, specificDate: string) {
   return "flexible";
 }
 
-function getClientIp(h: ReturnType<typeof headers>) {
+function getClientIp(h: Awaited<ReturnType<typeof headers>>) {
   const header = h.get("x-forwarded-for") ?? h.get("x-real-ip") ?? "";
   return header.split(",").map((v) => v.trim()).find(Boolean) || null;
 }
