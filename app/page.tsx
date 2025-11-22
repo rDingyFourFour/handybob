@@ -17,6 +17,7 @@ type UrgentLeadRow = {
   id: string;
   title: string | null;
   urgency: string | null;
+  source?: string | null;
   priority?: string | null;
   ai_urgency?: string | null;
   attention_score?: number | null;
@@ -115,6 +116,15 @@ const AI_URGENCY_ORDER = ["emergency", "urgent", "this_week", "soon", "flexible"
 function aiUrgencyRank(value?: string | null) {
   const idx = AI_URGENCY_ORDER.indexOf((value ?? "").toLowerCase());
   return idx === -1 ? AI_URGENCY_ORDER.length : idx;
+}
+
+function formatSource(source?: string | null) {
+  const value = (source || "").toLowerCase();
+  if (value === "web_form") return "Web form";
+  if (value === "voicemail") return "Phone/voicemail";
+  if (value === "manual") return "Manual";
+  if (!value) return "Lead";
+  return value.replace(/_/g, " ");
 }
 
 export default async function HomePage() {
@@ -265,7 +275,7 @@ export default async function HomePage() {
 
       supabase
         .from("jobs")
-        .select("id, title, urgency, ai_urgency, priority, attention_score, attention_reason, customer:customers(name)")
+        .select("id, title, urgency, source, ai_urgency, priority, attention_score, attention_reason, customer:customers(name)")
         .eq("workspace_id", workspace.id)
         .eq("status", "lead")
         .gte("created_at", newLeadWindowStart.toISOString())
@@ -385,6 +395,17 @@ export default async function HomePage() {
   const urgentEmergencyCount = urgentLeads.filter(
     (lead) => (lead.ai_urgency || lead.urgency || "").toLowerCase() === "emergency",
   ).length;
+  const leadSourceCounts = urgentLeads.reduce(
+    (acc, lead) => {
+      const src = (lead.source || "other").toLowerCase();
+      if (src === "web_form") acc.web++;
+      else if (src === "voicemail") acc.calls++;
+      else if (src === "manual") acc.manual++;
+      else acc.other++;
+      return acc;
+    },
+    { web: 0, calls: 0, manual: 0, other: 0 }
+  );
 
   return (
     <div className="space-y-4">
@@ -408,19 +429,24 @@ export default async function HomePage() {
           </Link>
         </div>
         <div className="grid gap-3 xl:grid-cols-4 md:grid-cols-2">
-          <AttentionCard
-            title="New leads (7 days)"
-            count={leadsRes.data?.length ?? 0}
-            href="/jobs"
-            items={topLeads.map((lead) => ({
-              id: lead.id,
-              primary: lead.title || "Lead",
-              secondary: lead.customer?.[0]?.name || "Unknown customer",
-              tag: lead.ai_urgency || lead.urgency || "lead",
-              href: `/jobs/${lead.id}`,
-            }))}
-            empty="No new leads."
-          />
+          <div className="space-y-1">
+            <AttentionCard
+              title="New leads (7 days)"
+              count={leadsRes.data?.length ?? 0}
+              href="/jobs"
+              items={topLeads.map((lead) => ({
+                id: lead.id,
+                primary: lead.title || "Lead",
+                secondary: `${lead.customer?.[0]?.name || "Unknown customer"} • ${formatSource(lead.source)}`,
+                tag: lead.ai_urgency || lead.urgency || "lead",
+                href: `/jobs/${lead.id}`,
+              }))}
+              empty="No new leads."
+            />
+            <div className="text-[11px] text-slate-400">
+              Web: {leadSourceCounts.web} · Calls: {leadSourceCounts.calls} · Manual: {leadSourceCounts.manual} · Other: {leadSourceCounts.other}
+            </div>
+          </div>
           <AttentionCard
             title="Quotes to follow up"
             count={staleQuotes.length}

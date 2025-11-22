@@ -135,6 +135,15 @@ function snippet(text: string | null | undefined, max = 180) {
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
 }
 
+function formatSource(source?: string | null) {
+  const value = (source || "").toLowerCase();
+  if (value === "web_form") return "Web form";
+  if (value === "voicemail") return "Phone/voicemail";
+  if (value === "manual") return "Manual";
+  if (!value) return "Unknown";
+  return value.replace(/_/g, " ");
+}
+
 export default async function JobDetailPage({
   params,
 }: {
@@ -413,6 +422,9 @@ export default async function JobDetailPage({
         <div className="text-xs text-slate-400">Status: {job.status}</div>
         <div className="text-xs text-slate-400">
           Urgency: {job.urgency ?? "not set"}
+        </div>
+        <div className="text-xs text-slate-400">
+          Source: {formatSource(job.source)} {job.created_at ? `· Created ${formatDateTime(job.created_at)}` : ""}
         </div>
         <div className="text-xs text-slate-400">
           AI category: {job.ai_category ?? "—"} · AI urgency: {job.ai_urgency ?? "—"} · Confidence:{" "}

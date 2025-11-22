@@ -10,6 +10,7 @@ type JobRow = {
   title: string | null;
   status: string | null;
   urgency: string | null;
+  source?: string | null;
   ai_category?: string | null;
   ai_urgency?: string | null;
   created_at: string;
@@ -32,6 +33,15 @@ function getParam(
   return value ?? null;
 }
 
+function formatSource(source?: string | null) {
+  const value = (source || "").toLowerCase();
+  if (value === "web_form") return "Web form";
+  if (value === "voicemail") return "Phone/voicemail";
+  if (value === "manual") return "Manual";
+  if (!value) return "Unknown";
+  return value.replace(/_/g, " ");
+}
+
 export default async function JobsPage({
   searchParams,
 }: {
@@ -46,10 +56,11 @@ export default async function JobsPage({
   const statusFilter = getParam(searchParams, "status") ?? "all";
   const aiCategoryFilter = getParam(searchParams, "ai_category") ?? "all";
   const aiUrgencyFilter = getParam(searchParams, "ai_urgency") ?? "all";
+  const sourceFilter = getParam(searchParams, "source") ?? "all";
 
   let jobsQuery = supabase
     .from("jobs")
-    .select("id, title, status, urgency, ai_category, ai_urgency, created_at, customer:customers(name)")
+    .select("id, title, status, urgency, source, ai_category, ai_urgency, created_at, customer:customers(name)")
     .order("created_at", { ascending: false })
     .limit(50);
 
@@ -65,6 +76,9 @@ export default async function JobsPage({
     jobsQuery = jobsQuery.is("ai_urgency", null);
   } else if (aiUrgencyFilter !== "all") {
     jobsQuery = jobsQuery.eq("ai_urgency", aiUrgencyFilter);
+  }
+  if (sourceFilter !== "all") {
+    jobsQuery = jobsQuery.eq("source", sourceFilter);
   }
 
   const { data: jobs, error } = await jobsQuery.returns<JobRow[]>();
@@ -159,6 +173,16 @@ export default async function JobsPage({
             <option value="uncategorized">Uncategorized</option>
           </select>
         </div>
+        <div className="flex flex-col">
+          <label className="hb-label text-xs" htmlFor="source-filter">Source</label>
+          <select id="source-filter" name="source" defaultValue={sourceFilter} className="hb-input">
+            <option value="all">All</option>
+            <option value="web_form">Web form</option>
+            <option value="voicemail">Phone call / voicemail</option>
+            <option value="manual">Manual</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
         <button className="hb-button text-sm" type="submit">
           Apply filters
         </button>
@@ -191,6 +215,9 @@ export default async function JobsPage({
                       Urgent
                     </span>
                   )}
+                </div>
+                <div className="text-[11px] text-slate-300 mt-1">
+                  Source: <span className="rounded border border-slate-700 bg-slate-900/60 px-2 py-[3px] uppercase tracking-wide">{formatSource(job.source)}</span>
                 </div>
                 <div className="text-xs text-slate-400">
                   {job.customer?.[0]?.name || "Unknown customer"}

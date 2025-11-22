@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
 
 import { createAdminClient } from "@/utils/supabase/admin";
+import { generateUniqueWorkspaceSlug } from "@/utils/workspaces";
 import { classifyJobWithAi } from "@/utils/ai/classifyJob";
 import { inferAttentionSignals, type AttentionSignals } from "@/utils/attention/inferAttentionSignals";
 import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
@@ -536,9 +537,10 @@ async function getWorkspaceIdForUser(supabase: SupabaseAdminClient, userId: stri
     const workspaceId = data?.[0]?.workspace_id as string | undefined;
     if (workspaceId) return workspaceId;
 
+    const slug = await generateUniqueWorkspaceSlug({ supabase, name: "Workspace" });
     const { data: workspaceRow } = await supabase
       .from("workspaces")
-      .insert({ owner_id: userId, name: "Workspace" })
+      .insert({ owner_id: userId, name: "Workspace", slug })
       .select("id")
       .single();
 
