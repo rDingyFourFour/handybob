@@ -301,7 +301,7 @@ async function logSubmission(
     user_agent: entry.userAgent,
     blocked_reason: entry.blockedReason,
     honeypot_tripped: entry.blockedReason === "honeypot",
-  }).catch(() => null);
+  });
 }
 
 function buildTitle(description: string) {
