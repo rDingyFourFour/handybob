@@ -231,8 +231,22 @@ function normalizePayload(raw: Record<string, FormDataEntryValue | null>) {
     return typeof value === "string" ? value.trim() : null;
   };
 
-  const payload = {
-    workspaceSlug: pick("workspaceSlug") ?? pick("workspace_slug"),
+  const workspaceSlug = pick("workspaceSlug") ?? pick("workspace_slug");
+  if (!workspaceSlug) return null;
+
+  const payload: {
+    workspaceSlug: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    description: string | null;
+    address: string | null;
+    urgency: string | null;
+    preferredTime: string | null;
+    specificDate: string | null;
+    honeypot: string | null;
+  } = {
+    workspaceSlug,
     name: pick("name"),
     email: pick("email"),
     phone: pick("phone"),
@@ -244,10 +258,13 @@ function normalizePayload(raw: Record<string, FormDataEntryValue | null>) {
     honeypot: pick("website") ?? pick("company"),
   };
 
-  return payload.workspaceSlug ? payload : null;
+  return payload;
 }
 
-async function resolveWorkspace(supabase: ReturnType<typeof createAdminClient>, workspaceSlug: string) {
+async function resolveWorkspace(
+  supabase: ReturnType<typeof createAdminClient>,
+  workspaceSlug: string
+) {
   const { data } = await supabase
     .from("workspaces")
     .select("id, owner_id, name, slug, brand_name, public_lead_form_enabled")
