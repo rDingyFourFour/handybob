@@ -132,7 +132,6 @@ export async function submitPublicBooking(
   }
 
   await logSubmission(supabase, {
-    workspaceSlug,
     workspaceId: workspace.id,
     customerId: customer.id,
     jobId: job?.id ?? null,
