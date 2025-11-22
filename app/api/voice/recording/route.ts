@@ -3,13 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { processCallById } from "@/app/calls/processCallAction";
 
-// Twilio recording status callback
-// - Twilio POSTs here after <Record> completes with RecordingUrl, CallSid, etc.
-// - We attach the recording to the existing calls row (matched via twilio_call_sid) and mark status.
-// - No TwiML response needed; just 200/4xx JSON for observability.
+// Recording status callback:
+// - Expects Twilio to POST RecordingUrl/CallSid (form-encoded) after <Record> completes.
+// - Uses service-role client to bypass RLS, matches call by twilio_call_sid, and updates status/duration.
+// - Responds with JSON; errors return 4xx/5xx to prompt Stripe retries.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Handler for Twilio recording callbacks: validates the minimal payload, updates the call row, and optionally triggers auto-processing.
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const callSid = getString(formData, "CallSid");

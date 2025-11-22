@@ -3,12 +3,10 @@ import twilio from "twilio";
 
 import { createAdminClient } from "@/utils/supabase/admin";
 
-// Inbound Voice webhook (Twilio)
-// 1) Twilio sends a POST to /api/voice/inbound with call metadata (From, To, CallSid, etc.).
-// 2) We create a calls row for the workspace owner (single-tenant assumption for now).
-//    TODO: map `To` -> user_id for multi-tenant routing once each user has their own Twilio number.
-// 3) We respond with TwiML that greets the caller and uses <Record> with a recordingStatusCallback
-//    that will be handled by /api/voice/recording to process the voicemail.
+// Twilio inbound voice endpoint:
+// - Receives the initial call metadata (From/To/CallSid) and returns TwiML that records a voicemail.
+// - Assumes `VOICE_FALLBACK_USER_ID` is set; workspace scoping is currently single-tenant.
+// - Always returns valid TwiML so Twilio can proceed; logs but skips DB writes when metadata/env is missing.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -23,6 +21,10 @@ export async function POST(req: NextRequest) {
   const callSid = getString(formData, "CallSid");
 
   const supabase = createAdminClient();
+
+  if (!callSid) {
+    console.warn("[voice-inbound] Missing CallSid; call row cannot be correlated.");
+  }
 
   // Expected Twilio payload (x-www-form-urlencoded): From, To, CallSid (no RecordingUrl yet).
   // DB: insert a calls row keyed by CallSid and mark status inbound_voicemail for the fallback user.

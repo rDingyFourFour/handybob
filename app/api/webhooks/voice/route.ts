@@ -8,17 +8,10 @@ import { inferAttentionSignals, type AttentionSignals } from "@/utils/attention/
 import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
 import { logAuditEvent } from "@/utils/audit/log";
 
-// Inbound call flow (current: single route; future: split inbound vs recording callback)
-// 1) Customer calls Twilio # (per-user number).
-// 2) Twilio hits this webhook (/api/webhooks/voice) with call metadata.
-// 3) We respond with TwiML: greet + <Record> with action callback (currently same URL).
-// 4) Caller hangs up; Twilio posts recording + Call SID to the callback (still this URL).
-// 5) We save call + recording_url, transcribe, summarize with AI, and auto-create/attach lead/job.
-//
-// TODO: If we later separate routes, keep signatures:
-//   - /api/voice/inbound -> returns greeting + <Record action="/api/voice/recording">
-//   - /api/voice/recording -> receives RecordingUrl/CallSid, persists, transcribes, summarizes.
-//   Diagram: Twilio Voice -> (/voice/inbound -> TwiML w/ Record action) -> customer leaves VM -> Twilio -> (/voice/recording) -> Supabase + AI.
+// Twilio voice webhook (shared inbound + recording callback):
+// - Stage 1: Twilio requests TwiML that greets the caller and instructs recording; no RecordingUrl is present yet.
+// - Stage 2: Twilio posts RecordingUrl/CallSid back to the same endpoint, and we persist the call + transcription/AI workups.
+// - TODO: split into `/api/voice/inbound` + `/api/voice/recording` later, keeping the same signatures for the Twilio config.
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,6 +45,7 @@ const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const DEFAULT_USER_ID = process.env.VOICE_FALLBACK_USER_ID;
 
+// Primary handler: validates Twilio signature-less payload, routes stage 1 vs stage 2, and always returns TwiML/XML for Twilio.
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const recordingUrl = getString(formData, "RecordingUrl");
@@ -99,6 +93,7 @@ export async function POST(req: NextRequest) {
   });
 }
 
+// Handles the RecordingUrl callback: persists call metadata, creates leads, ties customers/jobs, and fires automations using the admin client.
 async function handleVoicemailCallback(formData: FormData) {
   const supabase = createAdminClient();
 

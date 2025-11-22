@@ -11,6 +11,12 @@ import {
   sendCustomerCheckinMessage,
 } from "./customerAiActions";
 import { runCustomerAssistant } from "./assistantActions";
+import {
+  formatCurrency,
+  formatDateTime,
+  snippet,
+  sortTimelineEntries,
+} from "@/utils/timeline/formatters";
 
 type Customer = {
   id: string;
@@ -100,28 +106,6 @@ type TimelineEntry = {
   recordingUrl?: string | null;
 };
 
-function formatDateTime(date: string | null) {
-  if (!date) return "";
-  return new Date(date).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatCurrency(amount: number | null | undefined) {
-  const value = Number(amount ?? 0);
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function snippet(text: string | null, max = 120) {
-  if (!text) return null;
-  return text.length > max ? `${text.slice(0, max)}…` : text;
-}
 
 export default async function CustomerDetailPage({
   params,
@@ -196,7 +180,7 @@ export default async function CustomerDetailPage({
   const messages = (messagesRes.data ?? []) as MessageRow[];
   const calls = (callsRes.data ?? []) as CallRow[];
 
-  const timeline: TimelineEntry[] = [
+  const timeline: TimelineEntry[] = sortTimelineEntries([
     {
       id: `customer-${customer.id}`,
       kind: "customer" as const,
@@ -347,11 +331,7 @@ export default async function CustomerDetailPage({
 
       return events;
     }),
-  ].sort((a, b) => {
-    const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-    const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-    return bTime - aTime;
-  });
+  ]);
 
   return (
     <div className="space-y-6">

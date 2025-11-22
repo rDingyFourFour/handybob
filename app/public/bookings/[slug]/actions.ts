@@ -14,6 +14,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { classifyJobWithAi } from "@/utils/ai/classifyJob";
 import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
 import { sendCustomerMessageEmail } from "@/utils/email/sendCustomerMessage";
+import { validatePublicLeadSubmission } from "@/schemas/publicLead";
 
 export type ActionState = {
   status: "idle" | "error" | "success";
@@ -50,25 +51,36 @@ export async function submitPublicBooking(
   const ipHash = ip ? hashValue(ip) : null;
   const userAgent = hdrs.get("user-agent") ?? null;
 
-  const name = (formData.get("name") as string | null)?.trim() ?? "";
-  const email = (formData.get("email") as string | null)?.trim() ?? "";
-  const phone = (formData.get("phone") as string | null)?.trim() || "";
-  const address = (formData.get("address") as string | null)?.trim() || "";
-  const description = (formData.get("description") as string | null)?.trim() ?? "";
-  const urgencyRaw = (formData.get("urgency") as string | null)?.trim() || "this_week";
-  const specificDate = (formData.get("specific_date") as string | null)?.trim() || "";
-  const preferredTime = (formData.get("preferred_time") as string | null)?.trim() || "";
-  const honeypot = (formData.get("website") as string | null)?.trim() || "";
+  const formValues = Object.fromEntries(formData.entries()) as Record<string, FormDataEntryValue>;
+  const normalizedInput = Object.fromEntries(
+    Object.entries(formValues).map(([key, value]) => [
+      key,
+      typeof value === "string" ? value : null,
+    ]),
+  ) as Record<string, string | null | undefined>;
 
-  const errors: ActionState["errors"] = {};
-  if (!name) errors.name = "Name is required.";
-  if (!email) errors.email = "Email is required.";
-  if (!description) errors.description = "Please describe the work.";
-  const spamSuspected = Boolean(honeypot);
+  const validation = validatePublicLeadSubmission({
+    ...normalizedInput,
+    workspaceSlug,
+    honeypot: normalizedInput.website ?? normalizedInput.honeypot ?? null,
+  });
 
-  if (Object.keys(errors).length > 0) {
-    return { status: "error", errors };
+  if (!validation.success) {
+    return { status: "error", message: validation.error };
   }
+
+  const {
+    name,
+    email,
+    phone,
+    address,
+    description,
+    urgency,
+    preferredTime,
+    specificDate,
+    honeypot,
+  } = validation.data;
+  const spamSuspected = Boolean(honeypot);
 
   const supabase = createAdminClient();
 

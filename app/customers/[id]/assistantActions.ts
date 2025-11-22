@@ -3,6 +3,7 @@
 import { requestAssistantReply } from "@/utils/ai/assistant";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/utils/workspaces";
+import { snippet } from "@/utils/timeline/formatters";
 
 type CustomerAssistantState = {
   summary?: string;
@@ -235,6 +236,8 @@ function buildCustomerHistory({
       timestamp: msg.sent_at || msg.created_at,
       text: `Message (${msg.direction ?? "direction unknown"} · ${msg.status ?? "status unknown"})${formatJob(msg.job_id, jobNameLookup)}: ${snippet(
         msg.body || msg.subject,
+        180,
+        "No content",
       )}`,
     }),
   );
@@ -245,7 +248,9 @@ function buildCustomerHistory({
       text: `Call (${call.direction ?? "direction unknown"} · ${call.status ?? "status unknown"})${formatJob(
         call.job_id,
         jobNameLookup,
-      )}: ${snippet(call.ai_summary || call.summary || call.transcript)} Duration ${Number(call.duration_seconds ?? 0)}s.`,
+      )}: ${snippet(call.ai_summary || call.summary || call.transcript, 180, "No content")} Duration ${Number(
+        call.duration_seconds ?? 0,
+      )}s.`,
     }),
   );
 
@@ -356,12 +361,6 @@ ${jobList}
 Recent history across this customer (newest first):
 ${historyText}
 `.trim();
-}
-
-function snippet(text?: string | null, max = 180) {
-  if (!text) return "No content";
-  const trimmed = text.trim();
-  return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
 }
 
 function formatJob(jobId: string | null, lookup: Map<string, string | null>) {

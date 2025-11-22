@@ -3,7 +3,7 @@
 This is the canonical flow for public lead intake. Keep code and product behavior aligned with this doc.
 
 1) Entry point: visitor opens the workspace public URL  
-   - Path: `/public/booking/{slug}` (shareable + embeddable; legacy `/public/workspaces/{slug}/lead` still works if kept)  
+   - Path: `/public/bookings/{slug}` (shareable + embeddable; legacy `/public/workspaces/{slug}/lead` still works if kept)  
    - Slug + enable flag live on `workspaces.slug` and `workspaces.public_lead_form_enabled`.
 
 2) Form fields (visitor sees)  

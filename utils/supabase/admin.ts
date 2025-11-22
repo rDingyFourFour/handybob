@@ -1,13 +1,10 @@
 // utils/supabase/admin.ts
 import { createClient } from "@supabase/supabase-js";
 
-export function createAdminClient() {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
-  }
+import { NEXT_PUBLIC_SUPABASE_URL } from "@/utils/env/public";
+import { SUPABASE_SERVICE_ROLE_KEY } from "@/utils/env/server";
 
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
+// Accesses Supabase with the service role key. Intended strictly for server-only contexts (webhooks, cron jobs, public APIs that bypass RLS).
+export function createAdminClient() {
+  return createClient(NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 }

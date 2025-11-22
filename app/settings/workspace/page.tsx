@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace, requireOwner } from "@/utils/workspaces";
 import { logAuditEvent } from "@/utils/audit/log";
+import { publicBookingUrl } from "@/utils/urls/public";
 
 async function saveWorkspaceProfile(formData: FormData) {
   "use server";
@@ -171,11 +172,7 @@ export default async function WorkspaceProfilePage() {
   };
 
   const readOnly = role !== "owner";
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
-  const publicLeadUrl =
-    w.slug && appUrl
-      ? `${appUrl}/public/booking/${w.slug}`
-      : null;
+  const publicLeadUrl = w.slug ? publicBookingUrl(w.slug) : null;
   const embedCode = publicLeadUrl
     ? `<iframe src="${publicLeadUrl}" style="width:100%;min-height:700px;border:0;border-radius:12px;" loading="lazy"></iframe>`
     : null;

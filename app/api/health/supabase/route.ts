@@ -1,21 +1,12 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 
+import { createAdminClient } from "@/utils/supabase/admin";
+
+// Verifies the service-role connection to Supabase for readiness checks.
 export async function GET() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !serviceKey) {
-    return NextResponse.json(
-      { ok: false, error: "Supabase env vars missing" },
-      { status: 500 }
-    );
-  }
-
   try {
-    const supabase = createClient(url, serviceKey);
+    const supabase = createAdminClient();
 
-    // Lightweight admin call to verify the service key works.
     const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1 });
 
     if (error) {

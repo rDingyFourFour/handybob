@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/utils/workspaces";
 import { processCallRecording } from "./processCallAction";
+import { formatDateTime, snippet } from "@/utils/timeline/formatters";
 
 type CallRow = {
   id: string;
@@ -28,29 +29,6 @@ type CallRow = {
   ai_urgency?: string | null;
 };
 
-function formatDateTime(date: string | null) {
-  if (!date) return "Unknown time";
-  return new Date(date).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatDuration(seconds: number | null | undefined) {
-  if (!seconds) return "—";
-  if (seconds < 60) return `${seconds}s`;
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}m${secs ? ` ${secs}s` : ""}`;
-}
-
-function snippet(text: string | null | undefined, max = 160) {
-  if (!text) return null;
-  const trimmed = text.trim();
-  return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
-}
 
 function getParam(
   params: Record<string, string | string[] | undefined> | undefined,
@@ -304,4 +282,12 @@ export default async function CallsPage({
       </div>
     </div>
   );
+}
+
+function formatDuration(seconds: number | null | undefined) {
+  if (!seconds) return "—";
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}m${secs ? ` ${secs}s` : ""}`;
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { JobTimelinePayload, TimelineEvent } from "@/types/ai";
 
 // Central timeline normaliser for AI prompts:
 // - Used by job AI summary, next actions, and follow-up helpers.
@@ -198,63 +199,34 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
 
   const customerRecord = Array.isArray(job.customers) ? job.customers[0] : job.customers;
 
-  const normalized: JobTimelinePayload = {
+  const sortedEvents = [...events]
+    .sort((a, b) => {
+      const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return bTime - aTime;
+    })
+    .slice(0, 150);
+
+  return {
     job: {
-      title: job.title,
+      id: job.id,
+      title: job.title ?? null,
       description: truncate(job.description_raw, 400),
-      category: job.category,
-      urgency: job.urgency,
-      status: job.status,
-      created_at: job.created_at,
+      category: job.category ?? null,
+      urgency: job.urgency ?? null,
+      status: job.status ?? null,
+      created_at: job.created_at ?? null,
+      customer: customerRecord
+        ? {
+            name: customerRecord.name ?? null,
+            email: customerRecord.email ?? null,
+            phone: customerRecord.phone ?? null,
+          }
+        : null,
     },
-    customer: {
-      name: customerRecord?.name,
-      email: customerRecord?.email,
-      phone: customerRecord?.phone,
-    },
-    events: events
-      .sort((a, b) => {
-        const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        return bTime - aTime;
-      })
-      .slice(0, 150), // cap number of events to keep payload small
+    events: sortedEvents,
   };
-
-  return normalized;
 }
-
-type TimelineEvent = {
-  type:
-    | "job_created"
-    | "message"
-    | "call"
-    | "appointment"
-    | "quote"
-    | "invoice"
-    | "payment";
-  timestamp: string | null;
-  title: string;
-  detail?: string | null;
-  status?: string | null;
-};
-
-export type JobTimelinePayload = {
-  job: {
-    title: string | null;
-    description: string | null;
-    category: string | null;
-    urgency: string | null;
-    status: string | null;
-    created_at: string | null;
-  };
-  customer: {
-    name: string | null | undefined;
-    email: string | null | undefined;
-    phone: string | null | undefined;
-  };
-  events: TimelineEvent[];
-};
 
 function truncate(value: unknown, max = 300) {
   if (typeof value !== "string") return null;

@@ -8,6 +8,7 @@ import { logMessage } from "@/utils/communications/logMessage";
 import { createSignedMediaUrl } from "@/utils/supabase/storage";
 import { getCurrentWorkspace, getWorkspaceProfile } from "@/utils/workspaces";
 import { logAuditEvent } from "@/utils/audit/log";
+import { publicInvoiceUrl } from "@/utils/urls/public";
 
 type InvoiceWithRelations = {
   id: string;
@@ -190,7 +191,9 @@ async function sendInvoiceEmailAction(formData: FormData) {
     return;
   }
 
-  const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL}/public/invoices/${invoice.public_token}`;
+  const publicUrl = invoice.public_token
+    ? publicInvoiceUrl(invoice.public_token)
+    : "/public/invoices";
   const invoiceTotal = Number(invoice.total ?? 0);
 
   await sendInvoiceEmail({
@@ -285,7 +288,9 @@ async function sendInvoiceSmsAction(formData: FormData) {
     return;
   }
 
-  const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL}/public/invoices/${invoice.public_token}`;
+  const publicUrl = invoice.public_token
+    ? publicInvoiceUrl(invoice.public_token)
+    : "/public/invoices";
   const invoiceTotal = Number(invoice.total ?? 0);
   const smsBody = `Hi ${customer.name || ""}, your HandyBob invoice ${
     invoice.invoice_number ? `#${invoice.invoice_number} ` : ""
@@ -410,7 +415,9 @@ export default async function InvoiceDetailPage({
   const paymentsForQuote = (payments ?? []) as QuotePayment[];
   const jobTitle = extractJobTitle(invoice) || "Untitled job";
   const customer = extractCustomer(invoice);
-  const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL}/public/invoices/${invoice.public_token}`;
+  const publicUrl = invoice.public_token
+    ? publicInvoiceUrl(invoice.public_token)
+    : "/public/invoices";
   const quotePaymentLink =
     invoice.stripe_payment_link_url ?? invoice.quotes?.stripe_payment_link_url ?? null;
   const isPaid = invoice.status === "paid";

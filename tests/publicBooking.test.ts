@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { submitPublicBooking } from "@/app/public/booking/[slug]/actions";
+import { submitPublicBooking } from "@/app/public/bookings/[slug]/actions";
 
 type WorkspaceRow = {
   id: string;

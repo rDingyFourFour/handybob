@@ -1,23 +1,8 @@
 // utils/ai/assistant.ts
+import { AssistantReply, JobSummary } from "@/types/ai";
+
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
-
-// JobSummary defines the structured payload we want an AI assistant to return for a job.
-// - overview: short description in plain language of what the job is about.
-// - key_events: ordered highlights like quote sent/accepted/paid, appointments scheduled/completed, invoice states, payments.
-// - communication_patterns: notable behaviors inferred from messages (e.g., “customer is price-sensitive”, “prefers weekends”).
-// - notes: optional freeform extra context.
-export type JobSummary = {
-  overview: string;
-  key_events: {
-    label: string;
-    timestamp: string | null;
-    status?: string | null;
-    reference?: string | null;
-  }[];
-  communication_patterns: string[];
-  notes?: string | null;
-};
 
 type OpenAIContentChunk = {
   type?: string;
@@ -35,12 +20,6 @@ type RawAssistantReply = {
   summary?: unknown;
   follow_up_message?: unknown;
   next_actions?: unknown;
-};
-
-export type AssistantReply = {
-  summary: string;
-  follow_up_message: string;
-  next_actions: string[];
 };
 
 function parseAssistantReply(payload: OpenAIResponseBody): AssistantReply {

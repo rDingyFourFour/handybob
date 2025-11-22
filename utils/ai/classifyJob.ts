@@ -1,15 +1,9 @@
 import { createAdminClient } from "@/utils/supabase/admin";
+import { AiClassification } from "@/types/ai";
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1";
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
-
-export type AiClassification = {
-  ai_category: string | null;
-  ai_urgency: string | null;
-  ai_confidence: number | null;
-};
-
 type ClassificationArgs = {
   jobId: string;
   userId?: string;

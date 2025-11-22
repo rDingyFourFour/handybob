@@ -1,0 +1,11 @@
+import { requireEnv } from "./base";
+
+export const NEXT_PUBLIC_SUPABASE_URL = requireEnv(
+  "NEXT_PUBLIC_SUPABASE_URL",
+  process.env.NEXT_PUBLIC_SUPABASE_URL
+);
+
+export const NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = requireEnv(
+  "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+);

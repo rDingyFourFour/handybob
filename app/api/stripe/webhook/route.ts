@@ -5,6 +5,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { ensureInvoiceForQuote } from "@/utils/invoices/ensureInvoiceForQuote";
 import { sendReceiptEmail } from "@/utils/email/sendReceiptEmail";
 import { logAuditEvent } from "@/utils/audit/log";
+import { publicInvoiceUrl } from "@/utils/urls/public";
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -19,6 +20,9 @@ const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 //   pages in `app/public/...`.
 export const runtime = "nodejs";
 
+// Webhook receiver: validates the Stripe signature, uses the service-role Supabase client, and dispatches supported events.
+// Assumes `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` are configured and Stripe will retry on 4xx/5xx responses.
+// Returns `{"received": true}` on success or a friendly error payload when validation fails.
 export async function POST(req: Request) {
   // Testing tips:
   // 1. Run `stripe listen --forward-to localhost:3000/api/stripe/webhook` while
@@ -57,17 +61,30 @@ export async function POST(req: Request) {
 
   const supabase = createAdminClient();
 
-  switch (event.type) {
-    case "checkout.session.completed":
-      await handleCheckoutSessionCompleted(event, supabase);
-      break;
-    default:
-      break;
+  try {
+    switch (event.type) {
+      case "checkout.session.completed":
+        await handleCheckoutSessionCompleted(event, supabase);
+        break;
+      default:
+        console.log(`[stripe-webhook] Unhandled event type: ${event.type}`);
+        break;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown processing error";
+    console.error("[stripe-webhook] Failed to process event:", message);
+    return NextResponse.json(
+      { error: "Failed to process Stripe event" },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ received: true });
 }
 
+// Processes Stripe checkout.session.completed events: marks the quote/invoice paid, inserts the payment record, and attempts receipt delivery.
+// Assumes the Stripe signature has already been validated and the service-role Supabase client is available for workspace-scoped writes.
+// Returns silently after logging if any step cannot complete so Stripe can retry later.
 async function handleCheckoutSessionCompleted(
   event: Stripe.Event,
   supabase: ReturnType<typeof createAdminClient>
@@ -117,6 +134,13 @@ async function handleCheckoutSessionCompleted(
     return;
   }
 
+  if (!quote.workspace_id) {
+    console.warn("[stripe-webhook] Quote lacks workspace_id; aborting", quoteId);
+    return;
+  }
+
+  const quoteWorkspaceId = quote.workspace_id;
+
   const updatePayload: Record<string, unknown> = {
     status: "paid",
     paid_at: paidAt,
@@ -130,7 +154,8 @@ async function handleCheckoutSessionCompleted(
   const { error: updateError } = await supabase
     .from("quotes")
     .update(updatePayload)
-    .eq("id", quoteId);
+    .eq("id", quoteId)
+    .eq("workspace_id", quoteWorkspaceId);
 
   if (updateError) {
     console.error("[stripe-webhook] Failed to update quote", quoteId, updateError.message);
@@ -267,12 +292,12 @@ async function handleCheckoutSessionCompleted(
   const invoiceToken = invoiceForReceipt?.public_token;
 
   if (receiptEmail && invoiceToken) {
-    const publicInvoiceUrl = `${process.env.NEXT_PUBLIC_APP_URL}/public/invoices/${invoiceToken}`;
+    const publicInvoiceLink = publicInvoiceUrl(invoiceToken);
     await sendReceiptEmail({
       to: receiptEmail,
       amount: amountTotal / 100,
       invoiceNumber: invoiceForReceipt?.invoice_number ?? invoiceForReceipt?.id,
-      publicUrl: publicInvoiceUrl,
+      publicUrl: publicInvoiceLink,
     });
   }
 }

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/utils/workspaces";
 import { newLeadCutoff, overdueInvoiceCutoff, staleQuoteCutoff } from "@/utils/attention/attentionModel";
+import { formatCurrency } from "@/utils/timeline/formatters";
 
 export const dynamic = "force-dynamic";
 
@@ -95,14 +96,6 @@ function formatTime(date: string | null) {
 function formatDate(date: string | null) {
   if (!date) return "";
   return new Date(date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function formatCurrency(amount: number | null | undefined) {
-  const value = Number(amount ?? 0);
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
 }
 
 function daysSince(date: string | null) {

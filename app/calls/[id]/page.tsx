@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/utils/workspaces";
 import { processCallRecording } from "../processCallAction";
+import { formatDateTime } from "@/utils/timeline/formatters";
 
 type CallRow = {
   id: string;
@@ -154,16 +155,6 @@ export default async function CallDetailPage({ params }: { params: { id: string 
       </div>
     </div>
   );
-}
-
-function formatDateTime(date: string | null) {
-  if (!date) return "Unknown time";
-  return new Date(date).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function formatDuration(seconds: number | null | undefined) {

@@ -14,6 +14,12 @@ import { runJobAssistant } from "./assistantActions";
 import { createSignedMediaUrl, MEDIA_BUCKET_ID } from "@/utils/supabase/storage";
 import { JobMediaGallery, type MediaItem } from "./JobMediaGallery";
 import { classifyJobAction } from "./classifyJobAction";
+import {
+  formatCurrency,
+  formatDateTime,
+  snippet,
+  sortTimelineEntries,
+} from "@/utils/timeline/formatters";
 
 type QuoteRow = {
   id: string;
@@ -111,29 +117,6 @@ type TimelineEntry = {
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function formatDateTime(date: string | null) {
-  if (!date) return "";
-  return new Date(date).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatCurrency(amount: number | null | undefined) {
-  const value = Number(amount ?? 0);
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function snippet(text: string | null | undefined, max = 180) {
-  if (!text) return null;
-  const trimmed = text.trim();
-  return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
-}
 
 function formatSource(source?: string | null) {
   const value = (source || "").toLowerCase();
@@ -271,7 +254,7 @@ export default async function JobDetailPage({
     label: `Invoice ${invoice.invoice_number ?? invoice.id.slice(0, 8)}${invoice.status ? ` · ${invoice.status}` : ""}`,
   }));
 
-  const timeline: TimelineEntry[] = [
+  const timeline: TimelineEntry[] = sortTimelineEntries([
     {
       id: `job-${job.id}`,
       kind: "job" as const,
@@ -399,11 +382,7 @@ export default async function JobDetailPage({
       timestamp: payment.created_at,
       status: "paid",
     })),
-  ].sort((a, b) => {
-    const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-    const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-    return bTime - aTime;
-  });
+  ]);
 
   return (
     <div className="space-y-6">

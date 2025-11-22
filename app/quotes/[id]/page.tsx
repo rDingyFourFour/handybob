@@ -12,6 +12,7 @@ import { createSignedMediaUrl } from "@/utils/supabase/storage";
 import { getCurrentWorkspace } from "@/utils/workspaces";
 import { getWorkspaceProfile } from "@/utils/workspaces";
 import { logAuditEvent } from "@/utils/audit/log";
+import { publicQuoteUrl } from "@/utils/urls/public";
 
 
 type CustomerInfo = {
@@ -106,7 +107,7 @@ async function sendQuoteEmailAction(formData: FormData) {
     return;
   }
 
-  const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL}/public/quotes/${quote.public_token}`;
+  const publicUrl = publicQuoteUrl(quote.public_token);
   const quoteTotal = Number(quote.total ?? 0);
 
   await sendQuoteEmail({

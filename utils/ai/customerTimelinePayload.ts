@@ -1,6 +1,7 @@
 "use server";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { CustomerTimelinePayload } from "@/types/ai";
 
 // Customer-level timeline normaliser for AI prompts:
 // - Used by customer AI summary and check-in helpers.
@@ -87,17 +88,6 @@ type TimelineEvent = {
   detail?: string | null;
   status?: string | null;
   job_title?: string | null;
-};
-
-export type CustomerTimelinePayload = {
-  customer: {
-    name: string | null;
-    email: string | null;
-    phone: string | null;
-    created_at: string | null;
-  };
-  jobs: JobRow[];
-  events: TimelineEvent[];
 };
 
 /**
