@@ -13,7 +13,7 @@ update public.messages
 set via = coalesce(via, channel::message_via)
 where channel in ('email', 'sms', 'note') or channel is null;
 
--- TODO: inbound email/SMS webhooks (e.g., /api/webhooks/email or /api/webhooks/sms) should:
+-- TODO [TECH_DEBT #3]: inbound email/SMS webhooks (e.g., /api/webhooks/email or /api/webhooks/sms) should:
 --  - Find/create customer by from_address/phone.
 --  - Attach job_id/quote_id/invoice_id when possible.
 --  - Insert messages with direction = 'inbound' so customer replies appear in timelines.
@@ -30,7 +30,7 @@ alter table public.calls
   add column if not exists ai_summary text,
   add column if not exists recording_url text;
 
--- TODO: inbound voice webhook (e.g., /api/webhooks/voice from Twilio) should:
+-- TODO [TECH_DEBT #5]: inbound voice webhook (e.g., /api/webhooks/voice from Twilio) should:
 --  - Match or create a customer by from_number.
 --  - Attach job_id when a current job exists for that customer.
 --  - Insert calls with direction = 'inbound', summary/ai_summary, and recording_url.

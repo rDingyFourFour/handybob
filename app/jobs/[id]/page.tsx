@@ -20,6 +20,9 @@ import {
   snippet,
   sortTimelineEntries,
 } from "@/utils/timeline/formatters";
+import { logServerError } from "@/utils/errors/logServerError";
+import { Card } from "@/components/ui/Card";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 
 type QuoteRow = {
   id: string;
@@ -146,7 +149,8 @@ export default async function JobDetailPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: job, error: jobError } = await supabase
+  try {
+    const { data: job, error: jobError } = await supabase
     .from("jobs")
     .select("*, customers(*)")
     .eq("id", jobId)
@@ -386,7 +390,7 @@ export default async function JobDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="hb-card space-y-2">
+      <Card className="space-y-2">
         <p className="hb-label text-xs uppercase tracking-wide text-slate-400">
           Job
         </p>
@@ -468,7 +472,7 @@ export default async function JobDetailPage({
             Open inbox
           </Link>
         </div>
-      </div>
+      </Card>
 
       <JobSummaryPanel jobId={job.id} action={generateJobSummary} />
 
@@ -579,23 +583,21 @@ export default async function JobDetailPage({
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
-      <div className="hb-card space-y-4">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Quotes</h2>
-            <p className="hb-muted text-sm">
-              Generate a quote with AI or review existing drafts.
-            </p>
-          </div>
-          <form action={generateQuoteForJob} className="flex items-center gap-2">
-            <input type="hidden" name="job_id" value={job.id} />
-            <button className="hb-button">
-              {safeQuotes.length ? "Generate new quote" : "Generate quote with AI"}
-            </button>
-          </form>
-        </div>
+      <Card className="space-y-4">
+        <SectionHeader
+          title="Quotes"
+          subtitle="Generate a quote with AI or review existing drafts."
+          actions={
+            <form action={generateQuoteForJob} className="flex items-center gap-2">
+              <input type="hidden" name="job_id" value={job.id} />
+              <button className="hb-button">
+                {safeQuotes.length ? "Generate new quote" : "Generate quote with AI"}
+              </button>
+            </form>
+          }
+        />
 
         {quotesError ? (
           <p className="text-sm text-red-400">
@@ -638,4 +640,16 @@ export default async function JobDetailPage({
       </div>
     </div>
   );
+  } catch (error) {
+    logServerError(
+      { entityType: "job", entityId: jobId, message: "Failed to load job details" },
+      error
+    );
+    return (
+      <div className="hb-card text-sm text-rose-200">
+        <h1>Something went wrong loading this job.</h1>
+        <p>Please refresh or try again later.</p>
+      </div>
+    );
+  }
 }
