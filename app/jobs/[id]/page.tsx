@@ -637,7 +637,7 @@ export default async function JobDetailPage({
             No quotes yet. Generate your first AI quote above.
           </p>
         )}
-      </div>
+      </Card>
     </div>
   );
   } catch (error) {

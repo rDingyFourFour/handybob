@@ -75,7 +75,7 @@ export async function submitPublicBooking(
     phone,
     address,
     description,
-    urgency,
+    urgency: selectedUrgency,
     preferredTime,
     specificDate,
     honeypot,
@@ -118,9 +118,16 @@ export async function submitPublicBooking(
     return { status: "error", message: "We could not save your request. Please try again." };
   }
 
-  const mergedDescription = buildDescription(description, { address, preferredTime, specificDate, name, email, phone });
+  const mergedDescription = buildDescription(description, {
+    address,
+    preferredTime,
+    specificDate,
+    name,
+    email,
+    phone,
+  });
   const jobTitle = buildTitle(description);
-  const urgency = normalizeUrgency(urgencyRaw, specificDate);
+  const normalizedUrgency = normalizeUrgency(selectedUrgency, specificDate);
 
   const { data: job, error } = await supabase
     .from("jobs")
@@ -132,7 +139,7 @@ export async function submitPublicBooking(
       description_raw: mergedDescription,
       status: "lead",
       source: "web_form",
-      urgency,
+      urgency: normalizedUrgency,
       spam_suspected: spamSuspected,
     })
     .select("id")
@@ -164,7 +171,7 @@ export async function submitPublicBooking(
         userId: workspace.owner_id,
         workspaceId: workspace.id,
         title: jobTitle,
-        description: `${mergedDescription}\n\nTiming: ${urgency}${specificDate ? `, date: ${specificDate}` : ""}`,
+        description: `${mergedDescription}\n\nTiming: ${normalizedUrgency}${specificDate ? `, date: ${specificDate}` : ""}`,
       });
 
       if (classification?.ai_urgency?.toLowerCase() === "emergency") {
