@@ -45,9 +45,10 @@ export async function submitPublicBooking(
   _prevState: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const ip = getClientIp(headers());
+  const hdrs = await headers();
+  const ip = getClientIp(hdrs);
   const ipHash = ip ? hashValue(ip) : null;
-  const userAgent = headers().get("user-agent") ?? null;
+  const userAgent = hdrs.get("user-agent") ?? null;
 
   const name = (formData.get("name") as string | null)?.trim() ?? "";
   const email = (formData.get("email") as string | null)?.trim() ?? "";
