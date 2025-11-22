@@ -581,7 +581,7 @@ export default async function JobDetailPage({
             ))}
           </div>
         )}
-      </Card>
+      </div>
 
       <div className="hb-card space-y-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
