@@ -44,6 +44,7 @@ async function createAppointmentAction(formData: FormData) {
   const startDateTime = new Date(`${date}T${startTime}`);
   const endDateTime = endTime ? new Date(`${date}T${endTime}`) : null;
 
+  // Server action: require title/date/start, then insert appointment scoped to workspace_id so both owner/staff can manage schedules while updates remain audit-friendly via user_id.
   const { error } = await supabase.from("appointments").insert({
     title,
     job_id: jobId,

@@ -57,7 +57,7 @@ export async function generateFollowupDraft(
     const supabase = createServerClient();
     const { workspace } = await getCurrentWorkspace({ supabase });
 
-    const timelinePayload = await buildJobTimelinePayload(jobId, workspace.id); // already scoped + truncated
+    const timelinePayload = await buildJobTimelinePayload(jobId, workspace.id); // scoped + truncated to job in this workspace only
     const goalLabel = GOAL_LABELS[String(goal)] ?? "Follow up after sending a quote";
     const toneInstruction = tone ? `Tone: ${tone}.` : "";
 

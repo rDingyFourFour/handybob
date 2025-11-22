@@ -109,6 +109,7 @@ export async function requestAssistantReply(prompt: string): Promise<AssistantRe
     throw new Error("OPENAI_API_KEY is not configured.");
   }
 
+  // Sends a single prompt string (constructed upstream from workspace-scoped timeline data); expects JSON (summary, follow_up_message, next_actions) via Responses API using DEFAULT_MODEL.
   const aiResponse = await fetch(OPENAI_ENDPOINT, {
     method: "POST",
     headers: {

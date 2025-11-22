@@ -76,6 +76,8 @@ export async function generateQuoteForJob(formData: FormData) {
     supabase,
     workspaceId: workspace.id,
   });
+  // Happy path: pricing settings exist (ensurePricingSettings seeds defaults), customer+job found, and OpenAI key present.
+  // Failure modes: missing OpenAI key, job lookup fails, or OpenAI returns a non-200; each throws to surface to the UI.
 
   const openAiKey = process.env.OPENAI_API_KEY;
   if (!openAiKey) {

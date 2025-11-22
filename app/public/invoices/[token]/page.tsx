@@ -16,6 +16,7 @@ export default async function PublicInvoicePage({
 }: {
   params: { token: string };
 }) {
+  // Server-only: resolve invoice via admin client by public_token; no auth required on public link.
   const supabase = createAdminClient();
 
   const { data: invoice } = await supabase
@@ -52,7 +53,7 @@ export default async function PublicInvoicePage({
       ? invoice.quotes.jobs[0]?.title
       : invoice.quotes.jobs.title
     : null;
-  const workspace = invoice.workspaces;
+  const workspace = invoice.workspaces; // public-safe: only brand/phone/email/address, no internal secrets
 
   const payUrl =
     invoice.status !== "paid"

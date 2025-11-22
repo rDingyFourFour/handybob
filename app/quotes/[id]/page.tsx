@@ -67,6 +67,7 @@ async function sendQuoteEmailAction(formData: FormData) {
 
   const quoteId = String(formData.get("quote_id"));
   const supabase = createServerClient();
+  // Workspace_id guard via getCurrentWorkspace ensures staff+owner share access; user_id is for attribution.
   const { user, workspace } = await getCurrentWorkspace({ supabase });
   const workspaceProfile = await getWorkspaceProfile({ supabase });
 
@@ -246,8 +247,11 @@ async function acceptQuoteAction(formData: FormData) {
   const quoteId = String(formData.get("quote_id"));
   const supabase = createServerClient();
 
+  // Workspace scope ensures the quote belongs to this workspace before updating status/creating invoice.
   const { user, workspace } = await getCurrentWorkspace({ supabase });
 
+  // Happy path: mark quote accepted in this workspace, then ensure an invoice exists (or create one) tied to the same job/customer/workspace.
+  // Failure modes: quote not found in workspace, invoice creation fails (returns null), or DB errors surface and throw.
   await supabase
     .from("quotes")
     .update({

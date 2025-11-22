@@ -35,7 +35,7 @@ export async function generateJobSummary(
     const supabase = createServerClient();
     const { workspace } = await getCurrentWorkspace({ supabase });
 
-    const timelinePayload = await buildJobTimelinePayload(jobId, workspace.id); // scoped to workspace + capped history
+    const timelinePayload = await buildJobTimelinePayload(jobId, workspace.id); // scoped to workspace + capped history to avoid leaking other jobs/users
 
     const prompt = `
 You are HandyBob's assistant for contractors.
@@ -100,3 +100,9 @@ function extractText(payload: OpenAIResponseBody): string | null {
 
   return null;
 }
+
+// Manual AI test checklist (UI):
+// - Job summary: trigger “Generate summary” on a job with timeline data; expect 3–6 sentence recap using only that job’s history.
+// - Follow-up drafts: request email/SMS follow-up; expect goal/tone reflected and no cross-job/customer info.
+// - Next actions: request next actions; expect 3 actionable suggestions derived from the job timeline only.
+// - Customer summary: on a customer profile, generate summary/check-in draft; expect content based solely on that customer’s history in the workspace.

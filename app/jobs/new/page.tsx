@@ -20,6 +20,7 @@ async function createJob(formData: FormData) {
   if (!customer_id) throw new Error("Customer is required");
   if (!description_raw) throw new Error("Job description is required");
 
+  // Server action: validate required fields and create lead/job scoped to workspace_id so staff members can act (role enforced upstream via getCurrentWorkspace).
   const { data: inserted, error } = await supabase.from("jobs").insert({
     user_id: user.id,
     customer_id,

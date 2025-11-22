@@ -36,7 +36,7 @@ export async function generateNextActions(
     const { workspace } = await getCurrentWorkspace({ supabase });
 
     const payload = await buildJobTimelinePayload(jobId, workspace.id);
-    // payload is already trimmed (events capped, text truncated) to avoid leaking other jobs/users.
+    // payload is already trimmed (events capped, text truncated) and scoped to this workspace/job to avoid leaking other users' data.
 
     const prompt = `
 Given this job's history, list the top 3 most important next actions the contractor should take.

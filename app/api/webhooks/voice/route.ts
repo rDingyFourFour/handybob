@@ -23,6 +23,12 @@ import { logAuditEvent } from "@/utils/audit/log";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Manual test script (dev):
+// 1) Set TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/VOICE_FALLBACK_USER_ID and run the dev server behind a tunnel (ngrok/Cloudflare) pointing Twilio Voice webhook to /api/webhooks/voice.
+// 2) Call your Twilio number and leave a voicemail.
+// 3) Expect: calls row created with recording_url, transcript/summary populated, job created/linked in the same workspace, automation fires if AI urgency = emergency.
+// 4) Send a duplicate RecordingUrl callback to confirm duplicate recording is skipped.
+
 type CustomerRow = {
   id: string;
   user_id: string;
@@ -52,6 +58,8 @@ export async function POST(req: NextRequest) {
 
   // Stage 1: initial inbound call -> instruct Twilio to record a voicemail.
   if (!recordingUrl) {
+    // Expected inbound payload: From, To, CallSid (no RecordingUrl yet).
+    // DB: no writes here; this route only returns TwiML. Call rows are inserted by /api/voice/inbound (legacy path) or on callback below.
     const response = new twilio.twiml.VoiceResponse();
     response.say(
       { voice: "alice" },

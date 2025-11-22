@@ -24,6 +24,9 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
 
+  // Expected Twilio payload (x-www-form-urlencoded): From, To, CallSid (no RecordingUrl yet).
+  // DB: insert a calls row keyed by CallSid and mark status inbound_voicemail for the fallback user.
+  // NOTE: workspace_id is not set here; if multiple workspaces/users share numbers, resolve workspace by `To`/user and persist workspace_id to keep rows scoped.
   // TODO: replace this with a lookup that maps `toNumber` -> user/workspace once per-tenant numbers exist.
   const userId = DEFAULT_USER_ID ?? null;
   if (!userId) {

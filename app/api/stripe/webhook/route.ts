@@ -28,6 +28,10 @@ export async function POST(req: Request) {
   // 3. Trigger `checkout.session.completed` by creating a Payment Link in test mode
   //    and completing checkout via the Dashboard or `stripe payment_links create`
   //    + `stripe checkout sessions create` CLI commands.
+  // Stripe test checklist (dev/test mode):
+  // - CLI: `stripe listen --forward-to localhost:3000/api/stripe/webhook` to set STRIPE_WEBHOOK_SECRET.
+  // - Create a Payment Link in test mode (Dashboard or `stripe payment_links create ...`), then complete checkout with test card 4242...
+  // - Expect DB: quote.status=paid, quote.paid_at set, quote_payments row inserted (amount/currency/intent/session/link ids), invoice created or updated to paid with stripe_payment_intent_id, audit events logged, receipt email attempted if a customer email exists.
   if (!stripe || !webhookSecret) {
     console.warn("[stripe-webhook] Missing Stripe configuration.");
     return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
@@ -70,6 +74,8 @@ async function handleCheckoutSessionCompleted(
 ) {
   // Payment Links ultimately create Checkout Sessions, and Stripe guarantees
   // checkout.session.completed fires once the customer pays successfully.
+  // Happy path: verify signature, find quote, mark quote paid, ensure invoice exists, and mark invoice paid with the same workspace/job linkage.
+  // Failure modes: missing metadata, DB errors, or download issues are logged and exit early without throwing to Stripe.
   if (!event.data.object || typeof event.data.object !== "object") {
     console.warn("[stripe-webhook] checkout.session.completed missing session payload");
     return;

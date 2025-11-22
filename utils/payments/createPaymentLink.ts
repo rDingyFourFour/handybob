@@ -11,6 +11,10 @@ if (!stripeSecretKey) {
   console.warn("STRIPE_SECRET_KEY is not set; Stripe payments disabled.");
 }
 
+// Server-only Stripe helper:
+// - Uses secret key only on the server (no client-side Stripe usage).
+// - Creates a Payment Link with quote/workspace/user metadata for webhook reconciliation.
+// - Throws if Stripe is not configured so the caller can surface an error.
 const stripe = stripeSecretKey
   ? new Stripe(stripeSecretKey, {
       // Use your account's default API version (configured in Stripe dashboard)  [oai_citation:6‡Stripe Docs](https://docs.stripe.com/api/versioning?utm_source=chatgpt.com)

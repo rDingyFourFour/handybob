@@ -190,6 +190,12 @@ export default async function HomePage() {
   const newLeadWindowStart = newLeadCutoff(todayStart);
   const quoteStaleThreshold = staleQuoteCutoff(todayStart);
   const invoiceOverdueThreshold = overdueInvoiceCutoff(todayStart);
+  // Attention cards pull:
+  // - New leads: status=lead created within newLeadWindowStart.
+  // - Urgent leads: lead rows (status=lead) scoped to workspace, ordered by created_at; urgency surface comes from ai_urgency/urgency.
+  // - Calls needing review: calls missing transcript/summary/job_id or flagged needs_followup.
+  // - Overdue invoices / stale quotes: status filters plus date thresholds above.
+  // Automation prefs control visibility of overdue work blocks.
 
   let appointmentsRes,
     leadsRes,

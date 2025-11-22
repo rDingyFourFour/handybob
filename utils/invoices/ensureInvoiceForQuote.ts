@@ -84,6 +84,9 @@ export async function ensureInvoiceForQuote({
   paidAt,
   paymentIntentId,
 }: EnsureInvoiceArgs) {
+  // Happy path: look up any existing invoice for the quote (scoped by quote_id), update it if markPaid,
+  // otherwise fetch quote details and insert a new invoice carrying workspace_id/user_id/job_id from the quote.
+  // Failure modes: quote or invoice fetch/update errors return null/previous invoice; callers should handle null.
   const { data: existingInvoice, error: existingError } = await supabase
     .from("invoices")
     .select("*")

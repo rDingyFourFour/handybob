@@ -113,14 +113,16 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Sequence (happy path): normalize payload -> resolve workspace by slug (scopes workspace_id) -> enforce public_lead_form_enabled -> spam checks (honeypot, link filter, rate limit) -> upsert customer scoped to workspace -> insert lead job scoped to workspace -> log submission -> AI classify job -> trigger automations if emergency -> audit log entry.
+    // Failure modes: invalid input, disabled form, spam/rate limits, DB errors during upsert/insert, AI/automation failures (non-blocking) all return 4xx/5xx or early OK for honeypot to avoid teaching bots.
     const urgencyNormalized = normalizeUrgency(urgency);
-  const mergedDescription = buildDescription(cleanedDescription, {
-    address,
-    preferredTime: preferredTime || specificDate || null,
-    name,
-    email,
-    phone,
-  });
+    const mergedDescription = buildDescription(cleanedDescription, {
+      address,
+      preferredTime: preferredTime || specificDate || null,
+      name,
+      email,
+      phone,
+    });
 
     const signals = inferAttentionSignals({
       text: mergedDescription,

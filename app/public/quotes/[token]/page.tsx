@@ -15,6 +15,7 @@ export default async function PublicQuotePage({
 }: {
   params: { token: string };
 }) {
+  // Server-only: use admin client to resolve quote by public_token; no RLS/auth required on public links.
   const supabase = createAdminClient();
 
   const { data: quote } = await supabase
@@ -60,7 +61,7 @@ export default async function PublicQuotePage({
     );
   }
 
-  const customer = quote.jobs?.customers;
+  const customer = quote.jobs?.customers; // public-safe: only shows customer-facing name/email/phone
   const workspace = quote.workspaces;
   const canPay = Boolean(quote.stripe_payment_link_url);
   const { data: mediaRows } = await supabase

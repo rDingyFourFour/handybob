@@ -49,7 +49,7 @@ export async function generateCustomerSummary(
     const supabase = createServerClient();
     const { workspace } = await getCurrentWorkspace({ supabase });
 
-    const payload = await buildCustomerTimelinePayload(customerId, workspace.id); // scoped to workspace + capped history
+    const payload = await buildCustomerTimelinePayload(customerId, workspace.id); // scoped to workspace + capped history to avoid other customers' data
 
     const prompt = `
 You are HandyBob's assistant. Summarize this customer relationship in 3–6 sentences:
@@ -104,7 +104,7 @@ export async function generateCustomerCheckinDraft(
     const supabase = createServerClient();
     const { workspace } = await getCurrentWorkspace({ supabase });
 
-    const payload = await buildCustomerTimelinePayload(customerId, workspace.id); // scoped to workspace + capped history
+    const payload = await buildCustomerTimelinePayload(customerId, workspace.id); // scoped to workspace + capped history to avoid other customers' data
     const toneInstruction = tone ? `Tone: ${tone}.` : "";
 
     const prompt = `

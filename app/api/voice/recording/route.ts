@@ -16,6 +16,9 @@ export async function POST(req: NextRequest) {
   const recordingUrl = getString(formData, "RecordingUrl");
   const duration = getString(formData, "RecordingDuration");
 
+  // Expected Twilio recording callback payload: CallSid, RecordingUrl, RecordingDuration (form-encoded).
+  // DB: attach recording_url + duration to existing call row (matched by CallSid), set status=voicemail_recorded.
+  // Edge cases: returns 404 if no call found; repeated callbacks will overwrite same fields (idempotent-ish). Auto-processing is gated by env flag.
   if (!callSid || !recordingUrl) {
     console.warn("[voice-recording] Missing CallSid or RecordingUrl");
     return NextResponse.json({ error: "Missing CallSid or RecordingUrl" }, { status: 400 });

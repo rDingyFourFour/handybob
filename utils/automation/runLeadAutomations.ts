@@ -26,6 +26,9 @@ export async function runLeadAutomations({
   summary,
   aiUrgency,
 }: LeadAutomationArgs) {
+  // Trigger rule: only fire when ai_urgency === "emergency".
+  // Workspace scoping: automation_settings are fetched per workspace_id; events are logged with workspace_id for audit/visibility.
+  // Outcome: sends email/SMS alerts to the workspace owner if enabled; always records automation_events rows (success or failed) for troubleshooting.
   if ((aiUrgency || "").toLowerCase() !== "emergency") return;
 
   const supabase = createAdminClient();

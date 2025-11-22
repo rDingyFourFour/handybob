@@ -67,6 +67,7 @@ export async function classifyJobWithAi(args: ClassificationArgs): Promise<AiCla
     },
     body: JSON.stringify({
       model: OPENAI_MODEL,
+      // Sends only job-specific text (title/description/transcript/messages) for this workspace/job; no cross-workspace data.
       input: [
         { role: "system", content: [{ type: "text", text: PROMPT }] },
         { role: "user", content: [{ type: "text", text: inputText }] },

@@ -83,6 +83,7 @@ export default async function ActivityPage({
   const workspaceContext = await getCurrentWorkspace({ supabase });
   const { workspace, role } = workspaceContext;
 
+  // Only owners can view audit logs (workspace membership ensures workspace_id constraint; non-owners get read-only info elsewhere).
   if (role !== "owner") {
     return (
       <div className="hb-card space-y-2">

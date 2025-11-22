@@ -58,6 +58,7 @@ export async function getCurrentWorkspace(
     // Role meanings:
     // - owner: can manage workspace-level settings (billing, automation, pricing, membership) and all data.
     // - staff: can work with jobs/customers/quotes/invoices/appointments/messages/calls/media but not admin settings.
+    // Membership lookup ensures RLS enforces workspace_id in every downstream query/action. user_id is only used for attribution.
     return {
       user,
       workspace: workspaceRow as {
@@ -92,6 +93,7 @@ export async function getCurrentWorkspace(
   };
 }
 
+// Throw for non-owner roles—used by workspace/automation/pricing config to keep owner-only settings gated.
 export function requireOwner(context: WorkspaceContext) {
   if (context.role !== "owner") {
     throw new Error("You don’t have permission to manage workspace settings.");

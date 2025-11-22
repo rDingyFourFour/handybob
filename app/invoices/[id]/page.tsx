@@ -150,6 +150,7 @@ async function sendInvoiceEmailAction(formData: FormData) {
   const { user, workspace } = await getCurrentWorkspace({ supabase });
   const workspaceProfile = await getWorkspaceProfile({ supabase });
 
+  // Workspace_id guard ensures both owner and staff members can view/send invoices for their workspace; user_id is only used for audit/logging.
   const { data: invoice } = await supabase
     .from("invoices")
     .select(

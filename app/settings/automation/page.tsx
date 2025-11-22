@@ -43,6 +43,7 @@ export default async function AutomationSettingsPage() {
   };
   const safeEvents: AutomationEvent[] = events ?? [];
 
+  // Automation config is owner-only (role enforced here; actions also call requireOwner).
   if (role !== "owner") {
     return (
       <div className="hb-card space-y-2">

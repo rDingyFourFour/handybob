@@ -17,6 +17,7 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+// Twilio credentials stay server-side; used only for authenticated fetch of recording audio.
 
 export async function processCallRecording(formData: FormData): Promise<void> {
   const callId = formData.get("call_id");
@@ -388,6 +389,7 @@ ${transcript}
     },
     body: JSON.stringify({
       model: OPENAI_MODEL,
+      // Sends transcript text only for this call; expects a short text summary back.
       input: [{ role: "user", content: [{ type: "text", text: prompt }] }],
       response_format: { type: "text" },
     }),

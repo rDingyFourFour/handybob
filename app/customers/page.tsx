@@ -16,6 +16,7 @@ async function createCustomer(formData: FormData) {
 
   if (!name) throw new Error("Name is required");
 
+  // Server action: enforce name presence, then insert customer scoped to this workspace (allowing owner/staff per RLS, user_id is there for auditing).
   const { error } = await supabase.from("customers").insert({
     user_id: user.id,
     workspace_id: workspace.id,
