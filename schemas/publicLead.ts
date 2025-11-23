@@ -3,8 +3,8 @@ type RawForm = Record<string, string | null | undefined>;
 export type PublicLeadSubmission = {
   workspaceSlug: string;
   name: string;
-  email: string | null;
-  phone: string | null;
+  email: string;
+  phone: string;
   description: string;
   address: string | null;
   urgency: "today" | "this_week" | "next_week" | "flexible";
@@ -43,7 +43,7 @@ export function validatePublicLeadSubmission(
   }
 
   const email = normalizeString(raw.email);
-  if (email && !isValidEmail(email)) {
+  if (email && email !== "" && !isValidEmail(email)) {
     return { success: false, error: "Email address is invalid." };
   }
 
@@ -60,13 +60,16 @@ export function validatePublicLeadSubmission(
   const address = normalizeString(raw.address);
   const honeypot = normalizeString(raw.honeypot);
 
+  const normalizedEmail = email ?? "";
+  const normalizedPhone = phone ?? "";
+
   return {
     success: true,
     data: {
       workspaceSlug,
       name,
-      email,
-      phone,
+      email: normalizedEmail,
+      phone: normalizedPhone,
       description,
       address,
       urgency,
