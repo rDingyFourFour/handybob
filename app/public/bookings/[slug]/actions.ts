@@ -331,7 +331,14 @@ function buildTitle(description: string) {
 
 function buildDescription(
   description: string,
-  extras: { address: string; preferredTime: string; specificDate: string; name: string; email: string; phone: string },
+  extras: {
+    address: string | null;
+    preferredTime: string | null;
+    specificDate: string | null;
+    name: string;
+    email: string;
+    phone: string;
+  },
 ) {
   const lines = [
     description,
