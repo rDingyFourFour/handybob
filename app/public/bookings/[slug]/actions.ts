@@ -80,6 +80,9 @@ export async function submitPublicBooking(
     specificDate,
     honeypot,
   } = validation.data;
+  const contactAddress = address ?? "";
+  const contactPreferredTime = preferredTime ?? "";
+  const contactSpecificDate = specificDate ?? "";
   const spamSuspected = Boolean(honeypot);
 
   const supabase = createAdminClient();
@@ -119,9 +122,9 @@ export async function submitPublicBooking(
   }
 
   const mergedDescription = buildDescription(description, {
-    address: address ?? "",
-    preferredTime: preferredTime ?? "",
-    specificDate: specificDate ?? "",
+    address: contactAddress,
+    preferredTime: contactPreferredTime,
+    specificDate: contactSpecificDate,
     name,
     email,
     phone,
