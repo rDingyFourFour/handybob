@@ -114,7 +114,7 @@ export async function submitPublicBooking(
     name,
     email,
     phone,
-    address,
+    address: contactAddress,
   });
 
   if (!customer) {
