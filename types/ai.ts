@@ -2,6 +2,7 @@
 
 export type TimelineEventType =
   | "job_created"
+  | "job"
   | "message"
   | "call"
   | "appointment"
