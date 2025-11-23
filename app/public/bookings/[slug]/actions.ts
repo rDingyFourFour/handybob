@@ -119,9 +119,9 @@ export async function submitPublicBooking(
   }
 
   const mergedDescription = buildDescription(description, {
-    address,
-    preferredTime,
-    specificDate,
+    address: address ?? "",
+    preferredTime: preferredTime ?? "",
+    specificDate: specificDate ?? "",
     name,
     email,
     phone,
@@ -332,9 +332,9 @@ function buildTitle(description: string) {
 function buildDescription(
   description: string,
   extras: {
-    address: string | null;
-    preferredTime: string | null;
-    specificDate: string | null;
+    address: string;
+    preferredTime: string;
+    specificDate: string;
     name: string;
     email: string;
     phone: string;
