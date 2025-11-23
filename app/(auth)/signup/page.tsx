@@ -83,7 +83,7 @@ export default function SignupPage() {
         <p className="hb-muted">
           Already have an account?{" "}
           <Link href="/login" className="underline underline-offset-2">
-            Log in
+            Sign in
           </Link>
         </p>
       </div>

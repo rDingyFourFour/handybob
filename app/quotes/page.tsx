@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { HintBox } from "@/components/ui/HintBox";
 
 type QuoteListItem = {
   id: string;
@@ -94,9 +95,20 @@ export default async function QuotesPage() {
             </div>
           ))
         ) : (
-          <p className="hb-muted text-sm">
-            No quotes yet. Generate one from a job to see it here.
-          </p>
+          <div className="flex flex-col items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-center">
+            <p className="text-lg font-semibold text-slate-100">
+              No quotes yet. Create one from a job to see it listed here.
+            </p>
+            <p className="hb-muted text-sm max-w-xl">
+              Quotes are generated from jobs. Open a job and click “Generate Quote with AI” to draft your first proposal.
+            </p>
+            <Link href="/jobs" className="hb-button">
+              View jobs
+            </Link>
+            <HintBox id="quotes-no-quotes" title="Hint">
+              Use the job’s AI assistant to generate a quote, tweak the scope, and send it straight from the job page.
+            </HintBox>
+          </div>
         )}
       </div>
     </div>

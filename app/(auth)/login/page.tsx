@@ -34,13 +34,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/70 p-8 shadow-xl">
         <h1 className="text-2xl font-semibold text-white mb-2">Welcome back</h1>
         <p className="text-sm text-slate-400 mb-6">
-          Need an account?{" "}
-          <Link
-            href="/signup"
-            className="text-blue-400 hover:text-blue-300 underline underline-offset-2"
-          >
-            Sign up
-          </Link>
+          Sign in to access quotes, invoices, appointments, and the AI assistant in one workspace.
         </p>
 
         <form className="space-y-4" onSubmit={handleSubmit}>
@@ -73,7 +67,7 @@ export default function LoginPage() {
             className="w-full rounded-lg bg-blue-500 py-2 font-semibold text-white transition hover:bg-blue-400 disabled:opacity-70"
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Signing in..." : "Log in"}
+            {isSubmitting ? "Signing in..." : "Sign in"}
           </button>
         </form>
 
@@ -82,6 +76,15 @@ export default function LoginPage() {
             {error}
           </p>
         )}
+        <p className="mt-4 text-sm text-slate-400">
+          New to HandyBob?{" "}
+          <Link
+            href="/signup"
+            className="text-blue-400 hover:text-blue-300 underline underline-offset-2"
+          >
+            Create an account
+          </Link>
+        </p>
       </div>
     </div>
   );

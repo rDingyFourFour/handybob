@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { HintBox } from "@/components/ui/HintBox";
 
 type AppointmentListItem = {
   id: string;
@@ -202,11 +203,20 @@ export default async function AppointmentsPage({
             );
           })
         ) : (
-          <p className="hb-muted text-sm">
-            {filterJobId
-              ? "No appointments scheduled for this job yet."
-              : "You haven’t scheduled any appointments yet."}
-          </p>
+          <div className="flex flex-col items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-center">
+            <p className="text-lg font-semibold text-slate-100">
+              No appointments scheduled. Once you create jobs, you can schedule visits here.
+            </p>
+            <p className="hb-muted text-sm max-w-xl">
+              Keep the calendar full by linking jobs to customers and booking visits ahead of time.
+            </p>
+            <Link href="/appointments/new" className="hb-button">
+              New appointment
+            </Link>
+            <HintBox id="appointments-no-appointments" title="Hint">
+              After you log a job, you can schedule a visit or work session right from the job timeline so the calendar stays in sync.
+            </HintBox>
+          </div>
         )}
       </div>
     </div>

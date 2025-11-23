@@ -120,6 +120,55 @@ function formatSource(source?: string | null) {
   return value.replace(/_/g, " ");
 }
 
+const marketingHighlights = [
+  "Keep quotes and invoices tidy so customers always understand what they're paying for.",
+  "Schedule calls, visits, and jobs without bouncing between calendars.",
+  "Let the AI assistant summarize conversations and flag what needs attention next.",
+];
+
+const howItWorksSteps = [
+  {
+    title: "Capture leads",
+    body: "Record calls, web form submissions, or jot them down manually so work never slips through the cracks.",
+  },
+  {
+    title: "Turn into quotes & invoices",
+    body: "Use the AI assistant to scope work and send polished quotes, then convert accepted ones into invoices.",
+  },
+  {
+    title: "Stay on top of jobs & appointments",
+    body: "Track work, calendar slots, and inbox items from the job dashboard so nothing falls behind.",
+  },
+];
+
+const onboardingSteps = [
+  {
+    title: "Add your business details",
+    description: "Personalize your workspace name, payment info, and public messaging.",
+    href: "/settings/workspace",
+  },
+  {
+    title: "Add your first customer",
+    description: "Capture a contact so jobs, quotes, and calls have a home.",
+    href: "/customers/new",
+  },
+  {
+    title: "Create your first job",
+    description: "Track leads, quotes, and schedules in one tidy job record.",
+    href: "/jobs/new",
+  },
+  {
+    title: "Generate your first quote with AI",
+    description: "Use the AI assistant to scope work and send a proposal.",
+    href: "/quotes",
+  },
+  {
+    title: "Turn on your public booking link",
+    description: "Share a link so customers can request service directly.",
+    href: "/settings/workspace",
+  },
+];
+
 export default async function HomePage() {
   let supabase;
   try {
@@ -143,12 +192,43 @@ export default async function HomePage() {
     user = fetchedUser;
     if (!user) {
       return (
-        <div className="hb-card space-y-2">
-          <h1>Welcome to HandyBob</h1>
-          <p className="hb-muted text-sm">Please sign in to view your dashboard.</p>
-          <Link href="/login" className="hb-button text-sm w-fit">
-            Sign in
-          </Link>
+        <div className="flex-1 flex flex-col items-center justify-center gap-10 px-4 py-12 text-center">
+          <div className="w-full max-w-4xl space-y-6 rounded-3xl border border-slate-800 bg-slate-900/60 p-10 shadow-2xl shadow-slate-900/40">
+            <p className="text-xs uppercase tracking-[0.4em] text-slate-500">HandyBob</p>
+            <h1 className="text-4xl font-semibold text-slate-50">HandyBob</h1>
+            <p className="text-lg text-slate-400">
+              Full support office in an app for independent handypeople.
+            </p>
+            <ul className="space-y-3 text-left text-lg text-slate-200">
+              {marketingHighlights.map((highlight) => (
+                <li className="flex items-start gap-3" key={highlight}>
+                  <span className="mt-1 h-2 w-2 rounded-full bg-slate-500" />
+                  <span>{highlight}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap justify-center gap-3">
+              <Link href="/signup" className="hb-button text-sm">
+                Create account
+              </Link>
+              <Link href="/login" className="hb-button-ghost text-sm">
+                Sign in
+              </Link>
+            </div>
+          </div>
+          <div className="w-full max-w-4xl">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-left text-sm text-slate-300">
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">How HandyBob works</p>
+              <div className="mt-4 grid gap-4 md:grid-cols-3">
+                {howItWorksSteps.map((step) => (
+                  <div key={step.title} className="space-y-1 rounded-xl border border-slate-800/70 bg-slate-950/20 p-4">
+                    <p className="text-sm font-semibold text-slate-100">{step.title}</p>
+                    <p className="text-xs text-slate-400">{step.body}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       );
     }
@@ -202,6 +282,8 @@ export default async function HomePage() {
     overdueInvoicesRes,
     staleQuotesRes,
     automationPrefsRes;
+  let workspaceCustomersCountRes,
+    workspaceJobsCountRes;
 
   try {
     [
@@ -217,6 +299,8 @@ export default async function HomePage() {
       overdueInvoicesRes,
       staleQuotesRes,
       automationPrefsRes,
+      workspaceCustomersCountRes,
+      workspaceJobsCountRes,
     ] = await Promise.all([
       supabase
         .from("appointments")
@@ -326,6 +410,14 @@ export default async function HomePage() {
         .select("notify_urgent_leads, show_overdue_work")
         .eq("workspace_id", workspace.id)
         .maybeSingle(),
+      supabase
+        .from("customers")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspace.id),
+      supabase
+        .from("jobs")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspace.id),
     ]);
   } catch (error) {
     console.error("[home] Failed to load dashboard data:", error);
@@ -379,6 +471,45 @@ export default async function HomePage() {
     ...quote,
     job: Array.isArray(quote.job) ? quote.job[0] ?? null : quote.job ?? null,
   }));
+
+  const workspaceCustomersCount = workspaceCustomersCountRes.count ?? 0;
+  const workspaceJobsCount = workspaceJobsCountRes.count ?? 0;
+  const isWorkspaceEmpty =
+    workspaceCustomersCount === 0 && workspaceJobsCount === 0;
+
+  if (isWorkspaceEmpty) {
+    return (
+      <div className="space-y-4">
+        <div className="hb-card space-y-6">
+          <div>
+            <p className="text-xs uppercase tracking-[0.4em] text-slate-500">Getting started</p>
+            <h1 className="text-2xl font-semibold">Let&apos;s get your HandyBob office set up.</h1>
+            <p className="hb-muted text-sm">
+              Complete these steps to see the dashboard spark with activity.
+            </p>
+          </div>
+
+          <ol className="space-y-3 text-left">
+            {onboardingSteps.map((step, index) => (
+              <Link
+                key={step.title}
+                href={step.href}
+                className="group flex items-start gap-4 rounded-2xl border border-slate-800/80 bg-slate-900/60 px-4 py-4 transition hover:border-slate-600"
+              >
+                <span className="min-w-[28px] text-right text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">
+                  {index + 1}
+                </span>
+                <div>
+                  <p className="text-base font-semibold text-slate-100">{step.title}</p>
+                  <p className="text-sm text-slate-400">{step.description}</p>
+                </div>
+              </Link>
+            ))}
+          </ol>
+        </div>
+      </div>
+    );
+  }
 
   const attentionCount =
     (leadsRes.data?.length ?? 0) +

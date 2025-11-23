@@ -409,7 +409,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
       </div>
 
       <div className="hb-card space-y-2">
-        <h3>Client message</h3>
+        <h3>Customer message</h3>
         <p className="text-sm">
           {quote.client_message_template ||
             "Here is your quote. Let me know if this works for you."}
@@ -523,7 +523,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
         </div>
 
         <p className="hb-muted text-xs">
-          Email uses the client message above. SMS sends a short summary & total.
+          Email uses the customer message above. SMS sends a short summary & total.
         </p>
         {isPaid && (
           <p className="hb-muted text-xs">

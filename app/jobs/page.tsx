@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { HintBox } from "@/components/ui/HintBox";
 import { createSignedMediaUrl } from "@/utils/supabase/storage";
 
 type JobRow = {
@@ -193,7 +194,20 @@ export default async function JobsPage({
 
       <div className="hb-card">
         {!safeJobs.length ? (
-          <p className="hb-muted">No jobs yet. Create your first one.</p>
+          <div className="flex flex-col items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-center">
+            <p className="text-lg font-semibold text-slate-100">
+              No jobs yet. Create your first job to track work, quotes, and appointments.
+            </p>
+            <p className="hb-muted text-sm max-w-xl">
+              Jobs are the central way HandyBob keeps quotes, customers, and visits organized. Start by logging a job so everything else has context.
+            </p>
+            <Link href="/jobs/new" className="hb-button">
+              New job
+            </Link>
+            <HintBox id="jobs-no-jobs" title="Pro tip">
+              Start with a job when someone calls or messages you. You can generate a quote from the job page whenever you need to send pricing.
+            </HintBox>
+          </div>
         ) : (
           <div className="space-y-2">
             {safeJobs.map((job) => (

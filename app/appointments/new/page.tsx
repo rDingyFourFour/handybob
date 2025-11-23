@@ -142,7 +142,7 @@ export default async function NewAppointmentPage({
           </div>
           <div>
             <label className="hb-label" htmlFor="location">Location</label>
-            <input id="location" name="location" className="hb-input" placeholder="Client address or notes" />
+          <input id="location" name="location" className="hb-input" placeholder="Customer address or notes" />
           </div>
         </div>
 

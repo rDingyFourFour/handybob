@@ -183,12 +183,12 @@ export default async function WorkspaceProfilePage() {
   return (
     <div className="max-w-2xl space-y-6">
       <div>
-        <h1>Workspace profile</h1>
+        <h1>Workspace settings</h1>
         <p className="hb-muted">
-          Business identity used across the app, outgoing emails, and public quote/invoice pages. Applies to all workspace members.
+          Business profile used across the app, outgoing emails, and public quote/invoice pages. Applies to all workspace members.
         </p>
         <div className="mt-1 text-[11px] uppercase text-slate-500">
-          Workspace settings for {workspace.name || "Workspace"}
+          Business profile for {workspace.name || "Workspace"}
         </div>
         {readOnly && (
           <p className="text-sm text-amber-300 mt-2">You don’t have permission to edit workspace settings.</p>
