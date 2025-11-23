@@ -130,7 +130,7 @@ export async function submitPublicBooking(
     phone,
   });
   const jobTitle = buildTitle(description);
-  const normalizedUrgency = normalizeUrgency(selectedUrgency, specificDate);
+  const normalizedUrgency = normalizeUrgency(selectedUrgency, contactSpecificDate);
 
   const { data: job, error } = await supabase
     .from("jobs")
