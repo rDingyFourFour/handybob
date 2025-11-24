@@ -15,6 +15,11 @@ type AutomationPrefs = {
   showOverdueWork: boolean;
 };
 
+type AutomationPreferencesRow = {
+  notify_urgent_leads?: boolean | null;
+  show_overdue_work?: boolean | null;
+};
+
 type UrgentLeadRow = {
   id: string;
   title: string | null;
@@ -845,9 +850,11 @@ export default async function HomePage() {
 
   const todaysAppointments = (appointmentsRes.data ?? []) as AppointmentRow[];
 
+  const automationPrefsRow = (automationPrefsRes as { data: AutomationPreferencesRow | null }).data;
+
   const prefs: AutomationPrefs = {
-    notifyUrgentLeads: automationPrefsRes.data?.notify_urgent_leads ?? true,
-    showOverdueWork: automationPrefsRes.data?.show_overdue_work ?? true,
+    notifyUrgentLeads: automationPrefsRow?.notify_urgent_leads ?? true,
+    showOverdueWork: automationPrefsRow?.show_overdue_work ?? true,
   };
 
   const urgentLeads = (urgentLeadsRes.data ?? []) as UrgentLeadRow[];
