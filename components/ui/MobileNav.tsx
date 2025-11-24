@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 
-type NavLink = { label: string; href };
+type NavLink = { label: string; href: string };
 
 type MobileNavProps = {
   navLinks: NavLink[];
