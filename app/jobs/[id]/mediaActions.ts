@@ -49,7 +49,7 @@ export async function uploadJobMedia(
   _prev: UploadMediaState | null,
   formData: FormData,
 ): Promise<UploadMediaState> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const jobId = String(formData.get("job_id") || "");
@@ -117,7 +117,7 @@ export async function uploadJobMedia(
 }
 
 export async function deleteJobMedia(formData: FormData): Promise<DeleteMediaState> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
 
   const mediaId = String(formData.get("media_id") || "");
@@ -153,7 +153,7 @@ export async function deleteJobMedia(formData: FormData): Promise<DeleteMediaSta
 }
 
 export async function linkJobMedia(_prev: LinkMediaState | null, formData: FormData): Promise<LinkMediaState> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
 
   const mediaId = String(formData.get("media_id") || "");
@@ -178,7 +178,7 @@ export async function linkJobMedia(_prev: LinkMediaState | null, formData: FormD
 }
 
 export async function toggleMediaVisibility(formData: FormData): Promise<VisibilityState> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
 
   const mediaId = String(formData.get("media_id") || "");

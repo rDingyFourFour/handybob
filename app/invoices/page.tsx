@@ -14,7 +14,7 @@ type InvoiceListItem = {
 };
 
 export default async function InvoicesPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -26,7 +26,7 @@ const stripe = stripeSecretKey
 export async function createPaymentLinkForQuote(formData: FormData) {
   const quoteId = String(formData.get("quote_id"));
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   if (!stripe) {

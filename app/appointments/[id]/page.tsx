@@ -27,7 +27,7 @@ type JobOption = {
 async function updateAppointmentAction(formData: FormData) {
   "use server";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -64,7 +64,7 @@ async function updateAppointmentAction(formData: FormData) {
 async function deleteAppointmentAction(formData: FormData) {
   "use server";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -81,7 +81,7 @@ export default async function AppointmentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -68,7 +68,7 @@ async function sendQuoteEmailAction(formData: FormData) {
   "use server";
 
   const quoteId = String(formData.get("quote_id"));
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   // Workspace_id guard via getCurrentWorkspace ensures staff+owner share access; user_id is for attribution.
   const { user, workspace } = await getCurrentWorkspace({ supabase });
   const workspaceProfile = await getWorkspaceProfile({ supabase });
@@ -161,7 +161,7 @@ async function sendQuoteSmsAction(formData: FormData) {
   "use server";
 
   const quoteId = String(formData.get("quote_id"));
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { user, workspace } = await getCurrentWorkspace({ supabase });
 
@@ -247,7 +247,7 @@ async function acceptQuoteAction(formData: FormData) {
   "use server";
 
   const quoteId = String(formData.get("quote_id"));
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Workspace scope ensures the quote belongs to this workspace before updating status/creating invoice.
   const { user, workspace } = await getCurrentWorkspace({ supabase });
@@ -293,7 +293,7 @@ async function createPaymentLinkAction(formData: FormData) {
 
 export default async function QuoteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
 
   const [quoteRes, paymentsRes] = await Promise.all([

@@ -30,7 +30,7 @@ function normalizeSingle<T>(relation: T | T[] | null | undefined): T | null {
 
 export async function createInvoiceFromQuote(formData: FormData) {
   const quoteId = String(formData.get("quote_id"));
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { user, workspace } = await getCurrentWorkspace({ supabase });
 

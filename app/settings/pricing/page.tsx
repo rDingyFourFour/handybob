@@ -10,7 +10,7 @@ import { logAuditEvent } from "@/utils/audit/log";
 async function updatePricingSettings(formData: FormData) {
   "use server";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const workspaceContext = await getCurrentWorkspace({ supabase });
   requireOwner(workspaceContext);
   const workspace = workspaceContext.workspace;
@@ -49,7 +49,7 @@ async function updatePricingSettings(formData: FormData) {
 }
 
 export default async function PricingSettingsPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const workspaceContext = await getCurrentWorkspace({ supabase });
   const { workspace, role } = workspaceContext;
   const settings = await ensurePricingSettings({ supabase, workspaceId: workspace.id });

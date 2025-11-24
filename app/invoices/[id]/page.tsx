@@ -148,7 +148,7 @@ async function sendInvoiceEmailAction(formData: FormData) {
   "use server";
 
   const invoiceId = String(formData.get("invoice_id"));
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { user, workspace } = await getCurrentWorkspace({ supabase });
   const workspaceProfile = await getWorkspaceProfile({ supabase });
 
@@ -247,7 +247,7 @@ async function sendInvoiceSmsAction(formData: FormData) {
   "use server";
 
   const invoiceId = String(formData.get("invoice_id"));
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: invoice } = await supabase
@@ -346,7 +346,7 @@ export default async function InvoiceDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: invoiceData } = await supabase

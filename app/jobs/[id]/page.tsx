@@ -142,7 +142,7 @@ export default async function JobDetailPage({
     redirect("/jobs");
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -46,7 +46,7 @@ export async function generateCustomerSummary(
   if (typeof customerId !== "string") return { error: "Customer ID is required." };
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { workspace } = await getCurrentWorkspace({ supabase });
 
     const payload = await buildCustomerTimelinePayload(customerId, workspace.id); // scoped to workspace + capped history to avoid other customers' data
@@ -101,7 +101,7 @@ export async function generateCustomerCheckinDraft(
   if (typeof customerId !== "string") return { error: "Customer ID is required." };
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { workspace } = await getCurrentWorkspace({ supabase });
 
     const payload = await buildCustomerTimelinePayload(customerId, workspace.id); // scoped to workspace + capped history to avoid other customers' data
@@ -162,7 +162,7 @@ export async function sendCustomerCheckinMessage(
   if (!to || !body) return { error: "Recipient and message are required." };
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { user, workspace } = await getCurrentWorkspace({ supabase });
 
     let fromAddress: string | null = null;

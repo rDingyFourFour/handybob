@@ -54,7 +54,7 @@ export async function generateFollowupDraft(
   }
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { workspace } = await getCurrentWorkspace({ supabase });
 
     const timelinePayload = await buildJobTimelinePayload(jobId, workspace.id); // scoped + truncated to job in this workspace only
@@ -123,7 +123,7 @@ export async function sendFollowupMessage(
   }
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { user, workspace } = await getCurrentWorkspace({ supabase });
 
     let fromAddress: string | null = null;

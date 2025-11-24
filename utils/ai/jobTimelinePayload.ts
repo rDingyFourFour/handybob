@@ -22,7 +22,7 @@ import { TimelineEvent } from "@/types/ai";
  * The returned object is safe to JSON.stringify and send to the OpenAI Responses API.
  */
 export async function buildJobTimelinePayload(jobId: string, workspaceId: string) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: job } = await supabase
     .from("jobs")

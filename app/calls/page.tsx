@@ -44,7 +44,7 @@ export default async function CallsPage({
 }: {
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
 
   const needsProcessing = searchParams?.filter === "needs_processing";

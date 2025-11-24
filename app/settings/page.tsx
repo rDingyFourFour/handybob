@@ -32,7 +32,7 @@ const settingsSections = [
 
 export async function signOutAction() {
   "use server";
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await supabase.auth.signOut();
   revalidatePath("/");
   revalidatePath("/settings");
@@ -40,7 +40,7 @@ export async function signOutAction() {
 }
 
 export default async function SettingsHomePage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace, role, user } = await getCurrentWorkspace({ supabase });
   const workspaceName = workspace.name || "Workspace";
 

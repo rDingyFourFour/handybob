@@ -8,7 +8,7 @@ import { logAuditEvent } from "@/utils/audit/log";
 async function createJob(formData: FormData) {
   "use server";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const customer_id = String(formData.get("customer_id"));
@@ -50,7 +50,7 @@ async function createJob(formData: FormData) {
 }
 
 export default async function NewJobPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: customers } = await supabase

@@ -99,7 +99,7 @@ type TimelineEvent = {
  * JSON.stringify for LLM prompts.
  */
 export async function buildCustomerTimelinePayload(customerId: string, workspaceId: string) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: customer } = await supabase
     .from("customers")

@@ -49,7 +49,7 @@ export default async function JobsPage({
 }: {
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

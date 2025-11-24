@@ -9,7 +9,7 @@ import { publicBookingUrl } from "@/utils/urls/public";
 async function saveWorkspaceProfile(formData: FormData) {
   "use server";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const workspaceContext = await getCurrentWorkspace({ supabase });
   requireOwner(workspaceContext);
 
@@ -55,7 +55,7 @@ async function saveWorkspaceProfile(formData: FormData) {
 async function toggleLeadForm(formData: FormData) {
   "use server";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const workspaceContext = await getCurrentWorkspace({ supabase });
   requireOwner(workspaceContext);
 
@@ -82,7 +82,7 @@ async function toggleLeadForm(formData: FormData) {
 async function updateWorkspaceSlug(formData: FormData) {
   "use server";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const workspaceContext = await getCurrentWorkspace({ supabase });
   requireOwner(workspaceContext);
 
@@ -124,7 +124,7 @@ async function updateWorkspaceSlug(formData: FormData) {
 async function toggleAutoConfirm(formData: FormData) {
   "use server";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const workspaceContext = await getCurrentWorkspace({ supabase });
   requireOwner(workspaceContext);
 
@@ -149,7 +149,7 @@ async function toggleAutoConfirm(formData: FormData) {
 }
 
 export default async function WorkspaceProfilePage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const context = await getCurrentWorkspace({ supabase });
   const { workspace, role } = context;
 

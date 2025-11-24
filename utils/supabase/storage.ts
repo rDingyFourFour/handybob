@@ -7,7 +7,7 @@ const MEDIA_BUCKET_ID = "job-media"; // private bucket for job/uploads; served v
  * Objects live under user-scoped prefixes (user_id/job_id/file.ext) in the job-media bucket.
  */
 export async function createSignedMediaUrl(path: string, expiresInSeconds = 3600) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data, error } = await supabase.storage
     .from(MEDIA_BUCKET_ID)
     .createSignedUrl(path, expiresInSeconds);

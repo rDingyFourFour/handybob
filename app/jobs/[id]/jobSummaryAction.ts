@@ -32,7 +32,7 @@ export async function generateJobSummary(
   }
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { workspace } = await getCurrentWorkspace({ supabase });
 
     const timelinePayload = await buildJobTimelinePayload(jobId, workspace.id); // scoped to workspace + capped history to avoid leaking other jobs/users

@@ -32,7 +32,7 @@ type CallRow = {
 };
 
 export default async function CallDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: call, error } = await supabase

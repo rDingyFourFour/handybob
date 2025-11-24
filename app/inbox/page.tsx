@@ -77,7 +77,7 @@ async function sendConversationMessage(formData: FormData) {
     return;
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const sentAt = new Date().toISOString();
@@ -130,7 +130,7 @@ export default async function InboxPage({
 }: {
   searchParams?: { customerId?: string; customer_id?: string };
 }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: messageRows, error } = await supabase

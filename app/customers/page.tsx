@@ -7,7 +7,7 @@ import { getCurrentWorkspace } from "@/utils/workspaces";
 async function createCustomer(formData: FormData) {
   "use server";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const name = String(formData.get("name") || "").trim();
@@ -31,7 +31,7 @@ async function createCustomer(formData: FormData) {
 }
 
 export default async function NewCustomerPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   await getCurrentWorkspace({ supabase });
 
   return (

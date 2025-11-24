@@ -59,7 +59,7 @@ export async function generateQuoteForJob(formData: FormData) {
     throw new Error("Job ID is required to generate a quote.");
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: job, error: jobError } = await supabase

@@ -33,7 +33,7 @@ type WorkspaceOptions = {
 export async function getCurrentWorkspace(
   options: WorkspaceOptions = {}
 ): Promise<WorkspaceContext> {
-  const supabase = options.supabase ?? createServerClient();
+  const supabase = options.supabase ?? await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -101,7 +101,7 @@ export function requireOwner(context: WorkspaceContext) {
 }
 
 export async function getWorkspaceProfile(options: WorkspaceOptions = {}) {
-  const supabase = options.supabase ?? createServerClient();
+  const supabase = options.supabase ?? await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
 
   const { data } = await supabase

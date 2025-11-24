@@ -26,7 +26,7 @@ type JobRow = {
 async function createAppointmentAction(formData: FormData) {
   "use server";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const title = String(formData.get("title") || "").trim();
@@ -75,7 +75,7 @@ export default async function NewAppointmentPage({
   const resolvedParams = await searchParams;
   const preselectedJobId = resolvedParams?.job_id || "";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: jobs } = await supabase

@@ -115,7 +115,7 @@ export default async function CustomerDetailPage({
   const customerId = params?.id;
   if (!customerId) redirect("/customers");
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

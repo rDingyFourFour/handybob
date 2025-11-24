@@ -32,7 +32,7 @@ export async function generateNextActions(
   if (typeof jobId !== "string") return { error: "Job ID is required." };
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { workspace } = await getCurrentWorkspace({ supabase });
 
     const payload = await buildJobTimelinePayload(jobId, workspace.id);

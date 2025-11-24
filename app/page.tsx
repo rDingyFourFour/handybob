@@ -69,7 +69,7 @@ type AppointmentRow = {
 
 export async function updateAutomationPreferences(formData: FormData) {
   "use server";
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
 
   const notifyUrgentLeads = formData.get("notifyUrgentLeads") === "on";
@@ -213,7 +213,7 @@ const guestHero = (
 export default async function HomePage() {
   let supabase;
   try {
-    supabase = createServerClient();
+    supabase = await createServerClient();
   } catch (error) {
     console.error("[home] Failed to init Supabase client:", error);
     return (

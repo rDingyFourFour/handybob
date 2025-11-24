@@ -28,7 +28,7 @@ function buildMonthDays(date: Date) {
 }
 
 export default async function CalendarPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

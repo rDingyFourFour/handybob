@@ -8,7 +8,7 @@ import { getCurrentWorkspace, requireOwner } from "@/utils/workspaces";
 import { logAuditEvent } from "@/utils/audit/log";
 
 export async function saveAutomationSettings(formData: FormData) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const workspaceContext = await getCurrentWorkspace({ supabase });
   requireOwner(workspaceContext);
   const workspace = workspaceContext.workspace;

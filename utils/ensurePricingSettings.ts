@@ -30,7 +30,7 @@ type EnsurePricingOptions = {
 export async function ensurePricingSettings(
   options: EnsurePricingOptions = {}
 ) {
-  const supabase = options.supabase ?? createServerClient();
+  const supabase = options.supabase ?? await createServerClient();
 
   let resolvedWorkspaceId = options.workspaceId;
 

@@ -17,7 +17,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   let workspaceContext: Awaited<ReturnType<typeof getCurrentWorkspace>> | null = null;
   let user = null as Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"] | null;
 

@@ -100,7 +100,7 @@ export async function runJobAssistant(
   }
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { workspace } = await getCurrentWorkspace({ supabase });
 
     const { data: job } = await supabase

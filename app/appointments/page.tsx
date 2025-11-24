@@ -43,7 +43,7 @@ type AppointmentListItem = {
 async function updateAppointmentStatusAction(formData: FormData) {
   "use server";
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -74,7 +74,7 @@ export default async function AppointmentsPage({
 }: {
   searchParams: Promise<{ job_id?: string }>;
 }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

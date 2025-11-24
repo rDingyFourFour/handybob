@@ -99,7 +99,7 @@ export async function runCustomerAssistant(
   }
 
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { workspace } = await getCurrentWorkspace({ supabase });
 
     const { data: customer } = await supabase

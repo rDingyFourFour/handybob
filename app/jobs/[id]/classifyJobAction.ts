@@ -24,7 +24,7 @@ export async function classifyJobAction(formData: FormData) {
   const jobId = formData.get("job_id");
   if (typeof jobId !== "string") return;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace, user } = await getCurrentWorkspace({ supabase });
 
   const { data: job } = await supabase

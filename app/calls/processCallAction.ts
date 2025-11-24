@@ -30,7 +30,7 @@ export async function processCallRecording(formData: FormData): Promise<void> {
     return;
   }
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
 
   const result = await processCallCore({

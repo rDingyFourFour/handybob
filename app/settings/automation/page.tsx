@@ -20,7 +20,7 @@ type AutomationEvent = {
 };
 
 export default async function AutomationSettingsPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { workspace, role } = await getCurrentWorkspace({ supabase });
 
   const { data } = await supabase

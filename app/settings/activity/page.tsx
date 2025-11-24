@@ -79,7 +79,7 @@ export default async function ActivityPage({
 }: {
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const workspaceContext = await getCurrentWorkspace({ supabase });
   const { workspace, role } = workspaceContext;
 
