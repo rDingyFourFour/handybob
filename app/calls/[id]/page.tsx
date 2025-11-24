@@ -59,7 +59,7 @@ export default async function CallDetailPage({ params }: { params: { id: string 
     )
     .eq("id", params.id)
     .eq("workspace_id", workspace.id)
-    .maybeSingle();
+    .maybeSingle<CallRow>();
 
   if (error) {
     return (

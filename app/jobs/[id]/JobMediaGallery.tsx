@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
@@ -122,9 +123,10 @@ export function JobMediaGallery({
   };
 
   const handleLink =
-    (mediaId: string, target: "quote" | "invoice") => async (formData: FormData) => {
+    (mediaId: string, linkTarget: "quote" | "invoice") => async (formData: FormData) => {
       setLinkError(null);
       setLinkingId(mediaId);
+      formData.set("link_target", linkTarget);
       const result = await linkJobMedia(null, formData);
       if (result?.error) {
         setLinkError(result.error);
@@ -239,15 +241,18 @@ export function JobMediaGallery({
                 key={item.id}
                 className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40"
               >
-                <div className="aspect-video w-full bg-slate-950/60">
-                  {item.signed_url ? (
-                    isImage ? (
-                      <img
-                        src={item.signed_url}
-                        alt={item.file_name || "Job media"}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
+                    <div className="relative aspect-video w-full bg-slate-950/60">
+                      {item.signed_url ? (
+                        isImage ? (
+                          <Image
+                            src={item.signed_url}
+                            alt={item.file_name || "Job media"}
+                            fill
+                            className="object-cover"
+                            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                            unoptimized
+                          />
+                        ) : (
                       <div className="flex h-full flex-col items-center justify-center gap-2 p-3 text-center">
                         <div className="rounded-full border border-slate-800 px-3 py-1 text-xs uppercase tracking-wide text-slate-200">
                           {getExtension(item.file_name)}

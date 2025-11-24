@@ -17,7 +17,7 @@ export function HintBox({ id, title, children }: HintBoxProps) {
     if (typeof window === "undefined") return;
     const stored = localStorage.getItem(`${storagePrefix}:${id}`);
     if (stored === "true") {
-      setDismissed(true);
+      queueMicrotask(() => setDismissed(true));
     }
   }, [id]);
 

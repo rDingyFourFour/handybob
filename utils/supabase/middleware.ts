@@ -23,11 +23,27 @@ export async function updateSession(request: NextRequest) {
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
     cookies: {
-      get(name: string) {
-        return request.cookies.get(name)?.value;
+      async get(name: string) {
+        const equalCookie = request.cookies.get(name);
+        if (!equalCookie) return null;
+        return { name: equalCookie.name, value: equalCookie.value };
+      },
+      async getAll() {
+        return request.cookies
+          .getAll()
+          .map((cookie) => ({ name: cookie.name, value: cookie.value }));
       },
       set(name: string, value: string, options: CookieOptions) {
         response.cookies.set({ name, value, ...options });
+      },
+      setAll(cookies) {
+        for (const cookie of cookies) {
+          response.cookies.set({
+            name: cookie.name,
+            value: cookie.value,
+            ...cookie.options,
+          });
+        }
       },
       remove(name: string, options: CookieOptions) {
         response.cookies.set({

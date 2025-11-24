@@ -10,6 +10,8 @@ export const metadata: Metadata = {
   description: "Full support office in an app for independent handypeople and small crews.",
 };
 
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({
   children,
 }: {

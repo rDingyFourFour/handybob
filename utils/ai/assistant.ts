@@ -1,5 +1,5 @@
 // utils/ai/assistant.ts
-import { AssistantReply, JobSummary } from "@/types/ai";
+import { AssistantReply } from "@/types/ai";
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";

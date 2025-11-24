@@ -12,11 +12,40 @@ type WorkspaceRow = {
   auto_confirmation_email_enabled?: boolean | null;
 };
 
+type CustomerRow = {
+  id?: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  workspace_id: string;
+  user_id: string;
+};
+
+type JobRow = {
+  id?: string;
+  status: string;
+  user_id: string;
+  workspace_id: string;
+  title?: string;
+  description?: string;
+};
+
+type LeadFormSubmissionRow = {
+  id?: string;
+  workspace_id: string;
+  data: Record<string, string>;
+};
+
 type SupabaseMockState = {
   workspaces: WorkspaceRow[];
-  customers: any[];
-  jobs: any[];
-  lead_form_submissions: any[];
+  customers: CustomerRow[];
+  jobs: JobRow[];
+  lead_form_submissions: LeadFormSubmissionRow[];
+};
+
+type SupabaseMock = {
+  state: SupabaseMockState;
+  from: (table: string) => Record<string, unknown>;
 };
 
 function makeSupabaseMock(initial?: Partial<SupabaseMockState>) {
@@ -38,7 +67,7 @@ function makeSupabaseMock(initial?: Partial<SupabaseMockState>) {
     ...initial,
   };
 
-  const supabase = {
+  const supabase: SupabaseMock = {
     state,
     from(table: string) {
       switch (table) {
@@ -54,14 +83,14 @@ function makeSupabaseMock(initial?: Partial<SupabaseMockState>) {
           };
         case "lead_form_submissions":
           return {
-            select: (_cols: string, _opts?: unknown) => ({
+            select: () => ({
               eq: () => ({
                 eq: () => ({
                   gte: async () => ({ count: 0 }),
                 }),
               }),
             }),
-            insert: async (payload: any) => {
+            insert: async (payload: LeadFormSubmissionRow) => {
               state.lead_form_submissions.push(payload);
               return { data: payload };
             },
@@ -75,10 +104,10 @@ function makeSupabaseMock(initial?: Partial<SupabaseMockState>) {
                 }),
               }),
             }),
-            insert: (payload: any) => ({
+            insert: (payload: CustomerRow) => ({
               select: () => ({
                 single: async () => {
-                  const row = { ...payload, id: `cust_${state.customers.length + 1}` };
+                  const row: CustomerRow = { ...payload, id: `cust_${state.customers.length + 1}` };
                   state.customers.push(row);
                   return { data: row, error: null };
                 },
@@ -92,10 +121,10 @@ function makeSupabaseMock(initial?: Partial<SupabaseMockState>) {
           };
         case "jobs":
           return {
-            insert: (payload: any) => ({
+            insert: (payload: JobRow) => ({
               select: () => ({
                 single: async () => {
-                  const row = { ...payload, id: `job_${state.jobs.length + 1}` };
+                  const row: JobRow = { ...payload, id: `job_${state.jobs.length + 1}` };
                   state.jobs.push(row);
                   return { data: row, error: null };
                 },

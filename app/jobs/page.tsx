@@ -1,4 +1,5 @@
 // app/jobs/page.tsx
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -244,10 +245,13 @@ export default async function JobsPage({
                 </div>
                 {mediaPreviews[job.id]?.signed_url && (
                   <div className="mt-2 flex items-center gap-2">
-                    <img
-                      src={mediaPreviews[job.id].signed_url!}
+                    <Image
+                      src={mediaPreviews[job.id]?.signed_url ?? ""}
                       alt="Latest job media"
+                      width={64}
+                      height={48}
                       className="h-12 w-16 rounded-md border border-slate-800 object-cover"
+                      unoptimized
                     />
                     <span className="text-[11px] text-slate-400">Latest photo</span>
                   </div>

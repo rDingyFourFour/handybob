@@ -1,4 +1,5 @@
 // app/public/quotes/[token]/page.tsx
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/utils/supabase/admin";
 
@@ -143,13 +144,16 @@ export default async function PublicQuotePage({
                 const isImage = media.mime_type?.startsWith("image/");
                 return (
                   <div key={media.id} className="rounded-lg border border-slate-800 bg-slate-900/70">
-                    <div className="aspect-video bg-slate-950/60">
+                    <div className="relative aspect-video bg-slate-950/60">
                       {media.signed_url ? (
                         isImage ? (
-                          <img
+                          <Image
                             src={media.signed_url}
                             alt={media.file_name || "Media"}
-                            className="h-full w-full object-cover"
+                            fill
+                            className="object-cover"
+                            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                            unoptimized
                           />
                         ) : (
                           <div className="flex h-full flex-col items-center justify-center gap-2 p-3 text-center text-xs">

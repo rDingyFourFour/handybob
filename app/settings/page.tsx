@@ -30,7 +30,7 @@ const settingsSections = [
   },
 ];
 
-export async function signOutAction(formData: FormData) {
+export async function signOutAction() {
   "use server";
   const supabase = createServerClient();
   await supabase.auth.signOut();

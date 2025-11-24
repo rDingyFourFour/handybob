@@ -19,7 +19,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -31,8 +31,24 @@ export default function LoginPage() {
       return;
     }
 
+    if (data.session) {
+      try {
+        const sessionRes = await fetch("/api/auth/session", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session: data.session }),
+        });
+        if (!sessionRes.ok) {
+          console.warn("[login] session sync failed", await sessionRes.text());
+        }
+      } catch (sessionError) {
+        console.error("[login] Failed to sync session:", sessionError);
+      }
+    }
+
+    await router.push("/");
     router.refresh();
-    router.push("/");
   }
 
   return (

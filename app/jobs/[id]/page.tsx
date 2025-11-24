@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -11,7 +12,7 @@ import { generateJobSummary } from "./jobSummaryAction";
 import { generateNextActions } from "./nextActionsAction";
 import { generateFollowupDraft, sendFollowupMessage } from "./followupActions";
 import { runJobAssistant } from "./assistantActions";
-import { createSignedMediaUrl, MEDIA_BUCKET_ID } from "@/utils/supabase/storage";
+import { createSignedMediaUrl } from "@/utils/supabase/storage";
 import { JobMediaGallery, type MediaItem } from "./JobMediaGallery";
 import { classifyJobAction } from "./classifyJobAction";
 import {
@@ -448,12 +449,15 @@ export default async function JobDetailPage({
                 .filter((m) => m.mime_type?.startsWith("image/"))
                 .slice(0, 4)
                 .map((m) => (
-                  <img
-                    key={m.id}
-                    src={m.signed_url || ""}
-                    alt={m.file_name || "Media"}
-                    className="h-16 w-24 rounded-md border border-slate-800 object-cover"
-                  />
+              <Image
+                key={m.id}
+                src={m.signed_url || ""}
+                alt={m.file_name || "Media"}
+                width={96}
+                height={64}
+                className="h-16 w-24 rounded-md border border-slate-800 object-cover"
+                unoptimized
+              />
                 ))}
             </div>
           </div>

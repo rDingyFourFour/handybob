@@ -169,6 +169,47 @@ const onboardingSteps = [
   },
 ];
 
+const guestHero = (
+  <div className="flex-1 flex flex-col items-center justify-center gap-10 px-4 py-12 text-center">
+    <div className="w-full max-w-4xl space-y-6 rounded-3xl border border-slate-800 bg-slate-900/60 p-10 shadow-2xl shadow-slate-900/40">
+      <p className="text-xs uppercase tracking-[0.4em] text-slate-500">HandyBob</p>
+      <h1 className="text-4xl font-semibold text-slate-50">HandyBob</h1>
+      <p className="text-lg text-slate-400">
+        Full support office in an app for independent handypeople.
+      </p>
+      <ul className="space-y-3 text-left text-lg text-slate-200">
+        {marketingHighlights.map((highlight) => (
+          <li className="flex items-start gap-3" key={highlight}>
+            <span className="mt-1 h-2 w-2 rounded-full bg-slate-500" />
+            <span>{highlight}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-wrap justify-center gap-3">
+        <Link href="/signup" className="hb-button text-sm">
+          Create account
+        </Link>
+        <Link href="/login" className="hb-button-ghost text-sm">
+          Sign in
+        </Link>
+      </div>
+    </div>
+    <div className="w-full max-w-4xl">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-left text-sm text-slate-300">
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">How HandyBob works</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          {howItWorksSteps.map((step) => (
+            <div key={step.title} className="space-y-1 rounded-xl border border-slate-800/70 bg-slate-950/20 p-4">
+              <p className="text-sm font-semibold text-slate-100">{step.title}</p>
+              <p className="text-xs text-slate-400">{step.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
 export default async function HomePage() {
   let supabase;
   try {
@@ -190,48 +231,21 @@ export default async function HomePage() {
       data: { user: fetchedUser },
     } = await supabase.auth.getUser();
     user = fetchedUser;
-    if (!user) {
-      return (
-        <div className="flex-1 flex flex-col items-center justify-center gap-10 px-4 py-12 text-center">
-          <div className="w-full max-w-4xl space-y-6 rounded-3xl border border-slate-800 bg-slate-900/60 p-10 shadow-2xl shadow-slate-900/40">
-            <p className="text-xs uppercase tracking-[0.4em] text-slate-500">HandyBob</p>
-            <h1 className="text-4xl font-semibold text-slate-50">HandyBob</h1>
-            <p className="text-lg text-slate-400">
-              Full support office in an app for independent handypeople.
-            </p>
-            <ul className="space-y-3 text-left text-lg text-slate-200">
-              {marketingHighlights.map((highlight) => (
-                <li className="flex items-start gap-3" key={highlight}>
-                  <span className="mt-1 h-2 w-2 rounded-full bg-slate-500" />
-                  <span>{highlight}</span>
-                </li>
-              ))}
-            </ul>
-            <div className="flex flex-wrap justify-center gap-3">
-              <Link href="/signup" className="hb-button text-sm">
-                Create account
-              </Link>
-              <Link href="/login" className="hb-button-ghost text-sm">
-                Sign in
-              </Link>
-            </div>
-          </div>
-          <div className="w-full max-w-4xl">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-left text-sm text-slate-300">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">How HandyBob works</p>
-              <div className="mt-4 grid gap-4 md:grid-cols-3">
-                {howItWorksSteps.map((step) => (
-                  <div key={step.title} className="space-y-1 rounded-xl border border-slate-800/70 bg-slate-950/20 p-4">
-                    <p className="text-sm font-semibold text-slate-100">{step.title}</p>
-                    <p className="text-xs text-slate-400">{step.body}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
+  } catch (error) {
+    console.error("[home] Failed to resolve workspace:", error);
+    return (
+      <div className="hb-card">
+        <h1>Dashboard unavailable</h1>
+        <p className="hb-muted text-sm">Unable to resolve workspace. Please sign in again.</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return guestHero;
+  }
+
+  try {
     workspace = (await getCurrentWorkspace({ supabase })).workspace;
   } catch (error) {
     console.error("[home] Failed to resolve workspace:", error);

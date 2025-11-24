@@ -1,4 +1,5 @@
 // app/invoices/[id]/page.tsx
+import Image from "next/image";
 import { redirect } from "next/navigation";
 
 import { sendInvoiceEmail } from "@/utils/email/sendInvoiceEmail";
@@ -466,14 +467,17 @@ export default async function InvoiceDetailPage({
               const isImage = media.mime_type?.startsWith("image/");
               return (
                 <div key={media.id} className="rounded-lg border border-slate-800 bg-slate-900/60">
-                  <div className="aspect-video w-full bg-slate-950/60">
-                    {media.signed_url ? (
-                      isImage ? (
-                        <img
-                          src={media.signed_url}
-                          alt={media.file_name || "Media"}
-                          className="h-full w-full object-cover"
-                        />
+                <div className="relative aspect-video w-full bg-slate-950/60">
+                  {media.signed_url ? (
+                    isImage ? (
+                      <Image
+                        src={media.signed_url}
+                        alt={media.file_name || "Media"}
+                        fill
+                        className="object-cover"
+                        sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                        unoptimized
+                      />
                       ) : (
                         <div className="flex h-full flex-col items-center justify-center gap-2 p-3 text-center">
                           <div className="rounded-full border border-slate-800 px-3 py-1 text-xs uppercase tracking-wide text-slate-200">

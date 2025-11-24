@@ -15,6 +15,12 @@ export function createServerClient() {
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     {
       cookies: {
+        async get(name: string) {
+          const cookieStore = await cookieStorePromise;
+          const match = cookieStore.get(name);
+          if (!match) return null;
+          return { name: match.name, value: match.value };
+        },
         async getAll() {
           const cookieStore = await cookieStorePromise;
           return cookieStore

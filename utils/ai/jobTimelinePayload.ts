@@ -1,7 +1,7 @@
 "use server";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { JobTimelinePayload, TimelineEvent } from "@/types/ai";
+import { TimelineEvent } from "@/types/ai";
 
 // Central timeline normaliser for AI prompts:
 // - Used by job AI summary, next actions, and follow-up helpers.

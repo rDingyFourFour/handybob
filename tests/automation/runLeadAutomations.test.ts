@@ -2,8 +2,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
 
+type AutomationEventRow = {
+  type: string;
+  status: string;
+};
+
 type SupabaseState = {
-  automation_events: any[];
+  automation_events: AutomationEventRow[];
+};
+
+type SupabaseMock = {
+  state: SupabaseState;
+  auth: {
+    admin: {
+      getUserById: () => Promise<{ data: { user: { email: string } } }>;
+    };
+  };
+  from: (table: string) => Record<string, unknown>;
 };
 
 function makeSupabaseMock(initial?: Partial<SupabaseState>) {
@@ -12,7 +27,7 @@ function makeSupabaseMock(initial?: Partial<SupabaseState>) {
     ...initial,
   };
 
-  const supabase = {
+  const supabase: SupabaseMock = {
     state,
     auth: {
       admin: {
@@ -37,7 +52,7 @@ function makeSupabaseMock(initial?: Partial<SupabaseState>) {
           };
         case "automation_events":
           return {
-            insert: async (payload: any) => {
+            insert: async (payload: AutomationEventRow) => {
               state.automation_events.push(payload);
               return { data: payload };
             },
@@ -61,11 +76,11 @@ const sendEmail = vi.fn();
 const sendSms = vi.fn();
 
 vi.mock("@/utils/email/sendCustomerMessage", () => ({
-  sendCustomerMessageEmail: (...args: any[]) => sendEmail(...args),
+  sendCustomerMessageEmail: () => sendEmail(),
 }));
 
 vi.mock("@/utils/sms/sendCustomerSms", () => ({
-  sendCustomerSms: (...args: any[]) => sendSms(...args),
+  sendCustomerSms: () => sendSms(),
 }));
 
 describe("runLeadAutomations", () => {

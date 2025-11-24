@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ensureInvoiceForQuote } from "@/utils/invoices/ensureInvoiceForQuote";
 
+type LineItemRow = {
+  description: string;
+  amount: number;
+};
+
 type QuoteRow = {
   id: string;
   total: number;
@@ -10,14 +15,28 @@ type QuoteRow = {
   workspace_id: string;
   subtotal: number;
   tax: number;
-  line_items: any[];
+  line_items: LineItemRow[];
   jobs: { title: string; customers: { name: string; email: string }[] };
+};
+
+type InvoiceRow = {
+  id: string;
+  quote_id: string;
+  status: string;
+  stripe_payment_intent_id?: string;
 };
 
 type SupabaseState = {
   quotes: QuoteRow[];
-  invoices: any[];
+  invoices: InvoiceRow[];
 };
+
+type SupabaseMock = {
+  state: SupabaseState;
+  from: (table: string) => Record<string, unknown>;
+};
+
+type EnsureInvoiceArgs = Parameters<typeof ensureInvoiceForQuote>[0];
 
 function makeSupabaseMock(initial?: Partial<SupabaseState>) {
   const state: SupabaseState = {
@@ -38,7 +57,7 @@ function makeSupabaseMock(initial?: Partial<SupabaseState>) {
     ...initial,
   };
 
-  const supabase = {
+  const supabase: SupabaseMock = {
     state,
     from(table: string) {
       switch (table) {
@@ -52,7 +71,7 @@ function makeSupabaseMock(initial?: Partial<SupabaseState>) {
                 }),
               }),
             }),
-            update: (payload: any) => ({
+            update: (payload: Partial<InvoiceRow>) => ({
               eq: () => ({
                 select: () => ({
                   maybeSingle: async () => {
@@ -63,7 +82,7 @@ function makeSupabaseMock(initial?: Partial<SupabaseState>) {
                 }),
               }),
             }),
-            insert: (payload: any) => ({
+            insert: (payload: Omit<InvoiceRow, "id">) => ({
               select: () => ({
                 single: async () => {
                   const row = { id: `inv_${state.invoices.length + 1}`, ...payload };
@@ -106,7 +125,7 @@ describe("ensureInvoiceForQuote", () => {
 
   it("creates a new invoice when one does not exist", async () => {
     const invoice = await ensureInvoiceForQuote({
-      supabase: supabaseMock as any,
+      supabase: supabaseMock as EnsureInvoiceArgs["supabase"],
       quoteId: "quote_1",
       markPaid: true,
       paidAt: "2024-01-01T00:00:00.000Z",
