@@ -27,8 +27,11 @@ export async function POST(request: NextRequest) {
         get(name: string) {
           return request.cookies.get(name)?.value ?? null;
         },
-        getAll() {
-          return request.cookies.getAll().map((cookie) => cookie.value);
+        async getAll() {
+          return request.cookies.getAll().map((cookie) => ({
+            name: cookie.name,
+            value: cookie.value,
+          }));
         },
         setAll(cookiesList) {
           for (const cookie of cookiesList) {
