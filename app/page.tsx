@@ -94,6 +94,7 @@ type MessageActivityRow = {
   created_at: string | null;
   subject: string | null;
   direction: string | null;
+  customer_id?: string | null;
 };
 
 type QuoteActivityRow = {
