@@ -218,8 +218,8 @@ function daysSince(date: string | null) {
 
 function normalizeCustomer(
   customer:
-    | { id: string | null; name: string | null }
-    | { id: string | null; name: string | null }[]
+    | { id?: string | null; name: string | null }
+    | { id?: string | null; name: string | null }[]
     | null
     | undefined
 ) {
