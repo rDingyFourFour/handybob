@@ -24,9 +24,6 @@ export async function POST(request: NextRequest) {
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value ?? null;
-        },
         async getAll() {
           return request.cookies.getAll().map((cookie) => ({
             name: cookie.name,
