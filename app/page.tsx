@@ -29,6 +29,7 @@ type UrgentLeadRow = {
   ai_urgency?: string | null;
   attention_score?: number | null;
   attention_reason?: string | null;
+  created_at: string | null;
   customer: { name: string | null }[] | null;
 };
 
@@ -692,7 +693,7 @@ export default async function HomePage() {
 
       supabase
         .from("jobs")
-        .select("id, title, urgency, source, ai_urgency, priority, attention_score, attention_reason, customer:customers(name)")
+        .select("id, title, urgency, source, ai_urgency, priority, attention_score, attention_reason, created_at, customer:customers(name)")
         .eq("workspace_id", workspace.id)
         .eq("status", "lead")
         .gte("created_at", newLeadWindowStart.toISOString())
