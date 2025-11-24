@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/utils/workspaces";
+import { MobileNav } from "@/components/ui/MobileNav";
 
 export const metadata: Metadata = {
   title: "HandyBob",
@@ -62,17 +63,23 @@ export default async function RootLayout({
                     HandyBob
                   </Link>
                   {user && (
-                    <nav className="hidden lg:flex items-center gap-2 text-sm text-slate-300">
-                      {navLinks.map(({ label, href }) => (
-                        <Link
-                          key={label}
-                          href={href}
-                          className="rounded-md px-2 py-1 text-slate-300 transition hover:bg-slate-800 hover:text-white"
-                        >
-                          {label}
-                        </Link>
-                      ))}
-                    </nav>
+                    <>
+                      <nav className="hidden lg:flex items-center gap-2 text-sm text-slate-300">
+                        {navLinks.map(({ label, href }) => (
+                          <Link
+                            key={label}
+                            href={href}
+                            className="rounded-md px-2 py-1 text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                          >
+                            {label}
+                          </Link>
+                        ))}
+                      </nav>
+                      <MobileNav
+                        navLinks={navLinks}
+                        workspaceName={workspaceContext?.workspace.name ?? ""}
+                      />
+                    </>
                   )}
                 </div>
                 <div className="flex items-center gap-3">
