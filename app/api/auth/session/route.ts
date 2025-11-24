@@ -43,10 +43,13 @@ export async function POST(request: NextRequest) {
     }
   );
 
-  if (body.session?.access_token || body.session?.refresh_token) {
+  const accessToken = body.session?.access_token;
+  const refreshToken = body.session?.refresh_token;
+
+  if (accessToken && refreshToken) {
     await supabase.auth.setSession({
-      access_token: body.session.access_token ?? undefined,
-      refresh_token: body.session.refresh_token ?? undefined,
+      access_token: accessToken,
+      refresh_token: refreshToken,
     });
   } else {
     await supabase.auth.getSession();
