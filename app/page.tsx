@@ -690,41 +690,6 @@ export default async function HomePage() {
         .limit(5),
 
       supabase
-        .from("appointments")
-        .select("id, job_id, title, start_time")
-        .eq("workspace_id", workspace.id)
-        .order("start_time", { ascending: false })
-        .limit(5),
-
-      supabase
-        .from("calls")
-        .select("id, job_id, created_at, status")
-        .eq("workspace_id", workspace.id)
-        .order("created_at", { ascending: false })
-        .limit(5),
-
-      supabase
-        .from("messages")
-        .select("id, job_id, created_at, subject, direction")
-        .eq("workspace_id", workspace.id)
-        .order("created_at", { ascending: false })
-        .limit(5),
-
-      supabase
-        .from("quotes")
-        .select("id, job_id, created_at, total, status")
-        .eq("workspace_id", workspace.id)
-        .order("created_at", { ascending: false })
-        .limit(5),
-
-      supabase
-        .from("invoices")
-        .select("id, job_id, created_at, total, status")
-        .eq("workspace_id", workspace.id)
-        .order("created_at", { ascending: false })
-        .limit(5),
-
-      supabase
         .from("jobs")
         .select("id, title, urgency, source, ai_urgency, priority, attention_score, attention_reason, customer:customers(name)")
         .eq("workspace_id", workspace.id)
