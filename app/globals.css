@@ -5,6 +5,36 @@
   --foreground: #171717;
 }
 
+@layer components {
+  .hb-card {
+    @apply rounded-2xl border border-slate-800 bg-slate-950/60 p-4 shadow-[0_25px_55px_rgba(2,6,23,0.6)];
+  }
+
+  .hb-card-heading {
+    @apply text-lg font-semibold tracking-tight text-slate-100;
+  }
+
+  .hb-heading-1 {
+    @apply text-3xl md:text-4xl font-semibold tracking-tight text-slate-100;
+  }
+
+  .hb-heading-2 {
+    @apply text-xl md:text-2xl font-semibold tracking-tight text-slate-100;
+  }
+
+  .hb-heading-3 {
+    @apply text-lg font-semibold tracking-tight text-slate-100;
+  }
+
+  .hb-body {
+    @apply text-sm md:text-base text-slate-200 leading-relaxed;
+  }
+
+  .hb-muted {
+    @apply text-xs text-slate-400;
+  }
+}
+
 /* @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -24,4 +54,3 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
-
