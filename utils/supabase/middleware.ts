@@ -1,5 +1,5 @@
 // utils/supabase/middleware.ts
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function updateSession(request: NextRequest) {
@@ -23,18 +23,10 @@ export async function updateSession(request: NextRequest) {
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
     cookies: {
-      async get(name: string) {
-        const equalCookie = request.cookies.get(name);
-        if (!equalCookie) return null;
-        return { name: equalCookie.name, value: equalCookie.value };
-      },
       async getAll() {
         return request.cookies
           .getAll()
           .map((cookie) => ({ name: cookie.name, value: cookie.value }));
-      },
-      set(name: string, value: string, options: CookieOptions) {
-        response.cookies.set({ name, value, ...options });
       },
       setAll(cookies) {
         for (const cookie of cookies) {
@@ -44,15 +36,6 @@ export async function updateSession(request: NextRequest) {
             ...cookie.options,
           });
         }
-      },
-      remove(name: string, options: CookieOptions) {
-        response.cookies.set({
-          name,
-          value: "",
-          maxAge: 0,
-          expires: new Date(0),
-          ...options,
-        });
       },
     },
   });
