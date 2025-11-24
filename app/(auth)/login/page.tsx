@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { createClient } from "@/utils/supabase/client";
 
@@ -10,6 +11,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const router = useRouter();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -22,11 +24,15 @@ export default function LoginPage() {
       password,
     });
 
+    setIsSubmitting(false);
+
     if (signInError) {
       setError(signInError.message);
+      return;
     }
 
-    setIsSubmitting(false);
+    router.refresh();
+    router.push("/");
   }
 
   return (

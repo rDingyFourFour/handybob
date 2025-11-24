@@ -38,6 +38,7 @@ export default async function RootLayout({
     { label: "Jobs", href: "/jobs" },
     { label: "Customers", href: "/customers" },
     { label: "Appointments", href: "/appointments" },
+    { label: "Quotes", href: "/quotes" },
     { label: "Invoices", href: "/invoices" },
     { label: "Settings", href: "/settings" },
   ];
@@ -47,47 +48,9 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-slate-950 text-slate-100">
-        {/* Logged-out visitors land here on a clean marketing-style shell with just the logo and CTAs. */}
-        {/* Logged-in users see the full app navigation, workspace info, and sidebar/dashboard shell. */}
+        {/* Logged-out visitors see a clean marketing shell with only the brand CTAs. */}
+        {/* Logged-in users get the full header nav, workspace info, and account actions. */}
         <div className="flex min-h-screen">
-          {/* Sidebar */}
-          {user ? (
-            <aside className="hidden md:block w-64 border-r border-slate-800 bg-slate-900/80 p-4">
-              <div className="mb-6">
-                <h1 className="text-xl font-semibold tracking-tight">HandyBob</h1>
-                <p className="text-xs text-slate-400">
-                  Full support office in an app
-                </p>
-              </div>
-              <nav className="space-y-1 text-sm">
-                <div className="font-semibold text-slate-300 mb-2">Main</div>
-                <ul className="space-y-1">
-                  <li className="rounded-lg px-2 py-1 bg-slate-800/80">
-                    <Link href="/">Dashboard</Link>
-                  </li>
-                  <li className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-800/60">
-                    <Link href="/inbox">Inbox</Link>
-                  </li>
-                  <li className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-800/60">
-                    <Link href="/calls">Calls</Link>
-                  </li>
-                  <li className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-800/60">
-                    <Link href="/jobs">Jobs</Link>
-                  </li>
-                  <li className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-800/60">
-                    <Link href="/customers">Customers</Link>
-                  </li>
-                  <li className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-800/60">
-                    <Link href="/appointments">Appointments</Link>
-                  </li>
-                  <li className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-800/60">
-                    <Link href="/invoices">Invoices</Link>
-                  </li>
-                </ul>
-              </nav>
-            </aside>
-          ) : null}
-
           {/* Main area */}
           <main className="flex-1 flex flex-col">
             <header className="border-b border-slate-800 px-4 py-3">

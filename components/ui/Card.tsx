@@ -1,6 +1,6 @@
-import type { HTMLAttributes } from "react";
-
 "use client";
+
+import type { HTMLAttributes } from "react";
 
 type CardProps = HTMLAttributes<HTMLDivElement>;
 
