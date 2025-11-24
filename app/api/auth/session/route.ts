@@ -24,17 +24,13 @@ export async function POST(request: NextRequest) {
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     {
       cookies: {
-        async get(name: string) {
-          const match = request.cookies.get(name);
-          if (!match) return null;
-          return { name: match.name, value: match.value };
+        get(name: string) {
+          return request.cookies.get(name)?.value ?? null;
         },
-        async getAll() {
-          return request.cookies
-            .getAll()
-            .map((cookie) => ({ name: cookie.name, value: cookie.value }));
+        getAll() {
+          return request.cookies.getAll().map((cookie) => cookie.value);
         },
-        async setAll(cookiesList) {
+        setAll(cookiesList) {
           for (const cookie of cookiesList) {
             response.cookies.set({
               name: cookie.name,
