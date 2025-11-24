@@ -1,5 +1,6 @@
 // app/page.tsx
 import Link from "next/link";
+import type { ReactElement } from "react";
 import { revalidatePath } from "next/cache";
 
 import { createServerClient } from "@/utils/supabase/server";
@@ -249,7 +250,7 @@ function formatRelativeMinutesAgo(date: string | null) {
   return `Received ${hours} hour${hours === 1 ? "" : "s"} ago`;
 }
 
-const ACTIVITY_ICON_PATHS: Record<ActivityEvent["type"], JSX.Element> = {
+const ACTIVITY_ICON_PATHS: Record<ActivityEvent["type"], ReactElement> = {
   call: (
     <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.79 19.79 0 0 1 3 5.18 2 2 0 0 1 5 3h3a2 2 0 0 1 2 1.72 12.12 12.12 0 0 0 .7 2.81 2 2 0 0 1-.45 2L9.13 11a16 16 0 0 0 6.77 6.77l1.48-1.48a2 2 0 0 1 2-.45 12.12 12.12 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
   ),
