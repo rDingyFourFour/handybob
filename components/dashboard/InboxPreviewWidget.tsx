@@ -136,8 +136,8 @@ export function InboxPreviewWidget({
         const customerName = customer?.name || "Unknown contact";
         const job = Array.isArray(msg.job) ? msg.job[0] ?? null : msg.job ?? null;
         const jobTitle = job?.title || "No job linked";
-        const timestamp = msg.sent_at || msg.created_at;
-        const timestampLabel = formatFriendlyDateTime(timestamp, null, workspaceTimeZone);
+        const timestamp = msg.sent_at || msg.created_at || "";
+        const timestampLabel = formatFriendlyDateTime(timestamp, null, workspaceTimeZone ?? undefined);
         const snippet = buildMessageSnippet(msg.body, msg.subject);
         const receivedLabel = formatRelativeMinutesAgo(timestamp);
         const inboxLink = msg.customer_id ? `/inbox?customer_id=${msg.customer_id}` : "/inbox";
