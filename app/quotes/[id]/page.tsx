@@ -14,6 +14,7 @@ import { getCurrentWorkspace } from "@/utils/workspaces";
 import { getWorkspaceProfile } from "@/utils/workspaces";
 import { logAuditEvent } from "@/utils/audit/log";
 import { publicQuoteUrl } from "@/utils/urls/public";
+import { SmsActionButton } from "@/components/sms/SmsActionButton";
 
 
 type CustomerInfo = {
