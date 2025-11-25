@@ -166,7 +166,7 @@ export function JobMediaGallery({
         </div>
       </div>
 
-      <form action={handleSubmit} className="space-y-3" encType="multipart/form-data">
+      <form action={handleSubmit} className="space-y-3">
         <input type="hidden" name="job_id" value={jobId} />
         <div className="grid gap-3 md:grid-cols-[1fr,220px] md:items-center">
           <div className="space-y-2">
