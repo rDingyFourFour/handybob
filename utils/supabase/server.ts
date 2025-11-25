@@ -21,6 +21,9 @@ export async function createServerClient() {
             .getAll()
             .map((cookie) => ({ name: cookie.name, value: cookie.value }));
         },
+        async set() {},
+        async delete() {},
+        async setAll() {},
       },
     }
   );

@@ -148,7 +148,7 @@ async function sendConversationMessage(formData: FormData): Promise<SendConversa
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams?: { customerId?: string; customer_id?: string };
+  searchParams?: Promise<{ customerId?: string; customer_id?: string }>;
 }) {
   const supabase = await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
@@ -200,7 +200,8 @@ export default async function InboxPage({
     return bTime - aTime;
   });
 
-  const paramKey = searchParams?.customerId || searchParams?.customer_id;
+  const resolvedSearchParams = await searchParams;
+  const paramKey = resolvedSearchParams?.customerId || resolvedSearchParams?.customer_id;
   const selectedKey =
     (paramKey && threadsMap.has(paramKey))
       ? paramKey
