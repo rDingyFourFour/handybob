@@ -78,6 +78,20 @@ type ProcessCallCoreResult = {
   customerName?: string | null;
 };
 
+type CallRecord = {
+  id: string;
+  user_id: string;
+  workspace_id: string | null;
+  recording_url: string | null;
+  from_number: string | null;
+  to_number: string | null;
+  job_id: string | null;
+  customer_id: string | null;
+  status: string | null;
+  direction: string | null;
+  transcript?: string | null;
+};
+
 /**
  * Core transcription + summary workflow.
  * Expects the call row to include recording_url + workspace_id/user_id context.
@@ -102,21 +116,24 @@ async function processCallCore({
   // Load call (optionally scoped to user when called from UI)
   let query = supabase
     .from("calls")
-    .select("id, user_id, workspace_id, recording_url, from_number, to_number, job_id, customer_id, status, direction")
+    .select(
+      "id, user_id, workspace_id, recording_url, from_number, to_number, job_id, customer_id, status, direction, transcript"
+    )
     .eq("id", callId);
 
   if (enforceWorkspaceId && workspaceIdFilter) {
     query = query.eq("workspace_id", workspaceIdFilter);
   }
 
-  const { data: call, error: loadError } =
+  const { data: callRow, error: loadError } =
     (await query.maybeSingle?.()) ??
     (await query.single?.()) ??
     { data: null, error: { message: "Call not found." } };
 
-  if (loadError || !call) {
+  if (loadError || !callRow) {
     return { error: loadError?.message || "Call not found." };
   }
+  const call = callRow as CallRecord;
   if (!call.recording_url) {
     return { error: "No recording_url available on this call." };
   }
@@ -133,9 +150,9 @@ async function processCallCore({
   }
 
   console.info("[processCallCore] Processing call", {
-    call_id: call.id,
-    workspace_id: workspaceId,
-  });
+      call_id: call.id,
+      workspace_id: workspaceId,
+    });
 
   const audioBuffer = await downloadRecording(call.recording_url);
   if (!audioBuffer) return { error: "Failed to download recording audio." };
