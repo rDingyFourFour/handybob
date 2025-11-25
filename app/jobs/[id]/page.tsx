@@ -133,9 +133,9 @@ function formatSource(source?: string | null) {
 export default async function JobDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const jobId = params?.id;
+  const { id: jobId } = await params;
   if (typeof jobId !== "string" || !UUID_REGEX.test(jobId)) {
     redirect("/jobs");
   }

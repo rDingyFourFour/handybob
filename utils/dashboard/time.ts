@@ -28,7 +28,7 @@ function formatTimeRange(startDate: Date, endDate: Date | null, timezone: string
 export function formatFriendlyDateTime(
   start: string | null,
   end: string | null,
-  timezone: string = DEFAULT_TIMEZONE
+  timezone: string | undefined = DEFAULT_TIMEZONE
 ) {
   if (!start) return "";
   const startDate = new Date(start);

@@ -47,7 +47,7 @@ function formatSource(source?: string | null) {
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const supabase = await createServerClient();
   const {
@@ -55,10 +55,11 @@ export default async function JobsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const statusFilter = getParam(searchParams, "status") ?? "all";
-  const aiCategoryFilter = getParam(searchParams, "ai_category") ?? "all";
-  const aiUrgencyFilter = getParam(searchParams, "ai_urgency") ?? "all";
-  const sourceFilter = getParam(searchParams, "source") ?? "all";
+  const resolvedSearchParams = await searchParams;
+  const statusFilter = getParam(resolvedSearchParams, "status") ?? "all";
+  const aiCategoryFilter = getParam(resolvedSearchParams, "ai_category") ?? "all";
+  const aiUrgencyFilter = getParam(resolvedSearchParams, "ai_urgency") ?? "all";
+  const sourceFilter = getParam(resolvedSearchParams, "source") ?? "all";
 
   let jobsQuery = supabase
     .from("jobs")
