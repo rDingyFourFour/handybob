@@ -41,6 +41,10 @@ export async function logMessage({
   body,
   status = "sent",
   externalId,
+  toAddress,
+  fromAddress,
+  sentAt,
+  via,
 }: LogMessageArgs) {
   if (!workspaceId || !userId) {
     console.warn("[logMessage] Missing workspaceId or userId; skipping log.");
