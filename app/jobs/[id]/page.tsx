@@ -46,6 +46,7 @@ type MessageRow = {
   customer_id?: string | null;
   channel: string | null;
   direction: string | null;
+  via?: string | null;
   subject: string | null;
   body: string | null;
   status: string | null;
@@ -172,7 +173,7 @@ export default async function JobDetailPage({
         .order("start_time", { ascending: false }),
       supabase
         .from("messages")
-        .select("id, customer_id, channel, direction, subject, body, status, created_at, sent_at")
+        .select("id, customer_id, channel, direction, via, subject, body, status, created_at, sent_at")
         .eq("job_id", jobId)
         .order("created_at", { ascending: false })
         .limit(50),
