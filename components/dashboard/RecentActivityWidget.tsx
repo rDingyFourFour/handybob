@@ -154,7 +154,7 @@ export function RecentActivityWidget({
     <div className="space-y-2">
       {events.map((event) => {
         const eventHref = getActivityLink(event);
-        const eventTime = formatFriendlyDateTime(event.timestamp, null, workspaceTimeZone);
+        const eventTime = formatFriendlyDateTime(event.timestamp, null, workspaceTimeZone ?? undefined);
         return (
           <Link
             key={`${event.type}-${event.id}`}
