@@ -84,22 +84,6 @@ export default async function RootLayout({
                     />
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="flex flex-col text-right text-xs">
-                      {workspaceContext?.workspace.name ? (
-                        <>
-                          <span className="font-semibold text-slate-50">
-                            Workspace: {workspaceContext.workspace.name}
-                          </span>
-                          <span className="text-slate-400">
-                            Your workspace is your business in HandyBob. All your jobs, customers, and quotes live here.
-                          </span>
-                        </>
-                      ) : null}
-                      <span className="text-slate-400">{user?.email || "Signed in"}</span>
-                    </div>
-                    <Link href="/settings" className="hb-button-ghost text-xs">
-                      Settings
-                    </Link>
                     <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-800 bg-slate-900 text-sm font-semibold text-white">
                       {userInitial}
                     </div>

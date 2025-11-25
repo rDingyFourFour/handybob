@@ -500,7 +500,7 @@ export default async function DashboardPage() {
               Welcome, {workspace.name ? workspace.name.split(" ")[0] : "handypeople"}
             </span>
           </div>
-          <p className="hb-muted">Today&apos;s work at a glance.</p>
+          {/* tagline removed as redundant */}
         </div>
         <Link href="/jobs/new" className="hb-button px-4 py-2 text-sm">
           New job

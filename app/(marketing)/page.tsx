@@ -86,12 +86,6 @@ function MarketingHero() {
         <Link href="/login" className="hb-button-ghost text-sm">
           Sign in
         </Link>
-        <Link
-          href="/appointments/new"
-          className="hb-button px-4 py-3 text-sm shadow-xl shadow-slate-900"
-        >
-          Book a new appointment
-        </Link>
       </div>
     </div>
   );
