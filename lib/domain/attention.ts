@@ -22,7 +22,7 @@ export type AttentionWindowCutoffs = {
   overdueInvoiceCutoff: Date;
 };
 
-export function getAttentionCutoffs(now = new Date()): AttentionWindowCutoffs {
+export async function getAttentionCutoffs(now = new Date()): Promise<AttentionWindowCutoffs> {
   return {
     newLeadWindowStart: newLeadCutoff(now),
     staleQuoteCutoff: staleQuoteCutoff(now),

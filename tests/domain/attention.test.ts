@@ -119,10 +119,10 @@ vi.mock("@/utils/supabase/server", () => ({
 }));
 
 describe("getAttentionCutoffs", () => {
-  it("calculates attention windows relative to the provided date", () => {
+  it("calculates attention windows relative to the provided date", async () => {
     const reference = new Date("2024-01-08T00:00:00.000Z");
     const { newLeadWindowStart, staleQuoteCutoff, overdueInvoiceCutoff } =
-      getAttentionCutoffs(reference);
+      await getAttentionCutoffs(reference);
 
     expect(newLeadWindowStart.toISOString().slice(0, 10)).toBe("2024-01-01");
     expect(staleQuoteCutoff.toISOString().slice(0, 10)).toBe("2024-01-05");

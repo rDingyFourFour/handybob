@@ -204,7 +204,7 @@ export default async function DashboardPage() {
     newLeadWindowStart,
     staleQuoteCutoff: quoteStaleThreshold,
     overdueInvoiceCutoff: invoiceOverdueThreshold,
-  } = getAttentionCutoffs(todayStart);
+  } = await getAttentionCutoffs(todayStart);
   // Attention cards pull:
   // - Calls needing review: calls missing transcript/summary/job_id or flagged needs_followup.
   // - Overdue invoices / stale quotes: status filters plus date thresholds above.
