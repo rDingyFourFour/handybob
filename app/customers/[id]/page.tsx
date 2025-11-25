@@ -110,9 +110,9 @@ type TimelineEntry = {
 export default async function CustomerDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const customerId = params?.id;
+  const { id: customerId } = await params;
   if (!customerId) redirect("/customers");
 
   const supabase = await createServerClient();

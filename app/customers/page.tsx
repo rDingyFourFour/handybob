@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/utils/workspaces";
+import CustomerListRow from "./components/CustomerListRow";
 
 type CustomerRow = {
   id: string;
@@ -62,31 +63,7 @@ export default async function CustomersPage() {
               </thead>
               <tbody>
                 {safeCustomers.map((customer) => (
-                  <tr key={customer.id} className="border-t border-slate-800/60">
-                    <td className="py-3">
-                      <Link
-                        href={`/customers/${customer.id}`}
-                        className="font-medium text-slate-100 hover:text-slate-50"
-                      >
-                        {customer.name || "Unnamed customer"}
-                      </Link>
-                    </td>
-                    <td className="py-3 hidden md:table-cell text-slate-400">
-                      {customer.email || "—"}
-                    </td>
-                    <td className="py-3 hidden md:table-cell text-slate-400">
-                      {customer.phone || "—"}
-                    </td>
-                    <td className="py-3 text-right text-slate-400">
-                      {customer.created_at
-                        ? new Intl.DateTimeFormat(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }).format(new Date(customer.created_at))
-                        : "Unknown"}
-                    </td>
-                  </tr>
+                  <CustomerListRow key={customer.id} customer={customer} />
                 ))}
               </tbody>
             </table>
