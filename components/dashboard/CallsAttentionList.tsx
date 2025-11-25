@@ -61,7 +61,7 @@ export function CallsAttentionList({
       }
 
       const formatted = (data ?? []).slice(0, maxItems).map<AttentionListRowData>((call) => {
-        const friendly = formatFriendlyDateTime(call.created_at, null, workspaceTimeZone);
+        const friendly = formatFriendlyDateTime(call.created_at, null, workspaceTimeZone ?? undefined);
         const relative = formatRelativeMinutesAgo(call.created_at);
         return {
           id: call.id,
