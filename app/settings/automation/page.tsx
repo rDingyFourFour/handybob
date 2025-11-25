@@ -1,5 +1,5 @@
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { saveAutomationSettings } from "./saveAutomationSettings";
 
 type SettingsRow = {

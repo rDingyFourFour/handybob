@@ -3,11 +3,11 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 
 import { sendInvoiceEmail } from "@/utils/email/sendInvoiceEmail";
-import { sendInvoiceSms } from "@/utils/sms/sendInvoiceSms";
+import { sendInvoiceSms } from "@/lib/domain/sms";
 import { createServerClient } from "@/utils/supabase/server";
 import { logMessage } from "@/utils/communications/logMessage";
 import { createSignedMediaUrl } from "@/utils/supabase/storage";
-import { getCurrentWorkspace, getWorkspaceProfile } from "@/utils/workspaces";
+import { getCurrentWorkspace, getWorkspaceProfile } from "@/lib/domain/workspaces";
 import { logAuditEvent } from "@/utils/audit/log";
 import { publicInvoiceUrl } from "@/utils/urls/public";
 import { SmsActionButton } from "@/components/sms/SmsActionButton";

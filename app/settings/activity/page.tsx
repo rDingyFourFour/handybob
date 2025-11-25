@@ -1,6 +1,6 @@
 // app/settings/activity/page.tsx
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 
 type AuditRow = {
   id: string;

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { processCallRecording } from "../processCallAction";
 import { formatDateTime } from "@/utils/timeline/formatters";
 

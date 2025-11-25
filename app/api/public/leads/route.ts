@@ -1,9 +1,9 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { classifyJobWithAi } from "@/utils/ai/classifyJob";
-import { inferAttentionSignals } from "@/utils/attention/inferAttentionSignals";
-import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
+import { classifyJobWithAi } from "@/lib/domain/jobs";
+import { inferAttentionSignals } from "@/lib/domain/calls";
+import { runLeadAutomations } from "@/lib/domain/automation";
 import { logAuditEvent } from "@/utils/audit/log";
 import { createAdminClient } from "@/utils/supabase/admin";
 

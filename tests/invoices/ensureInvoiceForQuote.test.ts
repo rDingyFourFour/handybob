@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ensureInvoiceForQuote } from "@/utils/invoices/ensureInvoiceForQuote";
+import { ensureInvoiceForQuote } from "@/lib/domain/invoices";
 
 type LineItemRow = {
   description: string;

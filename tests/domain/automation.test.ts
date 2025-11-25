@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
+import { runLeadAutomations } from "@/lib/domain/automation";
 
 type AutomationEventRow = {
   type: string;
@@ -79,7 +79,7 @@ vi.mock("@/utils/email/sendCustomerMessage", () => ({
   sendCustomerMessageEmail: () => sendEmail(),
 }));
 
-vi.mock("@/utils/sms/sendCustomerSms", () => ({
+vi.mock("@/lib/domain/sms", () => ({
   sendCustomerSms: (args: unknown) => {
     sendSms(args);
     return Promise.resolve({

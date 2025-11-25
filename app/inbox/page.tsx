@@ -2,8 +2,8 @@ import Link from "next/link";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { sendCustomerMessageEmail } from "@/utils/email/sendCustomerMessage";
-import { sendCustomerSms } from "@/utils/sms/sendCustomerSms";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { sendCustomerSms } from "@/lib/domain/sms";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { ComposeBar } from "./ComposeBar";
 
 type CustomerRow = {

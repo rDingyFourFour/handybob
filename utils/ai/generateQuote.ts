@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { ensurePricingSettings } from "@/utils/ensurePricingSettings";
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { logAuditEvent } from "@/utils/audit/log";
 
 type GeneratedQuote = {

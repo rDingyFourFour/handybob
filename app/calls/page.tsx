@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { processCallRecording } from "./processCallAction";
 import { formatDateTime, snippet } from "@/utils/timeline/formatters";
 

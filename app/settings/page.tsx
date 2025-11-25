@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { Card } from "@/components/ui/Card";
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 
 const settingsSections = [
   {

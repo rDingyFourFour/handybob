@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace, requireOwner } from "@/utils/workspaces";
+import { getCurrentWorkspace, requireOwner } from "@/lib/domain/workspaces";
 import { logAuditEvent } from "@/utils/audit/log";
 
 export async function saveAutomationSettings(formData: FormData) {

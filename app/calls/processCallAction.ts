@@ -6,10 +6,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { inferAttentionSignals } from "@/utils/attention/inferAttentionSignals";
-import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
-import { classifyJobWithAi } from "@/utils/ai/classifyJob";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { inferAttentionSignals } from "@/lib/domain/calls";
+import { runLeadAutomations } from "@/lib/domain/automation";
+import { classifyJobWithAi } from "@/lib/domain/jobs";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { logAuditEvent } from "@/utils/audit/log";
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1";

@@ -1,10 +1,10 @@
 "use server";
 
-import { buildJobTimelinePayload } from "@/utils/ai/jobTimelinePayload";
+import { buildJobTimelinePayload } from "@/lib/domain/jobs";
 import { sendCustomerMessageEmail } from "@/utils/email/sendCustomerMessage";
-import { sendCustomerSms } from "@/utils/sms/sendCustomerSms";
+import { sendCustomerSms } from "@/lib/domain/sms";
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses"; // OpenAI Responses API endpoint
 const DEFAULT_MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini"; // JSON responses, fast/cheap

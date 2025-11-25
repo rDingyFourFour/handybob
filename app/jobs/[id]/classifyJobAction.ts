@@ -3,10 +3,10 @@
 
 import { revalidatePath } from "next/cache";
 
-import { classifyJobWithAi } from "@/utils/ai/classifyJob";
+import { classifyJobWithAi } from "@/lib/domain/jobs";
 import { createServerClient } from "@/utils/supabase/server";
-import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { runLeadAutomations } from "@/lib/domain/automation";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 
 type JobRow = {
   id: string;

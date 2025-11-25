@@ -2,7 +2,7 @@
 
 import { requestAssistantReply } from "@/utils/ai/assistant";
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { snippet } from "@/utils/timeline/formatters";
 
 type CustomerAssistantState = {

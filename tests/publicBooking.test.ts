@@ -159,11 +159,11 @@ vi.mock("next/headers", () => ({
   headers: vi.fn(() => mockHeaders),
 }));
 
-vi.mock("@/utils/ai/classifyJob", () => ({
+vi.mock("@/lib/domain/jobs", () => ({
   classifyJobWithAi: vi.fn(() => ({ ai_urgency: "normal" })),
 }));
 
-vi.mock("@/utils/automation/runLeadAutomations", () => ({
+vi.mock("@/lib/domain/automation", () => ({
   runLeadAutomations: vi.fn(),
 }));
 

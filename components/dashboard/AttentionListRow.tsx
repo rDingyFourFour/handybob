@@ -3,24 +3,7 @@
 import Link from "next/link";
 
 import { dismissAttentionItem } from "@/app/actions/attention";
-
-export type AttentionAction = {
-  label: string;
-  href: string;
-  variant?: "ghost" | "solid";
-};
-
-export type AttentionListRowData = {
-  id: string;
-  primary: string;
-  secondary?: string | null;
-  tag?: string | null;
-  amount?: string;
-  meta?: string;
-  actions?: AttentionAction[];
-  dismissType?: "lead" | "quote" | "invoice" | "call";
-  href: string;
-};
+import type { AttentionListRowData } from "@/lib/domain/attention";
 
 export function AttentionListRow({ item }: { item: AttentionListRowData }) {
   return (

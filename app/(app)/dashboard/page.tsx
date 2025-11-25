@@ -1,47 +1,26 @@
 // app/page.tsx
-import nextDynamic from "next/dynamic";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Suspense } from "react";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { newLeadCutoff, overdueInvoiceCutoff, staleQuoteCutoff } from "@/utils/attention/attentionModel";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import { DEFAULT_TIMEZONE } from "@/utils/dashboard/time";
 import { AppointmentsSkeleton } from "@/components/dashboard/AppointmentsSkeleton";
 import { MessagesSkeleton } from "@/components/dashboard/MessagesSkeleton";
-import { AttentionListSkeleton } from "@/components/dashboard/AttentionListSkeleton";
 import { ActivitySkeleton } from "@/components/dashboard/ActivitySkeleton";
-
-const AppointmentsWidget = nextDynamic(() =>
-  import("@/components/dashboard/AppointmentsWidget").then((mod) => mod.AppointmentsWidget),
-);
-
-const LeadsAttentionList = nextDynamic(() =>
-  import("@/components/dashboard/LeadsAttentionList").then((mod) => mod.LeadsAttentionList),
-);
-
-const QuotesAttentionList = nextDynamic(() =>
-  import("@/components/dashboard/QuotesAttentionList").then((mod) => mod.QuotesAttentionList),
-);
-
-const InvoicesAttentionList = nextDynamic(() =>
-  import("@/components/dashboard/InvoicesAttentionList").then((mod) => mod.InvoicesAttentionList),
-);
-
-const CallsAttentionList = nextDynamic(() =>
-  import("@/components/dashboard/CallsAttentionList").then((mod) => mod.CallsAttentionList),
-);
-
-const InboxPreviewWidget = nextDynamic(() =>
-  import("@/components/dashboard/InboxPreviewWidget").then((mod) => mod.InboxPreviewWidget),
-);
-
-const RecentActivityWidget = nextDynamic(() =>
-  import("@/components/dashboard/RecentActivityWidget").then((mod) => mod.RecentActivityWidget),
-);
+import { LeadsAttentionList } from "@/components/dashboard/LeadsAttentionList";
+import { QuotesAttentionList } from "@/components/dashboard/QuotesAttentionList";
+import { InvoicesAttentionList } from "@/components/dashboard/InvoicesAttentionList";
+import { CallsAttentionList } from "@/components/dashboard/CallsAttentionList";
+import { InboxPreviewWidget } from "@/components/dashboard/InboxPreviewWidget";
+import { RecentActivityWidget } from "@/components/dashboard/RecentActivityWidget";
+import { AppointmentsWidget } from "@/components/dashboard/AppointmentsWidget";
+import { getAttentionItems } from "@/lib/domain/attention";
 
 export const dynamic = "force-dynamic";
 
@@ -53,19 +32,6 @@ type AutomationPrefs = {
 type AutomationPreferencesRow = {
   notify_urgent_leads?: boolean | null;
   show_overdue_work?: boolean | null;
-};
-
-type UrgentLeadRow = {
-  id: string;
-  title: string | null;
-  urgency: string | null;
-  source?: string | null;
-  priority?: string | null;
-  ai_urgency?: string | null;
-  attention_score?: number | null;
-  attention_reason?: string | null;
-  created_at: string | null;
-  customer: { name: string | null }[] | null;
 };
 
 type CallReviewRow = {
@@ -130,34 +96,13 @@ export async function updateAutomationPreferences(formData: FormData) {
     .select("workspace_id")
     .single();
 
-  revalidatePath("/");
+  revalidatePath("/dashboard");
 }
 
 export async function retryDashboardData() {
   "use server";
-  revalidatePath("/");
+  revalidatePath("/dashboard");
 }
-
-const marketingHighlights = [
-  "Keep quotes and invoices tidy so customers always understand what they're paying for.",
-  "Schedule calls, visits, and jobs without bouncing between calendars.",
-  "Let the AI assistant summarize conversations and flag what needs attention next.",
-];
-
-const howItWorksSteps = [
-  {
-    title: "Capture leads",
-    body: "Record calls, web form submissions, or jot them down manually so work never slips through the cracks.",
-  },
-  {
-    title: "Turn into quotes & invoices",
-    body: "Use the AI assistant to scope work and send polished quotes, then convert accepted ones into invoices.",
-  },
-  {
-    title: "Stay on top of jobs & appointments",
-    body: "Track work, calendar slots, and inbox items from the job dashboard so nothing falls behind.",
-  },
-];
 
 const onboardingSteps = [
   {
@@ -187,59 +132,13 @@ const onboardingSteps = [
   },
 ];
 
-const guestHero = (
-  <div className="flex-1 flex flex-col items-center justify-center gap-10 px-4 py-12 text-center">
-    <div className="w-full max-w-4xl space-y-6 rounded-3xl border border-slate-800 bg-slate-900/60 p-10 shadow-2xl shadow-slate-900/40">
-      <p className="text-xs uppercase tracking-[0.4em] text-slate-500">HandyBob</p>
-      <h1 className="text-4xl font-semibold text-slate-50">HandyBob</h1>
-      <p className="text-lg text-slate-400">
-        Full support office in an app for independent handypeople.
-      </p>
-      <ul className="space-y-3 text-left text-lg text-slate-200">
-        {marketingHighlights.map((highlight) => (
-          <li className="flex items-start gap-3" key={highlight}>
-            <span className="mt-1 h-2 w-2 rounded-full bg-slate-500" />
-            <span>{highlight}</span>
-          </li>
-        ))}
-      </ul>
-      <div className="flex flex-wrap justify-center gap-3">
-        <Link href="/signup" className="hb-button text-sm">
-          Create account
-        </Link>
-        <Link href="/login" className="hb-button-ghost text-sm">
-          Sign in
-        </Link>
-      </div>
-      <Link
-        href="/appointments/new"
-        className="hb-button fixed bottom-6 right-6 z-20 px-4 py-3 text-sm shadow-xl shadow-slate-900"
-      >
-        New appointment
-      </Link>
-    </div>
-    <div className="w-full max-w-4xl">
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-left text-sm text-slate-300">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">How HandyBob works</p>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          {howItWorksSteps.map((step) => (
-            <div key={step.title} className="space-y-1 rounded-xl border border-slate-800/70 bg-slate-950/20 p-4">
-              <p className="text-sm font-semibold text-slate-100">{step.title}</p>
-              <p className="text-xs text-slate-400">{step.body}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  </div>
-);
 
-export default async function HomePage() {
+export default async function DashboardPage() {
   let supabase;
   try {
     supabase = await createServerClient();
   } catch (error) {
-    console.error("[home] Failed to init Supabase client:", error);
+    console.error("[dashboard] Failed to init Supabase client:", error);
     return (
       <div className="hb-card">
         <h1>Dashboard unavailable</h1>
@@ -256,7 +155,7 @@ export default async function HomePage() {
     } = await supabase.auth.getUser();
     user = fetchedUser;
   } catch (error) {
-    console.error("[home] Failed to resolve workspace:", error);
+    console.error("[dashboard] Failed to resolve workspace:", error);
     return (
       <div className="hb-card">
         <h1>Dashboard unavailable</h1>
@@ -266,13 +165,13 @@ export default async function HomePage() {
   }
 
   if (!user) {
-    return guestHero;
+    redirect("/");
   }
 
   try {
     workspace = (await getCurrentWorkspace({ supabase })).workspace;
   } catch (error) {
-    console.error("[home] Failed to resolve workspace:", error);
+    console.error("[dashboard] Failed to resolve workspace:", error);
     return (
       <div className="hb-card">
         <h1>Dashboard unavailable</h1>
@@ -305,12 +204,7 @@ export default async function HomePage() {
   const newLeadWindowStart = newLeadCutoff(todayStart);
   const quoteStaleThreshold = staleQuoteCutoff(todayStart);
   const invoiceOverdueThreshold = overdueInvoiceCutoff(todayStart);
-  const newLeadWindowStartIso = newLeadWindowStart.toISOString();
-  const quoteStaleThresholdIso = quoteStaleThreshold.toISOString();
-  const invoiceOverdueThresholdIso = invoiceOverdueThreshold.toISOString();
   // Attention cards pull:
-  // - New leads: status=lead created within newLeadWindowStart.
-  // - Urgent leads: lead rows (status=lead) scoped to workspace, ordered by created_at; urgency surface comes from ai_urgency/urgency.
   // - Calls needing review: calls missing transcript/summary/job_id or flagged needs_followup.
   // - Overdue invoices / stale quotes: status filters plus date thresholds above.
   // Automation prefs control visibility of overdue work blocks.
@@ -321,7 +215,6 @@ export default async function HomePage() {
     paidQuotesThisMonthRes,
     paidInvoicesThisMonthRes,
     inboundMessagesRes,
-    urgentLeadsRes,
     callsNeedingReviewRes,
     overdueInvoicesRes,
     staleQuotesRes,
@@ -337,7 +230,6 @@ export default async function HomePage() {
       paidQuotesThisMonthRes,
       paidInvoicesThisMonthRes,
       inboundMessagesRes,
-      urgentLeadsRes,
       callsNeedingReviewRes,
       overdueInvoicesRes,
       staleQuotesRes,
@@ -486,7 +378,7 @@ export default async function HomePage() {
         .eq("workspace_id", workspace.id),
     ]);
   } catch (error) {
-    console.error("[home] Failed to load dashboard data:", error);
+    console.error("[dashboard] Failed to load dashboard data:", error);
     return (
       <div className="hb-card">
         <h1>Dashboard unavailable</h1>
@@ -527,7 +419,9 @@ export default async function HomePage() {
     showOverdueWork: automationPrefsRow?.show_overdue_work ?? true,
   };
 
-  const urgentLeads = (urgentLeadsRes.data ?? []) as UrgentLeadRow[];
+  const attentionItems = await getAttentionItems(workspace.id, {
+    workspaceTimeZone,
+  });
   const callsNeedingReviewRaw = (callsNeedingReviewRes.data ?? []) as CallReviewRow[];
   const callsNeedingReview = callsNeedingReviewRaw.map((call) => ({
     ...call,
@@ -591,20 +485,8 @@ export default async function HomePage() {
     callsNeedingReview.length +
     (prefs.showOverdueWork ? overdueInvoices.length + staleQuotes.length : 0);
 
-  const urgentEmergencyCount = urgentLeads.filter(
-    (lead) => (lead.ai_urgency || lead.urgency || "").toLowerCase() === "emergency",
-  ).length;
-  const leadSourceCounts = urgentLeads.reduce(
-    (acc, lead) => {
-      const src = (lead.source || "other").toLowerCase();
-      if (src === "web_form") acc.web++;
-      else if (src === "voicemail") acc.calls++;
-      else if (src === "manual") acc.manual++;
-      else acc.other++;
-      return acc;
-    },
-    { web: 0, calls: 0, manual: 0, other: 0 }
-  );
+  const urgentEmergencyCount = attentionItems.urgentEmergencyCount;
+  const leadSourceCounts = attentionItems.leadSourceCounts;
 
   return (
     <div className="space-y-6 relative">
@@ -837,44 +719,30 @@ export default async function HomePage() {
             </Link>
           </div>
           <div className="grid gap-5 xl:grid-cols-4 md:grid-cols-2">
-            <AttentionCard title="New leads (7 days)" count={leadsRes.data?.length ?? 0} href="/jobs">
-              <Suspense fallback={<AttentionListSkeleton rows={3} />}>
-                <LeadsAttentionList workspaceId={workspace.id} windowStartIso={newLeadWindowStartIso} />
-              </Suspense>
-            </AttentionCard>
-            <AttentionCard
-              title="Overdue invoices"
-              count={overdueInvoices.length}
-              href="/invoices"
-              badge="Overdue"
-              badgeClassName="border border-red-500/30 bg-red-500/10 text-red-200"
-            >
-              <Suspense fallback={<AttentionListSkeleton rows={3} />}>
-                <InvoicesAttentionList
-                  workspaceId={workspace.id}
-                  invoiceOverdueThresholdIso={invoiceOverdueThresholdIso}
-                />
-              </Suspense>
-            </AttentionCard>
-            <AttentionCard title="Quotes to follow up" count={staleQuotes.length} href="/quotes">
-              <Suspense fallback={<AttentionListSkeleton rows={3} />}>
-                <QuotesAttentionList workspaceId={workspace.id} quoteStaleThresholdIso={quoteStaleThresholdIso} />
-              </Suspense>
-            </AttentionCard>
-            <AttentionCard
-              title="Incomplete tasks"
-              count={callsNeedingReview.length}
-              href="/calls?filter=needs_processing"
-              badge="Unprocessed"
-              badgeClassName="border border-amber-500/30 bg-amber-500/10 text-amber-200"
-            >
-              <Suspense fallback={<AttentionListSkeleton rows={3} />}>
-                <CallsAttentionList
-                  workspaceId={workspace.id}
-                  workspaceTimeZone={workspaceTimeZone}
-                />
-              </Suspense>
-            </AttentionCard>
+          <AttentionCard title="New leads (7 days)" count={leadsRes.data?.length ?? 0} href="/jobs">
+            <LeadsAttentionList items={attentionItems.leads} />
+          </AttentionCard>
+          <AttentionCard
+            title="Overdue invoices"
+            count={overdueInvoices.length}
+            href="/invoices"
+            badge="Overdue"
+            badgeClassName="border border-red-500/30 bg-red-500/10 text-red-200"
+          >
+            <InvoicesAttentionList items={attentionItems.invoices} />
+          </AttentionCard>
+          <AttentionCard title="Quotes to follow up" count={staleQuotes.length} href="/quotes">
+            <QuotesAttentionList items={attentionItems.quotes} />
+          </AttentionCard>
+          <AttentionCard
+            title="Incomplete tasks"
+            count={callsNeedingReview.length}
+            href="/calls?filter=needs_processing"
+            badge="Unprocessed"
+            badgeClassName="border border-amber-500/30 bg-amber-500/10 text-amber-200"
+          >
+            <CallsAttentionList items={attentionItems.calls} />
+          </AttentionCard>
           </div>
         </div>
       </section>

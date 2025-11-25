@@ -6,7 +6,7 @@ import { AiAssistantPanel } from "@/components/AiAssistantPanel";
 import { JobFollowupHelper } from "@/components/JobFollowupHelper";
 import { JobSummaryPanel } from "@/components/JobSummaryPanel";
 import { NextActionsPanel } from "@/components/NextActionsPanel";
-import { generateQuoteForJob } from "@/utils/ai/generateQuote";
+import { generateQuoteForJob } from "@/lib/domain/quotes";
 import { createServerClient } from "@/utils/supabase/server";
 import { generateJobSummary } from "./jobSummaryAction";
 import { generateNextActions } from "./nextActionsAction";

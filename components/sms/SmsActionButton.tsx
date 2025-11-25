@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import type { OutboundSmsStatus } from "@/utils/sms/sendOutboundSms";
+import type { OutboundSmsStatus } from "@/lib/domain/sms";
 
 type SmsActionButtonProps<Args extends Record<string, unknown>> = {
   action: (args: Args) => Promise<OutboundSmsStatus>;

@@ -5,7 +5,7 @@
 
 import { createAdminClient } from "@/utils/supabase/admin";
 import { sendCustomerMessageEmail } from "@/utils/email/sendCustomerMessage";
-import { sendCustomerSms } from "@/utils/sms/sendCustomerSms";
+import { sendCustomerSms } from "@/lib/domain/sms";
 
 type LeadAutomationArgs = {
   userId: string;
@@ -61,10 +61,10 @@ export async function runLeadAutomations({
     const channel = smsEnabled ? "both" : "email";
     try {
       await sendCustomerMessageEmail({
-      to: userEmail,
-      subject,
-      body,
-    });
+        to: userEmail,
+        subject,
+        body,
+      });
       await logAutomationEvent({
         userId,
         workspaceId,

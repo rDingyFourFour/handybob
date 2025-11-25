@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { MEDIA_BUCKET_ID, createSignedMediaUrl } from "@/utils/supabase/storage";
-import { getCurrentWorkspace } from "@/utils/workspaces";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50MB, aligned with Supabase storage default
 

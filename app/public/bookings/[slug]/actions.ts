@@ -11,8 +11,8 @@ import crypto from "crypto";
 import { headers } from "next/headers";
 
 import { createAdminClient } from "@/utils/supabase/admin";
-import { classifyJobWithAi } from "@/utils/ai/classifyJob";
-import { runLeadAutomations } from "@/utils/automation/runLeadAutomations";
+import { classifyJobWithAi } from "@/lib/domain/jobs";
+import { runLeadAutomations } from "@/lib/domain/automation";
 import { sendCustomerMessageEmail } from "@/utils/email/sendCustomerMessage";
 import { validatePublicLeadSubmission } from "@/schemas/publicLead";
 
