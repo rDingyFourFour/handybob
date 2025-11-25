@@ -12,6 +12,7 @@ type SendCustomerSmsArgs = {
   body: string;
   customerId?: string | null;
   jobId?: string | null;
+  sentAt?: string;
 };
 
 export async function sendCustomerSms({
@@ -22,6 +23,7 @@ export async function sendCustomerSms({
   body,
   customerId,
   jobId,
+  sentAt,
 }: SendCustomerSmsArgs): Promise<OutboundSmsStatus> {
   return sendOutboundSms({
     supabase,
@@ -32,5 +34,6 @@ export async function sendCustomerSms({
     context: "sendCustomerSms",
     customerId,
     jobId,
+    sentAt,
   });
 }
