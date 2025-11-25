@@ -1,3 +1,6 @@
+// Call domain: uses the service-role admin client (createAdminClient) since webhooks bypass RLS.
+// Workspace identity is derived from the recorded caller/customer or legacy fallback info.
+// Public helpers: `handleTwilioVoiceEvent`, `recordLegacyInboundCall`, and `handleRecordingEvent`.
 import twilio from "twilio";
 
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -18,6 +21,12 @@ export type TwilioVoiceEvent = {
   from: string | null;
   to: string | null;
   callSid: string | null;
+};
+
+type LegacyInboundCallEvent = {
+  from?: string | null;
+  to?: string | null;
+  callSid?: string | null;
 };
 
 export type TwilioRecordingEvent = {
@@ -46,6 +55,44 @@ export async function handleTwilioVoiceEvent({ callSid, from, to }: TwilioVoiceE
   });
   response.say({ voice: "alice" }, "We did not receive a message. Goodbye.");
   return response.toString();
+}
+
+export async function recordLegacyInboundCall(event: LegacyInboundCallEvent) {
+  const supabase = createAdminClient();
+  const userId = DEFAULT_USER_ID ?? null;
+  if (!userId) {
+    console.warn("[voice-inbound] VOICE_FALLBACK_USER_ID not set; skipping call insert.");
+    return;
+  }
+
+  try {
+    const { error } = await supabase.from("calls").insert({
+      user_id: userId,
+      workspace_id: null,
+      from_number: event.from ?? null,
+      to_number: event.to ?? null,
+      twilio_call_sid: event.callSid ?? null,
+      direction: "inbound",
+      status: "inbound_voicemail",
+      started_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      console.error("[voice-inbound] Failed to insert call row:", error.message, {
+        user_id: userId,
+        callSid: event.callSid,
+      });
+    } else {
+      console.info("[voice-inbound] Call row created", {
+        user_id: userId,
+        twilio_call_sid: event.callSid,
+        from: event.from,
+      });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown";
+    console.error("[voice-inbound] Unexpected error inserting call:", message);
+  }
 }
 
 export async function handleRecordingEvent(event: TwilioRecordingEvent) {
@@ -200,6 +247,66 @@ function buildRecordingAck() {
   const response = new twilio.twiml.VoiceResponse();
   response.say({ voice: "alice" }, "Thanks. We received your voicemail.");
   return response.toString();
+}
+
+export class RecordingCallbackError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+type RecordingCallbackArgs = {
+  callSid: string;
+  recordingUrl: string;
+  durationSeconds?: number | null;
+};
+
+export async function attachRecordingToCall({
+  callSid,
+  recordingUrl,
+  durationSeconds,
+}: RecordingCallbackArgs): Promise<string> {
+  const supabase = createAdminClient();
+  const canonicalUrl = recordingUrl.endsWith(".mp3") ? recordingUrl : `${recordingUrl}.mp3`;
+
+  const { data: existingCall, error: fetchError } = await supabase
+    .from("calls")
+    .select("id")
+    .eq("twilio_call_sid", callSid)
+    .maybeSingle();
+
+  if (fetchError) {
+    console.error("[voice-recording] Failed to fetch call by CallSid:", fetchError.message);
+    throw new RecordingCallbackError("Database error", 500);
+  }
+
+  if (!existingCall?.id) {
+    console.warn("[voice-recording] No call found for CallSid", callSid);
+    throw new RecordingCallbackError("Call not found", 404);
+  }
+
+  const { error: updateError } = await supabase
+    .from("calls")
+    .update({
+      recording_url: canonicalUrl,
+      status: "voicemail_recorded",
+      duration_seconds: durationSeconds ?? null,
+    })
+    .eq("id", existingCall.id);
+
+  if (updateError) {
+    console.error("[voice-recording] Failed to update call with recording:", updateError.message);
+    throw new RecordingCallbackError("Failed to attach recording", 500);
+  }
+
+  console.info("[voice-recording] Attached recording to call", {
+    call_id: existingCall.id,
+    twilio_call_sid: callSid,
+  });
+  return existingCall.id;
 }
 
 async function findCustomerByPhone(supabase: ReturnType<typeof createAdminClient>, phone: string | null) {

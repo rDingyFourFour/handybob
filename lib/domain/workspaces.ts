@@ -1,3 +1,5 @@
+"// Workspace domain: centralizes RLS-aware membership resolution via createServerClient. All helpers expect to run with an authenticated user."
+"// Entry points: `getCurrentWorkspace`, `requireOwner`, `getWorkspaceProfile`, and slug helpers rely on the current user's workspace membership."
 import crypto from "crypto";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";

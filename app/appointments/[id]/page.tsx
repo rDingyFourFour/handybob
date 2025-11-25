@@ -2,6 +2,7 @@
 import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 
 type AppointmentWithRelations = {
   id: string;
@@ -27,11 +28,7 @@ type JobOption = {
 async function updateAppointmentAction(formData: FormData) {
   "use server";
 
-  const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase, workspace } = await getAppointmentContext();
 
   const apptId = String(formData.get("appointment_id"));
   const title = String(formData.get("title") || "").trim();
@@ -52,7 +49,8 @@ async function updateAppointmentAction(formData: FormData) {
       notes: notes || null,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", apptId);
+    .eq("id", apptId)
+    .eq("workspace_id", workspace.id);
 
   if (error) {
     throw new Error(error.message);
@@ -64,15 +62,21 @@ async function updateAppointmentAction(formData: FormData) {
 async function deleteAppointmentAction(formData: FormData) {
   "use server";
 
-  const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase, workspace } = await getAppointmentContext();
 
   const apptId = String(formData.get("appointment_id"));
-  await supabase.from("appointments").delete().eq("id", apptId);
+  await supabase
+    .from("appointments")
+    .delete()
+    .eq("id", apptId)
+    .eq("workspace_id", workspace.id);
   redirect("/appointments");
+}
+
+async function getAppointmentContext() {
+  const supabase = await createServerClient();
+  const { workspace } = await getCurrentWorkspace({ supabase });
+  return { supabase, workspace };
 }
 
 export default async function AppointmentDetailPage({
@@ -81,11 +85,7 @@ export default async function AppointmentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase, workspace } = await getAppointmentContext();
 
   const [{ data: appt }, { data: jobs }] = await Promise.all([
     supabase
@@ -102,9 +102,14 @@ export default async function AppointmentDetailPage({
           jobs ( id, title )
         `
       )
+      .eq("workspace_id", workspace.id)
       .eq("id", id)
       .maybeSingle(),
-    supabase.from("jobs").select("id, title").order("title", { ascending: true }),
+    supabase
+      .from("jobs")
+      .select("id, title")
+      .eq("workspace_id", workspace.id)
+      .order("title", { ascending: true }),
   ]);
 
   const appointment = appt as AppointmentWithRelations | null;

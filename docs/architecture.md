@@ -3,15 +3,20 @@
 ## High-level platform
 - **Next.js App Router** powers the whole experience: `app/layout.tsx` defines the root shell (global fonts, workspace-aware nav, authenticated vs. marketing banners), and most user features live as server/rsc-driven routes under `app/*`.  
 - **Supabase** is the single source of truth for workspace, customer, job/quote/invoice, and communication data. Shared helpers like `createServerClient` (`utils/supabase/server.ts`) and `getCurrentWorkspace` (`lib/domain/workspaces.ts`) encapsulate auth-aware context for every server component or action.
-- **Domain services** under `lib/domain/*` (attention, automation, payments, invoices, SMS, calls, etc.) centralize business logic so server routes call shared helpers rather than duplicating queries.
+- **Domain services layer** under `lib/domain/*` now hosts attention, automation, payments, invoices, SMS, calls, etc., so routes call shared helpers instead of duplicating expensive queries. Each module exposes the main entry points (e.g., `lib/domain/attention.ts#getAttentionItems`, `lib/domain/payments.ts#createPaymentLinkForQuote`) and documents whether it runs under RLS (`createServerClient`) or the service-role admin client (`createAdminClient`).
 
 ## Routing and entry points
 - `app/layout.tsx` wraps every route with the branded header, workspace summaries, and responsive navigation (desktop nav + `components/ui/MobileNav`). It fetches the Supabase user/workspace on the server so the header can show workspace info and sign-in CTAs.
 - Marketing and authenticated dashboards now split under App Router groups: `app/(marketing)/page.tsx` renders the unauthenticated hero while `/dashboard` lives in `app/(app)/dashboard/page.tsx`, which loads Supabase helpers, the new attention service, and dynamic widgets (`components/dashboard/*`) plus server actions (`updateAutomationPreferences`, `retryDashboardData`).
 - Feature slices (`/customers`, `/jobs`, `/invoices`, `/quotes`, `/calls`, `/appointments`) live under `app/<feature>`. Many include nested dynamic routes (e.g., `app/customers/[id]/page.tsx`) that query Supabase, assemble timeline data, and render assistant or timeline panels (`components/CustomerSummaryPanel`, `CustomerCheckinHelper`, `AiAssistantPanel`).
 - Public and webhook surfaces live under `app/public` and `app/api/*` respectively (e.g., Stripe webhooks, Twilio voice/webhook handlers, public quotes/invoices). Those routes typically use service-role Supabase clients that bypass RLS for background jobs (see `supabase/migrations/*` for schema hints).
+- **Public vs internal route groups**: public surfaces such as `app/public/quotes/[token]/page.tsx`, `app/public/invoices/[token]/page.tsx`, and public lead/booking forms use slug/token-based workspace resolution and the admin client; internal feature routes rely on `createServerClient`/RLS and never leak secrets to the client.
+
+-## Domain services layer
+- Each `lib/domain/*` module documents whether it runs under RLS or the service-role admin client and exports the entry points UI/server routes should call (e.g., `lib/domain/attention.ts#getAttentionItems`, `lib/domain/payments.ts#handleStripeEvent`, `lib/domain/calls.ts#handleRecordingEvent`). Keeping SQL and business logic here prevents duplication and makes targeted Vitest coverage easier.
 
 ## Data access and utilities
+- Most server components use `createServerClient` + `getCurrentWorkspace` or domain helpers from `utils/` and `lib/domain/` to scope data to the current workspace (`workspace_id = workspace.id`). Common utility folders include:
 - Most server components use `createServerClient` + `getCurrentWorkspace` or domain helpers from `utils/` and `lib/domain/` to scope data to the current workspace (`workspace_id = workspace.id`). Common utility folders include:
   - `utils/attention/`: helper rules for highlighting urgent leads/overdue work (`newLeadCutoff`, `staleQuoteCutoff`, etc.).
   - `lib/domain/attention.ts`: consolidates attention-state SQL queries for leads/quotes/invoices/calls plus the actionable `getAttentionItems` used by the dashboard.
@@ -35,8 +40,12 @@
 - **Actions** (server actions declared with `"use server"`) appear in feature pages and respect Next.js data-flow (e.g., forms that update automation preferences call Supabase and revalidate paths).
 
 ## Testing/dev workflows
-- `npm run dev` / `npm run build` / `npm run lint` / `npm run test` (Vitest) are defined in `package.json`. Tests live under `tests/` (integration suites) with the new `tests/domain/` folder keeping unit coverage for the domain helpers.
+- `npm run dev` / `npm run build` / `npm run lint` / `npm run test` (Vitest) are defined in `package.json`. Tests live under `tests/` (integration suites such as `tests/publicBooking.test.ts` and `tests/voice/*`) while `tests/domain/` focuses on targeted helpers (`lib/domain/automation.ts`, `calls.ts`, `attention.ts`, etc.).
 - Linting uses `eslint` (per `eslint.config.mjs`). Tailwind v4 + PostCSS pipeline is configured with `postcss.config.mjs`.  
+
+## Testing strategy: domain vs integration tests
+- **Domain tests** (`tests/domain/*`) validate reusable helpers (payments, invoices, calls, attention, quotes, SMS) without spinning up routes or API layers.
+- **Integration/webhook tests** (`tests/publicBooking.test.ts`, `tests/voice/*`, etc.) exercise full flows from HTTP entrypoints through Supabase/Twilio helpers when mocking upstream providers becomes unwieldy.
 
 ## How to extend
 1. **Add routes** inside `app/<feature>`; keep server components, metadata, and layout logic close to the data fetch code.
@@ -49,3 +58,15 @@
 - Next.js App Router entrypoints: `app/layout.tsx`, `app/page.tsx`  
 - Shared components: `components/**/*`, especially `components/dashboard`, `components/ui`, `components/Customer*`  
 - Utilities: `utils/*` (supabase clients, timeline formatters, attention models)
+
+## Integrations & env knobs
+
+| Integration | Required env variables | Primary runtime |
+| --- | --- | --- |
+| Supabase | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Authenticated routes (`createServerClient`), service/admin helpers (`createAdminClient`), and all domain helpers that hit Supabase. |
+| Stripe | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | `lib/domain/payments.ts` produces payment links and updates quotes; `app/api/stripe/webhook/route.ts` validates signatures and dispatches `handleStripeEvent`. |
+| Twilio | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `VOICE_FALLBACK_USER_ID`, `VOICE_RECORDING_CALLBACK_URL`, `ENABLE_AUTO_CALL_PROCESSING` | `app/api/webhooks/voice/route.ts`, `app/api/voice/*`, `lib/domain/calls.ts`, and `utils/sms/*` only run on the server after signature validation. |
+| Resend | `RESEND_API_KEY` (optional `QUOTE_FROM_EMAIL`) | `utils/email/*` helpers that send quotes, invoices, receipts, and public lead confirmations. |
+| OpenAI | `OPENAI_API_KEY` and optional `OPENAI_MODEL` | `lib/domain/calls.ts` (transcription, classification) plus `utils/ai/*` helpers such as `generateQuoteForJob`. |
+
+See `.env.example` for concrete placeholder values and guidance when bootstrapping a new environment—never check real secret values into source control, and keep these env vars limited to server-side code paths.

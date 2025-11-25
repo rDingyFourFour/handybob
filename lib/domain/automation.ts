@@ -1,7 +1,5 @@
-// utils/automation/runLeadAutomations.ts
-// Basic rule-based automation engine (v1):
-// - If a new lead is marked ai_urgency='emergency', alert the user based on their automation_settings.
-// This is intentionally simple and server-side; no user-authored rules yet.
+// Automation domain: runs on the service-role admin client so it bypasses RLS for background alerts.
+// Public entry point: `runLeadAutomations` inspects workspace automation_settings and sends email/SMS events via `automation_events`.
 
 import { createAdminClient } from "@/utils/supabase/admin";
 import { sendCustomerMessageEmail } from "@/utils/email/sendCustomerMessage";

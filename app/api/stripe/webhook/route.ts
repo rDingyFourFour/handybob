@@ -1,3 +1,4 @@
+// Stripe webhook: validates `checkout.session.completed` signatures and forwards normalized events to `handleStripeEvent`.
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 

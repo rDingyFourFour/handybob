@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 
 type CalendarAppointment = {
   id: string;
@@ -29,10 +29,7 @@ function buildMonthDays(date: Date) {
 
 export default async function CalendarPage() {
   const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -48,6 +45,7 @@ export default async function CalendarPage() {
         jobs ( title )
       `
     )
+    .eq("workspace_id", workspace.id)
     .gte("start_time", monthStart.toISOString())
     .lt("start_time", nextMonthStart.toISOString())
     .order("start_time", { ascending: true });

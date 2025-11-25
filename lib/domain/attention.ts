@@ -1,5 +1,8 @@
 "use server";
 
+// Attention domain helpers: run under RLS via createServerClient but require callers to pass a workspace_id so queries stay scoped.
+// Entry points: `getAttentionItems(workspaceId)` and `getAttentionCutoffs(now)` keep dashboard cutoffs centralized.
+
 import { formatCurrency } from "@/utils/timeline/formatters";
 import { formatFriendlyDateTime, formatRelativeMinutesAgo, daysSince } from "@/utils/dashboard/time";
 import { formatLeadSourceLabel } from "@/utils/dashboard/leads";
@@ -12,6 +15,20 @@ const ATTENTION_WINDOWS = {
   QUOTE_STALE_DAYS: 3,
   INVOICE_OVERDUE_GRACE_DAYS: 0,
 };
+
+export type AttentionWindowCutoffs = {
+  newLeadWindowStart: Date;
+  staleQuoteCutoff: Date;
+  overdueInvoiceCutoff: Date;
+};
+
+export function getAttentionCutoffs(now = new Date()): AttentionWindowCutoffs {
+  return {
+    newLeadWindowStart: newLeadCutoff(now),
+    staleQuoteCutoff: staleQuoteCutoff(now),
+    overdueInvoiceCutoff: overdueInvoiceCutoff(now),
+  };
+}
 
 export type AttentionCategoryKey =
   | "new_leads"

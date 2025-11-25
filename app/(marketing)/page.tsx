@@ -1,3 +1,4 @@
+// Public marketing shell; assumes no authenticated user (redirects signed-in visitors) and only renders marketing content.
 import Link from "next/link";
 import { redirect } from "next/navigation";
 

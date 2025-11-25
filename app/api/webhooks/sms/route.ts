@@ -1,5 +1,8 @@
+// Twilio SMS webhook: validates the request signature and hands SMS payload handling (logging + placeholder response) to `handleInboundSms`.
 import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
+
+import { handleInboundSms } from "@/lib/domain/sms";
 
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_SIGNATURE_HEADER = "x-twilio-signature";
@@ -57,18 +60,13 @@ export async function POST(req: NextRequest) {
   const toNumber = params.To ?? "unknown";
   const body = params.Body ?? "";
 
-  console.warn("[sms-webhook] Inbound SMS received but not yet supported:", {
+  const responseXml = await handleInboundSms({
     from: fromNumber,
     to: toNumber,
     body,
   });
 
-  const response = new twilio.twiml.MessagingResponse();
-  response.message(
-    "Thanks for messaging HandyBob. We aren’t yet processing inbound SMS replies. This is a placeholder response.",
-  );
-
-  return new NextResponse(response.toString(), {
+  return new NextResponse(responseXml, {
     status: 200,
     headers: { "Content-Type": "text/xml" },
   });

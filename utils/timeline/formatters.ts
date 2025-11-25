@@ -1,5 +1,5 @@
 // Shared helpers for formatting timeline data, currency, and quick snippets.
-// Used by job/customer/call pages (server or client) so every view stays consistent.
+// This is the single source of truth for event ordering and display used by jobs, customers, and dashboards.
 export function formatDateTime(date: string | null | undefined, fallback = "") {
   if (!date) {
     return fallback;

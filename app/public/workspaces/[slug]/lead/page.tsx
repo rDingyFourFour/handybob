@@ -1,3 +1,4 @@
+// Public lead capture page: resolves workspace by slug via admin client, renders lead form without assuming any auth.
 import { notFound } from "next/navigation";
 
 import { createAdminClient } from "@/utils/supabase/admin";

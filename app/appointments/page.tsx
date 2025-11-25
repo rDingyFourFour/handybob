@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { HintBox } from "@/components/ui/HintBox";
 
 type AppointmentListItem = {
@@ -43,11 +43,7 @@ type AppointmentListItem = {
 async function updateAppointmentStatusAction(formData: FormData) {
   "use server";
 
-  const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase, workspace } = await getAppointmentsContext();
 
   const apptId = String(formData.get("appointment_id") || "");
   const nextStatus = String(formData.get("status") || "");
@@ -60,7 +56,8 @@ async function updateAppointmentStatusAction(formData: FormData) {
   await supabase
     .from("appointments")
     .update({ status: nextStatus, updated_at: new Date().toISOString() })
-    .eq("id", apptId);
+    .eq("id", apptId)
+    .eq("workspace_id", workspace.id);
 
   // Future Google Calendar sync point: when status changes, push updates to the
   // linked Google event (external_event_id) and listen for inbound changes via
@@ -69,16 +66,18 @@ async function updateAppointmentStatusAction(formData: FormData) {
   revalidatePath("/appointments");
 }
 
+async function getAppointmentsContext() {
+  const supabase = await createServerClient();
+  const { workspace } = await getCurrentWorkspace({ supabase });
+  return { supabase, workspace };
+}
+
 export default async function AppointmentsPage({
   searchParams,
 }: {
   searchParams: Promise<{ job_id?: string }>;
 }) {
-  const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase, workspace } = await getAppointmentsContext();
 
   const resolvedSearch = await searchParams;
   const filterJobId = resolvedSearch?.job_id?.trim() || null;
@@ -101,6 +100,8 @@ export default async function AppointmentsPage({
   if (filterJobId) {
     appointmentsQuery = appointmentsQuery.eq("job_id", filterJobId);
   }
+
+  appointmentsQuery = appointmentsQuery.eq("workspace_id", workspace.id);
 
   const { data: appts, error } = await appointmentsQuery;
 

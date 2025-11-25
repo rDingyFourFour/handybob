@@ -1,4 +1,4 @@
-// app/page.tsx
+// Authenticated dashboard page; expects a signed-in user and loads workspace context via createServerClient + getCurrentWorkspace.
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Suspense } from "react";
@@ -7,7 +7,6 @@ import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
-import { newLeadCutoff, overdueInvoiceCutoff, staleQuoteCutoff } from "@/utils/attention/attentionModel";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import { DEFAULT_TIMEZONE } from "@/utils/dashboard/time";
 import { AppointmentsSkeleton } from "@/components/dashboard/AppointmentsSkeleton";
@@ -20,7 +19,7 @@ import { CallsAttentionList } from "@/components/dashboard/CallsAttentionList";
 import { InboxPreviewWidget } from "@/components/dashboard/InboxPreviewWidget";
 import { RecentActivityWidget } from "@/components/dashboard/RecentActivityWidget";
 import { AppointmentsWidget } from "@/components/dashboard/AppointmentsWidget";
-import { getAttentionItems } from "@/lib/domain/attention";
+import { getAttentionItems, getAttentionCutoffs } from "@/lib/domain/attention";
 
 export const dynamic = "force-dynamic";
 
@@ -200,10 +199,12 @@ export default async function DashboardPage() {
   const nextMonthStart = new Date(monthStart);
   nextMonthStart.setMonth(monthStart.getMonth() + 1);
 
-  // Attention model cutoffs (see utils/attention/attentionModel.ts)
-  const newLeadWindowStart = newLeadCutoff(todayStart);
-  const quoteStaleThreshold = staleQuoteCutoff(todayStart);
-  const invoiceOverdueThreshold = overdueInvoiceCutoff(todayStart);
+  // Attention model cutoffs (centralized in lib/domain/attention)
+  const {
+    newLeadWindowStart,
+    staleQuoteCutoff: quoteStaleThreshold,
+    overdueInvoiceCutoff: invoiceOverdueThreshold,
+  } = getAttentionCutoffs(todayStart);
   // Attention cards pull:
   // - Calls needing review: calls missing transcript/summary/job_id or flagged needs_followup.
   // - Overdue invoices / stale quotes: status filters plus date thresholds above.

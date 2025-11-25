@@ -5,6 +5,7 @@ import { AiAssistantPanel } from "@/components/AiAssistantPanel";
 import { CustomerCheckinHelper } from "@/components/CustomerCheckinHelper";
 import { CustomerSummaryPanel } from "@/components/CustomerSummaryPanel";
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import {
   generateCustomerCheckinDraft,
   generateCustomerSummary,
@@ -106,6 +107,12 @@ type TimelineEntry = {
   recordingUrl?: string | null;
 };
 
+async function getCustomerContext() {
+  const supabase = await createServerClient();
+  const { workspace } = await getCurrentWorkspace({ supabase });
+  return { supabase, workspace };
+}
+
 
 export default async function CustomerDetailPage({
   params,
@@ -115,15 +122,12 @@ export default async function CustomerDetailPage({
   const { id: customerId } = await params;
   if (!customerId) redirect("/customers");
 
-  const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase, workspace } = await getCustomerContext();
 
   const { data: customer } = await supabase
     .from("customers")
     .select("*")
+    .eq("workspace_id", workspace.id)
     .eq("id", customerId)
     .single();
 
@@ -132,6 +136,7 @@ export default async function CustomerDetailPage({
   const { data: jobs } = await supabase
     .from("jobs")
     .select("id, title, status, urgency, created_at")
+    .eq("workspace_id", workspace.id)
     .eq("customer_id", customerId)
     .order("created_at", { ascending: false });
 
@@ -146,29 +151,34 @@ export default async function CustomerDetailPage({
         ? supabase
             .from("quotes")
             .select("id, status, total, created_at, updated_at, accepted_at, paid_at, job_id")
+            .eq("workspace_id", workspace.id)
             .in("job_id", jobIds)
         : { data: [], error: null },
       jobIds.length
         ? supabase
             .from("invoices")
             .select("id, invoice_number, status, total, created_at, issued_at, paid_at, job_id")
+            .eq("workspace_id", workspace.id)
             .in("job_id", jobIds)
         : { data: [], error: null },
       jobIds.length
         ? supabase
             .from("appointments")
             .select("id, title, start_time, status, location, job_id")
+            .eq("workspace_id", workspace.id)
             .in("job_id", jobIds)
         : { data: [], error: null },
       supabase
         .from("messages")
         .select("id, job_id, direction, channel, via, subject, body, status, created_at, sent_at")
+        .eq("workspace_id", workspace.id)
         .eq("customer_id", customerId)
         .order("created_at", { ascending: false })
         .limit(200),
       supabase
         .from("calls")
         .select("id, job_id, direction, status, started_at, created_at, duration_seconds, summary, ai_summary, transcript, recording_url, from_number")
+        .eq("workspace_id", workspace.id)
         .eq("customer_id", customerId)
         .order("created_at", { ascending: false })
         .limit(200),

@@ -1,9 +1,9 @@
 // app/jobs/page.tsx
 import Image from "next/image";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { HintBox } from "@/components/ui/HintBox";
 import { createSignedMediaUrl } from "@/utils/supabase/storage";
 
@@ -50,10 +50,7 @@ export default async function JobsPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const resolvedSearchParams = await searchParams;
   const statusFilter = getParam(resolvedSearchParams, "status") ?? "all";
@@ -64,6 +61,7 @@ export default async function JobsPage({
   let jobsQuery = supabase
     .from("jobs")
     .select("id, title, status, urgency, source, ai_category, ai_urgency, created_at, customer:customers(name)")
+    .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: false })
     .limit(50);
 
@@ -104,6 +102,7 @@ export default async function JobsPage({
     const { data: mediaRows } = await supabase
       .from("media")
       .select("id, job_id, storage_path, bucket_id, url, mime_type")
+      .eq("workspace_id", workspace.id)
       .in("job_id", jobIds)
       .order("created_at", { ascending: false });
 

@@ -1,4 +1,4 @@
-// app/public/invoices/[token]/page.tsx
+// Public invoice page: uses the invoice token + admin client; exposes only customer-visible fields without auth.
 import Image from "next/image";
 import { notFound } from "next/navigation";
 

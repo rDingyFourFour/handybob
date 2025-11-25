@@ -1,5 +1,7 @@
 "use server";
 
+// SMS domain: outbound helpers expect the caller to pass a supabase client operating under RLS so workspace_id stays scoped.
+// Inbound handlers (`handleInboundSms`) only touch Twilio/Twiml for future work; logging occurs at the call site.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import twilio from "twilio";
 
@@ -252,4 +254,23 @@ export async function sendInvoiceSms({
     quoteId,
     invoiceId,
   });
+}
+
+export type InboundSmsArgs = {
+  from: string;
+  to: string;
+  body: string;
+};
+
+export async function handleInboundSms({ from, to, body }: InboundSmsArgs) {
+  console.warn("[sms-webhook] Inbound SMS received but not yet supported:", {
+    from,
+    to,
+    body,
+  });
+  const response = new twilio.twiml.MessagingResponse();
+  response.message(
+    "Thanks for messaging HandyBob. We aren’t yet processing inbound SMS replies. This is a placeholder response.",
+  );
+  return response.toString();
 }

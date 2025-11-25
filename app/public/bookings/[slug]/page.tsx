@@ -1,3 +1,4 @@
+// Public booking page: workspace slug resolves via admin client, no auth, only exposes public-friendly brand info and form.
 import { createAdminClient } from "@/utils/supabase/admin";
 import { BookingForm } from "./BookingForm";
 

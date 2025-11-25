@@ -1,5 +1,7 @@
 "use server";
 
+// Invoice domain: runs under RLS via createServerClient/getCurrentWorkspace so all inserts/updates respect workspace_id.
+// Entry points: `createInvoiceFromQuote` (server action) and `ensureInvoiceForQuote` (called from webhook handlers).
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 

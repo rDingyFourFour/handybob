@@ -1,4 +1,4 @@
-// app/public/quotes/[token]/page.tsx
+// Public quote page: token-based workspace resolution via admin client, no auth required, only surface customer-friendly data.
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/utils/supabase/admin";

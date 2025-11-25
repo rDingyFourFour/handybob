@@ -1,4 +1,5 @@
-// utils/payments/createPaymentLink.ts
+// Payment domain: `createPaymentLinkForQuote` runs under RLS via createServerClient/getCurrentWorkspace so workspace_id is enforced.
+// `handleStripeEvent` runs on the supplied service-role client (webhook) and derives the workspace_id from Stripe metadata before changing quotes.
 "use server";
 
 import Stripe from "stripe";

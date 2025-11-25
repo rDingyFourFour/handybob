@@ -22,6 +22,7 @@ import {
   sortTimelineEntries,
 } from "@/utils/timeline/formatters";
 import { logServerError } from "@/utils/errors/logServerError";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 
 type QuoteRow = {
   id: string;
@@ -144,17 +145,15 @@ export default async function JobDetailPage({
   }
 
   const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   try {
     const { data: job, error: jobError } = await supabase
-    .from("jobs")
-    .select("*, customers(*)")
-    .eq("id", jobId)
-    .single();
+      .from("jobs")
+      .select("*, customers(*)")
+      .eq("workspace_id", workspace.id)
+      .eq("id", jobId)
+      .single();
 
   if (jobError) throw new Error(jobError.message);
   if (!job) redirect("/jobs");
@@ -164,28 +163,33 @@ export default async function JobDetailPage({
       supabase
         .from("quotes")
         .select("id, status, total, created_at, updated_at, accepted_at, paid_at")
+        .eq("workspace_id", workspace.id)
         .eq("job_id", jobId)
         .order("created_at", { ascending: false }),
       supabase
         .from("appointments")
         .select("id, title, start_time, status, location")
+        .eq("workspace_id", workspace.id)
         .eq("job_id", jobId)
         .order("start_time", { ascending: false }),
       supabase
         .from("messages")
         .select("id, customer_id, channel, direction, via, subject, body, status, created_at, sent_at")
+        .eq("workspace_id", workspace.id)
         .eq("job_id", jobId)
         .order("created_at", { ascending: false })
         .limit(50),
       supabase
         .from("calls")
         .select("id, direction, status, started_at, created_at, duration_seconds, summary, ai_summary, transcript, recording_url, from_number, ai_category, ai_urgency, ai_confidence")
+        .eq("workspace_id", workspace.id)
         .eq("job_id", jobId)
         .order("created_at", { ascending: false })
         .limit(50),
       supabase
         .from("invoices")
         .select("id, invoice_number, status, total, created_at, issued_at, paid_at")
+        .eq("workspace_id", workspace.id)
         .eq("job_id", jobId)
         .order("created_at", { ascending: false }),
     ]);
@@ -204,6 +208,7 @@ export default async function JobDetailPage({
     const { data: paymentRows } = await supabase
       .from("quote_payments")
       .select("id, quote_id, amount, currency, created_at")
+      .eq("workspace_id", workspace.id)
       .in("quote_id", quoteIds)
       .order("created_at", { ascending: false });
     payments = (paymentRows ?? []) as PaymentRow[];
@@ -212,6 +217,7 @@ export default async function JobDetailPage({
   const { data: mediaRowsRaw, error: mediaError } = await supabase
     .from("media")
     .select("id, bucket_id, storage_path, file_name, mime_type, created_at, url, caption, kind, quote_id, invoice_id, is_public")
+    .eq("workspace_id", workspace.id)
     .eq("job_id", jobId)
     .order("created_at", { ascending: false });
 

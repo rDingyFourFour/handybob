@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { HintBox } from "@/components/ui/HintBox";
 
 type InvoiceListItem = {
@@ -15,14 +15,12 @@ type InvoiceListItem = {
 
 export default async function InvoicesPage() {
   const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: invoices, error } = await supabase
     .from("invoices")
     .select("id, invoice_number, status, total, due_at, issued_at")
+    .eq("workspace_id", workspace.id)
     .order("issued_at", { ascending: false });
 
   const safeInvoices = (invoices ?? []) as InvoiceListItem[];

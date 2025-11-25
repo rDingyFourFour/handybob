@@ -1,3 +1,4 @@
+// Root layout: resolves Supabase session/workspace on the server once and chooses marketing vs app chrome based on auth state.
 import type { Metadata } from "next";
 import "./globals.css";
 import Link from "next/link";

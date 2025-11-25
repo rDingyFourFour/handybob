@@ -1,6 +1,7 @@
+// Twilio Voice recording callback: validates payload, delegates call lookup/recording attach to `attachRecordingToCall`, and optionally triggers auto-processing.
 import { NextRequest, NextResponse } from "next/server";
 
-import { createAdminClient } from "@/utils/supabase/admin";
+import { attachRecordingToCall, RecordingCallbackError } from "@/lib/domain/calls";
 import { processCallById } from "@/app/calls/processCallAction";
 
 // Recording status callback:
@@ -10,7 +11,6 @@ import { processCallById } from "@/app/calls/processCallAction";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Handler for Twilio recording callbacks: validates the minimal payload, updates the call row, and optionally triggers auto-processing.
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const callSid = getString(formData, "CallSid");
@@ -22,52 +22,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing CallSid or RecordingUrl" }, { status: 400 });
   }
 
-  const supabase = createAdminClient();
-  const canonicalUrl = recordingUrl.endsWith(".mp3") ? recordingUrl : `${recordingUrl}.mp3`;
-
   try {
-    const { data: existingCall, error: fetchError } = await supabase
-      .from("calls")
-      .select("id")
-      .eq("twilio_call_sid", callSid)
-      .maybeSingle();
-
-    if (fetchError) {
-      console.error("[voice-recording] Failed to fetch call by CallSid:", fetchError.message);
-      return NextResponse.json({ error: "Database error" }, { status: 500 });
-    }
-
-    if (!existingCall?.id) {
-      console.warn("[voice-recording] No call found for CallSid", callSid);
-      return NextResponse.json({ error: "Call not found" }, { status: 404 });
-    }
-
-    const { error: updateError } = await supabase
-      .from("calls")
-      .update({
-        recording_url: canonicalUrl,
-        status: "voicemail_recorded",
-        duration_seconds: parseInt(duration ?? "0", 10) || null,
-      })
-      .eq("id", existingCall.id);
-
-    if (updateError) {
-      console.error("[voice-recording] Failed to update call with recording:", updateError.message);
-      return NextResponse.json({ error: "Failed to attach recording" }, { status: 500 });
-    }
-
-    console.info("[voice-recording] Attached recording to call", {
-      call_id: existingCall.id,
-      twilio_call_sid: callSid,
+    const callId = await attachRecordingToCall({
+      callSid,
+      recordingUrl,
+      durationSeconds: parseInt(duration ?? "0", 10) || null,
     });
+
     if (process.env.ENABLE_AUTO_CALL_PROCESSING === "true") {
-      processCallById(existingCall.id).catch((err) =>
+      processCallById(callId).catch((err) =>
         console.error("[voice-recording] Auto-processing failed:", err instanceof Error ? err.message : err),
       );
     }
 
     return NextResponse.json({ ok: true });
   } catch (error) {
+    if (error instanceof RecordingCallbackError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "unknown";
     console.error("[voice-recording] Unexpected error:", message);
     return NextResponse.json({ error: message }, { status: 500 });

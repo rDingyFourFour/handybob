@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { HintBox } from "@/components/ui/HintBox";
 
 type QuoteListItem = {
@@ -24,10 +24,7 @@ function extractJobTitle(job: QuoteListItem["jobs"]) {
 
 export default async function QuotesPage() {
   const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: quotes, error } = await supabase
     .from("quotes")
@@ -37,11 +34,12 @@ export default async function QuotesPage() {
         status,
         total,
         created_at,
-        jobs (
-          title
-        )
-      `,
+      jobs (
+        title
+      )
+    `,
     )
+    .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: false });
 
   const safeQuotes = (quotes ?? []) as QuoteListItem[];
