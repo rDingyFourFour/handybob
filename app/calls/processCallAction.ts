@@ -293,7 +293,7 @@ async function ensureJobForCall({
     customer_id?: string | null;
   };
   transcript: string;
-  summary: string;
+  summary: string | null;
   workspaceId: string | null;
 }) {
   // Future: enrich job with AI-derived category/urgency/location once we trust the model outputs.
