@@ -15,39 +15,32 @@ import { MessagesSkeleton } from "@/components/dashboard/MessagesSkeleton";
 import { AttentionListSkeleton } from "@/components/dashboard/AttentionListSkeleton";
 import { ActivitySkeleton } from "@/components/dashboard/ActivitySkeleton";
 
-const AppointmentsWidget = nextDynamic(
-  () => import("@/components/dashboard/AppointmentsWidget").then((mod) => mod.AppointmentsWidget),
-  { suspense: true }
+const AppointmentsWidget = nextDynamic(() =>
+  import("@/components/dashboard/AppointmentsWidget").then((mod) => mod.AppointmentsWidget),
 );
 
-const LeadsAttentionList = nextDynamic(
-  () => import("@/components/dashboard/LeadsAttentionList").then((mod) => mod.LeadsAttentionList),
-  { suspense: true }
+const LeadsAttentionList = nextDynamic(() =>
+  import("@/components/dashboard/LeadsAttentionList").then((mod) => mod.LeadsAttentionList),
 );
 
-const QuotesAttentionList = nextDynamic(
-  () => import("@/components/dashboard/QuotesAttentionList").then((mod) => mod.QuotesAttentionList),
-  { suspense: true }
+const QuotesAttentionList = nextDynamic(() =>
+  import("@/components/dashboard/QuotesAttentionList").then((mod) => mod.QuotesAttentionList),
 );
 
-const InvoicesAttentionList = nextDynamic(
-  () => import("@/components/dashboard/InvoicesAttentionList").then((mod) => mod.InvoicesAttentionList),
-  { suspense: true }
+const InvoicesAttentionList = nextDynamic(() =>
+  import("@/components/dashboard/InvoicesAttentionList").then((mod) => mod.InvoicesAttentionList),
 );
 
-const CallsAttentionList = nextDynamic(
-  () => import("@/components/dashboard/CallsAttentionList").then((mod) => mod.CallsAttentionList),
-  { suspense: true }
+const CallsAttentionList = nextDynamic(() =>
+  import("@/components/dashboard/CallsAttentionList").then((mod) => mod.CallsAttentionList),
 );
 
-const InboxPreviewWidget = nextDynamic(
-  () => import("@/components/dashboard/InboxPreviewWidget").then((mod) => mod.InboxPreviewWidget),
-  { suspense: true }
+const InboxPreviewWidget = nextDynamic(() =>
+  import("@/components/dashboard/InboxPreviewWidget").then((mod) => mod.InboxPreviewWidget),
 );
 
-const RecentActivityWidget = nextDynamic(
-  () => import("@/components/dashboard/RecentActivityWidget").then((mod) => mod.RecentActivityWidget),
-  { suspense: true }
+const RecentActivityWidget = nextDynamic(() =>
+  import("@/components/dashboard/RecentActivityWidget").then((mod) => mod.RecentActivityWidget),
 );
 
 export const dynamic = "force-dynamic";
