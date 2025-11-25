@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { buildLog } from "@/utils/buildLog";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { formatCurrency } from "@/utils/timeline/formatters";
@@ -76,6 +77,8 @@ type MessageThreadRow = {
   job?: { title: string | null } | { title: string | null }[] | null;
   customers?: { id: string | null; name: string | null } | { id: string | null; name: string | null }[] | null;
 };
+
+buildLog("dashboard page module loaded");
 
 export async function updateAutomationPreferences(formData: FormData) {
   "use server";

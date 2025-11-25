@@ -20,4 +20,8 @@
 3. Review `package.json`/lifecycle scripts for new long-running steps (Supabase migrations, Prisma generation, etc.) added to `prebuild`/`postinstall`/`postbuild`.
 4. Inspect `lib/domain/*` for any recently added top-level side effects or external API/Stripe/Twilio initializations that could fire during module import.
 
+### Build-time kill switches
+When Vercel times out, flip one of the `DISABLE_*_FOR_BUILD` flags to `true` and rerun `npm run build`/`npm run vercel:build`. Each flag short-circuits the corresponding route (`app/calls/page.tsx`, `app/public/bookings/[slug]/page.tsx`, `app/jobs/[id]/page.tsx`, and `app/customers/[id]/page.tsx`) by exporting a tiny stub component so Supabase/Twilio/OpenAI code never executes during the compile phase. Combine a flag with `BUILD_DIAGNOSTICS=true` to surface `buildLog` traces from `next.config.ts` and `app/layout.tsx` while you do the binary search.
+Keep the flags disabled for normal deploys so the real features stay online—use them only inside the Vercel build/`next build` run you are inspecting.
+
 Keeping this document updated whenever build-time habits change should help prevent another 45+ minute Vercel timeout.

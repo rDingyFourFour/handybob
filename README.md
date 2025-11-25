@@ -40,7 +40,7 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 - `npm run build` (defined as `next build` in `package.json`) is the only script Vercel executes during install/build time (`package.json:8-19`); there are no `prebuild`/`postbuild` hooks or lint/test chains wrapped around it.
 - Tests (`npm run test`, powered by Vitest via `vitest.config.ts:1-16`) are CI/locally run only and should be triggered from your GitHub Actions or another dedicated pipeline so the Vercel worker never waits for the suite to finish.
 - Keep `npm run build` focused on the optimized Next.js build; any long-running checks (lint, tests, Supabase migrations, etc.) should run in `npm run lint` / `npm run test` or other scripts that you invoke outside of Vercel’s default deployment command.
-- To profile bundle sizes locally, run `npm run analyze`; it wraps `next build` with `ANALYZE=true` so `@next/bundle-analyzer` reports which routes and modules (e.g., the Stripe/Twilio/OpenAI helpers in `lib/domain/…`) dominate the build. This stays local and should not be committed to Vercel.
+- To profile bundle sizes locally, run `npm run analyze`; it sets `NEXT_DISABLE_TURBOPACK=1` and `ANALYZE=true` before `next build` so `@next/bundle-analyzer` runs on Webpack and reports which routes and modules dominate the bundle. This stays local and should not run on Vercel.
 - For local profiling, run `npm run profile-build`; it wraps `next build` and prints start/finish timestamps so you can see if the hang happens during compilation or a custom hook. This script isn’t invoked on Vercel (only locally).
 
 ## Stripe payments

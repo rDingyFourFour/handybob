@@ -3,12 +3,15 @@
 // Attention domain helpers: run under RLS via createServerClient but require callers to pass a workspace_id so queries stay scoped.
 // Entry points: `getAttentionItems(workspaceId)` and `getAttentionCutoffs(now)` keep dashboard cutoffs centralized.
 
+import { buildLog } from "@/utils/buildLog";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import { formatFriendlyDateTime, formatRelativeMinutesAgo, daysSince } from "@/utils/dashboard/time";
 import { formatLeadSourceLabel } from "@/utils/dashboard/leads";
 import { normalizeCustomer } from "@/utils/dashboard/customers";
 import { createServerClient } from "@/utils/supabase/server";
 import { aiUrgencyRank } from "@/utils/dashboard/urgency";
+
+buildLog("lib/domain/attention loaded");
 
 const ATTENTION_WINDOWS = {
   NEW_LEAD_DAYS: 7,

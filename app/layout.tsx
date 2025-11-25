@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Link from "next/link";
 
+import { buildLog } from "@/utils/buildLog";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { MobileNav } from "@/components/ui/MobileNav";
@@ -13,6 +14,8 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
+
+buildLog("app/layout loaded");
 
 export default async function RootLayout({
   children,

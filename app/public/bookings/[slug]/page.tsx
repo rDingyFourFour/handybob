@@ -1,4 +1,8 @@
 // Public booking page: workspace slug resolves via admin client, no auth, only exposes public-friendly brand info and form.
+import {
+  DISABLE_PUBLIC_BOOKING_FOR_BUILD,
+  isProductionBuildPhase,
+} from "@/utils/env/buildFlags";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { BookingForm } from "./BookingForm";
 
@@ -13,7 +17,24 @@ type WorkspacePublicProfile = {
 
 export const dynamic = "force-dynamic";
 
-export default async function PublicBookingPage({ params }: { params: { slug: string } }) {
+// Diagnostic-only build switch: when enabled we export a minimal stub instead of running Supabase/domain logic.
+const shouldStubPublicBooking =
+  isProductionBuildPhase && DISABLE_PUBLIC_BOOKING_FOR_BUILD;
+
+function PublicBookingStub() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
+      <div className="hb-card max-w-xl text-center space-y-3">
+        <h1 className="text-2xl font-semibold">Public booking temporarily disabled for build diagnostics</h1>
+        <p className="hb-muted text-sm">
+          The public booking form is skipped during this build to keep Supabase and Resend calls out of the compile phase.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+async function PublicBookingPageMain({ params }: { params: { slug: string } }) {
   const supabase = createAdminClient();
   const { data: workspace } = await supabase
     .from("workspaces")
@@ -92,3 +113,7 @@ export default async function PublicBookingPage({ params }: { params: { slug: st
     </div>
   );
 }
+
+const PublicBookingPage = shouldStubPublicBooking ? PublicBookingStub : PublicBookingPageMain;
+
+export default PublicBookingPage;

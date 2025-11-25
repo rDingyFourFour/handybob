@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DISABLE_CALLS_FEATURE_FOR_BUILD, isProductionBuildPhase } from "@/utils/env/buildFlags";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { processCallRecording } from "./processCallAction";
@@ -33,6 +34,23 @@ type CallRow = {
 };
 
 
+// Only stub during production builds when the calls feature flag is enabled so we skip Twilio/Supabase work.
+const shouldStubCallsFeature =
+  isProductionBuildPhase && DISABLE_CALLS_FEATURE_FOR_BUILD;
+
+function CallsBuildDisabledPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
+      <div className="hb-card max-w-xl text-center space-y-3">
+        <h1 className="text-2xl font-semibold">Calls disabled for build diagnostics</h1>
+        <p className="hb-muted text-sm">
+          The Twilio/AI calls feature is skipped during this timed build to avoid long-running fetches.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function getParam(
   params: Record<string, string | string[] | undefined> | undefined,
   key: string,
@@ -42,19 +60,21 @@ function getParam(
   return value ?? null;
 }
 
-export default async function CallsPage({
+async function CallsPageMain({
   searchParams,
 }: {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: Record<string, string | string[] | undefined> | Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const supabase = await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
 
-  const needsProcessing = searchParams?.filter === "needs_processing";
-  const newLeads = searchParams?.filter === "new_leads";
-  const processedFilter = getParam(searchParams, "processed") ?? (needsProcessing ? "unprocessed" : "all");
-  const aiCategoryFilter = getParam(searchParams, "ai_category") ?? "all";
-  const aiUrgencyFilter = getParam(searchParams, "ai_urgency") ?? "all";
+  const needsProcessing = resolvedSearchParams?.filter === "needs_processing";
+  const newLeads = resolvedSearchParams?.filter === "new_leads";
+  const processedFilter =
+    getParam(resolvedSearchParams, "processed") ?? (needsProcessing ? "unprocessed" : "all");
+  const aiCategoryFilter = getParam(resolvedSearchParams, "ai_category") ?? "all";
+  const aiUrgencyFilter = getParam(resolvedSearchParams, "ai_urgency") ?? "all";
 
   let query = supabase
     .from("calls")
@@ -313,6 +333,12 @@ export default async function CallsPage({
     </div>
   );
 }
+
+// When the build-time flag is enabled we swap to the stub so the heavy Calls logic never runs during compilation;
+// otherwise export the full page as normal.
+const CallsPage = shouldStubCallsFeature ? CallsBuildDisabledPage : CallsPageMain;
+
+export default CallsPage;
 
 function formatDuration(seconds: number | null | undefined) {
   if (!seconds) return "—";

@@ -22,9 +22,26 @@ import {
   sortTimelineEntries,
 } from "@/utils/timeline/formatters";
 import { logServerError } from "@/utils/errors/logServerError";
+import { DISABLE_AI_FOR_BUILD, isProductionBuildPhase } from "@/utils/env/buildFlags";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 
 export const dynamic = "force-dynamic";
+
+// During production build diagnostics we skip the AI-heavy job detail page when this flag is enabled.
+const shouldStubJobPage = isProductionBuildPhase && DISABLE_AI_FOR_BUILD;
+
+function JobDetailBuildStub() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
+      <div className="hb-card max-w-xl text-center space-y-3">
+        <h1 className="text-2xl font-semibold">Job & AI features disabled for build diagnostics</h1>
+        <p className="hb-muted text-sm">
+          This job detail page is skipped during timed builds to avoid Supabase/AI calls.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 
 type QuoteRow = {
@@ -134,7 +151,7 @@ function formatSource(source?: string | null) {
   return value.replace(/_/g, " ");
 }
 
-export default async function JobDetailPage({
+async function JobDetailPageMain({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -680,3 +697,7 @@ export default async function JobDetailPage({
     );
   }
 }
+
+const JobDetailPage = shouldStubJobPage ? JobDetailBuildStub : JobDetailPageMain;
+
+export default JobDetailPage;

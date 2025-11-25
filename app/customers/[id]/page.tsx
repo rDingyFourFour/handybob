@@ -7,20 +7,23 @@ import { CustomerSummaryPanel } from "@/components/CustomerSummaryPanel";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import {
-  generateCustomerCheckinDraft,
-  generateCustomerSummary,
-  sendCustomerCheckinMessage,
-} from "./customerAiActions";
-import { runCustomerAssistant } from "./assistantActions";
+  DISABLE_AI_FOR_BUILD,
+  isProductionBuildPhase,
+} from "@/utils/env/buildFlags";
 import {
-
-export const dynamic = "force-dynamic";
-
   formatCurrency,
   formatDateTime,
   snippet,
   sortTimelineEntries,
 } from "@/utils/timeline/formatters";
+import {
+  generateCustomerCheckinDraft,
+  generateCustomerSummary,
+  sendCustomerCheckinMessage,
+} from "./customerAiActions";
+import { runCustomerAssistant } from "./assistantActions";
+
+export const dynamic = "force-dynamic";
 
 type Customer = {
   id: string;
@@ -117,7 +120,23 @@ async function getCustomerContext() {
 }
 
 
-export default async function CustomerDetailPage({
+const shouldStubCustomerPage =
+  isProductionBuildPhase && DISABLE_AI_FOR_BUILD;
+
+function CustomerDetailBuildStub() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
+      <div className="hb-card max-w-xl text-center space-y-3">
+        <h1 className="text-2xl font-semibold">Customer feature disabled for build diagnostics</h1>
+        <p className="hb-muted text-sm">
+          The AI-backed customer detail view is skipped during this timed build to avoid Supabase/AI work.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+async function CustomerDetailPageMain({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -483,3 +502,9 @@ export default async function CustomerDetailPage({
     </div>
   );
 }
+const CustomerDetailPage = shouldStubCustomerPage
+  ? CustomerDetailBuildStub
+  : CustomerDetailPageMain;
+
+export default CustomerDetailPage;
+

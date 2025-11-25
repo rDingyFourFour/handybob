@@ -5,6 +5,9 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
+import { buildLog } from "@/utils/buildLog";
+
+buildLog("lib/domain/workspaces loaded");
 
 export type WorkspaceContext = {
   user: User;

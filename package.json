@@ -5,8 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "analyze": "ANALYZE=true npm run build",
-    "profile-build": "node scripts/profile-build.js",
+    "analyze": "NEXT_DISABLE_TURBOPACK=1 ANALYZE=true npm run build",
+    "profile-build": "node scripts/profile-build.mjs",
+    "vercel:build": "npx vercel build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest"
@@ -31,6 +32,7 @@
     "eslint-config-next": "16.0.3",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "vercel": "^48.10.14",
     "vitest": "^2.1.1"
   }
 }
