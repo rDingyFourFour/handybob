@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "analyze": "ANALYZE=true npm run build",
+    "profile-build": "node scripts/profile-build.js",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest"
@@ -20,6 +22,7 @@
     "twilio": "^5.10.5"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.0.4",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

@@ -16,6 +16,9 @@ import { logAuditEvent } from "@/utils/audit/log";
 import { publicQuoteUrl } from "@/utils/urls/public";
 import { SmsActionButton } from "@/components/sms/SmsActionButton";
 
+export const dynamic = "force-dynamic";
+
+
 
 type CustomerInfo = {
   id: string | null;

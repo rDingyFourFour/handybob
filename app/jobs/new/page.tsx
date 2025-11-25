@@ -5,6 +5,9 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { logAuditEvent } from "@/utils/audit/log";
 
+export const dynamic = "force-dynamic";
+
+
 async function createJob(formData: FormData) {
   "use server";
 

@@ -3,6 +3,9 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import CustomerListRow from "./components/CustomerListRow";
 
+export const dynamic = "force-dynamic";
+
+
 type CustomerRow = {
   id: string;
   name: string | null;

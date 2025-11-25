@@ -5,6 +5,9 @@ import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { processCallRecording } from "./processCallAction";
 import { formatDateTime, snippet } from "@/utils/timeline/formatters";
 
+export const dynamic = "force-dynamic";
+
+
 type CallRow = {
   id: string;
   direction: string | null;

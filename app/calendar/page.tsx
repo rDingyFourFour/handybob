@@ -3,6 +3,9 @@ import Link from "next/link";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 
+export const dynamic = "force-dynamic";
+
+
 type CalendarAppointment = {
   id: string;
   title: string | null;

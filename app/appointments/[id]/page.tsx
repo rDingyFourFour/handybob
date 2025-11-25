@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 
+export const dynamic = "force-dynamic";
+
+
 type AppointmentWithRelations = {
   id: string;
   title: string | null;

@@ -2,6 +2,9 @@
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 
+export const dynamic = "force-dynamic";
+
+
 type AuditRow = {
   id: string;
   created_at: string;

@@ -24,6 +24,9 @@ import {
 import { logServerError } from "@/utils/errors/logServerError";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 
+export const dynamic = "force-dynamic";
+
+
 type QuoteRow = {
   id: string;
   status: string | null;

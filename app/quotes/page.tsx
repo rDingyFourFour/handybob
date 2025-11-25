@@ -4,6 +4,9 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { HintBox } from "@/components/ui/HintBox";
 
+export const dynamic = "force-dynamic";
+
+
 type QuoteListItem = {
   id: string;
   status: string | null;

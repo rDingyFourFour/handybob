@@ -2,6 +2,9 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { saveAutomationSettings } from "./saveAutomationSettings";
 
+export const dynamic = "force-dynamic";
+
+
 type SettingsRow = {
   email_new_urgent_lead: boolean | null;
   sms_new_urgent_lead: boolean | null;

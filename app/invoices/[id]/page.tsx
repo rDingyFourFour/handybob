@@ -12,6 +12,9 @@ import { logAuditEvent } from "@/utils/audit/log";
 import { publicInvoiceUrl } from "@/utils/urls/public";
 import { SmsActionButton } from "@/components/sms/SmsActionButton";
 
+export const dynamic = "force-dynamic";
+
+
 type InvoiceWithRelations = {
   id: string;
   invoice_number: number | null;

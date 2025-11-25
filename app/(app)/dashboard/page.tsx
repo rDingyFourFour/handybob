@@ -493,14 +493,7 @@ export default async function DashboardPage() {
     <div className="space-y-6 relative">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Workspace</p>
-          <div className="flex items-center gap-2">
-            <span className="hb-heading-1 text-2xl font-semibold">{workspace.name ?? "Workspace"}</span>
-            <span className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-              Welcome, {workspace.name ? workspace.name.split(" ")[0] : "handypeople"}
-            </span>
-          </div>
-          {/* tagline removed as redundant */}
+          <h1 className="hb-heading-1 text-3xl font-semibold">{workspace.name ?? "Workspace"}</h1>
         </div>
         <Link href="/jobs/new" className="hb-button px-4 py-2 text-sm">
           New job
@@ -626,49 +619,6 @@ export default async function DashboardPage() {
           </div>
         )}
 
-        <div className="hb-card space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="hb-card-heading">Automations</h3>
-              <p className="hb-muted text-sm">Toggle alerts for urgent leads and overdue work.</p>
-            </div>
-            <Link href="/settings" className="hb-button-ghost text-xs">
-              Settings
-            </Link>
-          </div>
-          <form action={updateAutomationPreferences} className="space-y-2">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="notifyUrgentLeads"
-                defaultChecked={prefs.notifyUrgentLeads}
-                className="hb-checkbox"
-              />
-              <span>Notify me about urgent leads</span>
-            </label>
-            <p className="hb-muted text-xs">
-              Highlights leads marked as emergency/urgent and keeps them pinned in the attention row.
-            </p>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="showOverdueWork"
-                defaultChecked={prefs.showOverdueWork}
-                className="hb-checkbox"
-              />
-              <span>Show overdue invoices and stale quotes</span>
-            </label>
-            <p className="hb-muted text-xs">
-              Hide or show overdue billing work in the dashboard queue.
-            </p>
-            <button type="submit" className="hb-button mt-2 text-sm">
-              Save automations
-            </button>
-          </form>
-          <div className="rounded border border-slate-800 px-3 py-2 text-xs text-slate-400">
-            Automations run server-side, keeping RLS in place. No external calls required.
-          </div>
-        </div>
       </section>
 
       <section className="space-y-3">

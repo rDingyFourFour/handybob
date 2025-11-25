@@ -7,6 +7,9 @@ import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { HintBox } from "@/components/ui/HintBox";
 import { createSignedMediaUrl } from "@/utils/supabase/storage";
 
+export const dynamic = "force-dynamic";
+
+
 type JobRow = {
   id: string;
   title: string | null;

@@ -13,6 +13,9 @@ import {
 } from "./customerAiActions";
 import { runCustomerAssistant } from "./assistantActions";
 import {
+
+export const dynamic = "force-dynamic";
+
   formatCurrency,
   formatDateTime,
   snippet,

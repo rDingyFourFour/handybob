@@ -6,6 +6,9 @@ import { sendCustomerSms } from "@/lib/domain/sms";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { ComposeBar } from "./ComposeBar";
 
+export const dynamic = "force-dynamic";
+
+
 type CustomerRow = {
   id: string | null;
   name: string | null;

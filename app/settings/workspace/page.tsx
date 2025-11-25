@@ -6,6 +6,9 @@ import { getCurrentWorkspace, requireOwner } from "@/lib/domain/workspaces";
 import { logAuditEvent } from "@/utils/audit/log";
 import { publicBookingUrl } from "@/utils/urls/public";
 
+export const dynamic = "force-dynamic";
+
+
 async function saveWorkspaceProfile(formData: FormData) {
   "use server";
 

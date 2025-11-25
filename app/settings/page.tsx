@@ -6,6 +6,9 @@ import { Card } from "@/components/ui/Card";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 
+export const dynamic = "force-dynamic";
+
+
 const settingsSections = [
   {
     title: "Workspace profile",
