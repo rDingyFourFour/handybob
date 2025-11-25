@@ -90,11 +90,18 @@ export async function runLeadAutomations({
   }
 
   if (smsEnabled && settings.sms_alert_number) {
-    try {
-      await sendCustomerSms({
-        to: settings.sms_alert_number,
-        body: body.slice(0, 320),
-      });
+    const smsBody = body.slice(0, 320);
+    const sentAt = new Date().toISOString();
+    const smsResult = await sendCustomerSms({
+      supabase,
+      workspaceId,
+      userId,
+      to: settings.sms_alert_number,
+      body: smsBody,
+      sentAt,
+    });
+
+    if (smsResult.ok) {
       await logAutomationEvent({
         userId,
         workspaceId,
@@ -105,7 +112,7 @@ export async function runLeadAutomations({
         message: `SMS sent to ${settings.sms_alert_number}`,
         supabase,
       });
-    } catch (err) {
+    } else {
       await logAutomationEvent({
         userId,
         workspaceId,
@@ -113,7 +120,7 @@ export async function runLeadAutomations({
         type: "urgent_lead_alert",
         channel: emailEnabled ? "both" : "sms",
         status: "failed",
-        message: err instanceof Error ? err.message : "SMS send failed",
+        message: smsResult.error ?? "SMS send failed",
         supabase,
       });
     }

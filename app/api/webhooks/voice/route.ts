@@ -44,11 +44,22 @@ const OPENAI_ENDPOINT = "https://api.openai.com/v1";
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const DEFAULT_USER_ID = process.env.VOICE_FALLBACK_USER_ID;
+const TWILIO_SIGNATURE_HEADER = "x-twilio-signature";
+let twilioAuthTokenWarningLogged = false;
 
 // Primary handler: validates Twilio signature-less payload, routes stage 1 vs stage 2, and always returns TwiML/XML for Twilio.
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const recordingUrl = getString(formData, "RecordingUrl");
+  const isRecordingCallback = Boolean(recordingUrl);
+  const signatureResult = validateTwilioSignature(req, formData);
+
+  if (!isRecordingCallback && !signatureResult.valid) {
+    console.warn(
+      "[voice-webhook] Twilio signature validation failed for stage 1:",
+      signatureResult.reason ?? "unknown",
+    );
+  }
 
   // Stage 1: initial inbound call -> instruct Twilio to record a voicemail.
   if (!recordingUrl) {
@@ -75,6 +86,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Stage 2: Twilio posts back the recording + metadata.
+  if (!signatureResult.valid) {
+    console.warn(
+      "[voice-webhook] Twilio signature validation failed for recording callback:",
+      signatureResult.reason ?? "unknown",
+    );
+    return NextResponse.json({ error: "Invalid Twilio signature" }, { status: 403 });
+  }
   try {
     await handleVoicemailCallback(formData);
   } catch (error) {
@@ -586,4 +604,43 @@ function parseTimestamp(raw: string | null) {
 function truncateText(value: string, max = 240) {
   const trimmed = value.trim();
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
+}
+
+type TwilioSignatureResult = {
+  valid: boolean;
+  reason?: string;
+};
+
+function validateTwilioSignature(req: NextRequest, formData: FormData): TwilioSignatureResult {
+  if (!TWILIO_AUTH_TOKEN) {
+    if (!twilioAuthTokenWarningLogged) {
+      console.warn("[voice-webhook] TWILIO_AUTH_TOKEN not configured; skipping signature validation.");
+      twilioAuthTokenWarningLogged = true;
+    }
+    return { valid: true };
+  }
+
+  const signature = req.headers.get(TWILIO_SIGNATURE_HEADER);
+  if (!signature) {
+    return { valid: false, reason: "missing Twilio signature header" };
+  }
+
+  const params = formDataToRecord(formData);
+  try {
+    const isValid = twilio.validateRequest(TWILIO_AUTH_TOKEN, signature, req.url, params);
+    return { valid: isValid, reason: isValid ? undefined : "signature mismatch" };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "validation error";
+    return { valid: false, reason };
+  }
+}
+
+function formDataToRecord(formData: FormData): Record<string, string> {
+  const params: Record<string, string> = {};
+  formData.forEach((value, key) => {
+    if (typeof value === "string" && !(key in params)) {
+      params[key] = value;
+    }
+  });
+  return params;
 }

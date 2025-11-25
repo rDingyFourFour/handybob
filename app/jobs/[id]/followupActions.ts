@@ -127,33 +127,46 @@ export async function sendFollowupMessage(
     const { user, workspace } = await getCurrentWorkspace({ supabase });
 
     let fromAddress: string | null = null;
+    const sentAt = new Date().toISOString();
     if (channel === "email") {
       fromAddress = (await sendCustomerMessageEmail({ to, subject: subject || undefined, body })) || null;
+
+      const { error: insertError } = await supabase.from("messages").insert({
+        user_id: user.id,
+        workspace_id: workspace.id,
+        customer_id: customerId || null,
+        job_id: jobId,
+        quote_id: null,
+        invoice_id: null,
+        direction: "outbound",
+        via: channel,
+        channel,
+        to_address: to,
+        from_address: fromAddress,
+        subject: subject,
+        body,
+        sent_at: sentAt,
+        created_at: sentAt,
+      });
+
+      if (insertError) {
+        return { error: insertError.message };
+      }
     } else {
-      fromAddress = (await sendCustomerSms({ to, body })) || null;
-    }
-
-    const sentAt = new Date().toISOString();
-    const { error: insertError } = await supabase.from("messages").insert({
-      user_id: user.id,
-      workspace_id: workspace.id,
-      customer_id: customerId || null,
-      job_id: jobId,
-      quote_id: null,
-      invoice_id: null,
-      direction: "outbound",
-      via: channel,
-      channel,
-      to_address: to,
-      from_address: fromAddress,
-      subject: channel === "email" ? subject : null,
-      body,
-      sent_at: sentAt,
-      created_at: sentAt,
-    });
-
-    if (insertError) {
-      return { error: insertError.message };
+      const smsResult = await sendCustomerSms({
+        supabase,
+        workspaceId: workspace.id,
+        userId: user.id,
+        to,
+        body,
+        customerId: customerId || null,
+        jobId,
+        sentAt,
+      });
+      if (!smsResult.ok) {
+        return { error: smsResult.error ?? "SMS send failed." };
+      }
+      fromAddress = smsResult.fromAddress ?? null;
     }
 
     return { ok: true };

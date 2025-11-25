@@ -19,6 +19,8 @@ const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 // Twilio credentials stay server-side; used only for authenticated fetch of recording audio.
 
+// Manual action invoked from the Calls UI ("Transcribe & summarize" button). 
+// Always forces transcription even if an existing transcript exists so contractors can retry.
 export async function processCallRecording(formData: FormData): Promise<void> {
   const callId = formData.get("call_id");
   if (typeof callId !== "string") {
@@ -38,6 +40,7 @@ export async function processCallRecording(formData: FormData): Promise<void> {
     callId,
     enforceWorkspaceId: true,
     workspaceIdFilter: workspace.id,
+    forceTranscription: true,
   });
 
   if (result.error) {
@@ -53,6 +56,8 @@ export async function processCallRecording(formData: FormData): Promise<void> {
 
 // Automation hook: can be called from webhooks/scheduled jobs using the service-role client.
 // Errors should be logged by the caller; this returns a structured result for retries.
+// Automated helper triggered by the recording status callback and scheduled jobs.
+// Skips re-transcribing if transcript already exists.
 export async function processCallById(callId: string): Promise<{ ok?: boolean; error?: string }> {
   if (!OPENAI_KEY) return { error: "OPENAI_API_KEY is not configured." };
   const supabase = createAdminClient();
@@ -60,6 +65,7 @@ export async function processCallById(callId: string): Promise<{ ok?: boolean; e
     supabase,
     callId,
     enforceWorkspaceId: false, // Service role bypasses RLS; we load by call.id directly.
+    forceTranscription: false,
   });
   return result.error ? { error: result.error } : { ok: true };
 }
@@ -72,16 +78,26 @@ type ProcessCallCoreResult = {
   customerName?: string | null;
 };
 
+/**
+ * Core transcription + summary workflow.
+ * Expects the call row to include recording_url + workspace_id/user_id context.
+ * Auto runs call this without `forceTranscription` (bonus: idempotent), manual hits set the flag.
+ */
+/** Core transcription + summary workflow for Twilio recordings.
+ * Logs include `call_id` + `workspace_id` so failures can be traced in the server console.
+ */
 async function processCallCore({
   supabase,
   callId,
   enforceWorkspaceId,
   workspaceIdFilter,
+  forceTranscription = false,
 }: {
   supabase: SupabaseClient;
   callId: string;
   enforceWorkspaceId: boolean;
   workspaceIdFilter?: string;
+  forceTranscription?: boolean;
 }): Promise<ProcessCallCoreResult> {
   // Load call (optionally scoped to user when called from UI)
   let query = supabase
@@ -104,6 +120,9 @@ async function processCallCore({
   if (!call.recording_url) {
     return { error: "No recording_url available on this call." };
   }
+  if (!forceTranscription && call.transcript) {
+    return { ok: true, jobId: call.job_id ?? null, customerId: call.customer_id ?? null };
+  }
 
   let linkedJobId: string | null | undefined = call.job_id;
   let linkedCustomerId: string | null | undefined = call.customer_id;
@@ -113,18 +132,40 @@ async function processCallCore({
     return { error: "Workspace missing for call." };
   }
 
+  console.info("[processCallCore] Processing call", {
+    call_id: call.id,
+    workspace_id: workspaceId,
+  });
+
   const audioBuffer = await downloadRecording(call.recording_url);
   if (!audioBuffer) return { error: "Failed to download recording audio." };
 
   const transcript = await transcribeAudio(audioBuffer);
-  if (!transcript) return { error: "Transcription failed." };
+  if (!transcript) {
+    await supabase
+      .from("calls")
+      .update({
+        status: "voicemail_recorded_no_transcript",
+      })
+      .eq("id", call.id);
+    console.error("[processCallCore] Transcription failed", {
+      call_id: call.id,
+      workspace_id: workspaceId,
+    });
+    return { error: "Transcription failed." };
+  }
 
   const summary = await summarizeTranscript(transcript);
-  if (!summary) return { error: "AI summary failed." };
+  if (!summary) {
+    console.warn("[processCallCore] AI summary returned no content; saving transcript only.", {
+      call_id: call.id,
+      workspace_id: workspaceId,
+    });
+  }
 
   const signals = inferAttentionSignals({
     text: transcript,
-    summary,
+    summary: summary ?? undefined,
     direction: call.direction,
     status: call.status,
     hasJob: Boolean(call.job_id),
@@ -134,7 +175,7 @@ async function processCallCore({
     .from("calls")
     .update({
       transcript,
-      ai_summary: summary,
+      ai_summary: summary ?? null,
       status: "processed",
       priority: signals.priority,
       needs_followup: signals.needsFollowup || !call.job_id,
@@ -148,6 +189,12 @@ async function processCallCore({
   if (updateError) {
     return { error: updateError.message };
   }
+
+  console.info("[processCallCore] Call processed", {
+    call_id: call.id,
+    workspace_id: workspaceId,
+    job_id: call.job_id,
+  });
 
   // If no job is attached yet, auto-create a lead + customer linkage.
   if (!call.job_id) {

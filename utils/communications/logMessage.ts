@@ -21,6 +21,10 @@ type LogMessageArgs = {
   body?: string | null;
   status?: string | null;
   externalId?: string | null;
+  toAddress?: string | null;
+  fromAddress?: string | null;
+  sentAt?: string | null;
+  via?: string | null;
 };
 
 export async function logMessage({
@@ -54,6 +58,10 @@ export async function logMessage({
     direction,
     subject,
     body,
+    to_address: toAddress ?? null,
+    from_address: fromAddress ?? null,
+    sent_at: sentAt ?? null,
+    via: via ?? null,
     status: status ?? "sent",
     external_id: externalId ?? null,
   });

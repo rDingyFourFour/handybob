@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 type ComposeBarProps = {
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<{ ok?: boolean; error?: string | null; customerId?: string | null }>;
   customerId: string | null;
   jobId: string | null;
   customerName: string;
@@ -19,6 +20,7 @@ export function ComposeBar({
   customerEmail,
   customerPhone,
 }: ComposeBarProps) {
+  const router = useRouter();
   const initialChannel = useMemo(() => (customerEmail ? "email" : "sms"), [customerEmail]);
   const [channel, setChannel] = useState<"email" | "sms">(initialChannel as "email" | "sms");
   const [toValue, setToValue] = useState(
@@ -27,14 +29,30 @@ export function ComposeBar({
   const [body, setBody] = useState("");
   const [subject, setSubject] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [statusType, setStatusType] = useState<"success" | "error" | null>(null);
 
   const handleChannelChange = (value: "email" | "sms") => {
     setChannel(value);
     setToValue(value === "email" ? customerEmail || "" : customerPhone || "");
+    setStatusMessage(null);
+    setStatusType(null);
   };
 
   const handleSubmit = (formData: FormData) => {
-    startTransition(() => action(formData));
+    startTransition(async () => {
+      setStatusMessage(null);
+      setStatusType(null);
+      const result = await action(formData);
+      if (result?.ok) {
+        setStatusMessage("Message sent.");
+        setStatusType("success");
+        router.refresh();
+      } else {
+        setStatusMessage(result?.error ?? "Couldn’t send the message — please check the recipient.");
+        setStatusType("error");
+      }
+    });
   };
 
   return (
@@ -109,6 +127,11 @@ export function ComposeBar({
           {isPending ? "Sending..." : "Send"}
         </button>
       </div>
+      {statusMessage && (
+        <p className={`text-[12px] ${statusType === "success" ? "text-emerald-400" : "text-amber-300"}`}>
+          {statusMessage}
+        </p>
+      )}
     </form>
   );
 }

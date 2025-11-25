@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { sendCustomerMessageEmail } from "@/utils/email/sendCustomerMessage";
@@ -62,7 +61,13 @@ function messageTimestamp(msg: MessageRow) {
   return msg.sent_at || msg.created_at || null;
 }
 
-async function sendConversationMessage(formData: FormData) {
+type SendConversationResult = {
+  ok?: boolean;
+  error?: string;
+  customerId?: string | null;
+};
+
+async function sendConversationMessage(formData: FormData): Promise<SendConversationResult> {
   "use server";
 
   const channel = String(formData.get("channel") || "email") as "email" | "sms";
@@ -74,55 +79,70 @@ async function sendConversationMessage(formData: FormData) {
 
   if (!to || !body) {
     console.warn("[sendConversationMessage] Missing recipient or body.");
-    return;
+    return { error: "Recipient and message body are required." };
   }
 
   const supabase = await createServerClient();
   const { user, workspace } = await getCurrentWorkspace({ supabase });
-
   const sentAt = new Date().toISOString();
-  let fromAddress: string | null = null;
+  let errorMessage: string | null = null;
 
   try {
     if (channel === "email") {
-      fromAddress =
-        (await sendCustomerMessageEmail({
-          to,
-          subject: subject || undefined,
-          body,
-        })) || null;
+      await sendCustomerMessageEmail({
+        to,
+        subject: subject || undefined,
+        body,
+      });
+
+      const { error: insertError } = await supabase.from("messages").insert({
+        user_id: user.id,
+        workspace_id: workspace.id,
+        customer_id: customerId,
+        job_id: jobId,
+        quote_id: null,
+        invoice_id: null,
+        direction: "outbound",
+        via: channel,
+        channel,
+        to_address: to,
+        from_address: null,
+        subject,
+        body,
+        sent_at: sentAt,
+        created_at: sentAt,
+      });
+
+      if (insertError) {
+        errorMessage = insertError.message;
+      }
     } else {
-      fromAddress = (await sendCustomerSms({ to, body })) || null;
+      const smsResult = await sendCustomerSms({
+        supabase,
+        workspaceId: workspace.id,
+        userId: user.id,
+        to,
+        body,
+        customerId,
+        jobId,
+        sentAt,
+      });
+      if (!smsResult.ok) {
+        console.error("[sendConversationMessage] Twilio SMS failed:", smsResult.error);
+        errorMessage = smsResult.error ?? "Failed to send SMS.";
+      }
     }
   } catch (err) {
-    console.error("[sendConversationMessage] Failed to send message", err);
+    const message = err instanceof Error ? err.message : "Unexpected error";
+    console.error("[sendConversationMessage] Failed to send message", message);
+    errorMessage = message;
   }
 
-  const { error: insertError } = await supabase.from("messages").insert({
-    user_id: user.id,
-    workspace_id: workspace.id,
-    customer_id: customerId,
-    job_id: jobId,
-    // Convention: link to the most specific context; inbox sends only know customer/job.
-    quote_id: null,
-    invoice_id: null,
-    direction: "outbound",
-    via: channel,
-    channel,
-    to_address: to,
-    from_address: fromAddress,
-    subject: channel === "email" ? subject : null,
-    body,
-    sent_at: sentAt,
-    created_at: sentAt,
-  });
-
-  if (insertError) {
-    console.warn("[sendConversationMessage] Failed to insert message record:", insertError.message);
+  if (errorMessage) {
+    return { error: errorMessage };
   }
 
-  const redirectCustomer = customerId ?? "unknown";
-  redirect(`/inbox?customer_id=${redirectCustomer}`);
+  return { ok: true, customerId };
 }
 
 export default async function InboxPage({
@@ -313,9 +333,14 @@ export default async function InboxPage({
                     return (
                       <div key={message.id} className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
                         <div className={`max-w-[85%] space-y-1 ${alignClass}`}>
-                          <div className="text-[11px] text-slate-400">
-                            {isOutbound ? "Outbound" : "Inbound"} · {message.via || message.channel || "message"} ·{" "}
-                            {formatTimestamp(timestamp)}
+                          <div className="text-[11px] text-slate-400 flex flex-wrap items-center gap-2">
+                            <span className="uppercase tracking-wide">
+                              {isOutbound ? "Outbound" : "Inbound"}
+                            </span>
+                            <span className="rounded-full border border-slate-800 px-2 py-1 text-[10px] uppercase tracking-wide">
+                              {message.via?.toUpperCase() || message.channel?.toUpperCase() || "Message"}
+                            </span>
+                            <span>{formatTimestamp(timestamp)}</span>
                           </div>
                           <div className={`rounded-xl border border-slate-800 px-3 py-2 shadow-sm ${bubbleClass}`}>
                             <p className="text-sm whitespace-pre-wrap">

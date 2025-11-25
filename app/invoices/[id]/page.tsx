@@ -10,6 +10,7 @@ import { createSignedMediaUrl } from "@/utils/supabase/storage";
 import { getCurrentWorkspace, getWorkspaceProfile } from "@/utils/workspaces";
 import { logAuditEvent } from "@/utils/audit/log";
 import { publicInvoiceUrl } from "@/utils/urls/public";
+import { SmsActionButton } from "@/components/sms/SmsActionButton";
 
 type InvoiceWithRelations = {
   id: string;
@@ -243,10 +244,11 @@ async function sendInvoiceEmailAction(formData: FormData) {
   redirect(`/invoices/${invoice.id}`);
 }
 
-async function sendInvoiceSmsAction(formData: FormData) {
+type SendInvoiceSmsArgs = { invoiceId: string };
+
+export async function sendInvoiceSmsAction({ invoiceId }: SendInvoiceSmsArgs) {
   "use server";
 
-  const invoiceId = String(formData.get("invoice_id"));
   const supabase = await createServerClient();
   const { user, workspace } = await getCurrentWorkspace({ supabase });
 
@@ -277,44 +279,48 @@ async function sendInvoiceSmsAction(formData: FormData) {
     .single();
 
   if (!invoice) {
-    console.warn("Invoice not found.");
-    return;
+    const error = "Invoice not found.";
+    console.warn("[sendInvoiceSmsAction] " + error);
+    return {
+      ok: false,
+      error,
+      sentAt: new Date().toISOString(),
+      fromAddress: null,
+    };
   }
 
   const invoiceRecord = invoice as InvoiceWithRelations;
   const customer = extractCustomer(invoiceRecord);
 
   if (!customer?.phone) {
-    console.warn("No phone number available for this invoice.");
-    return;
+    const error = "No phone number available for this invoice.";
+    console.warn("[sendInvoiceSmsAction] " + error);
+    return {
+      ok: false,
+      error,
+      sentAt: new Date().toISOString(),
+      fromAddress: null,
+    };
   }
 
   const publicUrl = invoice.public_token
     ? publicInvoiceUrl(invoice.public_token)
     : "/public/invoices";
   const invoiceTotal = Number(invoice.total ?? 0);
-  const smsBody = `Hi ${customer.name || ""}, your HandyBob invoice ${
-    invoice.invoice_number ? `#${invoice.invoice_number} ` : ""
-  }is $${invoiceTotal.toFixed(2)}. View/pay: ${publicUrl}`;
 
-  await sendInvoiceSms({
-    to: customer.phone,
-    customerName: customer.name,
-    invoiceNumber: invoice.invoice_number ?? invoice.id.slice(0, 8),
-    invoiceTotal,
-    publicUrl,
-  });
-
-  await logMessage({
+  const smsResult = await sendInvoiceSms({
     supabase,
-    userId: user.id,
     workspaceId: workspace.id,
+    userId: user.id,
+    to: customer.phone,
     customerId: customer.id,
     jobId: extractJobId(invoiceRecord),
     quoteId: invoiceRecord.quote_id,
     invoiceId: invoiceRecord.id,
-    channel: "sms",
-    body: smsBody,
+    customerName: customer.name,
+    invoiceNumber: invoice.invoice_number ?? invoice.id.slice(0, 8),
+    invoiceTotal,
+    publicUrl,
   });
 
   await logAuditEvent({
@@ -337,7 +343,7 @@ async function sendInvoiceSmsAction(formData: FormData) {
       .eq("id", invoice.id);
   }
 
-  redirect(`/invoices/${invoice.id}`);
+  return smsResult;
 }
 
 export default async function InvoiceDetailPage({
@@ -520,12 +526,15 @@ export default async function InvoiceDetailPage({
             </button>
           </form>
 
-          <form action={sendInvoiceSmsAction}>
-            <input type="hidden" name="invoice_id" value={invoice.id} />
-            <button type="submit" className="hb-button-ghost" disabled={isPaid}>
-              Send invoice via SMS
-            </button>
-          </form>
+          <SmsActionButton
+            action={sendInvoiceSmsAction}
+            args={{ invoiceId: invoice.id }}
+            label="Send invoice via SMS"
+            buttonClassName="hb-button-ghost"
+            disabled={isPaid}
+            successMessage="Invoice sent via SMS."
+            errorMessage="Couldn’t send SMS; please verify the customer’s phone."
+          />
         </div>
         {isPaid && (
           <p className="hb-muted text-xs">

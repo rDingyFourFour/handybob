@@ -1,38 +1,45 @@
-// utils/sms/sendQuoteSms.ts
 "use server";
 
-import twilio from "twilio";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromNumber = process.env.TWILIO_FROM_NUMBER;
-
-const client =
-  accountSid && authToken ? twilio(accountSid, authToken) : null;
+import { sendOutboundSms, type OutboundSmsStatus } from "./sendOutboundSms";
 
 type SendQuoteSmsArgs = {
+  supabase: SupabaseClient;
+  workspaceId: string;
+  userId: string;
   to: string;
-  customerName: string;
+  customerId?: string | null;
+  jobId?: string | null;
+  quoteId?: string | null;
+  customerName?: string | null;
   quoteTotal: number;
 };
 
 export async function sendQuoteSms({
+  supabase,
+  workspaceId,
+  userId,
   to,
+  customerId,
+  jobId,
+  quoteId,
   customerName,
   quoteTotal,
-}: SendQuoteSmsArgs) {
-  if (!client || !fromNumber) {
-    console.warn("Twilio not configured; skipping SMS send.");
-    return;
-  }
-
+}: SendQuoteSmsArgs): Promise<OutboundSmsStatus> {
   const body = `Hi ${customerName || ""}, your quote from HandyBob is $${quoteTotal.toFixed(
     2
   )}. Check your email for details.`;
 
-  await client.messages.create({
-    from: fromNumber,
+  return sendOutboundSms({
+    supabase,
+    workspaceId,
+    userId,
     to,
     body,
+    context: "sendQuoteSms",
+    customerId,
+    jobId,
+    quoteId,
   });
 }

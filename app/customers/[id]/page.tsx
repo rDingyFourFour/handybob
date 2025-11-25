@@ -198,11 +198,14 @@ export default async function CustomerDetailPage({
     })),
     ...messages.map((message): TimelineEntry => {
       const jobTitle = message.job_id ? jobTitleMap.get(message.job_id) : null;
+      const channelLabel = (message.via || message.channel || "message").toUpperCase();
+      const snippetText = snippet(message.body, 100) || snippet(message.subject, 100);
+      const directionLabel = message.direction === "inbound" ? "Inbound" : "Outbound";
       return {
         id: `msg-${message.id}`,
         kind: "message" as const,
-        title: `${message.direction === "inbound" ? "Inbound" : "Outbound"} message`,
-        detail: [jobTitle, snippet(message.body) || snippet(message.subject)]
+        title: `${directionLabel} ${channelLabel}`,
+        detail: [jobTitle, snippetText]
           .filter(Boolean)
           .join(" · "),
         timestamp: message.sent_at || message.created_at,
@@ -214,12 +217,17 @@ export default async function CustomerDetailPage({
       return {
         id: `call-${call.id}`,
         kind: "call" as const,
-        title: `Voicemail from ${call.from_number || customer.name || "Unknown caller"}`,
+        title: "Call",
         detail: [
+          `From ${call.from_number || customer.name || "Unknown caller"}`,
           jobTitle,
-          snippet(call.ai_summary ?? null, 180) ||
-            snippet(call.summary ?? null, 180) ||
-            (call.transcript ? `Transcript: ${snippet(call.transcript, 140)}` : null),
+          call.ai_summary
+            ? `Summary: ${snippet(call.ai_summary ?? null, 160)}`
+            : call.summary
+            ? `Summary: ${snippet(call.summary ?? null, 160)}`
+            : call.transcript
+            ? `Transcript: ${snippet(call.transcript, 140)}`
+            : null,
         ]
           .filter(Boolean)
           .join(" · "),

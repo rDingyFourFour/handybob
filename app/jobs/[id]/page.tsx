@@ -266,25 +266,38 @@ export default async function JobDetailPage({
       timestamp: job.created_at,
       status: job.status,
     },
-    ...messages.map((message) => ({
-      id: `msg-${message.id}`,
-      kind: "message" as const,
-      title: `${message.direction === "inbound" ? "Inbound" : "Outbound"} message`,
-      detail: message.body || message.subject || null,
-      timestamp: message.sent_at || message.created_at,
-      status: message.status,
-      href: message.customer_id
-        ? `/inbox?customer_id=${message.customer_id}`
-        : `/inbox`,
-    })),
+    ...messages.map((message) => {
+      const channelLabel = (message.via || message.channel || "message").toUpperCase();
+      const directionLabel = message.direction === "inbound" ? "Inbound" : "Outbound";
+      const snippetText = snippet(message.body, 100) || snippet(message.subject, 100);
+      return {
+        id: `msg-${message.id}`,
+        kind: "message" as const,
+        title: `${directionLabel} ${channelLabel}`,
+        detail: [snippetText, message.channel !== message.via ? message.via : null]
+          .filter(Boolean)
+          .join(" · ") || snippetText,
+        timestamp: message.sent_at || message.created_at,
+        status: message.status,
+        href: message.customer_id ? `/inbox?customer_id=${message.customer_id}` : `/inbox`,
+      };
+    }),
     ...calls.map((call) => ({
       id: `call-${call.id}`,
       kind: "call" as const,
-      title: `Voicemail from ${job.customers?.name || call.from_number || "Unknown caller"}`,
-      detail:
-        snippet(call.ai_summary, 200) ||
-        snippet(call.summary, 200) ||
-        (call.transcript ? `Transcript: ${snippet(call.transcript, 160)}` : null),
+      title: "Call",
+      detail: [
+        `From ${call.from_number || job.customers?.name || "Unknown caller"}`,
+        call.ai_summary
+          ? `Summary: ${snippet(call.ai_summary, 160)}`
+          : call.summary
+          ? `Summary: ${snippet(call.summary, 160)}`
+          : call.transcript
+          ? `Transcript: ${snippet(call.transcript, 140)}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
       timestamp: call.created_at || call.started_at,
       status: call.status,
       href: `/calls/${call.id}`,

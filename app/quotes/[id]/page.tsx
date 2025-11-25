@@ -157,12 +157,12 @@ async function sendQuoteEmailAction(formData: FormData) {
   redirect(`/quotes/${quote.id}`);
 }
 
-async function sendQuoteSmsAction(formData: FormData) {
+type SendQuoteSmsArgs = { quoteId: string };
+
+export async function sendQuoteSmsAction({ quoteId }: SendQuoteSmsArgs) {
   "use server";
 
-  const quoteId = String(formData.get("quote_id"));
   const supabase = await createServerClient();
-
   const { user, workspace } = await getCurrentWorkspace({ supabase });
 
   const { data: quote } = await supabase
@@ -185,8 +185,14 @@ async function sendQuoteSmsAction(formData: FormData) {
     .single();
 
   if (!quote) {
-    console.warn("Quote not found.");
-    return;
+    const error = "Quote not found.";
+    console.warn("[sendQuoteSmsAction] " + error);
+    return {
+      ok: false,
+      error,
+      sentAt: new Date().toISOString(),
+      fromAddress: null,
+    };
   }
 
   const job = normalizeSingle<JobWithCustomer>(
@@ -195,29 +201,26 @@ async function sendQuoteSmsAction(formData: FormData) {
   const customer = normalizeSingle<CustomerInfo>(job?.customers);
 
   if (!customer?.phone) {
-    console.warn("No phone number available for this quote.");
-    return;
+    const error = "No phone number available for this quote.";
+    console.warn("[sendQuoteSmsAction] " + error);
+    return {
+      ok: false,
+      error,
+      sentAt: new Date().toISOString(),
+      fromAddress: null,
+    };
   }
 
-  const smsBody = `Hi ${customer.name || ""}, your quote total is $${Number(
-    quote.total ?? 0
-  ).toFixed(2)}.`;
-
-  await sendQuoteSms({
-    to: customer.phone,
-    customerName: customer.name || "",
-    quoteTotal: Number(quote.total ?? 0),
-  });
-
-  await logMessage({
+  const result = await sendQuoteSms({
     supabase,
     workspaceId: workspace.id,
     userId: user.id,
+    to: customer.phone,
     customerId: customer.id,
     jobId: job?.id ?? quote.job_id ?? null,
     quoteId: quote.id,
-    channel: "sms",
-    body: smsBody,
+    customerName: customer.name || "",
+    quoteTotal: Number(quote.total ?? 0),
   });
 
   await logAuditEvent({
@@ -240,7 +243,7 @@ async function sendQuoteSmsAction(formData: FormData) {
       .eq("id", quote.id);
   }
 
-  redirect(`/quotes/${quote.id}`);
+  return result;
 }
 
 async function acceptQuoteAction(formData: FormData) {
@@ -518,12 +521,15 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
             </button>
           </form>
 
-          <form action={sendQuoteSmsAction}>
-            <input type="hidden" name="quote_id" value={quote.id} />
-            <button type="submit" className="hb-button-ghost" disabled={isPaid}>
-              Send via SMS
-            </button>
-          </form>
+          <SmsActionButton
+            action={sendQuoteSmsAction}
+            args={{ quoteId: quote.id }}
+            label="Send via SMS"
+            buttonClassName="hb-button-ghost"
+            disabled={isPaid}
+            successMessage="SMS sent successfully."
+            errorMessage="Couldn’t send SMS, please verify the number."
+          />
         </div>
 
         <p className="hb-muted text-xs">

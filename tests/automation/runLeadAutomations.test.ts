@@ -80,7 +80,13 @@ vi.mock("@/utils/email/sendCustomerMessage", () => ({
 }));
 
 vi.mock("@/utils/sms/sendCustomerSms", () => ({
-  sendCustomerSms: () => sendSms(),
+  sendCustomerSms: (args: unknown) => {
+    sendSms(args);
+    return Promise.resolve({
+      ok: true,
+      sentAt: "2024-01-01T00:00:00.000Z",
+    });
+  },
 }));
 
 describe("runLeadAutomations", () => {

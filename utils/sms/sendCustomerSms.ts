@@ -1,31 +1,36 @@
-// utils/sms/sendCustomerSms.ts
 "use server";
 
-import twilio from "twilio";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromNumber = process.env.TWILIO_FROM_NUMBER;
-
-const client =
-  accountSid && authToken ? twilio(accountSid, authToken) : null;
+import { sendOutboundSms, type OutboundSmsStatus } from "./sendOutboundSms";
 
 type SendCustomerSmsArgs = {
+  supabase: SupabaseClient;
+  workspaceId: string;
+  userId: string;
   to: string;
   body: string;
+  customerId?: string | null;
+  jobId?: string | null;
 };
 
-export async function sendCustomerSms({ to, body }: SendCustomerSmsArgs) {
-  if (!client || !fromNumber) {
-    console.warn("[sendCustomerSms] Twilio not configured; skipping SMS send.");
-    return null;
-  }
-
-  await client.messages.create({
-    from: fromNumber,
+export async function sendCustomerSms({
+  supabase,
+  workspaceId,
+  userId,
+  to,
+  body,
+  customerId,
+  jobId,
+}: SendCustomerSmsArgs): Promise<OutboundSmsStatus> {
+  return sendOutboundSms({
+    supabase,
+    workspaceId,
+    userId,
     to,
     body,
+    context: "sendCustomerSms",
+    customerId,
+    jobId,
   });
-
-  return fromNumber;
 }

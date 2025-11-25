@@ -205,6 +205,30 @@ export default async function CallsPage({
                   <span>From {call.from_number || "Unknown"} → {call.to_number || "Unknown"}</span>
                   <span>Duration {formatDuration(call.duration_seconds)}</span>
                 </div>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <span className="rounded-full border border-slate-800 px-2 py-1 text-[11px] uppercase tracking-wide">
+                    {call.direction === "inbound" ? "Inbound call" : "Outbound call"}
+                  </span>
+                  <span className="rounded-full border border-slate-800 px-2 py-1 text-[11px] uppercase tracking-wide">
+                    {call.status || "status unknown"}
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-1 text-[11px] uppercase tracking-wide ${
+                      call.transcript ? "border border-emerald-400 text-emerald-300" : "border border-amber-500 text-amber-300"
+                    }`}
+                  >
+                    {call.transcript ? "Transcript ready" : "Needs transcript"}
+                  </span>
+                  {call.ai_summary ? (
+                    <span className="rounded-full border border-emerald-400 px-2 py-1 text-[11px] uppercase tracking-wide text-emerald-300">
+                      AI summary available
+                    </span>
+                  ) : call.transcript ? (
+                    <span className="rounded-full border border-slate-800 px-2 py-1 text-[11px] uppercase tracking-wide">
+                      Summary pending
+                    </span>
+                  ) : null}
+                </div>
                 {primarySummary && (
                   <p className="hb-muted text-sm mt-1">{primarySummary}</p>
                 )}
@@ -221,6 +245,9 @@ export default async function CallsPage({
                     {call.priority ? `Priority: ${call.priority}` : "Priority: normal"}
                     {call.attention_reason ? ` · ${call.attention_reason}` : ""}
                   </p>
+                )}
+                {call.status === "voicemail_recorded_no_transcript" && (
+                  <p className="text-[12px] text-amber-300 mt-1">Transcription failed earlier; try again.</p>
                 )}
                 {!call.transcript && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">

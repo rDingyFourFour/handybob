@@ -76,7 +76,7 @@ function makeSupabaseMock(initial?: Partial<SupabaseState>) {
                 select: () => ({
                   maybeSingle: async () => {
                     const existing = state.invoices[0];
-                    Object.assign(existing, payload);
+                    if (existing) Object.assign(existing, payload);
                     return { data: existing, error: null };
                   },
                 }),
@@ -85,6 +85,11 @@ function makeSupabaseMock(initial?: Partial<SupabaseState>) {
             insert: (payload: Omit<InvoiceRow, "id">) => ({
               select: () => ({
                 single: async () => {
+                  const row = { id: `inv_${state.invoices.length + 1}`, ...payload };
+                  state.invoices.push(row);
+                  return { data: row, error: null };
+                },
+                maybeSingle: async () => {
                   const row = { id: `inv_${state.invoices.length + 1}`, ...payload };
                   state.invoices.push(row);
                   return { data: row, error: null };

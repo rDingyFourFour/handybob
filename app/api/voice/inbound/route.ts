@@ -4,13 +4,16 @@ import twilio from "twilio";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 // Twilio inbound voice endpoint:
-// - Receives the initial call metadata (From/To/CallSid) and returns TwiML that records a voicemail.
-// - Assumes `VOICE_FALLBACK_USER_ID` is set; workspace scoping is currently single-tenant.
-// - Always returns valid TwiML so Twilio can proceed; logs but skips DB writes when metadata/env is missing.
+// - Receives call metadata (From, To, CallSid) and must always reply with TwiML that records a voicemail.
+// - Expected payload: `From`, `To`, `CallSid` (form-encoded) plus optional `CallerName`, `CallStatus`.
+// - Persists a `calls` row tagged to `VOICE_FALLBACK_USER_ID` (legacy single-tenant).
+// - Always returns TwiML so Twilio can continue; logs failures but still responds with valid XML.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_USER_ID = process.env.VOICE_FALLBACK_USER_ID;
+
+// Logs around this route make it easier to trace calls coming from Twilio Voice webhooks.
 const RECORDING_CALLBACK =
   process.env.VOICE_RECORDING_CALLBACK_URL ?? "/api/voice/recording";
 
@@ -26,26 +29,37 @@ export async function POST(req: NextRequest) {
     console.warn("[voice-inbound] Missing CallSid; call row cannot be correlated.");
   }
 
-  // Expected Twilio payload (x-www-form-urlencoded): From, To, CallSid (no RecordingUrl yet).
-  // DB: insert a calls row keyed by CallSid and mark status inbound_voicemail for the fallback user.
-  // NOTE: workspace_id is not set here; if multiple workspaces/users share numbers, resolve workspace by `To`/user and persist workspace_id to keep rows scoped.
-  // TODO [TECH_DEBT #1]: replace this with a lookup that maps `toNumber` -> user/workspace once per-tenant numbers exist.
   const userId = DEFAULT_USER_ID ?? null;
   if (!userId) {
     console.warn("[voice-inbound] VOICE_FALLBACK_USER_ID not set; skipping call insert.");
   } else {
-    const { error } = await supabase.from("calls").insert({
-      user_id: userId,
-      from_number: fromNumber ?? null,
-      to_number: toNumber ?? null,
-      twilio_call_sid: callSid ?? null,
-      direction: "inbound",
-      status: "inbound_voicemail",
-      started_at: new Date().toISOString(),
-    });
+    try {
+      const { error } = await supabase.from("calls").insert({
+        user_id: userId,
+        workspace_id: null,
+        from_number: fromNumber ?? null,
+        to_number: toNumber ?? null,
+        twilio_call_sid: callSid ?? null,
+        direction: "inbound",
+        status: "inbound_voicemail",
+        started_at: new Date().toISOString(),
+      });
 
-    if (error) {
-      console.error("[voice-inbound] Failed to insert call row:", error.message);
+      if (error) {
+        console.error("[voice-inbound] Failed to insert call row:", error.message, {
+          user_id: userId,
+          callSid,
+        });
+      } else {
+        console.info("[voice-inbound] Call row created", {
+          user_id: userId,
+          twilio_call_sid: callSid,
+          from: fromNumber,
+        });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown";
+      console.error("[voice-inbound] Unexpected error inserting call:", message);
     }
   }
 

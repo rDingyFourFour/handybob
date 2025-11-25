@@ -1,41 +1,52 @@
-// utils/sms/sendInvoiceSms.ts
 "use server";
 
-import twilio from "twilio";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromNumber = process.env.TWILIO_FROM_NUMBER;
-
-const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
+import { sendOutboundSms, type OutboundSmsStatus } from "./sendOutboundSms";
 
 type SendInvoiceSmsArgs = {
+  supabase: SupabaseClient;
+  workspaceId: string;
+  userId: string;
   to: string;
-  customerName: string | null | undefined;
-  invoiceNumber: number | string | null | undefined;
+  customerId?: string | null;
+  jobId?: string | null;
+  quoteId?: string | null;
+  invoiceId?: string | null;
+  customerName?: string | null;
+  invoiceNumber?: number | string | null | undefined;
   invoiceTotal: number;
   publicUrl: string;
 };
 
 export async function sendInvoiceSms({
+  supabase,
+  workspaceId,
+  userId,
   to,
+  customerId,
+  jobId,
+  quoteId,
+  invoiceId,
   customerName,
   invoiceNumber,
   invoiceTotal,
   publicUrl,
-}: SendInvoiceSmsArgs) {
-  if (!client || !fromNumber) {
-    console.warn("Twilio not configured; skipping invoice SMS send.");
-    return;
-  }
-
+}: SendInvoiceSmsArgs): Promise<OutboundSmsStatus> {
   const body = `Hi ${customerName || ""}, your HandyBob invoice ${
     invoiceNumber ? `#${invoiceNumber} ` : ""
   }is $${invoiceTotal.toFixed(2)}. View/pay: ${publicUrl}`;
 
-  await client.messages.create({
-    from: fromNumber,
+  return sendOutboundSms({
+    supabase,
+    workspaceId,
+    userId,
     to,
     body,
+    context: "sendInvoiceSms",
+    customerId,
+    jobId,
+    quoteId,
+    invoiceId,
   });
 }
