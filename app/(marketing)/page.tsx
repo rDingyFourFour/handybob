@@ -1,10 +1,13 @@
 // Public marketing shell; assumes no authenticated user (redirects signed-in visitors) and only renders marketing content.
+import { buildLog } from "@/utils/debug/buildLog";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
 
 export const dynamic = "force-dynamic";
+
+buildLog("app/(marketing)/page module loaded");
 
 const marketingHighlights = [
   "Keep quotes and invoices tidy so customers always understand what they're paying for.",

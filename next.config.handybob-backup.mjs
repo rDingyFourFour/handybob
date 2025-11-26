@@ -19,3 +19,4 @@ const nextConfig: NextConfig = {
 export default withBundleAnalyzer({
   enabled: isAnalyze,
 })(nextConfig);
+// HandyBob backup of original next.config for build debugging.

@@ -1,21 +1,25 @@
+// Temporary build debugging code; remove once the diagnostic is complete.
+if (process.env.FORCE_FAIL_LAYOUT === "1") {
+  throw new Error("FORCE_FAIL_LAYOUT: test crash from app/layout.tsx");
+}
 // Root layout: resolves Supabase session/workspace on the server once and chooses marketing vs app chrome based on auth state.
+import { buildLog } from "@/utils/debug/buildLog";
 import type { Metadata } from "next";
 import "./globals.css";
 import Link from "next/link";
-
-import { buildLog } from "@/utils/buildLog";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { MobileNav } from "@/components/ui/MobileNav";
+
+// Temporary: disable static pre-generation while debugging the next build hang locally; remove once resolved.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "HandyBob",
   description: "Full support office in an app for independent handypeople and small crews.",
 };
 
-export const dynamic = "force-dynamic";
-
-buildLog("app/layout loaded");
+buildLog("app/layout.tsx module loaded");
 
 export default async function RootLayout({
   children,

@@ -215,18 +215,14 @@ export default async function JobsPage({
         ) : (
           <div className="space-y-2">
             {safeJobs.map((job) => (
-              <div
+              <Link
                 key={job.id}
-                className="border-b border-slate-800 last:border-0 pb-2 last:pb-0"
+                href={`/jobs/${job.id}`}
+                className="block border-b border-slate-800 last:border-0 pb-2 last:pb-0 transition hover:bg-slate-900/80 focus-visible:ring-2 focus-visible:ring-blue-400"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-sm font-medium">
-                  <Link
-                    href={`/jobs/${job.id}`}
-                    className="text-blue-400 hover:text-blue-300 underline-offset-2 hover:underline"
-                  >
+                  <div className="text-sm font-medium text-blue-200">
                     {job.title || "Untitled job"}
-                  </Link>
                   </div>
                   {job.ai_urgency === "emergency" && (
                     <span className="rounded-full bg-red-500/10 px-2 py-1 text-[11px] uppercase tracking-wide text-red-300 border border-red-500/30">
@@ -235,7 +231,10 @@ export default async function JobsPage({
                   )}
                 </div>
                 <div className="text-[11px] text-slate-300 mt-1">
-                  Source: <span className="rounded border border-slate-700 bg-slate-900/60 px-2 py-[3px] uppercase tracking-wide">{formatSource(job.source)}</span>
+                  Source:{" "}
+                  <span className="rounded border border-slate-700 bg-slate-900/60 px-2 py-[3px] uppercase tracking-wide">
+                    {formatSource(job.source)}
+                  </span>
                 </div>
                 <div className="text-xs text-slate-400">
                   {job.customer?.[0]?.name || "Unknown customer"}
@@ -259,7 +258,7 @@ export default async function JobsPage({
                     <span className="text-[11px] text-slate-400">Latest photo</span>
                   </div>
                 )}
-              </div>
+              </Link>
             ))}
           </div>
         )}

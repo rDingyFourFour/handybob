@@ -1,11 +1,14 @@
+// Build diagnostics only; remove after the investigation completes.
+if (process.env.FORCE_FAIL_DASHBOARD === "1") {
+  throw new Error("FORCE_FAIL_DASHBOARD: test crash from dashboard page module");
+}
 // Authenticated dashboard page; expects a signed-in user and loads workspace context via createServerClient + getCurrentWorkspace.
+import { buildLog } from "@/utils/debug/buildLog";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Suspense } from "react";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-
-import { buildLog } from "@/utils/buildLog";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { formatCurrency } from "@/utils/timeline/formatters";
@@ -23,6 +26,8 @@ import { AppointmentsWidget } from "@/components/dashboard/AppointmentsWidget";
 import { getAttentionItems, getAttentionCutoffs } from "@/lib/domain/attention";
 
 export const dynamic = "force-dynamic";
+
+buildLog("app/(app)/dashboard/page module loaded");
 
 type AutomationPrefs = {
   notifyUrgentLeads: boolean;
@@ -77,9 +82,6 @@ type MessageThreadRow = {
   job?: { title: string | null } | { title: string | null }[] | null;
   customers?: { id: string | null; name: string | null } | { id: string | null; name: string | null }[] | null;
 };
-
-buildLog("dashboard page module loaded");
-
 export async function updateAutomationPreferences(formData: FormData) {
   "use server";
   const supabase = await createServerClient();

@@ -4,10 +4,10 @@ import crypto from "crypto";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 
+import { buildLog } from "@/utils/debug/buildLog";
 import { createServerClient } from "@/utils/supabase/server";
-import { buildLog } from "@/utils/buildLog";
 
-buildLog("lib/domain/workspaces loaded");
+buildLog("lib/domain/workspaces module loaded");
 
 export type WorkspaceContext = {
   user: User;

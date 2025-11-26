@@ -132,7 +132,11 @@ export default async function AppointmentDetailPage({
         <p className="hb-muted text-sm">Update details or change status.</p>
       </div>
 
-      <form action={updateAppointmentAction} className="hb-card space-y-4">
+      <form
+        id="edit-appointment-form"
+        action={updateAppointmentAction}
+        className="hb-card space-y-4"
+      >
         <input type="hidden" name="appointment_id" value={appointment.id} />
 
         <div>
@@ -191,13 +195,21 @@ export default async function AppointmentDetailPage({
         </div>
 
         <div className="flex justify-end gap-2">
-          <form action={deleteAppointmentAction}>
-            <input type="hidden" name="appointment_id" value={appointment.id} />
-            <button type="submit" className="hb-button-ghost">Delete</button>
-          </form>
-          <button type="submit" className="hb-button">Save changes</button>
+          <button type="submit" className="hb-button">
+            Save changes
+          </button>
         </div>
       </form>
+
+      {/* Delete action lives outside the edit form so forms never nest */}
+      <div className="flex justify-end gap-2">
+        <form action={deleteAppointmentAction}>
+          <input type="hidden" name="appointment_id" value={appointment.id} />
+          <button type="submit" className="hb-button-ghost">
+            Delete
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

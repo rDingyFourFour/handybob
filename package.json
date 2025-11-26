@@ -4,13 +4,23 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "_dev_note": "long-lived dev server; not part of npm install or Vercel build",
+    "build": "node scripts/log-build-env.mjs && next build",
+    "_build_note": "Logs build env before `next build` so Vercel output shows VERCEL/NODE_ENV values; still no lint/tests/migrations",
+    "build:webpack": "TURBOPACK=0 next build",
+    "_build:webpack_note": "Debugs long build times when Turbopack causes hangs",
     "analyze": "NEXT_DISABLE_TURBOPACK=1 ANALYZE=true npm run build",
+    "_analyze_note": "build analyzer wraps build and is even heavier when enabled",
     "profile-build": "node scripts/profile-build.mjs",
+    "_profile-build_note": "profiles the build process; can be long-running",
     "vercel:build": "npx vercel build",
+    "_vercel:build_note": "runs Vercel CLI build which bundles and may be slow",
     "start": "next start",
+    "_start_note": "long-lived server for production, not run automatically",
     "lint": "eslint",
-    "test": "vitest"
+    "_lint_note": "static analysis; can take noticeable time on large repos",
+    "test": "vitest",
+    "_test_note": "runs unit tests; may take a while depending on suite"
   },
   "dependencies": {
     "@supabase/ssr": "^0.7.0",
@@ -33,6 +43,6 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vercel": "^48.10.14",
-    "vitest": "^2.1.1"
+    "vitest": "^4.0.14"
   }
 }

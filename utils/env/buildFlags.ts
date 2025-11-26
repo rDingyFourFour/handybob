@@ -11,7 +11,8 @@ function readFlag(name: FlagName): boolean {
   return ENABLED_VALUES.has(rawValue);
 }
 
-const isProductionBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+export const isProductionBuildPhase =
+  process.env.NEXT_PHASE === "phase-production-build";
 
 function shouldActivateFlag(name: FlagName) {
   return isProductionBuildPhase && readFlag(name);
