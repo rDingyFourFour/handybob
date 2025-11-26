@@ -5,6 +5,8 @@ if (process.env.FORCE_FAIL_LAYOUT === "1") {
 // Root layout: resolves Supabase session/workspace on the server once and chooses marketing vs app chrome based on auth state.
 import { buildLog } from "@/utils/debug/buildLog";
 import type { Metadata } from "next";
+// import "./globals.css";
+// TEMP: use minimized CSS for Turbopack debug.
 import "./globals.css";
 import Link from "next/link";
 import { createServerClient } from "@/utils/supabase/server";
@@ -54,6 +56,7 @@ export default async function RootLayout({
     { label: "Settings", href: "/settings" },
   ];
 
+  // Derived from Supabase auth (user resolved via supabase.auth.getUser); true whenever we have a signed-in user/session.
   const isAuthenticated = Boolean(user);
   const brandHref = isAuthenticated ? "/dashboard" : "/";
 
@@ -67,8 +70,10 @@ export default async function RootLayout({
         <div className="flex min-h-screen">
           {/* Main area */}
           <main className="flex-1 flex flex-col">
-            {isAuthenticated ? (
-              <header className="border-b border-slate-800 px-4 py-3">
+            {/* TEMP: force app header to render to verify navbar styling */}
+            {true ? (
+              // TEMP: Loud header debug styles (will remove after UI verification)
+              <header className="border-b border-slate-800 px-4 py-3 bg-red-900 text-yellow-300 border-b-4 border-yellow-400 h-16 flex items-center px-4">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
                     <Link href={brandHref} className="text-lg font-semibold tracking-tight">

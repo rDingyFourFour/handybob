@@ -24,6 +24,7 @@ import { InboxPreviewWidget } from "@/components/dashboard/InboxPreviewWidget";
 import { RecentActivityWidget } from "@/components/dashboard/RecentActivityWidget";
 import { AppointmentsWidget } from "@/components/dashboard/AppointmentsWidget";
 import { getAttentionItems, getAttentionCutoffs } from "@/lib/domain/attention";
+import HbCard from "@/components/ui/hb-card";
 
 export const dynamic = "force-dynamic";
 
@@ -144,10 +145,10 @@ export default async function DashboardPage() {
   } catch (error) {
     console.error("[dashboard] Failed to init Supabase client:", error);
     return (
-      <div className="hb-card">
+      <HbCard>
         <h1>Dashboard unavailable</h1>
         <p className="hb-muted text-sm">Could not connect to Supabase. Check environment keys.</p>
-      </div>
+      </HbCard>
     );
   }
 
@@ -161,10 +162,10 @@ export default async function DashboardPage() {
   } catch (error) {
     console.error("[dashboard] Failed to resolve workspace:", error);
     return (
-      <div className="hb-card">
+      <HbCard>
         <h1>Dashboard unavailable</h1>
         <p className="hb-muted text-sm">Unable to resolve workspace. Please sign in again.</p>
-      </div>
+      </HbCard>
     );
   }
 
@@ -177,10 +178,10 @@ export default async function DashboardPage() {
   } catch (error) {
     console.error("[dashboard] Failed to resolve workspace:", error);
     return (
-      <div className="hb-card">
+      <HbCard>
         <h1>Dashboard unavailable</h1>
         <p className="hb-muted text-sm">Unable to resolve workspace. Please sign in again.</p>
-      </div>
+      </HbCard>
     );
   }
 
@@ -455,7 +456,7 @@ export default async function DashboardPage() {
   if (isWorkspaceEmpty) {
     return (
       <div className="space-y-4">
-        <div className="hb-card space-y-6">
+        <HbCard className="space-y-6">
           <div>
             <p className="text-xs uppercase tracking-[0.4em] text-slate-500">Getting started</p>
             <h1 className="text-2xl font-semibold">Let&apos;s get your HandyBob office set up.</h1>
@@ -481,7 +482,7 @@ export default async function DashboardPage() {
               </Link>
             ))}
           </ol>
-        </div>
+        </HbCard>
       </div>
     );
   }
@@ -511,7 +512,7 @@ export default async function DashboardPage() {
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Daily check-in</p>
         </div>
         <div className="space-y-4">
-          <div className="hb-card space-y-2">
+          <HbCard className="space-y-2">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="hb-card-heading text-2xl font-bold tracking-tight">Today&apos;s appointments</h3>
@@ -534,9 +535,9 @@ export default async function DashboardPage() {
                 todayEndIso={todayEndIso}
               />
             </Suspense>
-          </div>
+          </HbCard>
 
-          <div className="hb-card space-y-2">
+          <HbCard className="space-y-2">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="hb-card-heading">Messages needing response</h3>
@@ -554,7 +555,7 @@ export default async function DashboardPage() {
                 windowStartIso={dayAgo.toISOString()}
               />
             </Suspense>
-          </div>
+          </HbCard>
         </div>
       </section>
 

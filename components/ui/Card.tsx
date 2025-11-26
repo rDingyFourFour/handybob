@@ -2,11 +2,9 @@
 
 import type { HTMLAttributes } from "react";
 
-type CardProps = HTMLAttributes<HTMLDivElement>;
+import { cn } from "@/lib/utils/cn";
 
-function cn(...classes: (string | undefined | false)[]) {
-  return classes.filter(Boolean).join(" ");
-}
+type CardProps = HTMLAttributes<HTMLDivElement>;
 
 export function Card({ className, children, ...props }: CardProps) {
   return (
