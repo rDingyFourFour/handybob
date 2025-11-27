@@ -9,6 +9,10 @@ const config: Config = {
     "./lib/**/*.{js,ts,jsx,tsx}",
     "./utils/**/*.{js,ts,jsx,tsx}",
   ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
 };
 
 export default config;

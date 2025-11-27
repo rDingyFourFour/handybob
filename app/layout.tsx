@@ -5,15 +5,12 @@ if (process.env.FORCE_FAIL_LAYOUT === "1") {
 // Root layout: resolves Supabase session/workspace on the server once and chooses marketing vs app chrome based on auth state.
 import { buildLog } from "@/utils/debug/buildLog";
 import type { Metadata } from "next";
-// import "./globals.css";
-// TEMP: use minimized CSS for Turbopack debug.
 import "./globals.css";
 import Link from "next/link";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { MobileNav } from "@/components/ui/MobileNav";
 import HbButton from "@/components/ui/hb-button";
-import { cn } from "@/lib/utils/cn";
 
 // Temporary: disable static pre-generation while debugging the next build hang locally; remove once resolved.
 export const dynamic = "force-dynamic";
@@ -64,17 +61,16 @@ export default async function RootLayout({
 
   const userInitial = user?.email?.[0]?.toUpperCase() || user?.id?.[0]?.toUpperCase() || "?";
 
-  const headerBaseClass =
-    "h-14 flex items-center justify-between border-b border-slate-800/60 bg-slate-950/70 backdrop-blur px-4 md:px-6";
+  const headerClass =
+    "sticky top-0 z-50 flex h-16 items-center justify-between border-b border-slate-800/60 bg-slate-950/80 px-4 md:px-6 backdrop-blur";
 
   return (
     <html lang="en">
       <body className="min-h-screen bg-slate-950 text-slate-100">
         <div className="flex min-h-screen">
-          <main className="flex-1 flex flex-col">
-            {/* TEMP: force app header to render to verify navbar styling */}
-            {true ? (
-              <header className={cn(headerBaseClass, "border-b-4 border-yellow-400 bg-red-900 text-yellow-300 px-4")}>
+          <main className="flex-1 flex flex-col pt-16">
+            {isAuthenticated ? (
+              <header className={headerClass}>
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
                     <Link href={brandHref} className="text-lg font-semibold tracking-tight">
@@ -104,7 +100,7 @@ export default async function RootLayout({
                 </div>
               </header>
             ) : (
-              <header className={headerBaseClass}>
+              <header className={headerClass}>
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <Link href={brandHref} className="text-lg font-semibold tracking-tight">

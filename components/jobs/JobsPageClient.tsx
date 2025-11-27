@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import { FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -12,11 +12,6 @@ import {
   HbListRoot,
   HbListRow,
 } from "@/components/ui/hb-list";
-import { JobRow, getJobAttentionLevel } from "@/lib/domain/jobs";
-
-type JobCustomer = {
-  name: string | null;
-};
 
 type PageInfo = {
   page: number;
@@ -31,8 +26,21 @@ type Filters = {
   search: string | null;
 };
 
+type JobAttentionLevel = "overdue" | "upcoming" | "normal";
+
+type JobsPageClientJob = {
+  id: string;
+  title: string | null;
+  status: string | null;
+  source: string | null;
+  created_at: string | null;
+  scheduled_at: string | null;
+  customer?: { name: string | null }[] | null;
+  attention: JobAttentionLevel;
+};
+
 type JobsPageClientProps = {
-  jobs: JobRow[];
+  jobs: JobsPageClientJob[];
   summary: {
     open: number;
     scheduled: number;
@@ -202,7 +210,7 @@ const JobsPageClient = ({
               <HbListHeaderCell align="right">Created</HbListHeaderCell>
             </HbListHeader>
             {jobs.map((job) => {
-              const attention = getJobAttentionLevel(job);
+              const attention = job.attention;
               return (
                 <HbListRow
                   key={job.id}

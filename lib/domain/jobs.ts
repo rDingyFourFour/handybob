@@ -34,6 +34,8 @@ type JobsPageResult = {
   pageInfo: PageInfo;
 };
 
+type JobQuery = ReturnType<SupabaseClient["from"]>;
+
 const sanitizePageSize = (value?: number) => {
   if (!value || value < 1) return DEFAULT_PAGE_SIZE;
   return Math.min(value, MAX_PAGE_SIZE);
@@ -48,7 +50,7 @@ const buildSearchPattern = (search?: string) => {
 
 const domainFilters = ({ statusFilter, search }: JobsPageParams) => {
   const filters: Array<{
-    apply: (query: any) => void;
+    apply: (query: JobQuery) => void;
   }> = [];
 
   if (statusFilter) {

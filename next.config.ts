@@ -13,7 +13,7 @@ const isAnalyze = process.env.ANALYZE === "true";
 buildLog("next.config loaded");
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  reactStrictMode: true,
 };
 
 export default withBundleAnalyzer({

@@ -14,13 +14,11 @@ import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import { DEFAULT_TIMEZONE } from "@/utils/dashboard/time";
 import { AppointmentsSkeleton } from "@/components/dashboard/AppointmentsSkeleton";
-import { MessagesSkeleton } from "@/components/dashboard/MessagesSkeleton";
 import { ActivitySkeleton } from "@/components/dashboard/ActivitySkeleton";
 import { LeadsAttentionList } from "@/components/dashboard/LeadsAttentionList";
 import { QuotesAttentionList } from "@/components/dashboard/QuotesAttentionList";
 import { InvoicesAttentionList } from "@/components/dashboard/InvoicesAttentionList";
 import { CallsAttentionList } from "@/components/dashboard/CallsAttentionList";
-import { InboxPreviewWidget } from "@/components/dashboard/InboxPreviewWidget";
 import { RecentActivityWidget } from "@/components/dashboard/RecentActivityWidget";
 import { AppointmentsWidget } from "@/components/dashboard/AppointmentsWidget";
 import { getAttentionItems, getAttentionCutoffs } from "@/lib/domain/attention";
@@ -497,7 +495,7 @@ export default async function DashboardPage() {
   const leadSourceCounts = attentionItems.leadSourceCounts;
 
   return (
-    <div className="mx-auto max-w-screen-xl px-4 py-8 space-y-8">
+    <div className="hb-shell pt-20 pb-8 space-y-8">
       <div className="space-y-6 relative">
         <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -514,11 +512,11 @@ export default async function DashboardPage() {
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Daily check-in</p>
         </div>
         <div className="space-y-4">
-          {/* DEBUG: Today's appointments card */}
+          {/* DEBUG: Today&apos;s appointments card */}
           <HbCard className="space-y-2">
             <div className="flex items-center justify-between gap-4">
               <div className="flex flex-col gap-1">
-                <h3 className="hb-card-heading text-2xl font-bold tracking-tight">Today's appointments</h3>
+                <h3 className="hb-card-heading text-2xl font-bold tracking-tight">Today&apos;s appointments</h3>
                 <p className="hb-muted text-sm">Quick view of your day.</p>
               </div>
               <div className="flex items-center gap-2 text-xs text-slate-300">
