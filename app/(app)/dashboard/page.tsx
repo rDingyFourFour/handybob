@@ -24,6 +24,7 @@ import { InboxPreviewWidget } from "@/components/dashboard/InboxPreviewWidget";
 import { RecentActivityWidget } from "@/components/dashboard/RecentActivityWidget";
 import { AppointmentsWidget } from "@/components/dashboard/AppointmentsWidget";
 import { getAttentionItems, getAttentionCutoffs } from "@/lib/domain/attention";
+import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 
 export const dynamic = "force-dynamic";
@@ -496,14 +497,15 @@ export default async function DashboardPage() {
   const leadSourceCounts = attentionItems.leadSourceCounts;
 
   return (
-    <div className="space-y-6 relative">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto max-w-screen-xl px-4 py-8 space-y-8">
+      <div className="space-y-6 relative">
+        <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="hb-heading-1 text-3xl font-semibold">{workspace.name ?? "Workspace"}</h1>
         </div>
-        <Link href="/jobs/new" className="hb-button px-4 py-2 text-sm">
+        <HbButton as={Link} href="/jobs/new" size="sm" variant="secondary">
           New job
-        </Link>
+        </HbButton>
       </header>
 
       <section className="space-y-4">
@@ -512,17 +514,18 @@ export default async function DashboardPage() {
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Daily check-in</p>
         </div>
         <div className="space-y-4">
+          {/* DEBUG: Today's appointments card */}
           <HbCard className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="hb-card-heading text-2xl font-bold tracking-tight">Today&apos;s appointments</h3>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col gap-1">
+                <h3 className="hb-card-heading text-2xl font-bold tracking-tight">Today's appointments</h3>
                 <p className="hb-muted text-sm">Quick view of your day.</p>
               </div>
-              <div className="flex gap-2 text-xs">
-                <Link href="/appointments" className="hb-button-ghost">
+              <div className="flex items-center gap-2 text-xs text-slate-300">
+                <Link href="/appointments" className="text-xs text-slate-300">
                   View all
                 </Link>
-                <Link href="/calendar" className="hb-button-ghost">
+                <Link href="/calendar" className="text-xs text-slate-300">
                   Calendar
                 </Link>
               </div>
@@ -536,26 +539,6 @@ export default async function DashboardPage() {
               />
             </Suspense>
           </HbCard>
-
-          <HbCard className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="hb-card-heading">Messages needing response</h3>
-                <p className="hb-muted text-sm">Inbound threads awaiting reply.</p>
-              </div>
-              <Link href="/inbox" className="hb-button-ghost text-xs">
-                Open inbox
-              </Link>
-            </div>
-
-            <Suspense fallback={<MessagesSkeleton rows={3} />}>
-              <InboxPreviewWidget
-                workspaceId={workspace.id}
-                workspaceTimeZone={workspaceTimeZone}
-                windowStartIso={dayAgo.toISOString()}
-              />
-            </Suspense>
-          </HbCard>
         </div>
       </section>
 
@@ -566,7 +549,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-          <div className="hb-card space-y-1">
+          <HbCard className="space-y-1">
             <div className="flex items-center justify-between">
               <h3 className="hb-card-heading">New leads</h3>
               <Link href="/jobs?status=lead" className="hb-button-ghost text-xs">
@@ -578,11 +561,11 @@ export default async function DashboardPage() {
             <p className="text-[11px] text-slate-500">
               Web: {leadSourceCounts.web} · Calls: {leadSourceCounts.calls} · Manual: {leadSourceCounts.manual} · Other: {leadSourceCounts.other}
             </p>
-          </div>
-          <div className="hb-card">
+          </HbCard>
+          <HbCard>
             <h3 className="hb-card-heading">Pending quotes</h3>
             <p className="text-2xl font-semibold">{pendingQuotesRes.data?.length ?? 0}</p>
-          </div>
+          </HbCard>
           <div className="hb-card">
             <h3 className="hb-card-heading">Unpaid invoices</h3>
             <p className="text-2xl font-semibold">{unpaidInvoicesRes.data?.length ?? 0}</p>
@@ -703,6 +686,7 @@ export default async function DashboardPage() {
           </div>
         </div>
       </section>
+    </div>
     </div>
   );
 }

@@ -12,6 +12,8 @@ import Link from "next/link";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { MobileNav } from "@/components/ui/MobileNav";
+import HbButton from "@/components/ui/hb-button";
+import { cn } from "@/lib/utils/cn";
 
 // Temporary: disable static pre-generation while debugging the next build hang locally; remove once resolved.
 export const dynamic = "force-dynamic";
@@ -62,18 +64,17 @@ export default async function RootLayout({
 
   const userInitial = user?.email?.[0]?.toUpperCase() || user?.id?.[0]?.toUpperCase() || "?";
 
+  const headerBaseClass =
+    "h-14 flex items-center justify-between border-b border-slate-800/60 bg-slate-950/70 backdrop-blur px-4 md:px-6";
+
   return (
     <html lang="en">
       <body className="min-h-screen bg-slate-950 text-slate-100">
-        {/* Logged-out visitors see a clean marketing shell with only the brand CTAs. */}
-        {/* Logged-in users get the full header nav, workspace info, and account actions. */}
         <div className="flex min-h-screen">
-          {/* Main area */}
           <main className="flex-1 flex flex-col">
             {/* TEMP: force app header to render to verify navbar styling */}
             {true ? (
-              // TEMP: Loud header debug styles (will remove after UI verification)
-              <header className="border-b border-slate-800 px-4 py-3 bg-red-900 text-yellow-300 border-b-4 border-yellow-400 h-16 flex items-center px-4">
+              <header className={cn(headerBaseClass, "border-b-4 border-yellow-400 bg-red-900 text-yellow-300 px-4")}>
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
                     <Link href={brandHref} className="text-lg font-semibold tracking-tight">
@@ -103,7 +104,7 @@ export default async function RootLayout({
                 </div>
               </header>
             ) : (
-              <header className="border-b border-slate-800 px-4 py-3">
+              <header className={headerBaseClass}>
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <Link href={brandHref} className="text-lg font-semibold tracking-tight">
@@ -114,17 +115,17 @@ export default async function RootLayout({
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    <Link href="/signup" className="hb-button text-sm">
+                    <HbButton as={Link} href="/signup" size="sm" variant="primary">
                       Create account
-                    </Link>
-                    <Link href="/login" className="hb-button-ghost text-sm text-slate-300">
+                    </HbButton>
+                    <HbButton as={Link} href="/login" size="sm" variant="ghost">
                       Sign in
-                    </Link>
+                    </HbButton>
                   </div>
                 </div>
               </header>
             )}
-            <div className="flex-1 p-4">{children}</div>
+            <div className="hb-shell flex-1">{children}</div>
           </main>
         </div>
       </body>

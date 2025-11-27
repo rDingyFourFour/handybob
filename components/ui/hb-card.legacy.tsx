@@ -1,3 +1,4 @@
+/* Legacy backup of HbCard before the CSS refresh. */
 // Replaces the old `.hb-card` global CSS with a Tailwind-friendly component for HandyBob cards.
 import type { ElementType, HTMLAttributes, ReactNode } from "react";
 

@@ -5,6 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import { HintBox } from "@/components/ui/HintBox";
+import {
+  HbListCell,
+  HbListHeader,
+  HbListHeaderCell,
+  HbListRoot,
+  HbListRow,
+} from "@/components/ui/hb-list";
 import { JobRow, getJobAttentionLevel } from "@/lib/domain/jobs";
 
 type JobCustomer = {
@@ -187,36 +194,46 @@ const JobsPageClient = ({
             No jobs match these filters; broaden the status or search term to get results.
           </div>
         ) : (
-          jobs.map((job) => {
-            const attention = getJobAttentionLevel(job);
-            return (
-              <Link
-                key={job.id}
-                href={`/jobs/${job.id}`}
-                className="hb-card flex flex-col gap-1 border border-slate-800 px-4 py-3 text-sm transition hover:border-slate-500"
-              >
-                <div className="flex items-center justify-between text-slate-200">
-                  <span className="font-semibold text-slate-100">
-                    {job.title || "Untitled job"}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                      {job.status ?? "Unknown"}
+          <HbListRoot>
+            <HbListHeader>
+              <HbListHeaderCell>Job</HbListHeaderCell>
+              <HbListHeaderCell>Customer</HbListHeaderCell>
+              <HbListHeaderCell>Status</HbListHeaderCell>
+              <HbListHeaderCell align="right">Created</HbListHeaderCell>
+            </HbListHeader>
+            {jobs.map((job) => {
+              const attention = getJobAttentionLevel(job);
+              return (
+                <HbListRow
+                  key={job.id}
+                  as={Link}
+                  href={`/jobs/${job.id}`}
+                  className="cursor-pointer"
+                >
+                  <HbListCell>
+                    <div className="font-semibold text-slate-100">{job.title || "Untitled job"}</div>
+                    <p className="text-xs text-slate-400">#{job.id}</p>
+                  </HbListCell>
+                  <HbListCell>
+                    <span className="text-xs text-slate-400">
+                      {job.customer?.[0]?.name ?? "Unknown customer"}
                     </span>
-                    <span className={attentionStyles[attention]}>
-                      {attention.toUpperCase()}
-                    </span>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-400">
-                  Created {job.created_at ? new Date(job.created_at).toLocaleDateString() : "unknown"}
-                </p>
-                <p className="text-xs text-slate-400">
-                  Customer: {job.customer?.[0]?.name ?? "Unknown customer"}
-                </p>
-              </Link>
-            );
-          })
+                  </HbListCell>
+                  <HbListCell>
+                    <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em]">
+                      <span className="text-slate-400">{job.status ?? "Unknown"}</span>
+                      <span className={attentionStyles[attention]}>
+                        {attention.toUpperCase()}
+                      </span>
+                    </div>
+                  </HbListCell>
+                  <HbListCell align="right">
+                    {job.created_at ? new Date(job.created_at).toLocaleDateString() : "unknown"}
+                  </HbListCell>
+                </HbListRow>
+              );
+            })}
+          </HbListRoot>
         )}
       </section>
 

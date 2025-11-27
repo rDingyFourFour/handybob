@@ -3,13 +3,60 @@
 @tailwind utilities;
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #f8fafc;
+  background-color: #020617;
+  color: #f8fafc;
+  min-height: 100%;
 }
 
+html,
 body {
   margin: 0;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: system-ui, sans-serif;
+  min-height: 100%;
+  font-family: "Inter", system-ui, sans-serif;
+  background-color: #020617;
+  color: #f8fafc;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.hb-shell {
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.hb-heading-lg {
+  font-size: 2.25rem;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.hb-heading-md {
+  font-size: 1.5rem;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.hb-heading-sm {
+  font-size: 1.125rem;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.hb-body {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: #e2e8f0;
+}
+
+.hb-muted {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #94a3b8;
 }
