@@ -46,6 +46,7 @@
   ],
   "exclude": [
     "node_modules",
+    "app_disabled",
     ".next",
     "dist",
     "**/*.test.ts",

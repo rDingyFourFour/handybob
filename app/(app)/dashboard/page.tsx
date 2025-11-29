@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 import { Suspense } from "react";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createServerClient } from "@/utils/supabase/server";
+import { createServerClient } from "@//utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import { DEFAULT_TIMEZONE } from "@/utils/dashboard/time";
@@ -593,6 +593,21 @@ export default async function DashboardPage() {
               {formatCurrency(collectedThisMonth + collectedInvoicesThisMonth)}
             </p>
           </div>
+        </div>
+
+        <div className="grid gap-5 md:grid-cols-2">
+          <HbCard className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="hb-card-heading">Customers</h3>
+                <p className="text-2xl font-semibold">{workspaceCustomersCount}</p>
+              </div>
+              <Link href="/customers" className="hb-button-ghost text-xs">
+                View customers
+              </Link>
+            </div>
+            <p className="hb-muted text-sm">People you’ve worked with or are following up with.</p>
+          </HbCard>
         </div>
 
         {invoiceLoadFailed && (
