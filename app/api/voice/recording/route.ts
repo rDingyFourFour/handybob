@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { attachRecordingToCall, RecordingCallbackError } from "@/lib/domain/calls";
-import { processCallById } from "@/app/calls/processCallAction";
 
 // Recording status callback:
 // - Twilio posts `CallSid`, `RecordingUrl`, and `RecordingDuration` after <Record>.
@@ -29,13 +28,16 @@ export async function POST(req: NextRequest) {
       durationSeconds: parseInt(duration ?? "0", 10) || null,
     });
 
-    if (process.env.ENABLE_AUTO_CALL_PROCESSING === "true") {
-      processCallById(callId).catch((err) =>
-        console.error("[voice-recording] Auto-processing failed:", err instanceof Error ? err.message : err),
-      );
-    }
+    console.log(
+      "[voice-recording] Received recording webhook for call",
+      callId,
+      "; processing is temporarily disabled.",
+    );
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json(
+      { ok: true, message: "Recording received; processing is temporarily disabled." },
+      { status: 200 },
+    );
   } catch (error) {
     if (error instanceof RecordingCallbackError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

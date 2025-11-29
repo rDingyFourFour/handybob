@@ -14,13 +14,31 @@ async function createJobAction(formData: FormData) {
   const workspaceContext = await getCurrentWorkspace({ supabase });
   const { workspace } = workspaceContext;
 
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    console.error("[jobs/new] No authenticated user when creating job", userError);
+    redirect("/");
+  }
+
   if (!workspace) {
     console.error("[jobs/new] Failed to resolve workspace inside action");
     redirect("/");
   }
 
+  const customerIdRaw = formData.get("customerId");
+  const customerId =
+    typeof customerIdRaw === "string" && customerIdRaw.trim() ? customerIdRaw.trim() : "";
+  if (!customerId) {
+    console.error("[jobs/new] Missing customerId in form submission");
+    return { ok: false, message: "Customer is required." };
+  }
+
   const titleRaw = formData.get("title");
-  const description = formData.get("description");
+  const descriptionField = formData.get("description");
   const statusRaw = formData.get("status");
 
   const title = typeof titleRaw === "string" ? titleRaw.trim() : "";
@@ -30,14 +48,21 @@ async function createJobAction(formData: FormData) {
     return { ok: false, message: "Title is required." };
   }
 
+  const normalizedDescription =
+    typeof descriptionField === "string" && descriptionField.trim().length > 0
+      ? descriptionField.trim()
+      : "New job";
+
   try {
     const { error } = await supabase
       .from("jobs")
       .insert({
+        user_id: user.id,
         workspace_id: workspace.id,
         title,
         status,
-        description: typeof description === "string" ? description.trim() : null,
+        description_raw: normalizedDescription,
+        customer_id: customerId,
       })
       .select("id")
       .single();
@@ -89,6 +114,13 @@ export default async function NewJobPage() {
     redirect("/");
   }
 
+  const { data: customersData } = await supabase
+    .from("customers")
+    .select("id, name")
+    .eq("workspace_id", workspace.id)
+    .order("name");
+  const customers = (customersData ?? []) as { id: string; name: string | null }[];
+
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
       <header className="space-y-2">
@@ -100,6 +132,11 @@ export default async function NewJobPage() {
       </header>
       <HbCard className="space-y-4">
         <form action={createJobAction} className="space-y-5">
+          {customers.length === 0 && (
+            <div className="text-sm text-rose-400">
+              No customers in this workspace. Create a customer first to assign a job.
+            </div>
+          )}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-500">
               <label htmlFor="title">Job title</label>
@@ -118,8 +155,29 @@ export default async function NewJobPage() {
             />
           </div>
           <div className="space-y-2">
+            <label htmlFor="customerId" className="text-xs uppercase tracking-[0.3em] text-slate-500">
+              Customer
+            </label>
+            <select
+              id="customerId"
+              name="customerId"
+              required
+              className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm"
+              defaultValue=""
+            >
+              <option value="" disabled>
+                Select a customer…
+              </option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name ?? "(No name)"}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
             <label htmlFor="description" className="text-xs uppercase tracking-[0.3em] text-slate-500">
-              Description
+              Job description
             </label>
             <p className="text-[11px] text-slate-500">
               Optional notes about the scope, location, or special considerations.

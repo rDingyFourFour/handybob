@@ -1,5 +1,4 @@
 import type { ElementType, ReactNode } from "react";
-
 import { cn } from "@/lib/utils/cn";
 
 type HbButtonVariant = "primary" | "secondary" | "ghost";
@@ -26,6 +25,7 @@ type HbButtonProps = {
   variant?: HbButtonVariant;
   size?: HbButtonSize;
   as?: ElementType;
+  className?: string;
 } & Omit<React.ButtonHTMLAttributes<HTMLElement>, "className">;
 
 export default function HbButton({

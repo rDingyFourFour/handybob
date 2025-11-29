@@ -6,11 +6,14 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
+import HbButton from "@/components/ui/hb-button";
 
-type JobRecord = {
+type CustomerRecord = {
   id: string;
-  title: string | null;
-  status: string | null;
+  workspace_id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
   created_at: string | null;
 };
 
@@ -18,7 +21,27 @@ function formatDate(value: string | null) {
   if (!value) return null;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toLocaleDateString();
+  return parsed.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function fallbackCard(title: string, body: string) {
+  return (
+    <div className="hb-shell pt-20 pb-8">
+      <HbCard className="space-y-3">
+        <h1 className="hb-heading-1 text-2xl font-semibold">{title}</h1>
+        <p className="hb-muted text-sm">{body}</p>
+        <HbButton as="a" href="/customers" size="sm">
+          Back to customers
+        </HbButton>
+      </HbCard>
+    </div>
+  );
 }
 
 export default async function CustomerDetailPage(props: {
@@ -26,112 +49,92 @@ export default async function CustomerDetailPage(props: {
 }) {
   const { id } = await props.params;
 
+  if (!id || !id.trim() || id === "new") {
+    redirect("/customers/new");
+    return null;
+  }
+
   let supabase;
   try {
     supabase = await createServerClient();
   } catch (error) {
-    console.error("[customer-detail] Failed to initialize Supabase client:", error);
-    redirect("/");
+    console.error("[customer-detail] Failed to init Supabase client", error);
+    return fallbackCard("Customer unavailable", "Could not connect to Supabase. Please try again.");
   }
 
-  let user;
-  try {
-    const {
-      data: { user: fetchedUser },
-    } = await supabase.auth.getUser();
-    user = fetchedUser;
-  } catch (error) {
-    console.error("[customer-detail] Failed to resolve user:", error);
-    redirect("/");
-  }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   if (!user) {
     redirect("/");
+    return null;
   }
 
   let workspace;
   try {
-    workspace = (await getCurrentWorkspace({ supabase })).workspace;
+    const workspaceResult = await getCurrentWorkspace({ supabase });
+    workspace = workspaceResult.workspace;
   } catch (error) {
-    console.error("[customer-detail] Failed to resolve workspace:", error);
-    redirect("/");
+    console.error("[customer-detail] Failed to resolve workspace", error);
+    return fallbackCard("Customer unavailable", "Unable to resolve workspace. Please try again.");
   }
 
   if (!workspace) {
-    redirect("/");
+    return fallbackCard("Customer unavailable", "Unable to resolve workspace. Please try again.");
   }
 
-  const { data: customer, error: customerError } = await supabase
-    .from("customers")
-    .select("id, name, email, phone, created_at")
-    .eq("workspace_id", workspace.id)
-    .eq("id", id)
-    .maybeSingle();
+  let customer: CustomerRecord | null = null;
 
-  if (customerError || !customer) {
-    console.error("[customer-detail] Customer lookup failed:", customerError);
-    return (
-      <div className="hb-shell pt-20 pb-8">
-        <HbCard className="space-y-3">
-          <h1 className="hb-heading-1 text-2xl font-semibold">Customer not found</h1>
-          <p className="hb-muted text-sm">
-            We couldn’t load that customer. Please try again or return to the customer list.
-          </p>
-          <Link href="/customers" className="hb-button px-4 py-2 text-sm">
-            Back to customers
-          </Link>
-        </HbCard>
-      </div>
-    );
-  }
-
-  let jobs: JobRecord[] = [];
   try {
-    const { data: jobsData, error: jobsError } = await supabase
-      .from("jobs")
-      .select("id, title, status, created_at")
+    const { data, error } = await supabase
+      .from<CustomerRecord>("customers")
+      .select("id, name, email, phone, created_at")
       .eq("workspace_id", workspace.id)
-      .eq("customer_id", customer.id)
-      .order("created_at", { ascending: false, nulls: "last" })
-      .limit(20);
-    if (jobsError) {
-      console.error("[customer-detail] Failed to load jobs:", jobsError);
-    } else {
-      jobs = (jobsData ?? []) as JobRecord[];
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[customer-detail] Customer lookup failed", error);
+      return fallbackCard("Customer not found", "We couldn’t find that customer. It may have been deleted.");
     }
+
+    customer = data ?? null;
   } catch (error) {
-    console.error("[customer-detail] Failed to load jobs:", error);
+    console.error("[customer-detail] Customer query error", error);
+    return fallbackCard("Customer not found", "We couldn’t find that customer. It may have been deleted.");
+  }
+
+  if (!customer) {
+    return fallbackCard("Customer not found", "We couldn’t find that customer. It may have been deleted.");
   }
 
   const displayName = customer.name ?? "Unnamed customer";
+  const contactLine = [customer.email, customer.phone].filter(Boolean).join(" · ");
   const createdLabel = formatDate(customer.created_at);
-
-  const contactDetails = [customer.email, customer.phone].filter(Boolean);
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
-      <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-1">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Customer</p>
-          <h1 className="hb-heading-1 text-3xl font-semibold">{displayName}</h1>
-          {contactDetails.length > 0 && (
-            <p className="text-sm text-slate-400">
-              {contactDetails.join(" · ")}
-            </p>
-          )}
-          {createdLabel && <p className="hb-muted text-sm">Added {createdLabel}</p>}
-        </div>
-        <Link
-          href="/customers"
-          className="text-xs uppercase tracking-[0.3em] text-slate-400 transition hover:text-slate-100"
-        >
-          ← Back to customers
-        </Link>
-      </header>
-
-      <HbCard className="space-y-3">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Profile</p>
-        <div className="space-y-2 text-sm">
+      <HbCard className="space-y-5">
+        <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Customer</p>
+            <h1 className="hb-heading-2 text-2xl font-semibold">{displayName}</h1>
+            {contactLine && <p className="text-sm text-slate-400">{contactLine}</p>}
+            {createdLabel && (
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Created {createdLabel}</p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <HbButton as="a" href="/customers" variant="ghost" size="sm">
+              Back to customers
+            </HbButton>
+            <HbButton as="a" href={`/jobs/new?customer_id=${customer.id}`} variant="secondary" size="sm">
+              New job
+            </HbButton>
+          </div>
+        </header>
+        <div className="grid gap-3 text-sm text-slate-400 md:grid-cols-2">
           <p>
             <span className="font-semibold">Name:</span> {customer.name ?? "—"}
           </p>
@@ -141,53 +144,15 @@ export default async function CustomerDetailPage(props: {
           <p>
             <span className="font-semibold">Phone:</span> {customer.phone ?? "—"}
           </p>
-        </div>
-        {createdLabel && <p className="hb-muted text-xs">Added on {createdLabel}</p>}
-      </HbCard>
-
-      <HbCard className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="hb-card-heading text-lg font-semibold">Jobs for this customer</h2>
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-            {jobs.length} job{jobs.length === 1 ? "" : "s"}
+          <p>
+            <span className="font-semibold">Created:</span> {createdLabel ?? "—"}
           </p>
         </div>
-        {jobs.length === 0 ? (
-          <p className="text-sm hb-muted">
-            No jobs linked to this customer yet. Create a job and associate this customer to see it here.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {jobs.map((job) => {
-              const jobDate = formatDate(job.created_at);
-              return (
-                <Link
-                  key={job.id}
-                  href={`/jobs/${job.id}`}
-                  className="group block rounded-2xl px-4 py-3 transition hover:bg-slate-900"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-base font-semibold text-slate-100">
-                        {job.title ?? "Untitled job"}
-                      </p>
-                      {job.status && (
-                        <p className="text-sm text-slate-400">{job.status}</p>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-1 text-right">
-                      {jobDate && (
-                        <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                          Created {jobDate}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
+        <div className="space-y-3 text-sm text-slate-400">
+          <Link href={`/jobs?customer_id=${customer.id}`} className="text-sky-300 hover:text-sky-200">
+            View jobs for this customer
+          </Link>
+        </div>
       </HbCard>
     </div>
   );

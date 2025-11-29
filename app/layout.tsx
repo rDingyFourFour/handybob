@@ -52,7 +52,7 @@ export default async function RootLayout({
     { label: "Appointments", href: "/appointments" },
     { label: "Quotes", href: "/quotes" },
     { label: "Invoices", href: "/invoices" },
-    { label: "Settings", href: "/settings" },
+    { label: "Settings", href: "/settings/workspace" },
   ];
 
   // Derived from Supabase auth (user resolved via supabase.auth.getUser); true whenever we have a signed-in user/session.

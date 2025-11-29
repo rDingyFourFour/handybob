@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+// Jobs table columns: id, user_id, customer_id, title, status, description_raw, source, urgency, ai_urgency, priority, attention_reason, attention_score, workspace_id, created_at, updated_at
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
 

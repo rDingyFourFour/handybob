@@ -1,7 +1,7 @@
 // Build diagnostics only; remove after the investigation completes.
-if (process.env.FORCE_FAIL_DASHBOARD === "1") {
-  throw new Error("FORCE_FAIL_DASHBOARD: test crash from dashboard page module");
-}
+// if (process.env.FORCE_FAIL_DASHBOARD === "1") {
+//   throw new Error("FORCE_FAIL_DASHBOARD: test crash from dashboard page module");
+// }
 // Authenticated dashboard page; expects a signed-in user and loads workspace context via createServerClient + getCurrentWorkspace.
 import { buildLog } from "@/utils/debug/buildLog";
 import Link from "next/link";
