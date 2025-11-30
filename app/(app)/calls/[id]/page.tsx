@@ -45,12 +45,9 @@ function fallbackCard(title: string, body: string) {
       <HbCard className="space-y-3">
         <h1 className="hb-heading-1 text-2xl font-semibold">{title}</h1>
         <p className="hb-muted text-sm">{body}</p>
-        <Link
-          href="/calls"
-          className="text-xs uppercase tracking-[0.3em] text-slate-500 transition hover:text-slate-100"
-        >
-          ← Back to calls
-        </Link>
+        <HbButton as="a" href="/calls" size="sm">
+          Back to calls
+        </HbButton>
       </HbCard>
     </div>
   );
@@ -73,7 +70,7 @@ export default async function CallDetailPage(props: { params: Promise<{ id: stri
     supabase = await createServerClient();
   } catch (error) {
     console.error("[call-detail] Unable to init Supabase client", error);
-    return fallbackCard("Call unavailable", "Could not connect to Supabase. Please try again.");
+    return fallbackCard("Something went wrong", "We couldn’t load this page. Try again or go back.");
   }
 
   const {
@@ -91,7 +88,7 @@ export default async function CallDetailPage(props: { params: Promise<{ id: stri
     workspace = workspaceResult.workspace;
   } catch (error) {
     console.error("[call-detail] Failed to resolve workspace", error);
-    return fallbackCard("Call unavailable", "Unable to resolve workspace. Please try again.");
+    return fallbackCard("Something went wrong", "We couldn’t load this page. Try again or go back.");
   }
 
   if (!workspace) {
@@ -162,9 +159,14 @@ export default async function CallDetailPage(props: { params: Promise<{ id: stri
               Status: {call.status ?? "—"} · {call.from_number ?? "Unknown source"}
             </p>
           </div>
-          <HbButton as="a" href="/calls" size="sm">
-            Back to calls
-          </HbButton>
+          <div className="flex gap-2">
+            <HbButton as="a" href="/calls" size="sm">
+              Back to calls
+            </HbButton>
+            <HbButton as="a" href="/calls/new" variant="secondary" size="sm">
+              Log new call
+            </HbButton>
+          </div>
         </header>
         <div className="grid gap-3 text-sm text-slate-400 md:grid-cols-2">
           <p>From number: {call.from_number ?? "Unknown"}</p>

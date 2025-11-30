@@ -425,9 +425,24 @@ export default async function DashboardPage() {
     showOverdueWork: automationPrefsRow?.show_overdue_work ?? true,
   };
 
-  const attentionItems = await getAttentionItems(workspace.id, {
-    workspaceTimeZone,
-  });
+  const defaultAttentionItems = {
+    leads: [],
+    invoices: [],
+    quotes: [],
+    calls: [],
+    urgentEmergencyCount: 0,
+    leadSourceCounts: { web: 0, calls: 0, manual: 0, other: 0 },
+  };
+
+  let attentionItems = defaultAttentionItems;
+  try {
+    attentionItems = await getAttentionItems(workspace.id, {
+      workspaceTimeZone,
+    });
+  } catch (error) {
+    console.error("[dashboard] Failed to load attention items:", error);
+    attentionItems = defaultAttentionItems;
+  }
   const callsNeedingReviewRaw = (callsNeedingReviewRes.data ?? []) as CallReviewRow[];
   const callsNeedingReview = callsNeedingReviewRaw.map((call) => ({
     ...call,
@@ -492,7 +507,12 @@ export default async function DashboardPage() {
     (prefs.showOverdueWork ? overdueInvoices.length + staleQuotes.length : 0);
 
   const urgentEmergencyCount = attentionItems.urgentEmergencyCount;
-  const leadSourceCounts = attentionItems.leadSourceCounts;
+  const leadSourceCounts = {
+    web: attentionItems.leadSourceCounts?.web ?? 0,
+    calls: attentionItems.leadSourceCounts?.calls ?? 0,
+    manual: attentionItems.leadSourceCounts?.manual ?? 0,
+    other: attentionItems.leadSourceCounts?.other ?? 0,
+  };
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-8">
@@ -663,14 +683,23 @@ export default async function DashboardPage() {
               </div>
             </div>
           </div>
-          <div className="rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm text-red-200 flex items-center justify-between">
-            <span>
-              You have {urgentEmergencyCount} urgent lead{urgentEmergencyCount === 1 ? "" : "s"} (AI urgency: emergency).
-            </span>
-            <Link href="/jobs?status=lead&ai_urgency=emergency" className="hb-button-ghost text-xs">
-              View urgent leads
-            </Link>
-          </div>
+          {urgentEmergencyCount > 0 ? (
+            <div className="rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm text-red-200 flex items-center justify-between">
+              <span>
+                You have {urgentEmergencyCount} urgent lead{urgentEmergencyCount === 1 ? "" : "s"} (AI urgency: emergency).
+              </span>
+              <Link href="/jobs?status=lead&ai_urgency=emergency" className="hb-button-ghost text-xs">
+                View urgent leads
+              </Link>
+            </div>
+          ) : (
+            <div className="rounded border border-slate-800/60 bg-slate-900/80 px-3 py-2 text-sm text-slate-400 flex items-center justify-between">
+              <span>No urgent leads right now.</span>
+              <Link href="/jobs?status=lead&ai_urgency=emergency" className="hb-button-ghost text-xs">
+                View urgent leads
+              </Link>
+            </div>
+          )}
           <div className="grid gap-5 xl:grid-cols-4 md:grid-cols-2">
           <AttentionCard title="New leads (7 days)" count={leadsRes.data?.length ?? 0} href="/jobs">
             <LeadsAttentionList items={attentionItems.leads} />

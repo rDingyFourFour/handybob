@@ -87,29 +87,23 @@ export default async function JobsPage() {
       <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="space-y-1">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Jobs</p>
-          <h1 className="hb-heading-1 text-3xl font-semibold">Jobs in {workspaceName}</h1>
-          <p className="hb-muted text-sm">
-            Track leads and active work so you always know what needs attention next.
-          </p>
+          <h1 className="hb-heading-1 text-3xl font-semibold">Jobs</h1>
+          <p className="hb-muted text-sm">Track leads and active work so you always know what needs attention next.</p>
         </div>
-        <HbButton as={Link} href="/jobs/new" size="sm">
+        <HbButton as={Link} href="/jobs/new" size="sm" variant="secondary">
           New job
         </HbButton>
       </header>
 
       {jobsError ? (
         <HbCard className="space-y-2">
-          <h2 className="hb-card-heading text-lg font-semibold">Unable to load jobs</h2>
-          <p className="hb-muted text-sm">
-            Something went wrong while fetching jobs. Please try again in a moment.
-          </p>
+          <h2 className="hb-card-heading text-lg font-semibold">Something went wrong</h2>
+          <p className="hb-muted text-sm">We couldn’t load this page. Try again or go back.</p>
         </HbCard>
       ) : jobs.length === 0 ? (
         <HbCard className="space-y-3">
           <h2 className="hb-card-heading text-lg font-semibold">No jobs yet</h2>
-          <p className="hb-muted text-sm">
-            Create a job or capture a lead and it will appear here so you can manage it.
-          </p>
+          <p className="hb-muted text-sm">You can create one using the button above.</p>
           <HbButton as={Link} href="/jobs/new">
             Create your first job
           </HbButton>
@@ -124,36 +118,40 @@ export default async function JobsPage() {
           </div>
           <div className="space-y-2">
             {jobs.map((job) => {
-              const jobDate = formatDate(job.created_at);
-              const detailParts = [job.status, job.source].filter(Boolean);
+              const jobDate = formatDate(job.created_at) ?? "—";
+              const customerDisplay = job.customer_id ? job.customer_id.slice(0, 8) : "—";
               return (
                 <Link
                   key={job.id}
                   href={`/jobs/${job.id}`}
                   className="group block rounded-2xl px-4 py-3 transition hover:bg-slate-900"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
+                  <div className="grid gap-3 text-sm text-slate-400 md:grid-cols-[minmax(0,1fr)_minmax(0,150px)_110px_140px]">
+                    <div>
                       <p className="text-base font-semibold text-slate-100">
                         {job.title ?? "Untitled job"}
                       </p>
-                      {detailParts.length > 0 && (
-                        <p className="text-sm text-slate-400">
-                          {detailParts.join(" · ")}
-                        </p>
-                      )}
+                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                        {workspaceName}
+                      </p>
                     </div>
-                    <div className="flex flex-col items-end gap-1 text-right">
-                      {jobDate && (
-                        <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                          Created {jobDate}
-                        </p>
-                      )}
-                      {job.urgency && (
-                        <span className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
-                          {job.urgency}
-                        </span>
-                      )}
+                    <div>
+                      <p className="font-semibold text-slate-100">{job.status ?? "unknown"}</p>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                        Source: {job.source ?? "manual"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-slate-100">{customerDisplay}</p>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                        Customer:
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-slate-100">{jobDate}</p>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                        Created:
+                      </p>
                     </div>
                   </div>
                 </Link>

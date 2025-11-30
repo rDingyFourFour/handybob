@@ -93,33 +93,27 @@ export default async function CustomersPage() {
       <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="space-y-1">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Customers</p>
-          <h1 className="hb-heading-1 text-3xl font-semibold">
-            Customers in {workspaceName}
-          </h1>
+          <h1 className="hb-heading-1 text-3xl font-semibold">Customers</h1>
           <p className="hb-muted text-sm">
             Keep track of the people you serve so jobs, quotes, and calls have a clear home.
           </p>
+          <p className="hb-muted text-sm">Showing customers for {workspaceName}.</p>
         </div>
-        <HbButton as={Link} href="/customers/new" size="sm">
-          Add customer
+        <HbButton as={Link} href="/customers/new" size="sm" variant="secondary">
+          New customer
         </HbButton>
       </header>
 
       {customersError ? (
         <HbCard className="space-y-2">
-          <h2 className="hb-card-heading text-lg font-semibold">Unable to load customers</h2>
-          <p className="hb-muted text-sm">
-            Something went wrong while fetching your customers. Please try again shortly.
-          </p>
+          <h2 className="hb-card-heading text-lg font-semibold">Something went wrong</h2>
+          <p className="hb-muted text-sm">We couldn’t load this page. Try again or go back.</p>
         </HbCard>
       ) : customers.length === 0 ? (
         <HbCard className="space-y-4">
           <div className="space-y-2">
             <h2 className="hb-card-heading text-lg font-semibold">No customers yet</h2>
-            <p className="hb-muted text-sm">
-              Once you add a customer, it will appear here so you can connect them to jobs, quotes,
-              and calls.
-            </p>
+            <p className="hb-muted text-sm">You can create one using the button above.</p>
           </div>
           <HbButton as={Link} href="/customers/new">
             Add your first customer

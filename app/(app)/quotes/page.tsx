@@ -90,13 +90,14 @@ export default async function QuotesPage() {
       <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="space-y-1">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Quotes</p>
-          <h1 className="hb-heading-1 text-3xl font-semibold">Quotes in {workspaceName}</h1>
+          <h1 className="hb-heading-1 text-3xl font-semibold">Quotes</h1>
           <p className="hb-muted text-sm">
             See which proposals are out, which are accepted, and what’s ready to invoice.
           </p>
+          <p className="hb-muted text-sm">Showing quotes for {workspaceName}.</p>
         </div>
         <div className="flex items-center gap-2">
-          <HbButton as={Link} href="/quotes/new" size="sm">
+          <HbButton as={Link} href="/quotes/new" size="sm" variant="secondary">
             New quote
           </HbButton>
           <HbButton as={Link} href="/jobs/new" size="sm" variant="secondary">
@@ -106,20 +107,13 @@ export default async function QuotesPage() {
       </header>
       {quotesError ? (
         <HbCard className="space-y-3">
-          <h2 className="hb-card-heading text-lg font-semibold">Unable to load quotes</h2>
-          <p className="hb-muted text-sm">
-            Something went wrong while loading your quotes. Please try again in a moment.
-          </p>
+          <h2 className="hb-card-heading text-lg font-semibold">Something went wrong</h2>
+          <p className="hb-muted text-sm">We couldn’t load this page. Try again or go back.</p>
         </HbCard>
       ) : quotes.length === 0 ? (
         <HbCard className="space-y-3">
           <h2 className="hb-card-heading text-lg font-semibold">No quotes yet</h2>
-          <p className="hb-muted text-sm">
-            Once you create a quote for a job, you’ll see it here with its status and total.
-          </p>
-          <p className="hb-muted text-sm">
-            Start by creating a job and then generating a quote from that job.
-          </p>
+          <p className="hb-muted text-sm">You can create one using the button above.</p>
           <HbButton as={Link} href="/jobs/new" size="sm">
             Go to jobs
           </HbButton>
@@ -134,42 +128,58 @@ export default async function QuotesPage() {
           </div>
           <div className="space-y-2">
             {quotes.map((quote) => {
-              const totalLabel =
-                quote.total != null ? formatCurrency(quote.total) : "Total not set";
-              const createdLabel = formatDate(quote.created_at);
+              const totalLabel = quote.total != null ? formatCurrency(quote.total) : "—";
+              const createdLabel = formatDate(quote.created_at) ?? "—";
+              const jobIdShort = quote.job_id ? quote.job_id.slice(0, 8) : null;
               return (
-                <Link
+                <article
                   key={quote.id}
-                  href={`/quotes/${quote.id}`}
-                  className="group block rounded-2xl px-4 py-3 transition hover:bg-slate-900"
+                  className="rounded-2xl border border-slate-800/60 bg-slate-900/60 px-4 py-3 transition hover:border-slate-600"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-base font-semibold text-slate-100">
-                        Quote {shortId(quote.id)}
-                      </p>
-                      <p className="text-sm text-slate-400">
-                        Status: {quote.status ?? "draft"}
-                      </p>
-                      <p className="text-sm text-slate-400">{totalLabel}</p>
+                  <div className="grid gap-3 text-sm text-slate-400 md:grid-cols-[minmax(0,1fr)_130px_120px_140px_140px]">
+                    <div>
+                      <p className="text-base font-semibold text-slate-100">Quote {shortId(quote.id)}</p>
                       {quote.client_message_template && (
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-slate-500 truncate">
                           {quote.client_message_template.slice(0, 80)}
                         </p>
                       )}
                     </div>
-                    <div className="flex flex-col items-end gap-1 text-right">
-                      {createdLabel && (
-                        <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                          Created {createdLabel}
-                        </p>
+                    <div>
+                      <p className="text-slate-100">{quote.status ?? "draft"}</p>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Status:</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-100">{totalLabel}</p>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Total:</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-slate-100">
+                        Job: {jobIdShort ? jobIdShort : "No job linked"}
+                      </p>
+                      {quote.job_id ? (
+                        <Link
+                          href={`/jobs/${quote.job_id}`}
+                          className="text-xs uppercase tracking-[0.3em] text-sky-300 hover:text-sky-200"
+                        >
+                          View job
+                        </Link>
+                      ) : (
+                        <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Job: N/A</p>
                       )}
-                      <span className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                        View
-                      </span>
+                    </div>
+                    <div className="space-y-1 text-right">
+                      <p className="text-slate-100">{createdLabel}</p>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Created:</p>
+                      <Link
+                        href={`/quotes/${quote.id}`}
+                        className="text-xs uppercase tracking-[0.3em] text-sky-300 hover:text-sky-200"
+                      >
+                        View quote
+                      </Link>
                     </div>
                   </div>
-                </Link>
+                </article>
               );
             })}
           </div>

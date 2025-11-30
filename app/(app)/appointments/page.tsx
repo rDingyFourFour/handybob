@@ -120,17 +120,13 @@ export default async function AppointmentsPage() {
 
       {appointmentsError ? (
         <HbCard className="space-y-3">
-          <h2 className="hb-card-heading text-lg font-semibold">Unable to load appointments</h2>
-          <p className="hb-muted text-sm">
-            Something went wrong. Please refresh or visit again shortly.
-          </p>
+          <h2 className="hb-card-heading text-lg font-semibold">Something went wrong</h2>
+          <p className="hb-muted text-sm">We couldn’t load this page. Try again or go back.</p>
         </HbCard>
       ) : appointments.length === 0 ? (
         <HbCard className="space-y-3">
           <h2 className="hb-card-heading text-lg font-semibold">No appointments yet</h2>
-          <p className="hb-muted text-sm">
-            Once you schedule visits, they’ll show up here with their times and status.
-          </p>
+          <p className="hb-muted text-sm">You can create one using the button above.</p>
           <Link
             href="/jobs/new"
             className="text-xs uppercase tracking-[0.3em] text-slate-500 transition hover:text-slate-100"
@@ -148,29 +144,48 @@ export default async function AppointmentsPage() {
           </div>
           <div className="space-y-2">
             {appointments.map((appt) => (
-              <Link
+              <article
                 key={appt.id}
-                href={`/appointments/${appt.id}`}
-                className="group block rounded-2xl px-4 py-3 transition hover:bg-slate-900"
+                className="group rounded-2xl border border-slate-800/60 bg-slate-900/60 px-4 py-3 transition hover:border-slate-600"
               >
                 <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
+                  <div className="space-y-1 text-sm text-slate-400">
                     <p className="text-base font-semibold text-slate-100">
                       {appt.title ?? `Appointment ${shortId(appt.id)}`}
                     </p>
                     <p className="text-sm text-slate-400">
-                      {formatDate(appt.start_time)}{appt.end_time ? ` – ${formatDate(appt.end_time)}` : ""}
+                      {formatDate(appt.start_time)}
+                      {appt.end_time ? ` – ${formatDate(appt.end_time)}` : ""}
                     </p>
                     <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
                       Status: {appt.status ?? "scheduled"}
                     </p>
+                    {appt.job?.title && (
+                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                        Job: {appt.job.title}
+                      </p>
+                    )}
                   </div>
-                  <div className="flex flex-col items-end gap-1 text-right text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                    <span>View</span>
-                    {appt.job?.title ? <span>{appt.job.title}</span> : <span>Job TBD</span>}
+                  <div className="flex flex-col items-end gap-1 text-right text-[11px] uppercase tracking-[0.3em]">
+                    <Link
+                      href={`/appointments/${appt.id}`}
+                      className="text-sky-300 hover:text-sky-200"
+                    >
+                      View appointment
+                    </Link>
+                    {appt.job_id ? (
+                      <Link
+                        href={`/jobs/${appt.job_id}`}
+                        className="text-sky-300 hover:text-sky-200"
+                      >
+                        View job
+                      </Link>
+                    ) : (
+                      <span className="text-slate-500">Job TBD</span>
+                    )}
                   </div>
                 </div>
-              </Link>
+              </article>
             ))}
           </div>
         </HbCard>

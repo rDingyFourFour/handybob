@@ -6,11 +6,11 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import HbCard from "@/components/ui/hb-card";
-import HbButton from "@/components/ui/hb-button";
 
 type InvoiceRow = {
   id: string;
   user_id: string;
+  job_id: string | null;
   status: string | null;
   total: number | null;
   created_at: string | null;
@@ -49,7 +49,7 @@ export default async function InvoicesPage() {
   try {
     const { data, error } = await supabase
       .from("invoices")
-      .select("id, user_id, status, total, created_at, due_at, paid_at, public_token")
+      .select("id, user_id, job_id, status, total, created_at, due_at, paid_at, public_token")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false, nulls: "last" })
       .limit(50);
@@ -83,25 +83,21 @@ export default async function InvoicesPage() {
             Track what’s due, what’s paid, and what needs your attention.
           </p>
         </div>
-        <HbButton as={Link} href="/invoices/new" size="sm" variant="secondary">
-          New invoice
-        </HbButton>
       </header>
 
       {invoicesError ? (
         <HbCard className="space-y-3">
-          <h2 className="hb-card-heading text-lg font-semibold">Unable to load invoices</h2>
-          <p className="hb-muted text-sm">
-            Something went wrong while loading your invoices. Please try again.
-          </p>
+          <h2 className="hb-card-heading text-lg font-semibold">Something went wrong</h2>
+          <p className="hb-muted text-sm">We couldn’t load this page. Try again or go back.</p>
         </HbCard>
       ) : invoices.length === 0 ? (
         <HbCard className="space-y-3">
           <h2 className="hb-card-heading text-lg font-semibold">No invoices yet</h2>
-          <p className="hb-muted text-sm">
-            Once you send invoices, they’ll show up here with their status and amounts.
-          </p>
-          <Link href="/quotes" className="text-xs uppercase tracking-[0.3em] text-slate-500 transition hover:text-slate-100">
+          <p className="hb-muted text-sm">There&apos;s nothing to show here yet.</p>
+          <Link
+            href="/quotes"
+            className="text-xs uppercase tracking-[0.3em] text-slate-500 transition hover:text-slate-100"
+          >
             → Create a quote first
           </Link>
         </HbCard>
@@ -115,43 +111,49 @@ export default async function InvoicesPage() {
           </div>
           <div className="space-y-2">
             {invoices.map((invoice) => {
-              const totalLabel =
-                invoice.total != null ? formatCurrency(invoice.total) : "Amount not set";
-              const createdLabel = formatDate(invoice.created_at);
-              const dueLabel = formatDate(invoice.due_at);
-              const paidLabel = formatDate(invoice.paid_at);
+              const totalLabel = invoice.total != null ? formatCurrency(invoice.total) : "—";
+              const dateLabel = formatDate(invoice.due_at ?? invoice.created_at);
+              const statusLabel = invoice.status ?? "draft";
+              const shortInvoiceId = shortId(invoice.id);
               return (
-                <Link
+                <article
                   key={invoice.id}
-                  href={`/invoices/${invoice.id}`}
-                  className="group block rounded-2xl px-4 py-3 transition hover:bg-slate-900"
+                  className="rounded-2xl border border-slate-800/60 bg-slate-900/60 px-4 py-3 transition hover:border-slate-600"
                 >
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-3 text-sm text-slate-400 md:flex-row md:items-center md:justify-between">
                     <div className="space-y-1">
-                      <p className="text-base font-semibold text-slate-100">
-                        Invoice {shortId(invoice.id)}
-                      </p>
-                      <p className="text-sm text-slate-400">
-                        Status: {invoice.status ?? "draft"}
-                      </p>
-                      <p className="text-sm text-slate-400">{totalLabel}</p>
-                      <p className="text-xs text-slate-500">
-                        Created: {createdLabel} · Due: {dueLabel}
-                      </p>
-                      {invoice.paid_at && (
-                        <p className="text-xs text-slate-500">
-                          Paid: {paidLabel}
+                      <p className="text-base font-semibold text-slate-100">Invoice {shortInvoiceId}</p>
+                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Status: {statusLabel}</p>
+                      {invoice.job_id ? (
+                        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                          Job:{" "}
+                          <Link
+                            href={`/jobs/${invoice.job_id}`}
+                            className="text-xs uppercase tracking-[0.3em] text-sky-300 hover:text-sky-200"
+                          >
+                            View job
+                          </Link>
                         </p>
+                      ) : (
+                        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job: N/A</p>
                       )}
                     </div>
-                    <div className="flex flex-col items-end gap-1 text-right text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                      <span>View</span>
-                      {invoice.public_token && (
-                        <span>Public</span>
-                      )}
+                    <div className="text-right space-y-1">
+                      <p className="text-slate-100">{totalLabel}</p>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Total:</p>
+                    </div>
+                    <div className="text-right space-y-1 text-[11px] uppercase tracking-[0.3em]">
+                      <p className="text-slate-100">{dateLabel}</p>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Due</p>
+                      <Link
+                        href={`/invoices/${invoice.id}`}
+                        className="text-xs uppercase tracking-[0.3em] text-sky-300 hover:text-sky-200"
+                      >
+                        View invoice
+                      </Link>
                     </div>
                   </div>
-                </Link>
+                </article>
               );
             })}
           </div>

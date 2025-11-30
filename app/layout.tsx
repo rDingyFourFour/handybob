@@ -45,14 +45,16 @@ export default async function RootLayout({
 
   const navLinks = [
     { label: "Dashboard", href: "/dashboard" },
-    { label: "Inbox", href: "/inbox" },
-    { label: "Calls", href: "/calls" },
     { label: "Jobs", href: "/jobs" },
     { label: "Customers", href: "/customers" },
-    { label: "Appointments", href: "/appointments" },
     { label: "Quotes", href: "/quotes" },
     { label: "Invoices", href: "/invoices" },
+    { label: "Appointments", href: "/appointments" },
+    { label: "Calls", href: "/calls" },
+    { label: "Messages", href: "/messages" },
+    { label: "Calendar", href: "/calendar" },
     { label: "Settings", href: "/settings/workspace" },
+    { label: "Profile", href: "/settings/profile" },
   ];
 
   // Derived from Supabase auth (user resolved via supabase.auth.getUser); true whenever we have a signed-in user/session.

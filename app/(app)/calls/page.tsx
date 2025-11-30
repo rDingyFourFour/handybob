@@ -16,6 +16,7 @@ type CallRow = {
   priority: string | null;
   needs_followup: boolean | null;
   job_id: string | null;
+  customer_id: string | null;
 };
 
 import HbButton from "@/components/ui/hb-button";
@@ -46,7 +47,9 @@ export default async function CallsPage() {
 
   const callsRes = await supabase
     .from("calls")
-    .select("id, workspace_id, created_at, from_number, status, priority, needs_followup, job_id")
+    .select(
+      "id, workspace_id, created_at, from_number, status, priority, needs_followup, job_id, customer_id"
+    )
     .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -73,7 +76,10 @@ export default async function CallsPage() {
 
       <HbCard className="space-y-3">
         {calls.length === 0 ? (
-          <p className="hb-muted text-sm">No calls yet.</p>
+          <div className="space-y-2">
+            <h2 className="hb-card-heading text-lg font-semibold">No calls yet</h2>
+            <p className="hb-muted text-sm">You can create one using the button above.</p>
+          </div>
         ) : (
           <div className="space-y-2">
             {calls.map((call) => (
@@ -82,15 +88,39 @@ export default async function CallsPage() {
                 className="flex flex-col gap-1 rounded-lg border border-slate-800 px-4 py-3"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold">
-                    {formatDate(call.created_at)}
-                  </p>
-                  <Link
-                    href={`/calls/${call.id}`}
-                    className="text-xs uppercase tracking-[0.3em] text-slate-500 hover:text-slate-100 transition"
-                  >
-                    View
-                  </Link>
+                  <p className="text-sm font-semibold">{formatDate(call.created_at)}</p>
+                  <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.3em]">
+                    <Link
+                      href={`/calls/${call.id}`}
+                      className="text-slate-500 hover:text-slate-100 transition"
+                    >
+                      View
+                    </Link>
+                    {call.job_id && (
+                      <span className="flex items-center gap-1 text-slate-500">
+                        <span className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Job:</span>
+                        <Link
+                          href={`/jobs/${call.job_id}`}
+                          className="text-slate-500 hover:text-slate-100 transition"
+                        >
+                          View job
+                        </Link>
+                      </span>
+                    )}
+                    {call.customer_id && (
+                      <span className="flex items-center gap-1 text-slate-500">
+                        <span className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
+                          Customer:
+                        </span>
+                        <Link
+                          href={`/customers/${call.customer_id}`}
+                          className="text-slate-500 hover:text-slate-100 transition"
+                        >
+                          View customer
+                        </Link>
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <p className="text-sm text-slate-400">
                   From: {call.from_number ?? "Unknown"} · Status: {call.status ?? "unknown"}

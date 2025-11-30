@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import HbCard from "@/components/ui/hb-card";
+import HbButton from "@/components/ui/hb-button";
 
 type CustomerLink = {
   id: string | null;
@@ -101,12 +102,9 @@ export default async function InvoiceDetailPage(props: {
         <HbCard className="space-y-3">
           <h1 className="hb-heading-1 text-2xl font-semibold">Invoice not found</h1>
           <p className="hb-muted text-sm">We couldn’t find an invoice for that link.</p>
-          <Link
-            href="/invoices"
-            className="text-xs uppercase tracking-[0.3em] text-slate-500 transition hover:text-slate-100"
-          >
-            ← Back to invoices
-          </Link>
+          <HbButton as="a" href="/invoices" size="sm">
+            Back to invoices
+          </HbButton>
         </HbCard>
       </div>
     );
@@ -137,16 +135,13 @@ export default async function InvoiceDetailPage(props: {
     <div className="hb-shell pt-20 pb-8 space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Invoice</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Invoice details</p>
           <h1 className="hb-heading-1 text-3xl font-semibold">Invoice {shortId}</h1>
           <p className="text-sm text-slate-400">Status: {invoice.status ?? "unknown"}</p>
         </div>
-        <Link
-          href="/invoices"
-          className="text-xs uppercase tracking-[0.3em] text-slate-500 transition hover:text-slate-100"
-        >
-          ← Back to invoices
-        </Link>
+        <HbButton as="a" href="/invoices" size="sm">
+          Back to invoices
+        </HbButton>
       </header>
       <HbCard className="space-y-4">
         <div>
@@ -160,6 +155,14 @@ export default async function InvoiceDetailPage(props: {
         </div>
         {customerLabel && (
           <p className="text-sm text-slate-400">Customer: {customerLabel}</p>
+        )}
+        {rawJob?.id && (
+          <p className="text-sm text-slate-400">
+            Job:{" "}
+            <Link href={`/jobs/${rawJob.id}`} className="text-sky-300 hover:text-sky-200">
+              {rawJob.title ?? rawJob.id.slice(0, 8)}
+            </Link>
+          </p>
         )}
         <div className="grid gap-2 text-sm text-slate-400">
           <p>Due: {dueDate}</p>

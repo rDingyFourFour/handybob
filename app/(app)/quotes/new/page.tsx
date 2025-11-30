@@ -71,11 +71,10 @@ async function createQuoteAction(formData: FormData) {
   }
 }
 
-export default async function NewQuotePage({
-  searchParams,
-}: {
-  searchParams?: { error?: string; jobId?: string };
+export default async function NewQuotePage(props: {
+  searchParams: Promise<{ error?: string; jobId?: string }>;
 }) {
+  const searchParams = await props.searchParams;
   let supabase;
   try {
     supabase = await createServerClient();

@@ -161,7 +161,7 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
       <HbCard className="space-y-5">
         <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Quote</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Quote details</p>
             <h1 className="hb-heading-2 text-2xl font-semibold">{title}</h1>
             <p className="text-sm text-slate-400">
               Status: {statusLabel} · Total: {formatCurrency(quote.total)}

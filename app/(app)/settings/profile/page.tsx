@@ -7,9 +7,9 @@ import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return "Unknown";
+  if (!value) return "—";
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "Invalid date";
+  if (Number.isNaN(parsed.getTime())) return "—";
   return parsed.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
@@ -40,8 +40,8 @@ export default async function ProfileSettingsPage() {
   } catch (error) {
     console.error("[settings/profile] Failed to init Supabase client:", error);
     return fallbackCard(
-      "Profile settings unavailable",
-      "Could not connect to Supabase. Check environment keys."
+      "Something went wrong",
+      "We couldn’t load this page. Try again or go back."
     );
   }
 
@@ -65,41 +65,32 @@ export default async function ProfileSettingsPage() {
     <div className="hb-shell pt-20 pb-8 space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Profile settings</p>
-          <h1 className="hb-heading-1 text-3xl font-semibold">Profile info</h1>
-          <p className="text-sm text-slate-400">Your HandyBob account information.</p>
+          <h1 className="hb-heading-2 text-2xl font-semibold text-slate-100">Profile</h1>
+          <p className="text-sm text-slate-400">Your account details for this workspace.</p>
         </div>
-        <div className="flex gap-2">
-          <HbButton as="a" href="/dashboard" variant="ghost" size="sm">
+        <div className="flex flex-wrap gap-2">
+          <HbButton as="a" href="/dashboard" size="sm">
             Back to dashboard
           </HbButton>
-          <HbButton as="a" href="/settings/workspace" size="sm">
-            Workspace settings
+          <HbButton as="a" href="/settings/workspace" variant="ghost" size="sm">
+            Back to settings
           </HbButton>
         </div>
       </div>
       <HbCard className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Account</p>
-          <h2 className="text-2xl font-semibold text-slate-100">
-            {fullName ?? user.email}
-          </h2>
-        </div>
-        <div className="grid gap-3 text-sm text-slate-400 md:grid-cols-2">
+        <div className="space-y-1 text-sm text-slate-300">
           <p>
-            <span className="font-semibold">Email:</span> {user.email ?? "—"}
+            <span className="font-semibold text-slate-100">Email:</span> {user.email ?? "—"}
           </p>
           <p>
-            <span className="font-semibold">User ID:</span> {user.id}
+            <span className="font-semibold text-slate-100">User ID:</span> {user.id}
           </p>
           <p>
-            <span className="font-semibold">Joined:</span> {createdLabel}
+            <span className="font-semibold text-slate-100">Name:</span> {fullName ?? "—"}
           </p>
-          {fullName && (
-            <p>
-              <span className="font-semibold">Name:</span> {fullName}
-            </p>
-          )}
+          <p>
+            <span className="font-semibold text-slate-100">Joined:</span> {createdLabel}
+          </p>
         </div>
       </HbCard>
     </div>

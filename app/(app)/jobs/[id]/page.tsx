@@ -153,7 +153,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
       <HbCard className="space-y-5">
         <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job details</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job details</p>
             <h1 className="hb-heading-2 text-2xl font-semibold">{jobTitle}</h1>
             <p className="text-sm text-slate-400">Status: {job.status ?? "—"}</p>
           </div>
@@ -179,7 +179,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           )}
         </div>
         <div className="space-y-3">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Description</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Description:</p>
           <p className="text-sm text-slate-300">{job.description_raw ?? "No description provided."}</p>
         </div>
       </HbCard>

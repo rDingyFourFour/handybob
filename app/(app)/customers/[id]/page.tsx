@@ -118,18 +118,18 @@ export default async function CustomerDetailPage(props: {
       <HbCard className="space-y-5">
         <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Customer</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Customer details</p>
             <h1 className="hb-heading-2 text-2xl font-semibold">{displayName}</h1>
             {contactLine && <p className="text-sm text-slate-400">{contactLine}</p>}
             {createdLabel && (
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Created {createdLabel}</p>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Created: {createdLabel}</p>
             )}
           </div>
           <div className="flex gap-2">
             <HbButton as="a" href="/customers" variant="ghost" size="sm">
               Back to customers
             </HbButton>
-            <HbButton as="a" href={`/jobs/new?customer_id=${customer.id}`} variant="secondary" size="sm">
+            <HbButton as="a" href={`/jobs/new?customerId=${customer.id}`} variant="secondary" size="sm">
               New job
             </HbButton>
           </div>
@@ -149,7 +149,7 @@ export default async function CustomerDetailPage(props: {
           </p>
         </div>
         <div className="space-y-3 text-sm text-slate-400">
-          <Link href={`/jobs?customer_id=${customer.id}`} className="text-sky-300 hover:text-sky-200">
+          <Link href={`/jobs?customerId=${customer.id}`} className="text-sky-300 hover:text-sky-200">
             View jobs for this customer
           </Link>
         </div>

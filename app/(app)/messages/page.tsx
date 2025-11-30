@@ -19,6 +19,7 @@ type MessageRecord = {
   customer_id: string | null;
   job_id: string | null;
   created_at: string | null;
+  sent_at: string | null;
 };
 
 function formatDate(value: string | null) {
@@ -34,19 +35,37 @@ function formatDate(value: string | null) {
   });
 }
 
-function fallbackCard(title: string, body: string) {
+type ShellCardProps = {
+  title: string;
+  subtitle: string;
+  buttonLabel?: string;
+  buttonHref?: string;
+};
+
+function renderShellCard({
+  title,
+  subtitle,
+  buttonLabel = "Back to dashboard",
+  buttonHref = "/dashboard",
+}: ShellCardProps) {
   return (
     <div className="hb-shell pt-20 pb-8">
       <HbCard className="space-y-3">
         <h1 className="hb-heading-1 text-2xl font-semibold">{title}</h1>
-        <p className="hb-muted text-sm">{body}</p>
-        <HbButton as="a" href="/dashboard" size="sm">
-          Back to dashboard
+        <p className="hb-muted text-sm">{subtitle}</p>
+        <HbButton as="a" href={buttonHref} size="sm">
+          {buttonLabel}
         </HbButton>
       </HbCard>
     </div>
   );
 }
+
+const bodyPreview = (body: string | null) => {
+  const trimmed = body?.trim() ?? "";
+  if (!trimmed) return "No preview available";
+  return trimmed.length > 80 ? `${trimmed.slice(0, 80)}...` : trimmed;
+};
 
 export default async function MessagesPage() {
   let supabase;
@@ -54,12 +73,21 @@ export default async function MessagesPage() {
     supabase = await createServerClient();
   } catch (error) {
     console.error("[messages] Failed to init Supabase client:", error);
-    return fallbackCard("Messages unavailable", "Could not connect to Supabase. Please try again.");
+    return renderShellCard({
+      title: "Something went wrong",
+      subtitle: "We couldn’t load this page. Try again or go back.",
+    });
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user;
+  try {
+    const {
+      data: { user: currentUser },
+    } = await supabase.auth.getUser();
+    user = currentUser;
+  } catch (error) {
+    console.error("[messages] Failed to fetch auth user:", error);
+  }
 
   if (!user) {
     redirect("/");
@@ -72,15 +100,20 @@ export default async function MessagesPage() {
     workspace = workspaceResult.workspace;
   } catch (error) {
     console.error("[messages] Failed to resolve workspace:", error);
-    return fallbackCard("Messages unavailable", "Unable to resolve workspace. Please sign in again.");
+    return renderShellCard({
+      title: "Something went wrong",
+      subtitle: "We couldn’t load this page. Try again or go back.",
+    });
   }
 
   if (!workspace) {
-    return fallbackCard("Messages unavailable", "Unable to resolve workspace. Please sign in again.");
+    return renderShellCard({
+      title: "Something went wrong",
+      subtitle: "We couldn’t load this page. Try again or go back.",
+    });
   }
 
-  let messages: MessageRecord[] = [];
-
+  let messages: MessageRecord[];
   try {
     const { data, error } = await supabase
       .from<MessageRecord>("messages")
@@ -95,93 +128,113 @@ export default async function MessagesPage() {
           external_id,
           customer_id,
           job_id,
-          created_at
+          created_at,
+          sent_at
         `
       )
       .eq("workspace_id", workspace.id)
-      .order("created_at", { ascending: false })
-      .limit(20);
+      .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("[messages] Failed to load messages:", error);
-      return fallbackCard("Messages unavailable", "Could not load workspace messages. Please try again.");
+      throw error;
     }
 
     messages = data ?? [];
   } catch (error) {
     console.error("[messages] Failed to load messages:", error);
-    return fallbackCard("Messages unavailable", "Could not load workspace messages. Please try again.");
+    return renderShellCard({
+      title: "Something went wrong",
+      subtitle: "We couldn’t load this page. Try again or go back.",
+    });
   }
 
-  const bodyPreview = (body: string | null) => {
-    const trimmed = body?.trim() ?? "";
-    if (!trimmed) return "No preview available";
-    return trimmed.length > 120 ? `${trimmed.slice(0, 120)}...` : trimmed;
-  };
+  if (messages.length === 0) {
+    return renderShellCard({
+      title: "No messages yet",
+      subtitle: "There's nothing to show here yet.",
+      buttonLabel: "View jobs",
+      buttonHref: "/jobs",
+    });
+  }
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
-      <HbCard className="space-y-4">
+      <HbCard className="space-y-6">
         <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Messages</p>
-            <h1 className="hb-heading-2 text-2xl font-semibold">Recent conversations</h1>
-            <p className="text-sm text-slate-400">Recent messages across jobs and customers.</p>
+            <h1 className="hb-heading-2 text-2xl font-semibold">Messages</h1>
+            <p className="text-sm text-slate-400">Recent messages across your jobs.</p>
           </div>
-          <div className="flex gap-2">
-            <HbButton as="a" href="/dashboard" variant="ghost" size="sm">
-              Back to dashboard
+          <div className="flex flex-wrap gap-2">
+            <HbButton as="a" href="/messages" variant="ghost" size="sm">
+              Back to messages
             </HbButton>
-            <HbButton as="a" href="/jobs" size="sm">
-              View jobs
+            <HbButton as="a" href="/customers" variant="secondary" size="sm">
+              View customers
             </HbButton>
           </div>
         </header>
 
-        {messages.length === 0 ? (
-          <div className="space-y-2 text-sm text-slate-400">
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">No messages yet</p>
-            <p>You haven’t exchanged messages in this workspace yet.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {messages.map((message) => (
-              <div
+        <div className="space-y-3">
+          {messages.map((message) => {
+            const subject = message.subject?.trim() || "(no subject)";
+            const preview = bodyPreview(message.body);
+            const statusLabel = message.status ?? "Unknown";
+            const channelLabel = message.channel?.charAt(0).toUpperCase() + message.channel?.slice(1);
+            const timestamp = formatDate(message.sent_at ?? message.created_at);
+
+            return (
+              <article
                 key={message.id}
-                className="rounded-2xl border border-slate-800/60 bg-slate-900/60 px-4 py-3 transition hover:border-slate-600"
+                className="rounded-2xl border border-slate-800/60 bg-slate-900/60 px-4 py-4 transition hover:border-slate-600"
               >
-                <div className="flex flex-col gap-1 text-sm text-slate-300 md:flex-row md:items-center md:justify-between">
-                  <div>
+                <div className="grid gap-3 text-sm text-slate-400 md:grid-cols-[minmax(0,1fr)_220px]">
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Subject:</p>
+                      <p className="text-sm font-semibold text-slate-100">{subject}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Body:</p>
+                      <p className="text-sm text-slate-500">{preview}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-sm text-slate-400">
+                    <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Status: {statusLabel}</p>
                     <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                      {message.direction === "inbound" ? "Inbound" : "Outbound"} ·{" "}
-                      {message.channel ?? "message"}
+                      Channel: {channelLabel ?? "—"}
                     </p>
-                    <p className="text-base font-semibold text-slate-100">
-                      {message.subject?.trim() || "(no subject)"}
-                    </p>
-                    <p className="text-sm text-slate-400">{bodyPreview(message.body)}</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-2 text-xs uppercase tracking-[0.3em] text-slate-500">
-                    <span>{formatDate(message.created_at)}</span>
-                    <span>{message.status ?? "status unknown"}</span>
+                    <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Sent: {timestamp}</p>
+                    <div className="flex flex-wrap gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-sky-300">
+                      {message.job_id && (
+                        <span className="flex items-center gap-1">
+                          <span className="text-slate-500">Job:</span>
+                          <Link href={`/jobs/${message.job_id}`} className="text-sky-300 hover:text-sky-200">
+                            View job
+                          </Link>
+                        </span>
+                      )}
+                      {message.customer_id && (
+                        <span className="flex items-center gap-1">
+                          <span className="text-slate-500">Customer:</span>
+                          <Link
+                            href={`/customers/${message.customer_id}`}
+                            className="text-sky-300 hover:text-sky-200"
+                          >
+                            View customer
+                          </Link>
+                        </span>
+                      )}
+                      {!message.job_id && !message.customer_id && (
+                        <span className="text-slate-500">No linked context</span>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-3 text-xs uppercase tracking-[0.3em]">
-                  {message.job_id && (
-                    <Link href={`/jobs/${message.job_id}`} className="text-sky-300 hover:text-sky-200">
-                      View job
-                    </Link>
-                  )}
-                  {message.customer_id && (
-                    <Link href={`/customers/${message.customer_id}`} className="text-sky-300 hover:text-sky-200">
-                      View customer
-                    </Link>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+              </article>
+            );
+          })}
+        </div>
       </HbCard>
     </div>
   );
