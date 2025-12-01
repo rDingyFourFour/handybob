@@ -9,6 +9,7 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
+import { formatCurrency } from "@/utils/timeline/formatters";
 
 type JobRecord = {
   id: string;
@@ -27,6 +28,14 @@ type JobRecord = {
     | { id: string | null; name: string | null }
     | Array<{ id: string | null; name: string | null }>
     | null;
+};
+
+type JobQuoteSummary = {
+  id: string;
+  job_id: string | null;
+  status: string | null;
+  total: number | null;
+  created_at: string | null;
 };
 
 function formatDate(value: string | null) {
@@ -137,6 +146,27 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     return fallbackCard("Job not found", "We couldn’t find that job. It may have been deleted.");
   }
 
+  let quotes: JobQuoteSummary[] = [];
+  let quotesError = false;
+  try {
+    const { data, error } = await supabase
+      .from<JobQuoteSummary>("quotes")
+      .select("id, job_id, status, total, created_at")
+      .eq("workspace_id", workspace.id)
+      .eq("job_id", job.id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("[job-detail] Failed to load quotes for job:", error);
+      quotesError = true;
+    } else {
+      quotes = data ?? [];
+    }
+  } catch (error) {
+    console.error("[job-detail] Quotes query failed:", error);
+    quotesError = true;
+  }
+
   const customer =
     Array.isArray(job.customers) && job.customers.length > 0
       ? job.customers[0]
@@ -147,6 +177,14 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
 
   const jobTitle = job.title ?? "Untitled job";
   const createdLabel = formatDate(job.created_at);
+  const quoteParams = new URLSearchParams();
+  quoteParams.set("jobId", job.id);
+  quoteParams.set("source", "job");
+  const description = (job.description_raw ?? job.title ?? "").trim();
+  if (description) {
+    quoteParams.set("description", description);
+  }
+  const quoteHref = `/quotes/new?${quoteParams.toString()}`;
 
   return (
     <div className="hb-shell pt-20 pb-8">
@@ -157,9 +195,14 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
             <h1 className="hb-heading-2 text-2xl font-semibold">{jobTitle}</h1>
             <p className="text-sm text-slate-400">Status: {job.status ?? "—"}</p>
           </div>
-          <HbButton as="a" href="/jobs" size="sm">
-            Back to jobs
-          </HbButton>
+          <div className="flex flex-wrap gap-2">
+            <HbButton as={Link} href={quoteHref} size="sm" variant="secondary">
+              Generate quote from job
+            </HbButton>
+            <HbButton as="a" href="/jobs" size="sm">
+              Back to jobs
+            </HbButton>
+          </div>
         </header>
         <div className="grid gap-3 text-sm text-slate-400 md:grid-cols-2">
           <p>Urgency: {job.urgency ?? "—"}</p>
@@ -182,6 +225,48 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Description:</p>
           <p className="text-sm text-slate-300">{job.description_raw ?? "No description provided."}</p>
         </div>
+      </HbCard>
+      <HbCard className="space-y-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job quotes</p>
+          <h2 className="hb-heading-3 text-xl font-semibold">Quotes for this job</h2>
+        </div>
+        {quotesError ? (
+          <div className="space-y-2 text-sm text-slate-400">
+            <p>Something went wrong. We couldn’t load quotes for this job.</p>
+            <HbButton as={Link} href={quoteHref} size="sm" variant="secondary">
+              New quote for this job
+            </HbButton>
+          </div>
+        ) : quotes.length === 0 ? (
+          <div className="space-y-2 text-sm text-slate-400">
+            <p>No quotes yet for this job.</p>
+            <HbButton as={Link} href={quoteHref} size="sm" variant="secondary">
+              New quote for this job
+            </HbButton>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {quotes.map((quote) => (
+              <Link
+                key={quote.id}
+                href={`/quotes/${quote.id}`}
+                className="block rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-300 transition hover:border-slate-600 hover:bg-slate-900"
+              >
+                <div className="flex items-center justify-between text-sm text-slate-200">
+                  <span className="font-semibold">Quote {quote.id.slice(0, 8)}</span>
+                  <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                    Created {formatDate(quote.created_at)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span>Status: {quote.status ?? "—"}</span>
+                  <span>Total: {quote.total != null ? formatCurrency(quote.total) : "—"}</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </HbCard>
     </div>
   );

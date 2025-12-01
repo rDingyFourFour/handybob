@@ -16,6 +16,7 @@ type QuoteRow = {
   created_at: string | null;
   job_id: string | null;
   client_message_template?: string | null;
+  smart_quote_used?: boolean | null;
 };
 
 export default async function QuotesPage() {
@@ -61,7 +62,7 @@ export default async function QuotesPage() {
   try {
     const { data, error } = await supabase
       .from("quotes")
-      .select("id, status, total, created_at, job_id, client_message_template")
+      .select("id, status, total, created_at, job_id, client_message_template, smart_quote_used")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false, nulls: "last" })
       .limit(50);
@@ -146,7 +147,14 @@ export default async function QuotesPage() {
                       )}
                     </div>
                     <div>
-                      <p className="text-slate-100">{quote.status ?? "draft"}</p>
+                      <p className="text-slate-100 flex flex-wrap items-center gap-2">
+                        {quote.status ?? "draft"}
+                        {quote.smart_quote_used ? (
+                          <span className="rounded-full border border-slate-800/80 bg-slate-900/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-300">
+                            Smart Quote
+                          </span>
+                        ) : null}
+                      </p>
                       <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Status:</p>
                     </div>
                     <div>

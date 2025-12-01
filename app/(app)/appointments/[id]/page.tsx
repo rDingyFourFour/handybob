@@ -128,6 +128,11 @@ export default async function AppointmentDetailPage(props: {
   const statusLabel = appointment.status ?? "scheduled";
   const notesLabel = appointment.notes?.trim();
 
+  const quoteHref =
+    appointment.job_id && appointment.job_id.trim()
+      ? `/quotes/new?${buildQuoteParams(appointment.job_id, appointment.notes ?? appointment.title)}`
+      : null;
+
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
       <HbCard className="space-y-5">
@@ -140,10 +145,15 @@ export default async function AppointmentDetailPage(props: {
             </p>
             <p className="text-sm text-slate-400">Time: {formatRange(appointment.start_time, appointment.end_time)}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <HbButton as="a" href="/appointments" variant="ghost" size="sm">
               Back to appointments
             </HbButton>
+            {quoteHref && (
+              <HbButton as={Link} href={quoteHref} variant="secondary" size="sm">
+                Generate quote for this job
+              </HbButton>
+            )}
             <HbButton as="a" href="/appointments/new" size="sm">
               Log new appointment
             </HbButton>
@@ -171,4 +181,15 @@ export default async function AppointmentDetailPage(props: {
       </HbCard>
     </div>
   );
+}
+
+function buildQuoteParams(jobId: string, description?: string | null) {
+  const params = new URLSearchParams();
+  params.set("jobId", jobId);
+  params.set("source", "job");
+  const trimmed = (description ?? "").trim();
+  if (trimmed) {
+    params.set("description", trimmed);
+  }
+  return params.toString();
 }

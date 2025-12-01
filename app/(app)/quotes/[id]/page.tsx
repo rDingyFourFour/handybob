@@ -28,7 +28,11 @@ type QuoteRecord = {
   updated_at: string | null;
   accepted_at: string | null;
   paid_at: string | null;
+  smart_quote_used: boolean | null;
 };
+
+const badgeBaseClasses =
+  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -129,7 +133,8 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
           created_at,
           updated_at,
           accepted_at,
-          paid_at
+          paid_at,
+          smart_quote_used
         `
       )
       .eq("workspace_id", workspace.id)
@@ -153,13 +158,27 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
 
   const title = quote.job_id ? `Quote for job ${quote.job_id.slice(0, 8)}` : "Quote details";
   const statusLabel = quote.status ?? "draft";
+  const isAiQuote = !!quote.smart_quote_used;
+  const badgeLabel = isAiQuote ? "AI-assisted quote" : "Manual quote";
+  const badgeClasses = `${badgeBaseClasses} ${
+    isAiQuote
+      ? "bg-emerald-500/10 border-emerald-400/40 text-emerald-300"
+      : "bg-slate-700/40 border-slate-500/50 text-slate-200"
+  }`;
+  const badgeDotColor = isAiQuote ? "bg-emerald-300" : "bg-slate-300";
+  const logPayload = {
+    quoteId: quote.id,
+    smartQuoteUsed: isAiQuote,
+    source: "quote_detail_badge",
+  };
+  console.log("[smart-quote-metrics] quote detail badge", logPayload);
   const lineItems = Array.isArray(quote.line_items) ? quote.line_items : [];
   const firstItems = lineItems.slice(0, 3);
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
       <HbCard className="space-y-5">
-        <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Quote details</p>
             <h1 className="hb-heading-2 text-2xl font-semibold">{title}</h1>
@@ -170,15 +189,21 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
               Created: {formatDate(quote.created_at)}
             </p>
           </div>
-          <div className="flex gap-2">
-            <HbButton as="a" href="/quotes" variant="ghost" size="sm">
-              Back to quotes
-            </HbButton>
-            {quote.job_id && (
-              <HbButton as="a" href={`/jobs/${quote.job_id}`} size="sm">
-                View job
+          <div className="flex flex-col items-end gap-3">
+            <span className={badgeClasses}>
+              <span className={`h-1.5 w-1.5 rounded-full ${badgeDotColor}`} />
+              {badgeLabel}
+            </span>
+            <div className="flex flex-wrap gap-3">
+              <HbButton as="a" href="/quotes" variant="secondary" size="sm">
+                Back to quotes
               </HbButton>
-            )}
+              {quote.job_id && (
+                <HbButton as="a" href={`/jobs/${quote.job_id}`} variant="secondary" size="sm">
+                  Back to job
+                </HbButton>
+              )}
+            </div>
           </div>
         </header>
         <div className="grid gap-3 text-sm text-slate-400 md:grid-cols-2">

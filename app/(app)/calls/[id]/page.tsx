@@ -53,6 +53,17 @@ function fallbackCard(title: string, body: string) {
   );
 }
 
+function buildQuoteParams(jobId: string, description?: string | null) {
+  const params = new URLSearchParams();
+  params.set("jobId", jobId);
+  params.set("source", "job");
+  const trimmed = (description ?? "").trim();
+  if (trimmed) {
+    params.set("description", trimmed);
+  }
+  return params.toString();
+}
+
 export default async function CallDetailPage(props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params;
 
@@ -142,6 +153,13 @@ export default async function CallDetailPage(props: { params: Promise<{ id: stri
 
   const jobTitle = job?.title ?? null;
   const jobId = job?.id ?? call.job_id ?? null;
+  const quoteHref =
+    jobId && jobId.trim()
+      ? `/quotes/new?${buildQuoteParams(
+          jobId,
+          call.attention_reason ?? call.from_number ?? jobTitle,
+        )}`
+      : null;
   const customerName = customer?.name ?? null;
   const customerId = customer?.id ?? null;
 
@@ -159,10 +177,15 @@ export default async function CallDetailPage(props: { params: Promise<{ id: stri
               Status: {call.status ?? "—"} · {call.from_number ?? "Unknown source"}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <HbButton as="a" href="/calls" size="sm">
               Back to calls
             </HbButton>
+            {quoteHref && (
+              <HbButton as={Link} href={quoteHref} variant="secondary" size="sm">
+                Generate quote for this job
+              </HbButton>
+            )}
             <HbButton as="a" href="/calls/new" variant="secondary" size="sm">
               Log new call
             </HbButton>
