@@ -1,12 +1,10 @@
 export const dynamic = "force-dynamic";
 
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
-import HbCard from "@/components/ui/hb-card";
-import HbButton from "@/components/ui/hb-button";
+import JobFormShell from "./JobFormShell";
 
 async function createJobAction(formData: FormData) {
   "use server";
@@ -130,75 +128,11 @@ export default async function NewJobPage() {
           Start by capturing a lead or active job. You can send quotes and schedule work from here later.
         </p>
       </header>
-      <HbCard className="space-y-4">
-        <form action={createJobAction} className="space-y-5">
-          {customers.length === 0 && (
-            <div className="text-sm text-rose-400">
-              No customers in this workspace. Create a customer first to assign a job.
-            </div>
-          )}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-500">
-              <label htmlFor="title">Job title</label>
-              <span className="text-slate-400">Required</span>
-            </div>
-            <p className="text-[11px] text-slate-500">
-              Something you’ll recognize in your schedule or billing.
-            </p>
-            <input
-              id="title"
-              name="title"
-              type="text"
-              placeholder="Fix irrigation leak"
-              className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="customerId" className="text-xs uppercase tracking-[0.3em] text-slate-500">
-              Customer
-            </label>
-            <select
-              id="customerId"
-              name="customerId"
-              required
-              className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm"
-              defaultValue=""
-            >
-              <option value="" disabled>
-                Select a customer…
-              </option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name ?? "(No name)"}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="description" className="text-xs uppercase tracking-[0.3em] text-slate-500">
-              Job description
-            </label>
-            <p className="text-[11px] text-slate-500">
-              Optional notes about the scope, location, or special considerations.
-            </p>
-            <textarea
-              id="description"
-              name="description"
-              placeholder="Example: needs a new valve, customer prefers mornings"
-              className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm"
-              rows={4}
-            />
-          </div>
-          <input type="hidden" name="status" value="lead" />
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
-            <HbButton type="submit">Create job</HbButton>
-            <Link href="/jobs" className="text-xs uppercase tracking-[0.3em] text-slate-500 transition hover:text-slate-100">
-              Cancel
-            </Link>
-          </div>
-        </form>
-      </HbCard>
+      <JobFormShell
+        customers={customers}
+        createJobAction={createJobAction}
+        workspaceId={workspace.id}
+      />
     </div>
   );
 }
