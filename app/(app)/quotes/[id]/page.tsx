@@ -6,6 +6,7 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
+import QuoteMaterialsPanel from "./QuoteMaterialsPanel";
 
 type QuoteLineItem = {
   description?: string;
@@ -243,6 +244,16 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
             )}
           </div>
         )}
+        <QuoteMaterialsPanel
+          quoteId={quote.id}
+          workspaceId={workspace.id}
+          description={
+            quote.client_message_template ??
+            (quote.job_id ? `Quote for job ${quote.job_id}` : "Materials for this quote")
+          }
+          lineItems={lineItems}
+          jobId={quote.job_id}
+        />
         <div className="space-y-3 text-sm text-slate-400">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Identifiers</p>
           <p>ID: {quote.id}</p>

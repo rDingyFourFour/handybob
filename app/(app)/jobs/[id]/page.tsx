@@ -10,6 +10,7 @@ import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import { formatCurrency } from "@/utils/timeline/formatters";
+import JobMaterialsPanel from "./JobMaterialsPanel";
 
 type JobRecord = {
   id: string;
@@ -186,6 +187,20 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     });
   }
 
+  const materialsQuoteCandidate = quotes[0] ?? null;
+  const materialsQuoteId = materialsQuoteCandidate?.id ?? null;
+  const materialsQuoteDescription = materialsQuoteCandidate
+    ? `Quote ${materialsQuoteCandidate.id.slice(0, 8)}${
+        materialsQuoteCandidate.total != null
+          ? ` · total ${formatCurrency(materialsQuoteCandidate.total)}`
+          : ""
+      }`
+    : null;
+  console.log("[materials-ui-job] job materials quote candidate", {
+    jobId: job.id,
+    materialsQuoteId,
+  });
+
   const customer =
     Array.isArray(job.customers) && job.customers.length > 0
       ? job.customers[0]
@@ -298,6 +313,13 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           </div>
         )}
       </HbCard>
+      <JobMaterialsPanel
+        jobId={job.id}
+        jobTitle={jobTitle}
+        jobDescription={job.description_raw ?? null}
+        materialsQuoteId={materialsQuoteId}
+        materialsQuoteDescription={materialsQuoteDescription}
+      />
     </div>
   );
 }
