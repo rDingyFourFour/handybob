@@ -4,9 +4,11 @@ import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import FollowupDraftPanel from "./FollowupDraftPanel";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import QuoteMaterialsPanel from "./QuoteMaterialsPanel";
+import { createFollowupMessageAction } from "./followupMessageActions";
 
 type QuoteLineItem = {
   description?: string;
@@ -56,6 +58,21 @@ function formatCurrency(value: number | null) {
     currency: "USD",
     minimumFractionDigits: 2,
   }).format(value);
+}
+
+function calculateDaysSince(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  const diffMs = Date.now() - parsed.getTime();
+  if (diffMs <= 0) {
+    return 0;
+  }
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
 function fallbackCard(title: string, body: string) {
@@ -253,6 +270,20 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
           }
           lineItems={lineItems}
           jobId={quote.job_id}
+        />
+        <FollowupDraftPanel
+          quoteId={quote.id}
+          description={
+            quote.client_message_template ??
+            (quote.job_id ? `Quote for job ${quote.job_id}` : "Home services quote")
+          }
+          jobId={quote.job_id}
+          workspaceId={workspace.id}
+          status={quote.status ?? null}
+          totalAmount={quote.total ?? null}
+          customerName={null}
+          daysSinceQuote={calculateDaysSince(quote.created_at)}
+          createMessageAction={createFollowupMessageAction}
         />
         <div className="space-y-3 text-sm text-slate-400">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Identifiers</p>
