@@ -36,7 +36,12 @@ type JobQuoteSummary = {
   status: string | null;
   total: number | null;
   created_at: string | null;
+  smart_quote_used: boolean | null;
 };
+
+const smartQuoteBadgeClasses =
+  "inline-flex items-center gap-2 rounded-full border px-3 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] bg-amber-500/10 border-amber-400/40 text-amber-300";
+const smartQuoteBadgeDotClasses = "h-1.5 w-1.5 rounded-full bg-amber-300";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -151,7 +156,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
   try {
     const { data, error } = await supabase
       .from<JobQuoteSummary>("quotes")
-      .select("id, job_id, status, total, created_at")
+      .select("id, job_id, status, total, created_at, smart_quote_used")
       .eq("workspace_id", workspace.id)
       .eq("job_id", job.id)
       .order("created_at", { ascending: false });
@@ -165,6 +170,20 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
   } catch (error) {
     console.error("[job-detail] Quotes query failed:", error);
     quotesError = true;
+  }
+
+  if (!quotesError) {
+    const aiCount = quotes.reduce(
+      (count, quote) => (quote.smart_quote_used ? count + 1 : count),
+      0,
+    );
+    const manualCount = quotes.length - aiCount;
+    console.log("[smart-quote-metrics] job quotes badges", {
+      jobId: job.id,
+      count: quotes.length,
+      aiCount,
+      manualCount,
+    });
   }
 
   const customer =
@@ -247,24 +266,35 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           </div>
         ) : (
           <div className="space-y-2">
-            {quotes.map((quote) => (
-              <Link
-                key={quote.id}
-                href={`/quotes/${quote.id}`}
-                className="block rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-300 transition hover:border-slate-600 hover:bg-slate-900"
-              >
-                <div className="flex items-center justify-between text-sm text-slate-200">
-                  <span className="font-semibold">Quote {quote.id.slice(0, 8)}</span>
-                  <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                    Created {formatDate(quote.created_at)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>Status: {quote.status ?? "—"}</span>
-                  <span>Total: {quote.total != null ? formatCurrency(quote.total) : "—"}</span>
-                </div>
-              </Link>
-            ))}
+            {quotes.map((quote) => {
+              const isAiQuote = !!quote.smart_quote_used;
+              return (
+                <Link
+                  key={quote.id}
+                  href={`/quotes/${quote.id}`}
+                  className="block rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-300 transition hover:border-slate-600 hover:bg-slate-900"
+                >
+                  <div className="flex items-center justify-between text-sm text-slate-200">
+                    <span className="font-semibold">Quote {quote.id.slice(0, 8)}</span>
+                    <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                      Created {formatDate(quote.created_at)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span className="flex items-center gap-2">
+                      Status: {quote.status ?? "—"}
+                      {isAiQuote && (
+                        <span className={smartQuoteBadgeClasses}>
+                          <span className={smartQuoteBadgeDotClasses} />
+                          Smart Quote
+                        </span>
+                      )}
+                    </span>
+                    <span>Total: {quote.total != null ? formatCurrency(quote.total) : "—"}</span>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
       </HbCard>

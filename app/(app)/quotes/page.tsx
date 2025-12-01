@@ -19,6 +19,10 @@ type QuoteRow = {
   smart_quote_used?: boolean | null;
 };
 
+const smartQuoteBadgeClasses =
+  "inline-flex items-center gap-2 rounded-full border px-3 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] bg-amber-500/10 border-amber-400/40 text-amber-300";
+const smartQuoteBadgeDotClasses = "h-1.5 w-1.5 rounded-full bg-amber-300";
+
 export default async function QuotesPage() {
   let supabase;
   try {
@@ -75,6 +79,19 @@ export default async function QuotesPage() {
   } catch (error) {
     console.error("[quotes] Failed to load quotes:", error);
     quotesError = error;
+  }
+
+  if (!quotesError) {
+    const aiCount = quotes.reduce(
+      (count, quote) => (quote.smart_quote_used ? count + 1 : count),
+      0,
+    );
+    const manualCount = quotes.length - aiCount;
+    console.log("[smart-quote-metrics] quotes list badges", {
+      count: quotes.length,
+      aiCount,
+      manualCount,
+    });
   }
 
   function formatDate(value: string | null) {
@@ -150,7 +167,8 @@ export default async function QuotesPage() {
                       <p className="text-slate-100 flex flex-wrap items-center gap-2">
                         {quote.status ?? "draft"}
                         {quote.smart_quote_used ? (
-                          <span className="rounded-full border border-slate-800/80 bg-slate-900/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-300">
+                          <span className={smartQuoteBadgeClasses}>
+                            <span className={smartQuoteBadgeDotClasses} />
                             Smart Quote
                           </span>
                         ) : null}

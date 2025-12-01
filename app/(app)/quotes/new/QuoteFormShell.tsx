@@ -27,7 +27,8 @@ type QuoteFormShellProps = {
 
 type AiStatus = "idle" | "loading" | "error" | "disabled";
 
-const idleHint = "This is optional; you can always fill in the form manually.";
+const idleHint =
+  "Optional: describe the job in your own words and we’ll draft a quote you can edit before sending.";
 
 type AiField = "subtotal" | "tax" | "total" | "lineItems" | "clientMessage";
 
@@ -166,7 +167,9 @@ export default function QuoteFormShell({
           });
           setDebugInfo(`Debug: ${response.error} – ${response.message}`);
           setAiStatus("disabled");
-          setSmartStatusMessage("Smart Quote Builder is currently disabled.");
+        setSmartStatusMessage(
+          "Smart Quote Builder is currently disabled in this environment. You can still fill in the quote details manually.",
+        );
           return;
         }
         console.log("[smart-quote-metrics]", {
@@ -179,7 +182,7 @@ export default function QuoteFormShell({
         setDebugInfo(`Debug: ${response.error} – ${response.message}`);
         setAiStatus("error");
         setSmartStatusMessage(
-          "We couldn’t generate a quote. Please try again or fill in details manually.",
+          "We couldn’t generate a Smart Quote right now. You can try again or fill in the quote details manually.",
         );
         return;
       }
@@ -231,7 +234,7 @@ export default function QuoteFormShell({
           userHadEditedAmounts:
             userTouched.subtotal || userTouched.tax || userTouched.total,
         });
-        setAiSuccessMessage("Smart Quote applied. Review and edit before sending.");
+        setAiSuccessMessage("Smart Quote applied. Review and adjust before sending.");
       } else {
         setAiSuccessMessage(null);
       }
@@ -240,9 +243,9 @@ export default function QuoteFormShell({
       setSmartStatusMessage(null);
     } catch {
       setAiStatus("error");
-      setSmartStatusMessage(
-        "We couldn’t generate a quote. Please try again or fill in details manually.",
-      );
+        setSmartStatusMessage(
+          "We couldn’t generate a Smart Quote right now. You can try again or fill in the quote details manually.",
+        );
     }
   };
 
@@ -294,7 +297,7 @@ export default function QuoteFormShell({
             disabled={aiStatus === "loading"}
             onClick={handleSmartQuoteGenerate}
           >
-            {aiStatus === "loading" ? "Generating quote…" : "Generate quote with AI"}
+            {aiStatus === "loading" ? "Generating Smart Quote…" : "Generate Smart Quote"}
           </HbButton>
           <p
             className={`text-[11px] ${

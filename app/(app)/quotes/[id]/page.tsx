@@ -31,8 +31,9 @@ type QuoteRecord = {
   smart_quote_used: boolean | null;
 };
 
-const badgeBaseClasses =
-  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide";
+const smartQuoteBadgeClasses =
+  "inline-flex items-center gap-2 rounded-full border px-3 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] bg-amber-500/10 border-amber-400/40 text-amber-300";
+const smartQuoteBadgeDotClasses = "h-1.5 w-1.5 rounded-full bg-amber-300";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -159,13 +160,6 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
   const title = quote.job_id ? `Quote for job ${quote.job_id.slice(0, 8)}` : "Quote details";
   const statusLabel = quote.status ?? "draft";
   const isAiQuote = !!quote.smart_quote_used;
-  const badgeLabel = isAiQuote ? "AI-assisted quote" : "Manual quote";
-  const badgeClasses = `${badgeBaseClasses} ${
-    isAiQuote
-      ? "bg-emerald-500/10 border-emerald-400/40 text-emerald-300"
-      : "bg-slate-700/40 border-slate-500/50 text-slate-200"
-  }`;
-  const badgeDotColor = isAiQuote ? "bg-emerald-300" : "bg-slate-300";
   const logPayload = {
     quoteId: quote.id,
     smartQuoteUsed: isAiQuote,
@@ -190,10 +184,12 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
             </p>
           </div>
           <div className="flex flex-col items-end gap-3">
-            <span className={badgeClasses}>
-              <span className={`h-1.5 w-1.5 rounded-full ${badgeDotColor}`} />
-              {badgeLabel}
-            </span>
+            {isAiQuote && (
+              <span className={smartQuoteBadgeClasses}>
+                <span className={smartQuoteBadgeDotClasses} />
+                Smart Quote
+              </span>
+            )}
             <div className="flex flex-wrap gap-3">
               <HbButton as="a" href="/quotes" variant="secondary" size="sm">
                 Back to quotes
