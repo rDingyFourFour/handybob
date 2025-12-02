@@ -132,6 +132,10 @@ export default async function AppointmentDetailPage(props: {
     appointment.job_id && appointment.job_id.trim()
       ? `/quotes/new?${buildQuoteParams(appointment.job_id, appointment.notes ?? appointment.title)}`
       : null;
+  const jobCallScriptHref =
+    appointment.job_id && appointment.job_id.trim()
+      ? `/jobs/${appointment.job_id}#call-script`
+      : null;
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -152,6 +156,11 @@ export default async function AppointmentDetailPage(props: {
             {quoteHref && (
               <HbButton as={Link} href={quoteHref} variant="secondary" size="sm">
                 Generate quote for this job
+              </HbButton>
+            )}
+            {jobCallScriptHref && (
+              <HbButton as={Link} href={jobCallScriptHref} variant="ghost" size="sm">
+                Call script helper for this job
               </HbButton>
             )}
             <HbButton as="a" href="/appointments/new" size="sm">

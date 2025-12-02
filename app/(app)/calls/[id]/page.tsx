@@ -160,6 +160,7 @@ export default async function CallDetailPage(props: { params: Promise<{ id: stri
           call.attention_reason ?? call.from_number ?? jobTitle,
         )}`
       : null;
+  const jobCallScriptHref = jobId ? `/jobs/${jobId}#call-script` : null;
   const customerName = customer?.name ?? null;
   const customerId = customer?.id ?? null;
 
@@ -184,6 +185,11 @@ export default async function CallDetailPage(props: { params: Promise<{ id: stri
             {quoteHref && (
               <HbButton as={Link} href={quoteHref} variant="secondary" size="sm">
                 Generate quote for this job
+              </HbButton>
+            )}
+            {jobCallScriptHref && (
+              <HbButton as={Link} href={jobCallScriptHref} variant="ghost" size="sm">
+                Call script helper for this job
               </HbButton>
             )}
             <HbButton as="a" href="/calls/new" variant="secondary" size="sm">

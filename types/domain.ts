@@ -90,6 +90,7 @@ export type Message = {
   channel: string | null;
   subject: string | null;
   body: string | null;
+  outcome?: string | null;
   status: string | null;
   created_at: string | null;
   sent_at?: string | null;

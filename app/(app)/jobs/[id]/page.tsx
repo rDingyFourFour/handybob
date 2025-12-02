@@ -11,6 +11,7 @@ import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import JobMaterialsPanel from "./JobMaterialsPanel";
+import JobCallScriptPanel, { type PhoneMessageSummary } from "./JobCallScriptPanel";
 
 type JobRecord = {
   id: string;
@@ -26,8 +27,8 @@ type JobRecord = {
   created_at: string | null;
   customer_id: string | null;
   customers:
-    | { id: string | null; name: string | null }
-    | Array<{ id: string | null; name: string | null }>
+    | { id: string | null; name: string | null; phone?: string | null }
+    | Array<{ id: string | null; name: string | null; phone?: string | null }>
     | null;
 };
 
@@ -130,7 +131,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           description_raw,
           created_at,
           customer_id,
-          customers(id, name)
+          customers(id, name, phone)
         `
       )
       .eq("workspace_id", workspace.id)
@@ -200,6 +201,31 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     jobId: job.id,
     materialsQuoteId,
   });
+  const callScriptQuoteId = materialsQuoteId ?? quotes[0]?.id ?? null;
+  console.log("[call-script-ui-job] job call script quote candidate", {
+    jobId: job.id,
+    callScriptQuoteId,
+  });
+
+  let latestPhoneMessage: PhoneMessageSummary | null = null;
+  try {
+    const { data, error } = await supabase
+      .from<PhoneMessageSummary>("messages")
+      .select("id, channel, body, created_at, outcome")
+      .eq("workspace_id", workspace.id)
+      .eq("job_id", job.id)
+      .eq("channel", "phone")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.error("[job-detail] Latest phone message lookup failed", error);
+    } else {
+      latestPhoneMessage = data ?? null;
+    }
+  } catch (error) {
+    console.error("[job-detail] Latest phone message query failed", error);
+  }
 
   const customer =
     Array.isArray(job.customers) && job.customers.length > 0
@@ -207,6 +233,8 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
       : job.customers ?? null;
 
   const customerName = customer?.name ?? null;
+  const customerPhone = customer?.phone ?? null;
+  const customerFirstName = customerName ? customerName.split(" ")[0] : null;
   const customerId = customer?.id ?? job.customer_id ?? null;
 
   const jobTitle = job.title ?? "Untitled job";
@@ -313,6 +341,24 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           </div>
         )}
       </HbCard>
+      {callScriptQuoteId ? (
+        <JobCallScriptPanel
+          quoteId={callScriptQuoteId}
+          jobId={job.id}
+          workspaceId={workspace.id}
+          latestPhoneMessage={latestPhoneMessage}
+          customerName={customerName}
+          customerFirstName={customerFirstName}
+          customerPhone={customerPhone}
+        />
+      ) : (
+        <HbCard className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Phone call script</p>
+          <p className="text-sm text-slate-400">
+            Create a quote for this job first, then we’ll help you draft a call script.
+          </p>
+        </HbCard>
+      )}
       <JobMaterialsPanel
         jobId={job.id}
         jobTitle={jobTitle}

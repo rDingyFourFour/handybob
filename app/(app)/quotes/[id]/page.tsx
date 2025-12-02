@@ -9,6 +9,9 @@ import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import QuoteMaterialsPanel from "./QuoteMaterialsPanel";
 import { createFollowupMessageAction } from "./followupMessageActions";
+// CHANGE: import call script action at top of quote detail page
+import CallScriptPanel from "./CallScriptPanel";
+import { CallScriptActionResponse, generateCallScriptForQuoteAction } from "./callScriptActions";
 
 type QuoteLineItem = {
   description?: string;
@@ -186,6 +189,9 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
   console.log("[smart-quote-metrics] quote detail badge", logPayload);
   const lineItems = Array.isArray(quote.line_items) ? quote.line_items : [];
   const firstItems = lineItems.slice(0, 3);
+  const callScriptAction: (
+    input: Parameters<typeof generateCallScriptForQuoteAction>[0]
+  ) => Promise<CallScriptActionResponse> = generateCallScriptForQuoteAction;
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -284,6 +290,12 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
           customerName={null}
           daysSinceQuote={calculateDaysSince(quote.created_at)}
           createMessageAction={createFollowupMessageAction}
+        />
+        <CallScriptPanel
+          quoteId={quote.id}
+          callScriptAction={callScriptAction}
+          jobId={quote.job_id}
+          workspaceId={workspace.id}
         />
         <div className="space-y-3 text-sm text-slate-400">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Identifiers</p>
