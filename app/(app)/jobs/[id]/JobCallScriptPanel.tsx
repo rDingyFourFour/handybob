@@ -1,15 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type ChangeEvent } from "react";
+import { useRouter } from "next/navigation";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import { OutboundCallScriptResult } from "@/app/(app)/calls/outboundCallAiActions";
 import { generateCallScriptForQuoteAction } from "@/app/(app)/quotes/[id]/callScriptActions";
+import { createClient } from "@/utils/supabase/client";
 import {
+  createFollowupDraftFromCallSummaryAction,
+  createMessageDraftFromFollowupAction,
+  createNextActionSuggestionFromCallSummaryAction,
   createPhoneCallMessageAction,
   updateMessageOutcomeAction,
 } from "./phoneCallMessageActions";
+import { NextActionSuggestion } from "@/lib/domain/communications/followups";
 
 export type PhoneMessageSummary = {
   id: string;
@@ -138,6 +144,14 @@ function buildCallScriptClipboardText(script: OutboundCallScriptResult): string 
 
 function mapCallOutcomeToLabel(o){ if(o==="left_voicemail")return "Left voicemail"; if(o==="talked_to_customer")return "Talked to customer"; if(o==="no_answer")return "No answer"; if(o==="call_rescheduled")return "Call rescheduled"; return "Draft / not yet updated"; }
 
+function formatSecondsAsMmSs(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
 const CALL_OUTCOME_OPTIONS = [
   { value: "", label: "Not recorded yet" },
   { value: "left_voicemail", label: "Left voicemail" },
@@ -145,6 +159,33 @@ const CALL_OUTCOME_OPTIONS = [
   { value: "no_answer", label: "No answer" },
   { value: "call_rescheduled", label: "Call rescheduled" },
 ];
+
+type FollowupDraft = {
+  channel: string;
+  subject?: string | null;
+  body: string;
+};
+
+// CHANGE: Badge styling helper for the inline outcome label shown on each call log.
+function getOutcomeBadgeClasses(outcome?: string | null): string {
+  if (!outcome) {
+    return "border border-slate-800/60 bg-slate-900/40 text-slate-300/90";
+  }
+  switch (outcome) {
+    case "scheduled":
+    case "won":
+    case "talked_to_customer":
+      return "border border-emerald-200 bg-emerald-100 text-emerald-800";
+    case "lost":
+    case "call_rescheduled":
+      return "border border-amber-200 bg-amber-100 text-amber-800";
+    case "left_voicemail":
+    case "no_answer":
+      return "border border-amber-200 bg-amber-100 text-amber-800";
+    default:
+      return "border border-slate-800/60 bg-slate-900/40 text-slate-300/90";
+  }
+}
 
 type CallOutcomeEditorProps = {
   messageId: string;
@@ -225,33 +266,140 @@ export default function JobCallScriptPanel({
   const [callScriptError, setCallScriptError] = useState<string | null>(null);
   const [callScriptCopied, setCallScriptCopied] = useState(false);
   const [hasUsedCallScript, setHasUsedCallScript] = useState(false);
+  // CHANGE: Track checklist state for generated key points.
+  const [coveredKeyPoints, setCoveredKeyPoints] = useState<boolean[]>(() =>
+    initialLatestCallScript?.keyPoints?.map(() => false) ?? [],
+  );
   const [callOutcomeNotes, setCallOutcomeNotes] = useState("");
   const [callOutcome, setCallOutcome] = useState("not_set");
   const [isSavingCallOutcome, setIsSavingCallOutcome] = useState(false);
   const [lastCallOutcomeSaved, setLastCallOutcomeSaved] = useState(false);
   const [callOutcomeError, setCallOutcomeError] = useState<string | null>(null);
-  const [latestPhoneMessage, setLatestPhoneMessage] = useState<PhoneMessageSummary | null>(
-    initialLatestPhoneMessage ?? null,
+  const supabaseClient = useMemo(() => createClient(), []);
+  const [callLogs, setCallLogs] = useState<PhoneMessageSummary[]>(() =>
+    initialLatestPhoneMessage ? [initialLatestPhoneMessage] : [],
   );
+  const [callLogsLoading, setCallLogsLoading] = useState(false);
+  const [callLogsError, setCallLogsError] = useState<string | null>(null);
+  const [showCallLogList, setShowCallLogList] = useState(false);
+  // CHANGE: Track whether the agent is currently using the guided call mode.
+  const [inGuidedCall, setInGuidedCall] = useState(false);
+  // CHANGE: Track the call summary UI state for ending guided calls.
+  const [showCallSummary, setShowCallSummary] = useState(false);
+  // CHANGE: Track when the guided call started so we can compute duration.
+  const [guidedCallStartedAt, setGuidedCallStartedAt] = useState<number | null>(null);
+  const [guidedCallElapsedSeconds, setGuidedCallElapsedSeconds] = useState(0);
+  // CHANGE: Track the most recent guided-call duration for displaying in the summary card.
+  const [lastGuidedCallDurationSeconds, setLastGuidedCallDurationSeconds] = useState<number | null>(null);
+  const [callSummaryNote, setCallSummaryNote] = useState("");
+  const [callSummaryOutcome, setCallSummaryOutcome] = useState<string | null>(null);
+  const [savingCallSummary, setSavingCallSummary] = useState(false);
+  const [loadingFollowupDraft, setLoadingFollowupDraft] = useState(false);
+  const [followupDraft, setFollowupDraft] = useState<FollowupDraft | null>(null);
+  const [savingFollowupMessage, setSavingFollowupMessage] = useState(false);
+  const [loadingNextActionSuggestion, setLoadingNextActionSuggestion] = useState(false);
+  const [nextActionSuggestion, setNextActionSuggestion] = useState<NextActionSuggestion | null>(null);
+  const [savingNextActionPlan, setSavingNextActionPlan] = useState(false);
+  // CHANGE: Track which outcome filter is active for the log list.
+  const [outcomeFilter, setOutcomeFilter] = useState<"all" | string>("all");
   const [showGuidedCall, setShowGuidedCall] = useState(false);
   const [isPending, startTransition] = useTransition();
   const callScriptLoading = isPending;
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLoggedViewRef = useRef(false);
-
-  useEffect(() => {
-    setLatestPhoneMessage(initialLatestPhoneMessage ?? null);
-  }, [initialLatestPhoneMessage]);
+  const router = useRouter();
 
   useEffect(() => {
     setCallScriptResult(initialLatestCallScript ?? null);
   }, [initialLatestCallScript]);
 
   useEffect(() => {
-    if (!callScriptResult && showGuidedCall) {
-      setShowGuidedCall(false);
+    if (!jobId || !workspaceId) {
+      setCallLogs([]);
+      setCallLogsError(null);
+      setCallLogsLoading(false);
+      return undefined;
     }
-  }, [callScriptResult, showGuidedCall]);
+
+    let canceled = false;
+    setCallLogsLoading(true);
+    setCallLogsError(null);
+
+    const loadCallLogs = async () => {
+      try {
+        const { data, error } = await supabaseClient
+          .from<PhoneMessageSummary>("messages")
+          .select("id, channel, body, created_at, outcome")
+          .eq("workspace_id", workspaceId)
+          .eq("job_id", jobId)
+          .eq("channel", "phone")
+          .order("created_at", { ascending: false });
+        if (canceled) return;
+        if (error) {
+          console.error("[job-call-script-panel] Failed to load call logs", error);
+          setCallLogsError("Unable to load call notes right now.");
+          setCallLogs([]);
+        } else {
+          setCallLogs(data ?? []);
+        }
+      } catch (error) {
+        if (canceled) return;
+        console.error("[job-call-script-panel] Failed to load call logs", error);
+        setCallLogsError("Unable to load call notes right now.");
+      } finally {
+        if (!canceled) {
+          setCallLogsLoading(false);
+        }
+      }
+    };
+
+    void loadCallLogs();
+
+    return () => {
+      canceled = true;
+    };
+  }, [jobId, supabaseClient, workspaceId]);
+
+  const exitGuidedCall = () => {
+    setInGuidedCall(false);
+    setShowGuidedCall(false);
+    setShowCallSummary(false);
+    setCallSummaryNote("");
+    setCallSummaryOutcome(null);
+    // CHANGE: Reset the guided call timestamp when closing this mode.
+    setGuidedCallStartedAt(null);
+    setGuidedCallElapsedSeconds(0);
+  };
+
+  useEffect(() => {
+    if (!callScriptResult) {
+      exitGuidedCall();
+    }
+  }, [callScriptResult]);
+
+  useEffect(() => {
+    // CHANGE: Reset checklist whenever the script subject or key point count changes.
+    // CHANGE: Depend only on the array of key points to satisfy hooks linting.
+    setCoveredKeyPoints(callScriptResult?.keyPoints?.map(() => false) ?? []);
+  }, [callScriptResult?.keyPoints]);
+
+  useEffect(() => {
+    if (!inGuidedCall || !guidedCallStartedAt) {
+      setGuidedCallElapsedSeconds(0);
+      return;
+    }
+    // CHANGE: Maintain a live guided-call timer for the UI.
+    const tick = () => {
+      const now = Date.now();
+      const elapsed = Math.max(0, Math.round((now - guidedCallStartedAt) / 1000));
+      setGuidedCallElapsedSeconds(elapsed);
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => {
+      window.clearInterval(id);
+    };
+  }, [inGuidedCall, guidedCallStartedAt]);
 
   async function runCallScriptAction() {
     console.log("[call-script-ui] generate clicked", { quoteId });
@@ -313,6 +461,227 @@ export default function JobCallScriptPanel({
       console.log("[call-script-ui] copy failed", { quoteId, error });
     }
   };
+
+  // CHANGE: Toggle guided-call mode and optionally scroll to the script checklist.
+  const handleToggleGuidedCall = () => {
+    if (!callScriptResult) {
+      return;
+    }
+    if (!inGuidedCall) {
+      setFollowupDraft(null);
+      setNextActionSuggestion(null);
+      setLoadingFollowupDraft(false);
+      setLoadingNextActionSuggestion(false);
+      setInGuidedCall(true);
+      // CHANGE: Capture the guided call start time for later duration tracking.
+      setGuidedCallStartedAt(Date.now());
+      setShowCallSummary(false);
+      setShowGuidedCall(true);
+      if (typeof document !== "undefined") {
+        document
+          .getElementById("phone-call-script-section")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    } else {
+      setShowCallSummary(true);
+    }
+  };
+
+  const handleSkipCallSummary = () => {
+    setFollowupDraft(null);
+    setLoadingFollowupDraft(false);
+    setNextActionSuggestion(null);
+    setLoadingNextActionSuggestion(false);
+    exitGuidedCall();
+  };
+
+  const handleSaveCallSummary = async () => {
+    if (savingCallSummary || !callScriptResult) {
+      return;
+    }
+    const trimmedNote = callSummaryNote.trim();
+    const outcomeLabel = callSummaryOutcome ? mapCallOutcomeToLabel(callSummaryOutcome) : undefined;
+    if (!trimmedNote && !outcomeLabel) {
+      return;
+    }
+    setSavingCallSummary(true);
+    try {
+      const endedAt = Date.now();
+      const startedAt = guidedCallStartedAt ?? endedAt;
+      const durationSeconds = Math.max(0, Math.round((endedAt - startedAt) / 1000));
+      setLastGuidedCallDurationSeconds(durationSeconds);
+      const formattedOutcomeForBody = callSummaryOutcome?.replace(/_/g, " ");
+      const summaryLines: string[] = [];
+      if (formattedOutcomeForBody) {
+        summaryLines.push(`Outcome: ${formattedOutcomeForBody}`);
+      }
+      if (trimmedNote) {
+        summaryLines.push(trimmedNote);
+      }
+      // CHANGE: Inline a quick call-session footer for future agents to read.
+      summaryLines.push("");
+      summaryLines.push(
+        `Call session: guided, approx. duration ${durationSeconds}s (startedAt=${new Date(
+          startedAt,
+        ).toISOString()}, endedAt=${new Date(endedAt).toISOString()})`,
+      );
+      const body = summaryLines.join("\n\n");
+      const result = await createPhoneCallMessageAction({
+        jobId,
+        quoteId,
+        workspaceId,
+        subject: callScriptResult.subject ?? "Guided call summary",
+        noteBody: body,
+        script: {
+          subject: callScriptResult.subject,
+          opening: callScriptResult.opening,
+          keyPoints: callScriptResult.keyPoints,
+          closing: callScriptResult.closing,
+          outcome: outcomeLabel ?? undefined,
+        },
+      });
+      if (result.ok) {
+        const newLog: PhoneMessageSummary = {
+          id: result.messageId,
+          channel: "phone",
+          body,
+          created_at: new Date().toISOString(),
+          outcome: outcomeLabel ?? "Guided call summary",
+        };
+        setCallLogs((prev) => [newLog, ...prev.filter((log) => log.id !== newLog.id)]);
+        const summaryNoteForDraft = trimmedNote;
+        const summaryOutcomeValue = callSummaryOutcome ?? null;
+        exitGuidedCall();
+        setLoadingFollowupDraft(true);
+        setFollowupDraft(null);
+        try {
+          const draft = await createFollowupDraftFromCallSummaryAction({
+            workspaceId,
+            jobId,
+            quoteId,
+            summaryNote: summaryNoteForDraft,
+            outcome: summaryOutcomeValue,
+          });
+          if (draft) {
+            setFollowupDraft({
+              channel: draft.channelSuggestion ?? "email",
+              subject: draft.subject ?? null,
+              body: draft.body,
+            });
+          }
+        } catch (error) {
+          console.error(
+            "[job-call-script-panel] Failed to create follow-up draft from call summary",
+            error,
+          );
+        } finally {
+        setLoadingFollowupDraft(false);
+      }
+        setLoadingNextActionSuggestion(true);
+        setNextActionSuggestion(null);
+        try {
+          const suggestion = await createNextActionSuggestionFromCallSummaryAction({
+            workspaceId,
+            jobId,
+            quoteId,
+            outcome: summaryOutcomeValue,
+            summaryNote: summaryNoteForDraft,
+          });
+          if (suggestion) {
+            setNextActionSuggestion(suggestion);
+          }
+        } catch (error) {
+          console.error(
+            "[job-call-script-panel] Failed to create next action suggestion from call summary",
+            error,
+          );
+        } finally {
+          setLoadingNextActionSuggestion(false);
+        }
+    } else {
+      console.error("[job-call-script-panel] Failed to save guided call summary", result.error);
+    }
+    } catch (error) {
+      console.error("[job-call-script-panel] Failed to save guided call summary", error);
+    } finally {
+      setSavingCallSummary(false);
+    }
+  };
+
+  const handleCreateFollowupMessageFromDraft = async () => {
+    if (!followupDraft || savingFollowupMessage) {
+      return;
+    }
+    setSavingFollowupMessage(true);
+    try {
+      const result = await createMessageDraftFromFollowupAction({
+        workspaceId,
+        jobId,
+        quoteId,
+        channel: followupDraft.channel,
+        subject: followupDraft.subject ?? "Quick follow-up after our call",
+        body: followupDraft.body,
+      });
+      if (result.ok && result.messageId) {
+        setFollowupDraft(null);
+        router.push(`/messages/${result.messageId}`);
+      } else {
+        console.error(
+          "[job-call-script-panel] Failed to create follow-up message from draft",
+          result.error,
+        );
+      }
+    } catch (error) {
+      console.error("[job-call-script-panel] Failed to create follow-up message from draft", error);
+    } finally {
+      setSavingFollowupMessage(false);
+    }
+  };
+
+  const handleLogNextActionPlan = async () => {
+    if (!nextActionSuggestion || savingNextActionPlan) {
+      return;
+    }
+    setSavingNextActionPlan(true);
+    try {
+      const lines: string[] = [];
+      lines.push(`Recommended next step: ${nextActionSuggestion.label}`);
+      if (nextActionSuggestion.timingHint) {
+        lines.push(`Suggested timing: ${nextActionSuggestion.timingHint}`);
+      }
+      lines.push("");
+      lines.push(`Reason: ${nextActionSuggestion.reason}`);
+      const result = await createMessageDraftFromFollowupAction({
+        workspaceId,
+        jobId,
+        quoteId,
+        channel: nextActionSuggestion.channelHint ?? "planning",
+        subject: "Planned next action (phone agent)",
+        body: lines.join("\n"),
+        status: "draft",
+      });
+      if (result.ok) {
+        setNextActionSuggestion(null);
+        router.refresh();
+      } else {
+        console.error(
+          "[job-call-script-panel] Failed to log next action plan",
+          result.error,
+        );
+      }
+    } catch (error) {
+      console.error("[job-call-script-panel] Failed to log next action plan", error);
+    } finally {
+      setSavingNextActionPlan(false);
+    }
+  };
+
+  // CHANGE: Derive progress/checklist metrics for talking points.
+  const keyPoints = callScriptResult?.keyPoints ?? [];
+  const totalPoints = keyPoints.length;
+  const coveredCount = coveredKeyPoints.filter(Boolean).length;
+  const hasPoints = totalPoints > 0;
+  const progressPercent = hasPoints ? (coveredCount / totalPoints) * 100 : 0;
 
   useEffect(() => {
     if (!callScriptResult) {
@@ -385,17 +754,18 @@ export default function JobCallScriptPanel({
           outcome: outcomeLabel,
         },
       });
-        if (result.ok) {
-          setCallOutcomeNotes("");
-          setLastCallOutcomeSaved(true);
-          setCallOutcomeError(null);
-          setLatestPhoneMessage({
-            id: result.messageId,
-            channel: "phone",
-            body,
-            created_at: new Date().toISOString(),
-            outcome: outcomeLabel,
-          });
+      if (result.ok) {
+        setCallOutcomeNotes("");
+        setLastCallOutcomeSaved(true);
+        setCallOutcomeError(null);
+        const newLog: PhoneMessageSummary = {
+          id: result.messageId,
+          channel: "phone",
+          body,
+          created_at: new Date().toISOString(),
+          outcome: outcomeLabel,
+        };
+        setCallLogs((prev) => [newLog, ...prev.filter((log) => log.id !== newLog.id)]);
         console.log("[call-script-metrics]", {
           event: "phone_call_note_saved",
           jobId,
@@ -414,23 +784,30 @@ export default function JobCallScriptPanel({
     }
   };
 
-  const latestLogBody = latestPhoneMessage?.body?.trim();
-  const latestLogTimestamp = latestPhoneMessage
-    ? formatTimestamp(latestPhoneMessage.created_at)
+  // CHANGE: Derive the subset of call logs matching the currently selected outcome filter.
+  const filteredCallLogs = useMemo(() => {
+    if (outcomeFilter === "all") {
+      return callLogs;
+    }
+    // CHANGE: Treat missing outcomes as an empty string so the “Not recorded yet” pill works.
+    return callLogs.filter((log) => (log.outcome ?? "") === outcomeFilter);
+  }, [callLogs, outcomeFilter]);
+
+  const latestCallLog = callLogs[0] ?? null;
+  const latestLogBody = latestCallLog?.body?.trim();
+  const latestLogTimestamp = latestCallLog
+    ? formatTimestamp(latestCallLog.created_at)
     : null;
 
-  const handleLatestOutcomeChange = (nextOutcome: string | null) => {
-    setLatestPhoneMessage((prev) => (prev ? { ...prev, outcome: nextOutcome } : prev));
+  const handleCallLogOutcomeChange = (logId: string, nextOutcome: string | null) => {
+    setCallLogs((prev) =>
+      prev.map((log) => (log.id === logId ? { ...log, outcome: nextOutcome } : log)),
+    );
   };
 
   const callTypeLabel = "Quote follow-up";
 
   const hasCallScript = Boolean(callScriptResult);
-  const guidedCallButtonLabel = hasCallScript
-    ? showGuidedCall
-      ? "Hide"
-      : "Start call"
-    : "No script yet";
   const customerDisplayName = customerName ?? customerFirstName ?? "Customer";
   const cleanedCustomerPhone = customerPhone
     ? customerPhone.replace(/[^+\d]/g, "")
@@ -442,36 +819,164 @@ export default function JobCallScriptPanel({
 
   return (
     <HbCard className="space-y-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1 text-xs text-slate-400">
+          <p className="text-[11px] uppercase tracking-[0.4em] text-slate-500">Phone agent</p>
+          <p className="text-sm font-semibold text-slate-100">1. Prepare · 2. Call · 3. Wrap up</p>
+        </div>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-900"
+          onClick={() => {
+            router.push(`/calls?jobId=${jobId}`);
+          }}
+        >
+          Open in Calls
+        </button>
+      </div>
       <div className="space-y-1">
         <h3 className="text-base font-semibold text-slate-100">Phone call script</h3>
         <p className="text-xs text-slate-400">
           Use this to guide a quick call with the customer about their quote.
         </p>
       </div>
-      {latestLogBody && (
-        <div className="space-y-2 rounded-lg border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-100">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Last call log</p>
+      <div className="space-y-2 rounded-lg border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-100">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Latest note</p>
+          <div className="flex items-center gap-2">
+            {lastGuidedCallDurationSeconds != null && (
+              <span className="rounded-full border border-slate-800/60 bg-slate-900/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] text-slate-300">
+                Last call: {formatSecondsAsMmSs(lastGuidedCallDurationSeconds)}
+              </span>
+            )}
             <span className="text-[10px] uppercase tracking-[0.4em] text-slate-500">
-              {latestPhoneMessage?.channel === "phone" ? "Phone" : "Call"}
+              {latestCallLog ? (latestCallLog.channel === "phone" ? "Phone" : "Call") : "Notes"}
             </span>
           </div>
-          <div className="space-y-1 text-xs text-slate-400">
-            {latestPhoneMessage?.id && (
+        </div>
+        {latestCallLog ? (
+          <>
+            <div className="space-y-1 text-xs text-slate-400">
               <CallOutcomeEditor
-                key={`call-outcome-${latestPhoneMessage.id}-${latestPhoneMessage.outcome ?? "unset"}`}
-                messageId={latestPhoneMessage.id}
+                key={`call-outcome-${latestCallLog.id}-${latestCallLog.outcome ?? "unset"}`}
+                messageId={latestCallLog.id}
                 workspaceId={workspaceId}
-                initialOutcome={latestPhoneMessage.outcome}
-                onOutcomeChange={handleLatestOutcomeChange}
+                initialOutcome={latestCallLog.outcome}
+                onOutcomeChange={(nextOutcome) =>
+                  handleCallLogOutcomeChange(latestCallLog.id, nextOutcome)
+                }
               />
-            )}
-            <p>Call type: {callTypeLabel}</p>
-            {latestLogTimestamp && <p>Call time: {latestLogTimestamp}</p>}
-          </div>
-          <div className="max-h-44 overflow-auto rounded border border-slate-800/60 bg-slate-950/60 px-3 py-3 text-xs text-slate-200 whitespace-pre-wrap">
-            {latestLogBody}
-          </div>
+              <p>Call type: {callTypeLabel}</p>
+              {latestLogTimestamp && <p>Call time: {latestLogTimestamp}</p>}
+            </div>
+            <div className="max-h-44 overflow-auto rounded border border-slate-800/60 bg-slate-950/60 px-3 py-3 text-xs text-slate-200 whitespace-pre-wrap">
+              {latestLogBody}
+            </div>
+            <div className="flex justify-end">
+              {callLogs.length > 0 && (
+                <button
+                  type="button"
+                  className="text-xs font-medium text-slate-300 transition hover:text-white"
+                  onClick={() => setShowCallLogList((value) => !value)}
+                >
+                  {showCallLogList ? "Hide notes" : "View all notes"}
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-slate-400">
+            No call notes yet. End a guided call with a summary to see it here.
+          </p>
+        )}
+      </div>
+      {showCallLogList && (
+        <div className="space-y-3">
+          {callLogsLoading ? (
+            <p className="text-xs text-slate-400">Loading call notes…</p>
+          ) : callLogsError ? (
+            <p className="text-xs text-rose-400">{callLogsError}</p>
+          ) : callLogs.length === 0 ? (
+            <p className="text-xs text-slate-400">No call notes recorded yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {/* // CHANGE: Filter pills let the agent narrow call logs by recorded outcome. */}
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                  Outcome
+                </span>
+                <button
+                  type="button"
+                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
+                    outcomeFilter === "all"
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-700/60 bg-slate-950/40 text-slate-300 hover:border-slate-500"
+                  }`}
+                  onClick={() => setOutcomeFilter("all")}
+                >
+                  All
+                </button>
+                {CALL_OUTCOME_OPTIONS.map((option) => (
+                  <button
+                    key={`outcome-filter-${option.value}`}
+                    type="button"
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
+                      outcomeFilter === option.value
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-700/60 bg-slate-950/40 text-slate-300 hover:border-slate-500"
+                    }`}
+                    onClick={() => setOutcomeFilter(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              {filteredCallLogs.length === 0 ? (
+                <p className="text-xs text-slate-400">No call notes match this outcome.</p>
+              ) : (
+                <div className="space-y-3">
+                  {filteredCallLogs.map((log) => (
+                    <article
+                      key={log.id}
+                      className="space-y-2 rounded-lg border border-slate-800/60 bg-slate-950/40 p-3 text-sm text-slate-100"
+                    >
+                      <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-500">
+                        <span>{log.channel === "phone" ? "Phone note" : "Call note"}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-slate-400">
+                            {formatTimestamp(log.created_at) ?? "—"}
+                          </span>
+                          {/* // CHANGE: Badge shows the recorded outcome next to the timestamp. */}
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize tracking-[0.3em] ${getOutcomeBadgeClasses(
+                              log.outcome,
+                            )}`}
+                          >
+                            {log.outcome ? log.outcome.replace(/_/g, " ") : "No outcome"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        <CallOutcomeEditor
+                          key={`inline-call-outcome-${log.id}-${log.outcome ?? "unset"}`}
+                          messageId={log.id}
+                          workspaceId={workspaceId}
+                          initialOutcome={log.outcome}
+                          onOutcomeChange={(nextOutcome) =>
+                            handleCallLogOutcomeChange(log.id, nextOutcome)
+                          }
+                          size="xs"
+                        />
+                      </div>
+                      <p className="text-xs text-slate-200 whitespace-pre-wrap">
+                        {log.body || "No note body recorded."}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
       <div className="flex flex-wrap gap-3">
@@ -480,7 +985,15 @@ export default function JobCallScriptPanel({
           variant="secondary"
           size="sm"
           onClick={handleGenerateCallScript}
-          disabled={callScriptLoading}
+          disabled={callScriptLoading || inGuidedCall}
+          title={
+            inGuidedCall ? "End guided call before regenerating the script" : undefined
+          }
+          className={
+            inGuidedCall
+              ? "cursor-not-allowed border-slate-700 bg-slate-800/60 text-slate-500"
+              : ""
+          }
         >
           {callScriptResult ? "Regenerate call script" : "Generate call script"}
         </HbButton>
@@ -504,18 +1017,21 @@ export default function JobCallScriptPanel({
         <div className="space-y-1">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Guided call</p>
           <p className="text-xs text-slate-400">
-            Open a live guidance panel to follow the script while you’re on the phone.
+            Use guided mode to walk through the script live, check off talking points, then jot a quick summary.
           </p>
         </div>
-        <HbButton
+        <button
           type="button"
-          size="sm"
-          variant="secondary"
+          onClick={handleToggleGuidedCall}
           disabled={!hasCallScript}
-          onClick={() => setShowGuidedCall((prev) => !prev)}
+          className={`inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-medium transition ${
+            inGuidedCall
+              ? "border border-rose-500/60 bg-transparent text-rose-300 hover:bg-rose-500/10"
+              : "border border-slate-500/60 bg-slate-50/5 text-slate-100 hover:bg-slate-50/10"
+          }`}
         >
-          {guidedCallButtonLabel}
-        </HbButton>
+          {inGuidedCall ? "End & log call" : "Start guided call"}
+        </button>
       </div>
       {callScriptError && (
         <p className="text-sm text-rose-400">{callScriptError}</p>
@@ -526,13 +1042,15 @@ export default function JobCallScriptPanel({
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call log</p>
             <div className="space-y-1 text-sm text-slate-100">
               <p>Call type: {callTypeLabel}</p>
-              {latestPhoneMessage?.id ? (
+              {latestCallLog?.id ? (
                 <CallOutcomeEditor
-                  key={`guided-outcome-${latestPhoneMessage.id}-${latestPhoneMessage.outcome ?? "unset"}`}
-                  messageId={latestPhoneMessage.id}
+                  key={`guided-outcome-${latestCallLog.id}-${latestCallLog.outcome ?? "unset"}`}
+                  messageId={latestCallLog.id}
                   workspaceId={workspaceId}
-                  initialOutcome={latestPhoneMessage.outcome}
-                  onOutcomeChange={handleLatestOutcomeChange}
+                  initialOutcome={latestCallLog.outcome}
+                  onOutcomeChange={(nextOutcome) =>
+                    handleCallLogOutcomeChange(latestCallLog.id, nextOutcome)
+                  }
                   size="xs"
                 />
               ) : (
@@ -589,36 +1107,107 @@ export default function JobCallScriptPanel({
               type="button"
               size="sm"
               variant="ghost"
-              onClick={() => setShowGuidedCall(false)}
+              onClick={() => {
+                setShowGuidedCall(false);
+                setInGuidedCall(false);
+                // CHANGE: Ensure the duration tracker resets when dismissing the panel.
+                setGuidedCallStartedAt(null);
+                setGuidedCallElapsedSeconds(0);
+              }}
             >
               Done
             </HbButton>
           </div>
         </div>
       )}
-      {callScriptResult && (
-        <div className="space-y-3 rounded-lg border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-100">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call script</p>
-            {callScriptResult.channelSuggestion && (
-              <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                Channel: {callScriptResult.channelSuggestion}
-              </span>
+      {callScriptResult ? (
+        <>
+          <section
+            id="phone-call-script-section"
+            className={`space-y-3 rounded-lg border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-100 transition ${
+              inGuidedCall
+                ? "border-emerald-500/70 bg-slate-950/70 shadow-[0_0_0_1px_rgba(16,185,129,0.4)]"
+                : ""
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">CALL SCRIPT</p>
+              {callScriptResult.channelSuggestion && (
+                <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                  Channel: {callScriptResult.channelSuggestion}
+                </span>
+              )}
+            </div>
+            {inGuidedCall && (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center rounded-full border border-emerald-500/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-emerald-300">
+                  In guided call
+                </span>
+                <span className="text-[10px] uppercase tracking-[0.3em] text-emerald-200">
+                  {formatSecondsAsMmSs(guidedCallElapsedSeconds)}
+                </span>
+              </div>
             )}
-          </div>
           <div>
             <p className="text-sm font-semibold text-slate-50">{callScriptResult.subject}</p>
             <p className="text-xs text-slate-400">{callScriptResult.opening}</p>
           </div>
-          {callScriptResult.keyPoints.length > 0 && (
-            <ul className="space-y-1 text-sm text-slate-200">
-              {callScriptResult.keyPoints.map((point, index) => (
-                <li key={index} className="flex items-start gap-2">
-                  <span className="mt-[0.1rem] h-3 w-3 rounded-full border border-slate-600 bg-slate-900" />
-                  <span>{point}</span>
-                </li>
-              ))}
-            </ul>
+          {hasPoints && (
+            // CHANGE: Draw extra emphasis on the checklist while guided mode is active.
+            <div
+              className={`space-y-3 pb-2 transition ${
+                inGuidedCall ? "rounded-lg border border-emerald-500/40 bg-slate-900/80" : ""
+              }`}
+            >
+              <div className="space-y-1 text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                <p>
+                  {coveredCount} of {totalPoints} talking points covered
+                </p>
+              </div>
+              <div className="h-1.5 rounded-full bg-slate-800">
+                <div
+                  className="h-1.5 rounded-full bg-emerald-500 transition-[width]"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <ul className="space-y-2 text-sm text-slate-200">
+                {keyPoints.map((point, index) => {
+                  const checked = coveredKeyPoints[index] ?? false;
+                  return (
+                    <li
+                      key={index}
+                      className="flex items-start gap-3 rounded-md px-2 py-1 transition hover:bg-slate-900"
+                    >
+                      <button
+                        type="button"
+                        aria-pressed={checked}
+                        className={`mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded border text-[10px] ${
+                          checked
+                            ? "border-emerald-500 bg-emerald-500 text-slate-50"
+                            : "border-slate-600 bg-slate-900 text-slate-400"
+                        }`}
+                        onClick={() =>
+                          setCoveredKeyPoints((prev) => {
+                            const next = [...prev];
+                            next[index] = !next[index];
+                            return next;
+                          })
+                        }
+                      >
+                        {checked && <span>✓</span>}
+                      </button>
+                      <p
+                        className={`flex-1 whitespace-pre-wrap text-sm ${
+                          checked ? "line-through text-slate-500" : "text-slate-200"
+                        }`}
+                      >
+                        {point}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           )}
           <p className="text-xs text-slate-400">{callScriptResult.closing}</p>
           <div className="flex justify-end">
@@ -697,6 +1286,174 @@ export default function JobCallScriptPanel({
             </div>
             {callOutcomeError && <p className="text-sm text-rose-400">{callOutcomeError}</p>}
           </div>
+          </section>
+          {showCallSummary && (
+            <div className="space-y-4 rounded-lg border border-emerald-500/60 bg-slate-950/60 p-4 text-sm text-slate-100 shadow-lg shadow-emerald-900/30">
+              <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-400">
+                <p>Call summary</p>
+                <button
+                  type="button"
+                  className="text-xs text-slate-400 transition hover:text-slate-200"
+                  onClick={handleSkipCallSummary}
+                >
+                  Skip
+                </button>
+              </div>
+              <p className="text-xs text-slate-300">
+                After the call, add a quick note and outcome so HandyBob remembers what happened.
+              </p>
+              <div className="space-y-1">
+                <label className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                  Call note
+                </label>
+                <textarea
+                  rows={3}
+                  value={callSummaryNote}
+                  onChange={(event) => setCallSummaryNote(event.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900/60 p-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  placeholder="e.g. Left voicemail with details, customer asked to call back tomorrow at 4pm..."
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                  Outcome
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {CALL_OUTCOME_OPTIONS.map((option) => (
+                    <button
+                      key={`summary-outcome-${option.value}`}
+                      type="button"
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] transition ${
+                        callSummaryOutcome === option.value
+                          ? "border-emerald-400 bg-emerald-500/15 text-emerald-200"
+                          : "border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500 hover:bg-slate-800"
+                      }`}
+                      onClick={() =>
+                        setCallSummaryOutcome((prev) =>
+                          prev === option.value ? null : option.value,
+                        )
+                      }
+                    >
+                      {option.label ?? option.value.replace(/_/g, " ")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-full px-3 py-1.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-400 transition hover:bg-slate-800"
+                  onClick={handleSkipCallSummary}
+                  disabled={savingCallSummary}
+                >
+                  Skip logging
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-wait disabled:opacity-60"
+                  disabled={
+                    savingCallSummary || (!callSummaryNote.trim() && !callSummaryOutcome)
+                  }
+                  onClick={handleSaveCallSummary}
+                >
+                  {savingCallSummary ? "Saving…" : "Save summary"}
+                </button>
+              </div>
+            </div>
+          )}
+          {loadingFollowupDraft && !followupDraft && (
+            <p className="text-xs text-slate-400">
+              Preparing a follow-up suggestion…
+            </p>
+          )}
+          {followupDraft && (
+            <div className="space-y-3 rounded-lg border border-slate-800/60 bg-slate-950/60 p-4 text-sm text-slate-100 shadow-lg">
+              <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-400">
+                <p>Suggested follow-up</p>
+                <span className="text-[11px] text-slate-400">
+                  {followupDraft.channel === "sms" ? "Text" : followupDraft.channel}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                HandyBob drafted a follow-up for you. Review it or discard.
+              </p>
+              {followupDraft.subject && (
+                <p className="text-sm font-semibold text-slate-100">{followupDraft.subject}</p>
+              )}
+              <p className="text-xs text-slate-200 whitespace-pre-wrap">
+                {followupDraft.body.length > 180
+                  ? `${followupDraft.body.slice(0, 180)}…`
+                  : followupDraft.body}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-full px-3 py-1.5 text-slate-300 hover:bg-slate-900"
+                  onClick={() => setFollowupDraft(null)}
+                  disabled={savingFollowupMessage}
+                >
+                  Dismiss
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded-full bg-sky-500 px-3 py-1.5 font-semibold text-sky-950 hover:bg-sky-400"
+                  onClick={handleCreateFollowupMessageFromDraft}
+                  disabled={savingFollowupMessage}
+                >
+                  {savingFollowupMessage ? "Opening…" : "Open draft"}
+                </button>
+              </div>
+            </div>
+          )}
+          {loadingNextActionSuggestion && !nextActionSuggestion && (
+            <p className="text-xs text-slate-400">
+              Thinking about the best next step…
+            </p>
+          )}
+          {nextActionSuggestion && (
+            <div className="space-y-3 rounded-lg border border-slate-800/60 bg-slate-950/60 p-4 text-sm text-slate-100 shadow-lg">
+              <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-slate-400">
+                <p>Next step</p>
+                <span className="text-[11px] text-slate-400">
+                  {nextActionSuggestion.type.replace(/_/g, " ")}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                HandyBob’s suggestion based on this call.
+              </p>
+              <p className="text-sm font-semibold text-slate-100">{nextActionSuggestion.label}</p>
+              {nextActionSuggestion.timingHint && (
+                <p className="text-xs text-slate-500">
+                  When: {nextActionSuggestion.timingHint}
+                </p>
+              )}
+              <p className="text-xs text-slate-200">{nextActionSuggestion.reason}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-full px-3 py-1.5 text-slate-300 hover:bg-slate-900"
+                  onClick={() => setNextActionSuggestion(null)}
+                  disabled={savingNextActionPlan}
+                >
+                  Dismiss
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-3 py-1.5 font-semibold text-emerald-950 hover:bg-emerald-400"
+                  onClick={handleLogNextActionPlan}
+                  disabled={savingNextActionPlan}
+                >
+                  {savingNextActionPlan ? "Logging…" : "Log this plan"}
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="space-y-3 rounded-lg border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-100">
+          <p className="text-sm text-slate-400">
+            No call script generated yet. Generate a script to see talking points here.
+          </p>
         </div>
       )}
     </HbCard>

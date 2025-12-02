@@ -2,6 +2,12 @@
 
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import {
+  NextActionSuggestion,
+  SmartFollowupResult,
+  smartFollowupFromCallSummary,
+  smartNextActionFromCallSummary,
+} from "@/lib/domain/communications/followups";
 
 export type CallScriptDescriptor = {
   subject?: string | null;
@@ -100,9 +106,12 @@ export async function createPhoneCallMessageAction(
     input.script && agentName
       ? buildCallLogBody(input.script, subject, agentName)
       : "";
+  const normalizedNote = normalizeText(input.noteBody ?? "");
   let body = scriptBody;
-  if (!body) {
-    body = normalizeText(input.noteBody ?? "");
+  if (body && normalizedNote) {
+    body = `${body}\n\n${normalizedNote}`;
+  } else if (!body) {
+    body = normalizedNote;
   }
   const subjectLength = subject.length;
   const bodyLength = body.length;
@@ -186,6 +195,155 @@ export async function createPhoneCallMessageAction(
     return { ok: true, messageId: data.id, error: null };
   } catch (error) {
     console.error("[phone-call-message-action] Unexpected error", error);
+    return { ok: false, messageId: null, error: "db_error" };
+  }
+}
+
+export type CreateFollowupDraftFromCallSummaryInput = {
+  workspaceId: string;
+  jobId: string;
+  quoteId: string;
+  summaryNote: string;
+  outcome: string | null;
+};
+
+export async function createFollowupDraftFromCallSummaryAction(
+  input: CreateFollowupDraftFromCallSummaryInput,
+): Promise<SmartFollowupResult | null> {
+  try {
+    const supabase = await createServerClient();
+    const response = await smartFollowupFromCallSummary({
+      supabaseClient: supabase,
+      workspaceId: input.workspaceId,
+      jobId: input.jobId,
+      quoteId: input.quoteId,
+      summaryNote: input.summaryNote,
+      outcome: input.outcome,
+    });
+    if (!response.ok) {
+      console.error("[phone-call-message-action] Follow-up draft failed", response.error);
+      return null;
+    }
+    return response.data;
+  } catch (error) {
+    console.error("[phone-call-message-action] Follow-up draft action failed", error);
+    return null;
+  }
+}
+
+export async function createNextActionSuggestionFromCallSummaryAction(
+  input: CreateFollowupDraftFromCallSummaryInput,
+): Promise<NextActionSuggestion | null> {
+  try {
+    const supabase = await createServerClient();
+    const suggestion = await smartNextActionFromCallSummary({
+      supabaseClient: supabase,
+      workspaceId: input.workspaceId,
+      jobId: input.jobId,
+      quoteId: input.quoteId,
+      outcome: input.outcome,
+      summaryNote: input.summaryNote,
+    });
+    return suggestion;
+  } catch (error) {
+    console.error("[phone-call-message-action] Next action suggestion failed", error);
+    return null;
+  }
+}
+
+export type CreateMessageDraftFromFollowupInput = {
+  workspaceId?: string | null;
+  jobId: string;
+  quoteId: string;
+  channel: string;
+  subject: string;
+  body: string;
+  via?: string;
+  status?: string;
+};
+
+export type CreateMessageDraftFromFollowupResult = {
+  ok: boolean;
+  messageId: string | null;
+  error?: string | null;
+};
+
+export async function createMessageDraftFromFollowupAction(
+  input: CreateMessageDraftFromFollowupInput,
+): Promise<CreateMessageDraftFromFollowupResult> {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.id) {
+    console.warn("[phone-call-message-action] No user in session for follow-up draft", {
+      quoteId: input.quoteId,
+      jobId: input.jobId,
+    });
+    return { ok: false, messageId: null, error: "auth_error" };
+  }
+
+  let resolvedWorkspaceId = normalizeText(input.workspaceId ?? null);
+  if (!resolvedWorkspaceId) {
+    try {
+      const { workspace } = await getCurrentWorkspace({ supabase });
+      resolvedWorkspaceId = workspace?.id ?? "";
+    } catch (error) {
+      console.error("[phone-call-message-action] Failed to resolve workspace for follow-up", error);
+      return { ok: false, messageId: null, error: "validation_error" };
+    }
+  }
+
+  if (!resolvedWorkspaceId) {
+    console.error("[phone-call-message-action] Workspace ID missing for follow-up message");
+    return { ok: false, messageId: null, error: "validation_error" };
+  }
+
+  try {
+    const channel = input.channel;
+    const via = input.via ?? "email";
+    const status = input.status ?? "draft";
+    const { data, error } = await supabase
+      .from("messages")
+      .insert({
+        workspace_id: resolvedWorkspaceId,
+        user_id: user.id,
+        job_id: input.jobId,
+        quote_id: input.quoteId,
+        direction: "outbound",
+        status,
+        channel,
+        via,
+        subject: input.subject,
+        body: input.body,
+      })
+      .select("id")
+      .single();
+
+    if (error || !data?.id) {
+      console.error("[phone-call-message-action] Follow-up message insert failed", {
+        error,
+        quoteId: input.quoteId,
+        jobId: input.jobId,
+        workspaceId: resolvedWorkspaceId,
+        channel,
+        via,
+      });
+      return { ok: false, messageId: null, error: "db_error" };
+    }
+
+    console.log("[phone-call-message-action] Follow-up message saved", {
+      messageId: data.id,
+      quoteId: input.quoteId,
+      jobId: input.jobId,
+      workspaceId: resolvedWorkspaceId,
+      channel,
+      via,
+    });
+
+    return { ok: true, messageId: data.id };
+  } catch (error) {
+    console.error("[phone-call-message-action] Follow-up message action unexpected error", error);
     return { ok: false, messageId: null, error: "db_error" };
   }
 }

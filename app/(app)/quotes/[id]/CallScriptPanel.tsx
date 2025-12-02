@@ -31,6 +31,9 @@ export default function CallScriptPanel({
   const [callScriptError, setCallScriptError] = useState<string | null>(null);
   const [callScriptCopied, setCallScriptCopied] = useState(false);
   const [hasUsedCallScript, setHasUsedCallScript] = useState(false);
+  const [coveredKeyPoints, setCoveredKeyPoints] = useState<boolean[]>(() =>
+    callScriptResult?.keyPoints?.map(() => false) ?? [],
+  );
   const [isPending, startTransition] = useTransition();
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLoggedViewRef = useRef(false);
@@ -152,6 +155,19 @@ export default function CallScriptPanel({
     };
   }, [callScriptResult, quoteId]);
 
+  const keyPoints = callScriptResult?.keyPoints ?? [];
+  const totalPoints = keyPoints.length;
+  const coveredCount = coveredKeyPoints.filter(Boolean).length;
+  const hasPoints = totalPoints > 0;
+  const progressPercent = hasPoints ? (coveredCount / totalPoints) * 100 : 0;
+
+  useEffect(() => {
+    // CHANGE: Reset key point checklist whenever a new script arrives.
+    // CHANGE: Suppress the set-state-in-effect lint because the effect only runs on script updates.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCoveredKeyPoints(callScriptResult?.keyPoints?.map(() => false) ?? []);
+  }, [callScriptResult]);
+
   return (
     <HbCard className="space-y-4">
       <div className="space-y-1">
@@ -192,6 +208,14 @@ export default function CallScriptPanel({
       {callScriptError && (
         <p className="text-sm text-rose-400">{callScriptError}</p>
       )}
+      {!callScriptResult && (
+        <>
+          {/* // CHANGE: Guide users when no script exists yet. */}
+          <p className="text-sm text-slate-400">
+            No call script generated yet. Create a script to see talking points here.
+          </p>
+        </>
+      )}
 
       {callScriptResult && (
         <div className="space-y-3 rounded-lg border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-100">
@@ -207,15 +231,52 @@ export default function CallScriptPanel({
             <p className="text-sm font-semibold text-slate-50">{callScriptResult.subject}</p>
             <p className="text-xs text-slate-400">{callScriptResult.opening}</p>
           </div>
-          {callScriptResult.keyPoints.length > 0 && (
-            <ul className="space-y-1 text-sm text-slate-200">
-              {callScriptResult.keyPoints.map((point, index) => (
-                <li key={index} className="flex items-start gap-2">
-                  <span className="mt-[0.1rem] h-3 w-3 rounded-full border border-slate-600 bg-slate-900" />
-                  <span>{point}</span>
-                </li>
-              ))}
-            </ul>
+          {hasPoints && (
+            <>
+              {/* // CHANGE: Surface progress and checklist for talking points. */}
+              <div className="space-y-3 pb-2">
+                <div className="space-y-1 text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                  <p>{coveredCount} of {totalPoints} talking points covered</p>
+                </div>
+                <div className="h-1.5 rounded-full bg-slate-800">
+                  <div
+                    className="h-1.5 rounded-full bg-emerald-500 transition-[width]"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <ul className="space-y-2 text-sm text-slate-200">
+                  {keyPoints.map((point, index) => {
+                    const checked = coveredKeyPoints[index] ?? false;
+                    return (
+                      <li
+                        key={index}
+                        className="flex items-start gap-3 rounded-md px-2 py-1 transition hover:bg-slate-900"
+                      >
+                        <button
+                          type="button"
+                          aria-pressed={checked}
+                          className={`mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded border text-[10px] ${checked ? "border-emerald-500 bg-emerald-500 text-slate-50" : "border-slate-600 bg-slate-900 text-slate-400"}`}
+                          onClick={() =>
+                            setCoveredKeyPoints((prev) => {
+                              const next = [...prev];
+                              next[index] = !next[index];
+                              return next;
+                            })
+                          }
+                        >
+                          {checked && <span>✓</span>}
+                        </button>
+                        <p
+                          className={`flex-1 whitespace-pre-wrap text-sm ${checked ? "line-through text-slate-500" : "text-slate-200"}`}
+                        >
+                          {point}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </>
           )}
           <p className="text-xs text-slate-400">{callScriptResult.closing}</p>
           <div className="flex justify-end">

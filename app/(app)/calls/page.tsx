@@ -21,7 +21,12 @@ type CallRow = {
 
 import HbButton from "@/components/ui/hb-button";
 
-export default async function CallsPage() {
+export default async function CallsPage({
+  searchParams: searchParamsPromise,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const searchParams = await searchParamsPromise;
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -45,14 +50,23 @@ export default async function CallsPage() {
     );
   }
 
-  const callsRes = await supabase
+  const rawJobId = searchParams?.jobId;
+  const jobIdFilter = Array.isArray(rawJobId) ? rawJobId[0] : rawJobId ?? null;
+
+  let query = supabase
     .from("calls")
     .select(
       "id, workspace_id, created_at, from_number, status, priority, needs_followup, job_id, customer_id"
     )
-    .eq("workspace_id", workspace.id)
-    .order("created_at", { ascending: false })
-    .limit(50);
+    .eq("workspace_id", workspace.id);
+
+  if (jobIdFilter) {
+    query = query.eq("job_id", jobIdFilter);
+  }
+
+  query = query.order("created_at", { ascending: false }).limit(50);
+
+  const callsRes = await query;
 
   const calls = (callsRes.data ?? []) as CallRow[];
 
@@ -68,6 +82,17 @@ export default async function CallsPage() {
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Calls</p>
           <h1 className="hb-heading-1 text-3xl font-semibold">Calls</h1>
           <p className="hb-muted text-sm">Simple log of recent calls.</p>
+          {jobIdFilter && (
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.3em] text-slate-400">
+              <span>Filtered by job · {jobIdFilter.slice(0, 8)}…</span>
+              <Link
+                href={`/jobs/${jobIdFilter}`}
+                className="rounded-full bg-slate-50/5 px-2 py-0.5 text-[11px] font-medium text-slate-100 hover:bg-slate-50/10"
+              >
+                View job
+              </Link>
+            </div>
+          )}
         </div>
         <HbButton as={Link} href="/calls/new" size="sm" variant="secondary">
           New call
@@ -78,46 +103,39 @@ export default async function CallsPage() {
         {calls.length === 0 ? (
           <div className="space-y-2">
             <h2 className="hb-card-heading text-lg font-semibold">No calls yet</h2>
-            <p className="hb-muted text-sm">You can create one using the button above.</p>
+            <p className="hb-muted text-sm">
+              {jobIdFilter
+                ? "No calls logged for this job yet. End a guided call with a summary to create one."
+                : "You can create one using the button above."}
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
             {calls.map((call) => (
-              <div
+              <Link
                 key={call.id}
-                className="flex flex-col gap-1 rounded-lg border border-slate-800 px-4 py-3"
+                href={`/calls/${call.id}`}
+                className="block flex flex-col gap-1 rounded-lg border border-slate-800 bg-slate-950/60 px-4 py-3 transition hover:bg-slate-900/80"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-semibold">{formatDate(call.created_at)}</p>
-                  <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.3em]">
-                    <Link
-                      href={`/calls/${call.id}`}
-                      className="text-slate-500 hover:text-slate-100 transition"
-                    >
-                      View
-                    </Link>
+                  <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.3em] text-slate-400">
                     {call.job_id && (
-                      <span className="flex items-center gap-1 text-slate-500">
-                        <span className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Job:</span>
-                        <Link
-                          href={`/jobs/${call.job_id}`}
-                          className="text-slate-500 hover:text-slate-100 transition"
-                        >
-                          View job
-                        </Link>
+                      <span className="flex items-center gap-1 text-slate-300">
+                        <span className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
+                          Job:
+                        </span>
+                        <span className="font-semibold text-slate-100">
+                          {String(call.job_id).slice(0, 8)}…
+                        </span>
                       </span>
                     )}
                     {call.customer_id && (
-                      <span className="flex items-center gap-1 text-slate-500">
+                      <span className="flex items-center gap-1 text-slate-400">
                         <span className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
                           Customer:
                         </span>
-                        <Link
-                          href={`/customers/${call.customer_id}`}
-                          className="text-slate-500 hover:text-slate-100 transition"
-                        >
-                          View customer
-                        </Link>
+                        <span className="text-slate-300">{call.customer_id.slice(0, 8)}…</span>
                       </span>
                     )}
                   </div>
@@ -129,7 +147,7 @@ export default async function CallsPage() {
                   Priority: {call.priority ?? "normal"} · Needs follow-up:{" "}
                   {call.needs_followup ? "Yes" : "No"}
                 </p>
-              </div>
+              </Link>
             ))}
           </div>
         )}
