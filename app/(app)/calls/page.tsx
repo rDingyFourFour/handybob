@@ -6,6 +6,13 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
+import { formatDateTime } from "@/utils/timeline/formatters";
+
+const CHANNEL_HINTS = {
+  phone: { icon: "📞", label: "Phone" },
+  sms: { icon: "💬", label: "SMS" },
+  email: { icon: "✉️", label: "Email" },
+} as const;
 
 type CallRow = {
   id: string;
@@ -19,6 +26,9 @@ type CallRow = {
   customer_id: string | null;
   quote_id: string | null;
   body: string | null;
+  channel: string | null;
+  via: string | null;
+  updated_at: string | null;
 };
 
 type FilteredJobSummary = {
@@ -120,10 +130,10 @@ export default async function CallsPage({
     ? `/calls?jobId=${encodeURIComponent(jobIdFilter)}`
     : "/calls";
 
-  const formatDate = (value: string | null) => {
-    if (!value) return "—";
-    return new Date(value).toLocaleString();
-  };
+  const headerSubtitle =
+    !jobIdFilter && !summaryFilter
+      ? "All recent calls across your workspace."
+      : "Simple log of recent calls.";
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-4">
@@ -131,7 +141,12 @@ export default async function CallsPage({
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Calls</p>
           <h1 className="hb-heading-1 text-3xl font-semibold">Calls</h1>
-          <p className="hb-muted text-sm">Simple log of recent calls.</p>
+          <p className="hb-muted text-sm">{headerSubtitle}</p>
+          {summaryFilter === "needs" && (
+            <p className="mt-1 text-sm font-semibold text-emerald-200">
+              Showing calls that still need a summary.
+            </p>
+          )}
           {jobIdFilter && filterJobLabel && (
             <div className="mt-2 space-y-2 text-slate-400">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Filtered by job</p>
@@ -205,96 +220,134 @@ export default async function CallsPage({
         </HbButton>
       </header>
 
-      {filteredJob && callsToShow.length > 0 && (
-        <p className="px-4 text-[11px] uppercase tracking-[0.3em] text-slate-400">
-          Showing calls linked to this job.
+      {jobIdFilter && (
+        <p className="px-4 text-sm text-slate-400">
+          Showing calls associated with this job.
         </p>
       )}
       <HbCard className="space-y-3">
         {callsToShow.length === 0 ? (
-          <div className="space-y-2">
-            <h2 className="hb-card-heading text-lg font-semibold">No calls yet</h2>
-            <p className="hb-muted text-sm">
-              {summaryFilter === "needs"
-                ? filteredJob
-                  ? "No calls for this job currently need a summary. Switch back to all calls to see everything."
-                  : "No calls currently need a summary. Switch back to all calls to see completed sessions."
-                : filteredJob
-                ? "No calls found for this job yet. End a guided call with a summary to create one."
-                : jobIdFilter
-                ? "No calls logged for this job yet. End a guided call with a summary to create one."
-                : "You can create one using the button above."}
-            </p>
-          </div>
+          !jobIdFilter && !summaryFilter ? (
+            <div className="space-y-4">
+              <h2 className="hb-card-heading text-lg font-semibold">No calls yet</h2>
+              <p className="hb-muted text-sm">
+                Start by opening a job and creating a call workspace for it.
+              </p>
+              <HbButton as={Link} href="/jobs" size="sm" variant="secondary">
+                Open jobs
+              </HbButton>
+            </div>
+          ) : summaryFilter === "needs" ? (
+            <div className="space-y-2">
+              <h2 className="hb-card-heading text-lg font-semibold">
+                No calls need a summary right now.
+              </h2>
+              <p className="hb-muted text-sm">
+                {filterJobLabel
+                  ? `Once you finish guided calls without a summary for ${filterJobLabel}, they’ll appear here.`
+                  : "Once you finish guided calls without a summary, they’ll appear here."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <h2 className="hb-card-heading text-lg font-semibold">No calls for this job yet.</h2>
+              <p className="hb-muted text-sm">
+                {filterJobLabel
+                  ? `${filterJobLabel} has no calls yet. Use 'New call for this job' to start the first phone agent session.`
+                  : "No calls logged for this job yet. Use 'New call for this job' to start the first phone agent session."}
+              </p>
+            </div>
+          )
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {callsToShow.map((call) => {
               const summaryMissing = !call.body?.trim();
+              const normalizedChannel = (call.channel ?? "phone").toLowerCase();
+              const knownChannel = normalizedChannel in CHANNEL_HINTS;
+              const channelKey = (knownChannel ? normalizedChannel : "phone") as keyof typeof CHANNEL_HINTS;
+              const channelHint = CHANNEL_HINTS[channelKey];
+              const rawChannelLabel =
+                !knownChannel && call.channel ? call.channel : null;
+              const lastUpdated = formatDateTime(call.updated_at ?? call.created_at, "—");
+
               return (
                 <div
                   key={call.id}
-                  className="block flex flex-col gap-1 rounded-lg border border-slate-800 bg-slate-950/60 px-4 py-3 transition hover:bg-slate-900/80"
+                  className={`flex flex-col gap-3 rounded-lg border px-4 py-3 transition ${
+                    summaryMissing
+                      ? "border-amber-200/70 bg-amber-100/10 hover:bg-amber-100/20 border-l-4 border-l-amber-400"
+                      : "border-slate-800 bg-slate-950/60 hover:bg-slate-900/80"
+                  }`}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold">{formatDate(call.created_at)}</p>
-                    <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.3em] text-slate-400">
-                      {call.customer_id && (
-                        <span className="flex items-center gap-1 text-slate-400">
-                          <span className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
-                            Customer:
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {call.job_id ? (
+                          <Link
+                            href={`/jobs/${call.job_id}`}
+                            className="text-base font-semibold text-white hover:text-slate-200"
+                          >
+                            Job #{call.job_id.slice(0, 8)}…
+                          </Link>
+                        ) : (
+                          <span className="text-base font-semibold text-slate-200">
+                            Call {call.id.slice(0, 8)}…
                           </span>
-                          <span className="text-slate-300">{call.customer_id.slice(0, 8)}…</span>
+                        )}
+                        {call.quote_id && (
+                          <Link
+                            href={`/quotes/${call.quote_id}`}
+                            className="text-sm font-medium text-slate-400 hover:text-slate-200"
+                          >
+                            Quote #{call.quote_id.slice(0, 8)}…
+                          </Link>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                        <span className="flex items-center gap-1 text-slate-200">
+                          <span aria-hidden>{channelHint.icon}</span>
+                          <span className="font-semibold text-slate-100">
+                            {channelHint.label}
+                            {rawChannelLabel ? ` (${rawChannelLabel})` : ""}
+                          </span>
                         </span>
+                        {call.via && <span className="text-slate-400">via {call.via}</span>}
+                        <span className="text-slate-400">Status: {call.status ?? "unknown"}</span>
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] ${
+                            summaryMissing
+                              ? "border-amber-300 bg-amber-100/40 text-amber-400"
+                              : "border-slate-600 bg-slate-900 text-slate-300"
+                          }`}
+                        >
+                          {summaryMissing ? "Summary needed" : "Summary recorded"}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-400">
+                        From: {call.from_number ?? "Unknown"}
+                      </p>
+                      {call.customer_id && (
+                        <p className="text-xs text-slate-500">
+                          Customer: {call.customer_id.slice(0, 8)}…
+                        </p>
                       )}
+                      <p className="text-xs text-slate-500">
+                        Priority: {call.priority ?? "normal"} · Needs follow-up:{" "}
+                        {call.needs_followup ? "Yes" : "No"}
+                      </p>
+                      <p className="text-xs text-slate-500">Last updated {lastUpdated}</p>
                     </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-                    {call.job_id && (
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Job:</span>
-                        <Link
-                          href={`/jobs/${call.job_id}`}
-                          className="font-semibold text-slate-100 hover:text-slate-200"
-                        >
-                          #{call.job_id.slice(0, 8)}…
-                        </Link>
-                      </div>
-                    )}
-                    {call.quote_id && (
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Quote:</span>
-                        <Link
-                          href={`/quotes/${call.quote_id}`}
-                          className="font-semibold text-slate-100 hover:text-slate-200"
-                        >
-                          #{call.quote_id.slice(0, 8)}…
-                        </Link>
-                      </div>
-                    )}
-                    <span
-                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] ${
-                        summaryMissing
-                          ? "border-amber-200 bg-amber-100/20 text-amber-200"
-                          : "border-emerald-200 bg-emerald-100/20 text-emerald-200"
-                      }`}
-                    >
-                      {summaryMissing ? "Summary needed" : "Summary recorded"}
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-400">
-                    From: {call.from_number ?? "Unknown"} · Status: {call.status ?? "unknown"}
-                  </p>
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                    Priority: {call.priority ?? "normal"} · Needs follow-up:{" "}
-                    {call.needs_followup ? "Yes" : "No"}
-                  </p>
-                  <div className="text-right text-xs uppercase tracking-[0.3em] text-slate-400">
-                    <Link
-                      href={`/calls/${call.id}`}
-                      className="inline-flex items-center rounded-full border border-slate-800/60 px-2 py-0.5 font-semibold text-slate-100 hover:border-slate-600"
-                    >
-                      View call
-                    </Link>
+                    <div className="flex flex-col items-end gap-2 text-right">
+                      <Link
+                        href={`/calls/${call.id}`}
+                        className="inline-flex items-center rounded-full border border-slate-800/60 px-2 py-0.5 font-semibold text-slate-100 hover:border-slate-600"
+                      >
+                        View call
+                      </Link>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                        {formatDateTime(call.created_at, "—")}
+                      </p>
+                    </div>
                   </div>
                 </div>
               );
