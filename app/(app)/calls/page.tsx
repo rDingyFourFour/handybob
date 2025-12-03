@@ -7,12 +7,32 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import { formatDateTime } from "@/utils/timeline/formatters";
+import {
+  computeFollowupDueInfo,
+  deriveFollowupRecommendation,
+  isActionableFollowupDue,
+  type FollowupDueInfo,
+  type NextActionSuggestion,
+} from "@/lib/domain/communications/followupRecommendations";
+import {
+  findMatchingFollowupMessage,
+  type FollowupMessageRef,
+} from "@/lib/domain/communications/followupMessages";
 
 const CHANNEL_HINTS = {
   phone: { icon: "📞", label: "Phone" },
   sms: { icon: "💬", label: "SMS" },
   email: { icon: "✉️", label: "Email" },
 } as const;
+
+const ONE_DAY_MS = 1000 * 60 * 60 * 24;
+
+function startOfToday(date?: Date) {
+  const base = date ? new Date(date) : new Date();
+  base.setHours(0, 0, 0, 0);
+  base.setMilliseconds(0);
+  return base;
+}
 
 type CallRow = {
   id: string;
@@ -29,6 +49,20 @@ type CallRow = {
   channel: string | null;
   via: string | null;
   updated_at: string | null;
+};
+
+type QuoteCandidateSummary = {
+  id: string;
+  job_id: string | null;
+  created_at: string | null;
+};
+
+type EnrichedCallRow = CallRow & {
+  quoteCreatedAt: string | null;
+  followupRecommendation: NextActionSuggestion | null;
+  followupDueInfo: FollowupDueInfo;
+  hasMatchingFollowupToday: boolean;
+  matchingFollowupMessageId: string | null;
 };
 
 type FilteredJobSummary = {
@@ -72,6 +106,10 @@ export default async function CallsPage({
   const rawSummary = searchParams?.summary;
   const jobIdFilter = Array.isArray(rawJobId) ? rawJobId[0] : rawJobId ?? null;
   const summaryFilter = rawSummary === "needs" ? "needs" : null;
+  const rawFollowups = searchParams?.followups;
+  const followupsFilter = Array.isArray(rawFollowups)
+    ? rawFollowups[0]
+    : rawFollowups ?? null;
   let filteredJob: FilteredJobSummary | null = null;
 
   if (jobIdFilter) {
@@ -88,6 +126,8 @@ export default async function CallsPage({
 
     filteredJob = jobRow ?? null;
   }
+
+  const followupQueueActive = followupsFilter === "queue";
 
   let query = supabase.from("calls").select("*").eq("workspace_id", workspace.id);
 
@@ -111,10 +151,141 @@ export default async function CallsPage({
   }
 
   const calls = (callsRes.data ?? []) as CallRow[];
-  const callsToShow =
-    summaryFilter === "needs"
-      ? calls.filter((call) => !call.body?.trim())
-      : calls;
+  const jobIds = Array.from(
+    new Set(calls.map((call) => call.job_id).filter((jobId): jobId is string => Boolean(jobId))),
+  );
+  const quoteCandidatesByJob: Record<string, QuoteCandidateSummary> = {};
+  if (jobIds.length > 0) {
+    const { data: quoteRows, error: quoteError } = await supabase
+      .from<QuoteCandidateSummary>("quotes")
+      .select("id, job_id, created_at")
+      .in("job_id", jobIds)
+      .order("created_at", { ascending: false })
+      .limit(Math.max(jobIds.length * 3, 30));
+
+    if (quoteError) {
+      console.error("[calls/index] Failed to load quote candidates", quoteError);
+    }
+
+    (quoteRows ?? []).forEach((quote) => {
+      if (!quote.job_id) {
+        return;
+      }
+      if (!quoteCandidatesByJob[quote.job_id]) {
+        quoteCandidatesByJob[quote.job_id] = quote;
+      }
+    });
+  }
+
+  const todayStart = startOfToday();
+  let todayFollowupMessages: FollowupMessageRef[] = [];
+  const { data: todayMessagesRows, error: todayMessagesError } = await supabase
+    .from<FollowupMessageRef>("messages")
+    .select("id, job_id, quote_id, channel, via, created_at")
+    .eq("workspace_id", workspace.id)
+    .gte("created_at", todayStart.toISOString())
+    .in("channel", ["sms", "email", "phone"])
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (todayMessagesError) {
+    console.error("[followup-messages] Failed to load today's messages", todayMessagesError);
+  } else {
+    todayFollowupMessages = todayMessagesRows ?? [];
+  }
+
+  const now = new Date();
+  const callsWithFollowups: EnrichedCallRow[] = calls.map((call) => {
+    const quoteCandidate =
+      call.job_id && quoteCandidatesByJob[call.job_id]
+        ? quoteCandidatesByJob[call.job_id]
+        : null;
+    const quoteCreatedAt = quoteCandidate?.created_at ?? null;
+    const quoteDate = quoteCreatedAt ? new Date(quoteCreatedAt) : null;
+    const daysSinceQuote =
+      quoteDate && !Number.isNaN(quoteDate.getTime())
+        ? Math.floor((now.getTime() - quoteDate.getTime()) / ONE_DAY_MS)
+        : null;
+    const trimmedBody = call.body?.trim();
+    const trimmedStatus = call.status?.trim();
+    const recommendationOutcome = trimmedBody || trimmedStatus || null;
+    const followupRecommendation =
+      recommendationOutcome &&
+      deriveFollowupRecommendation({
+        outcome: recommendationOutcome,
+        daysSinceQuote,
+        modelChannelSuggestion: null,
+      });
+    const recommendedChannel = followupRecommendation?.recommendedChannel ?? null;
+    const matchingFollowupMessage =
+      followupRecommendation &&
+      findMatchingFollowupMessage({
+        messages: todayFollowupMessages,
+        recommendedChannel,
+        jobId: call.job_id ?? null,
+        quoteId: quoteCandidate?.id ?? call.quote_id ?? null,
+      });
+    const hasMatchingFollowupToday = Boolean(matchingFollowupMessage);
+    const matchingFollowupMessageId = matchingFollowupMessage?.id ?? null;
+    const followupDueInfo = computeFollowupDueInfo({
+      quoteCreatedAt,
+      callCreatedAt: call.created_at,
+      recommendation: followupRecommendation,
+      now,
+    });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[followup-reco]", {
+        callId: call.id,
+        jobId: call.job_id ?? null,
+        quoteId: quoteCandidate?.id ?? call.quote_id ?? null,
+        recommendedChannel,
+        recommendedDelayDays:
+          followupRecommendation?.recommendedDelayDays ?? null,
+        shouldSkipFollowup:
+          followupRecommendation?.shouldSkipFollowup ?? null,
+      });
+      console.log("[followup-queue-status]", {
+        callId: call.id,
+        jobId: call.job_id ?? null,
+        quoteId: quoteCandidate?.id ?? call.quote_id ?? null,
+        recommendedChannel,
+        dueStatus: followupDueInfo.dueStatus,
+        hasMatchingFollowupToday,
+        matchingFollowupMessageId,
+      });
+    }
+    return {
+      ...call,
+      quoteCreatedAt,
+      followupRecommendation,
+      followupDueInfo,
+      hasMatchingFollowupToday,
+      matchingFollowupMessageId,
+    };
+  });
+  const summaryModeActive = !followupQueueActive && summaryFilter === "needs";
+  const summaryFilteredCalls = callsWithFollowups.filter(
+    (call) => !call.body?.trim(),
+  );
+const followupQueueCalls = callsWithFollowups.filter((call) => {
+  const recommendation = call.followupRecommendation;
+  return (
+    recommendation &&
+    !recommendation.shouldSkipFollowup &&
+    isActionableFollowupDue(call.followupDueInfo.dueStatus)
+    && !call.hasMatchingFollowupToday
+  );
+});
+  const activeCalls = followupQueueActive
+    ? followupQueueCalls
+    : summaryModeActive
+    ? summaryFilteredCalls
+    : callsWithFollowups;
+  console.log("[followup-queue]", {
+    workspaceId: workspace.id,
+    totalCalls: callsWithFollowups.length,
+    queueCount: followupQueueCalls.length,
+    summaryNeedsCount: summaryFilteredCalls.length,
+  });
 
   const filterJobLabel = filteredJob
     ? filteredJob.title ?? `Job ${filteredJob.id.slice(0, 8)}…`
@@ -122,11 +293,24 @@ export default async function CallsPage({
     ? `Job ${jobIdFilter.slice(0, 8)}…`
     : null;
   const filteredJobId = filteredJob?.id ?? jobIdFilter;
+  const listHelperText = followupQueueActive
+    ? jobIdFilter
+      ? "Showing calls for this job with follow-ups Due today or Overdue."
+      : "Showing calls with follow-ups Due today or Overdue."
+    : jobIdFilter
+    ? "Showing calls associated with this job."
+    : null;
 
   const summaryNeedsHref = jobIdFilter
     ? `/calls?jobId=${encodeURIComponent(jobIdFilter)}&summary=needs`
     : "/calls?summary=needs";
   const viewAllHref = jobIdFilter
+    ? `/calls?jobId=${encodeURIComponent(jobIdFilter)}`
+    : "/calls";
+  const followupQueueHref = jobIdFilter
+    ? `/calls?jobId=${encodeURIComponent(jobIdFilter)}&followups=queue`
+    : "/calls?followups=queue";
+  const clearFiltersHref = jobIdFilter
     ? `/calls?jobId=${encodeURIComponent(jobIdFilter)}`
     : "/calls";
 
@@ -141,6 +325,9 @@ export default async function CallsPage({
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Calls</p>
           <h1 className="hb-heading-1 text-3xl font-semibold">Calls</h1>
+          <p className="text-xs text-slate-400">
+            Step 1: pick a call · Step 2: run guided call · Step 3: log summary & follow-up.
+          </p>
           <p className="hb-muted text-sm">{headerSubtitle}</p>
           {summaryFilter === "needs" && (
             <p className="mt-1 text-sm font-semibold text-emerald-200">
@@ -184,25 +371,47 @@ export default async function CallsPage({
             </div>
           )}
           <div className="mt-2 flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.3em]">
-            {summaryFilter === "needs" ? (
+            {followupQueueActive ? (
               <>
                 <span className="rounded-full border border-emerald-200 bg-emerald-100/20 px-3 py-1 font-semibold text-emerald-200">
-                  Showing calls needing summary
+                  Follow-up queue
                 </span>
                 <Link
-                  href={viewAllHref}
+                  href={clearFiltersHref}
                   className="rounded-full border border-slate-800/60 px-3 py-1 font-semibold text-slate-100 hover:border-slate-600"
                 >
                   View all calls
                 </Link>
               </>
             ) : (
-              <Link
-                href={summaryNeedsHref}
-                className="rounded-full border border-slate-800/60 px-3 py-1 font-semibold text-slate-100 hover:border-slate-600"
-              >
-                Show calls needing summary
-              </Link>
+              <>
+                {summaryFilter === "needs" ? (
+                  <>
+                    <span className="rounded-full border border-emerald-200 bg-emerald-100/20 px-3 py-1 font-semibold text-emerald-200">
+                      Showing calls needing summary
+                    </span>
+                    <Link
+                      href={viewAllHref}
+                      className="rounded-full border border-slate-800/60 px-3 py-1 font-semibold text-slate-100 hover:border-slate-600"
+                    >
+                      View all calls
+                    </Link>
+                  </>
+                ) : (
+                  <Link
+                    href={summaryNeedsHref}
+                    className="rounded-full border border-slate-800/60 px-3 py-1 font-semibold text-slate-100 hover:border-slate-600"
+                  >
+                    Show calls needing summary
+                  </Link>
+                )}
+                <Link
+                  href={followupQueueHref}
+                  className="rounded-full border border-slate-800/60 px-3 py-1 font-semibold text-slate-100 hover:border-slate-600"
+                >
+                  Follow-up queue
+                </Link>
+              </>
             )}
           </div>
         </div>
@@ -220,24 +429,42 @@ export default async function CallsPage({
         </HbButton>
       </header>
 
-      {jobIdFilter && (
-        <p className="px-4 text-sm text-slate-400">
-          Showing calls associated with this job.
-        </p>
+      {listHelperText && (
+        <p className="px-4 text-sm text-slate-400">{listHelperText}</p>
       )}
       <HbCard className="space-y-3">
-        {callsToShow.length === 0 ? (
-          !jobIdFilter && !summaryFilter ? (
+        {activeCalls.length === 0 ? (
+          followupQueueActive ? (
+            <div className="space-y-4">
+              <h2 className="hb-card-heading text-lg font-semibold">
+                No follow-ups due right now.
+              </h2>
+              <p className="hb-muted text-sm">
+                You’re all caught up for today. Switch back to “All calls” to review recent sessions,
+                or open Jobs to find more customers to follow up with.
+              </p>
+              <HbButton
+                as={Link}
+                href={clearFiltersHref}
+                size="sm"
+                variant="secondary"
+              >
+                View all calls
+              </HbButton>
+            </div>
+          ) : !jobIdFilter && !summaryModeActive ? (
             <div className="space-y-4">
               <h2 className="hb-card-heading text-lg font-semibold">No calls yet</h2>
               <p className="hb-muted text-sm">
-                Start by opening a job and creating a call workspace for it.
+                Start by opening a job and creating a call workspace for it. You can create a call
+                from a job using the “Open phone agent” pill on the job page, or hit “New call”
+                above if you’re starting directly from this workspace.
               </p>
               <HbButton as={Link} href="/jobs" size="sm" variant="secondary">
                 Open jobs
               </HbButton>
             </div>
-          ) : summaryFilter === "needs" ? (
+          ) : summaryModeActive ? (
             <div className="space-y-2">
               <h2 className="hb-card-heading text-lg font-semibold">
                 No calls need a summary right now.
@@ -260,7 +487,7 @@ export default async function CallsPage({
           )
         ) : (
           <div className="space-y-3">
-            {callsToShow.map((call) => {
+            {activeCalls.map((call) => {
               const summaryMissing = !call.body?.trim();
               const normalizedChannel = (call.channel ?? "phone").toLowerCase();
               const knownChannel = normalizedChannel in CHANNEL_HINTS;
@@ -269,6 +496,8 @@ export default async function CallsPage({
               const rawChannelLabel =
                 !knownChannel && call.channel ? call.channel : null;
               const lastUpdated = formatDateTime(call.updated_at ?? call.created_at, "—");
+              const rowDueInfo = call.followupDueInfo;
+              const showRowDue = rowDueInfo.dueStatus !== "none";
 
               return (
                 <div
@@ -316,12 +545,39 @@ export default async function CallsPage({
                         <span
                           className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] ${
                             summaryMissing
-                              ? "border-amber-300 bg-amber-100/40 text-amber-400"
-                              : "border-slate-600 bg-slate-900 text-slate-300"
+                              ? "border-amber-200 bg-amber-100/20 text-amber-200"
+                              : "border-emerald-200 bg-emerald-100/20 text-emerald-200"
                           }`}
                         >
                           {summaryMissing ? "Summary needed" : "Summary recorded"}
                         </span>
+                        {call.hasMatchingFollowupToday && (
+                          call.matchingFollowupMessageId ? (
+                            <Link
+                              href={`/messages/${call.matchingFollowupMessageId}`}
+                              className="inline-flex items-center rounded-full border border-slate-800 px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] text-slate-100 hover:border-slate-600"
+                            >
+                              Follow-up created
+                            </Link>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full border border-slate-800 px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                              Follow-up created
+                            </span>
+                          )
+                        )}
+                        {showRowDue && (
+                          <span
+                            className={`text-[11px] font-semibold ${
+                              rowDueInfo.dueStatus === "overdue"
+                                ? "text-amber-200"
+                                : rowDueInfo.dueStatus === "due-today"
+                                ? "text-emerald-200"
+                                : "text-slate-400"
+                            }`}
+                          >
+                            {rowDueInfo.dueLabel}
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-slate-400">
                         From: {call.from_number ?? "Unknown"}

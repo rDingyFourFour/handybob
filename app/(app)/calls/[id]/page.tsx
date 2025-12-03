@@ -10,9 +10,11 @@ import JobCallScriptPanel, {
   type PhoneMessageSummary,
 } from "@/app/(app)/jobs/[id]/JobCallScriptPanel";
 import {
+  computeFollowupDueInfo,
   deriveFollowupRecommendation,
   type NextActionSuggestion,
 } from "@/lib/domain/communications/followupRecommendations";
+import { findMatchingFollowupMessage } from "@/lib/domain/communications/followupMessages";
 
 type CallRecord = {
   id: string;
@@ -97,19 +99,6 @@ function calculateDaysSince(value?: string | null): number | null {
     return 0;
   }
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
-}
-
-function formatFollowupTimingDescription(days: number | null): string {
-  if (days === null) {
-    return "soon";
-  }
-  if (days === 0) {
-    return "today";
-  }
-  if (days === 1) {
-    return "tomorrow";
-  }
-  return `in about ${days} days`;
 }
 
 function formatFollowupTimingText(days: number | null): string {
@@ -315,12 +304,48 @@ export default async function CallSessionPage({
     modelChannelSuggestion: null,
   });
   const shouldSkipFollowup = followupRecommendation?.shouldSkipFollowup ?? false;
-  const followupTimingDescription = formatFollowupTimingDescription(
-    followupRecommendation?.recommendedDelayDays ?? null,
-  );
   const followupTimingText = formatFollowupTimingText(
     followupRecommendation?.recommendedDelayDays ?? null,
   );
+  const recommendedChannel = followupRecommendation?.recommendedChannel ?? null;
+  const matchingFollowupMessage = followupRecommendation
+    ? findMatchingFollowupMessage({
+        messages,
+        recommendedChannel,
+        jobId,
+        quoteId: callScriptQuoteId,
+      })
+    : null;
+  const hasRecommendedFollowupAlready = Boolean(matchingFollowupMessage);
+  const followupMessageLink = matchingFollowupMessage
+    ? `/messages/${matchingFollowupMessage.id}`
+    : "/messages";
+  const recommendedChannelAction = (() => {
+    switch (recommendedChannel) {
+      case "sms":
+        return "send an SMS follow-up";
+      case "email":
+        return "send a short email follow-up";
+      case "phone":
+        return "place a follow-up phone call";
+      default:
+        return "send a follow-up";
+    }
+  })();
+  const recommendedTimingLabel = followupRecommendation?.recommendedTimingLabel ?? "No follow-up recommended";
+  const dueInfo = computeFollowupDueInfo({
+    quoteCreatedAt: callScriptQuoteCandidate?.created_at ?? null,
+    callCreatedAt: call.created_at,
+    recommendation: followupRecommendation,
+  });
+  const dueTextClass =
+    dueInfo.dueStatus === "overdue"
+      ? "text-amber-200"
+      : dueInfo.dueStatus === "due-today"
+      ? "text-emerald-200"
+      : dueInfo.dueStatus === "upcoming"
+      ? "text-slate-300"
+      : "text-slate-500";
   console.log("[calls/[id]] followup recommendation", {
     callId: call.id,
     jobId: job?.id ?? null,
@@ -420,6 +445,9 @@ export default async function CallSessionPage({
               <h2 className="hb-heading-3 text-xl font-semibold text-white">
                 Phone call details
               </h2>
+              <p className="text-sm text-slate-400">
+                This column captures what happened on the call—summary, outcome, and notes.
+              </p>
               <div className="flex flex-wrap items-center gap-3 text-sm text-slate-400">
                 {customerName && (
                   <span className="text-slate-100">Customer: {customerName}</span>
@@ -555,31 +583,66 @@ export default async function CallSessionPage({
             {followupRecommendation && !shouldSkipFollowup && (
               <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-100">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Next suggested step</p>
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                    {hasRecommendedFollowupAlready
+                      ? "Next suggested step: follow-up created"
+                      : "Next suggested step"}
+                  </p>
                   {followupRecommendation.recommendedChannel && (
                     <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] text-slate-300">
                       {followupRecommendation.recommendedChannel.toUpperCase()}
                     </span>
                   )}
                 </div>
-                <p className="text-sm font-semibold text-slate-100">
-                  {followupRecommendation.primaryActionLabel}
-                </p>
-                <p className="text-xs text-slate-400">{followupTimingText}</p>
-                <p className="text-xs text-slate-400">{followupRecommendation.rationale}</p>
-                <p className="text-xs text-slate-400">
-                  If you accept this suggestion, we’ll create a{" "}
-                  {followupRecommendation.recommendedChannel
-                    ? followupRecommendation.recommendedChannel.toUpperCase()
-                    : "follow-up"}{" "}
-                  follow-up draft to send {followupTimingDescription}.
-                </p>
-                <Link
-                  href="/messages"
-                  className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-                >
-                  Prepare follow-up message
-                </Link>
+                {hasRecommendedFollowupAlready ? (
+                  <>
+                    <p className="text-sm font-semibold text-slate-100">
+                      A {recommendedChannelAction} follow-up already exists in Messages for this job/quote.
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      Review or send it from there when you’re ready.
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      Original timing recommendation: {recommendedTimingLabel}.
+                    </p>
+                    <p className={`text-xs font-semibold ${dueTextClass}`}>
+                      Next follow-up: {dueInfo.dueLabel}
+                    </p>
+                    <p className="text-xs text-slate-400">{followupRecommendation.primaryActionLabel}</p>
+                    <p className="text-xs text-slate-400">{followupTimingText}</p>
+                    <p className="text-xs text-slate-400">{followupRecommendation.rationale}</p>
+                    <Link
+                      href={followupMessageLink}
+                      className="text-sm font-semibold text-sky-300 hover:text-sky-200"
+                    >
+                      Open Messages
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-slate-100">
+                      Recommended next action: {recommendedChannelAction}.
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      Recommended timing: {recommendedTimingLabel}
+                    </p>
+                    <p className={`text-xs font-semibold ${dueTextClass}`}>
+                      Next follow-up: {dueInfo.dueLabel}
+                    </p>
+                    <p className="text-xs text-slate-400">{followupRecommendation.primaryActionLabel}</p>
+                    <p className="text-xs text-slate-400">{followupTimingText}</p>
+                    <p className="text-xs text-slate-400">{followupRecommendation.rationale}</p>
+                    <p className="text-xs text-slate-400">
+                      If you accept this, HandyBob will create a draft in Messages for you to review.
+                    </p>
+                    <Link
+                      href="/messages"
+                      className="text-sm font-semibold text-sky-300 hover:text-sky-200"
+                    >
+                      Prepare follow-up message
+                    </Link>
+                  </>
+                )}
               </div>
             )}
             <div className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-100">
@@ -623,8 +686,12 @@ export default async function CallSessionPage({
               </div>
             )}
             <div className="border-t border-slate-800 pt-4 space-y-4">
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Guided call workspace</p>
+                <p className="text-[11px] text-slate-500">
+                  Use the Start guided call button, work through the script, then capture a summary
+                  to unlock the follow-up suggestion.
+                </p>
                 {job ? (
                   <>
                     <p className="text-sm text-slate-400">
