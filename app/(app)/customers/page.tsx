@@ -8,6 +8,9 @@ import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 
+const LIST_GRID_CLASSES =
+  "md:grid-cols-[minmax(0,2fr)_minmax(0,160px)_minmax(0,220px)_minmax(0,220px)_minmax(0,170px)]";
+
 type CustomerRow = {
   id: string;
   name: string | null;
@@ -31,7 +34,56 @@ function formatCustomerDate(value: string | null) {
   });
 }
 
-export default async function CustomersPage() {
+function normalizeSearchQuery(value: string) {
+  return value.replace(/[,]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function buildSearchPattern(normalized: string) {
+  return normalized ? `%${normalized}%` : null;
+}
+
+type ActivityKind = "job" | "quote" | "call" | "message";
+
+const ACTIVITY_LABELS: Record<ActivityKind, string> = {
+  job: "Job",
+  quote: "Quote",
+  call: "Call",
+  message: "Message",
+};
+
+type ActivityResponse = {
+  customer_id: string | null;
+  last_activity_at: string | null;
+  last_activity_kind: ActivityKind | null;
+};
+
+type ActivityEntry = {
+  kind: ActivityKind;
+  timestamp: string;
+};
+
+function formatActivityLabel(activity?: ActivityEntry | null) {
+  if (!activity) {
+    return null;
+  }
+  const formattedDate = formatCustomerDate(activity.timestamp);
+  if (!formattedDate) {
+    return null;
+  }
+  return `${ACTIVITY_LABELS[activity.kind]} · ${formattedDate}`;
+}
+
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams?: { q?: string };
+}) {
+  const searchQueryRaw = searchParams?.q ?? "";
+  const trimmedSearchQuery = searchQueryRaw.trim();
+  const normalizedSearchQuery = normalizeSearchQuery(trimmedSearchQuery);
+  const searchPattern = buildSearchPattern(normalizedSearchQuery);
+  const hasSearch = Boolean(normalizedSearchQuery);
+
   let supabase;
   try {
     supabase = await createServerClient();
@@ -72,12 +124,21 @@ export default async function CustomersPage() {
   let customers: CustomerRow[] = [];
   let customersError: Error | null = null;
   try {
-    const { data, error } = await supabase
-      .from("customers")
+    const customersBuilder = supabase
+      .from<CustomerRow>("customers")
       .select("id, name, email, phone, created_at")
-      .eq("workspace_id", workspace.id)
-      .order("created_at", { ascending: false, nulls: "last" })
-      .limit(100);
+      .eq("workspace_id", workspace.id);
+
+    if (searchPattern) {
+      customersBuilder.or(
+        `name.ilike.${searchPattern},email.ilike.${searchPattern},phone.ilike.${searchPattern}`
+      );
+    }
+
+    const { data, error } = await customersBuilder
+      .order("name", { ascending: true, nulls: "last" })
+      .limit(150);
+
     if (error) {
       customersError = error;
     } else {
@@ -88,6 +149,45 @@ export default async function CustomersPage() {
     console.error("[customers] Failed to fetch customers:", error);
   }
 
+  const activityMap: Record<string, ActivityEntry> = {};
+  const customerIds = customers.map((customer) => customer.id);
+
+  if (customerIds.length > 0) {
+    try {
+      const { data: activityRows, error: activityError } = await supabase
+        .from<ActivityResponse>("customer_activity_summary")
+        .select("customer_id, last_activity_at, last_activity_kind")
+        .eq("workspace_id", workspace.id)
+        .in("customer_id", customerIds);
+
+      if (activityError) {
+        console.error("[customers] Failed to load activity summary:", activityError);
+      } else if (activityRows) {
+        for (const row of activityRows) {
+          if (!row.customer_id || !row.last_activity_at || !row.last_activity_kind) {
+            continue;
+          }
+          activityMap[row.customer_id] = {
+            kind: row.last_activity_kind,
+            timestamp: row.last_activity_at,
+          };
+        }
+      }
+    } catch (error) {
+      console.error("[customers] Failed to load activity summary:", error);
+    }
+  }
+
+  const resultCountLabel = `${customers.length} customer${customers.length === 1 ? "" : "s"}`;
+  const resultsLabel = hasSearch
+    ? `Showing ${resultCountLabel} for "${trimmedSearchQuery}".`
+    : `Showing ${resultCountLabel}.`;
+
+  const emptyTitle = hasSearch ? "No matching customers" : "No customers yet";
+  const emptyBody = hasSearch
+    ? `No customers match "${trimmedSearchQuery}". Try different keywords or clear the search.`
+    : "You can create one using the button below.";
+
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -95,11 +195,11 @@ export default async function CustomersPage() {
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Customers</p>
           <h1 className="hb-heading-1 text-3xl font-semibold">Customers</h1>
           <p className="hb-muted text-sm">
-            Keep track of the people you serve so jobs, quotes, and calls have a clear home.
+            This list shows contact info, when someone was added, and their latest job, quote, call, or message.
           </p>
           <p className="hb-muted text-sm">Showing customers for {workspaceName}.</p>
         </div>
-        <HbButton as={Link} href="/customers/new" size="sm" variant="secondary">
+        <HbButton as={Link} href="/customers/new" size="sm">
           New customer
         </HbButton>
       </header>
@@ -109,64 +209,75 @@ export default async function CustomersPage() {
           <h2 className="hb-card-heading text-lg font-semibold">Something went wrong</h2>
           <p className="hb-muted text-sm">We couldn’t load this page. Try again or go back.</p>
         </HbCard>
-      ) : customers.length === 0 ? (
-        <HbCard className="space-y-4">
-          <div className="space-y-2">
-            <h2 className="hb-card-heading text-lg font-semibold">No customers yet</h2>
-            <p className="hb-muted text-sm">You can create one using the button above.</p>
-          </div>
-          <HbButton as={Link} href="/customers/new">
-            Add your first customer
-          </HbButton>
-        </HbCard>
       ) : (
         <HbCard className="space-y-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="hb-card-heading text-lg font-semibold">All customers</h2>
+            <h2 className="hb-card-heading text-lg font-semibold">All customers</h2>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{resultsLabel}</p>
+          </div>
+          <form action="/customers" method="get" className="flex flex-wrap items-center gap-2">
+            <label htmlFor="customer-search" className="sr-only">
+              Search customers
+            </label>
+            <input
+              id="customer-search"
+              name="q"
+              defaultValue={trimmedSearchQuery}
+              placeholder="Search name, email, or phone"
+              className="flex-1 min-w-0 rounded-full border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+              autoComplete="off"
+            />
+            <button type="submit" className="hb-button px-3 py-1 text-sm">
+              Search
+            </button>
+          </form>
+          {customers.length === 0 ? (
+            <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-6 text-sm text-slate-400">
+              <div className="space-y-2">
+                <h2 className="hb-card-heading text-lg font-semibold text-slate-100">{emptyTitle}</h2>
+                <p>{emptyBody}</p>
+              </div>
+              <HbButton as={Link} href="/customers/new">
+                Add your first customer
+              </HbButton>
             </div>
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-              Showing {customers.length} customer{customers.length === 1 ? "" : "s"}
-            </p>
-          </div>
-          <div className="space-y-2">
-            {customers.map((customer) => {
-              const dateLabel = formatCustomerDate(customer.created_at);
-              const contactDetails = [customer.email, customer.phone].filter(Boolean);
-              return (
-                <Link
-                  key={customer.id}
-                  href={`/customers/${customer.id}`}
-                  className="group block rounded-2xl px-4 py-3 transition hover:bg-slate-900"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-base font-semibold text-slate-100">
-                        {customer.name ?? "Unnamed customer"}
-                      </p>
-                      {contactDetails.length > 0 && (
-                        <div className="flex flex-wrap gap-3 text-xs text-slate-400">
-                          {contactDetails.map((detail) => (
-                            <span key={detail}>{detail}</span>
-                          ))}
+          ) : (
+            <div className="space-y-1 rounded-2xl border border-slate-800 bg-slate-900/50">
+              <div
+                className={`grid items-center text-[10px] uppercase tracking-[0.3em] text-slate-500 px-4 py-2 ${LIST_GRID_CLASSES}`}
+              >
+                <div>Name</div>
+                <div>Phone</div>
+                <div>Email</div>
+                <div>Last activity</div>
+                <div className="text-right">Added</div>
+              </div>
+              <div className="divide-y divide-slate-800">
+                {customers.map((customer) => {
+                  const displayName = customer.name ?? "Unnamed customer";
+                  const lastActivityLabel = formatActivityLabel(activityMap[customer.id]);
+                  const createdLabel = formatCustomerDate(customer.created_at) ?? "—";
+                  return (
+                    <Link
+                      key={customer.id}
+                      href={`/customers/${customer.id}`}
+                      className="group block rounded-2xl bg-slate-950/60 transition hover:bg-slate-900"
+                    >
+                      <div className={`grid items-center gap-3 px-4 py-3 text-sm text-slate-300 ${LIST_GRID_CLASSES}`}>
+                        <div>
+                          <p className="text-base font-semibold text-slate-100">{displayName}</p>
                         </div>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-1 text-right">
-                      {dateLabel && (
-                        <p className="text-[11px] uppercase tracking-[0.35em] text-slate-500">
-                          Added {dateLabel}
-                        </p>
-                      )}
-                      <span className="text-[11px] uppercase tracking-[0.35em] text-slate-500">
-                        VIEW
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
+                        <div className="text-slate-100">{customer.phone ?? "—"}</div>
+                        <div className="text-slate-100">{customer.email ?? "—"}</div>
+                        <div className="text-slate-100">{lastActivityLabel ?? "No activity yet"}</div>
+                        <div className="text-right text-slate-100">{createdLabel}</div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </HbCard>
       )}
     </div>

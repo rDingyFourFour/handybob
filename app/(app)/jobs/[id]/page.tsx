@@ -397,6 +397,21 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job details</p>
             <h1 className="hb-heading-2 text-2xl font-semibold">{jobTitle}</h1>
             <p className="text-sm text-slate-400">Status: {job.status ?? "—"}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {customerId && customerName ? (
+                <Link
+                  href={`/customers/${customerId}`}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-slate-600 hover:bg-slate-900"
+                >
+                  <span className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Customer</span>
+                  <span className="text-sm">{customerName}</span>
+                </Link>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-800 bg-slate-950/60 px-3 py-1 text-xs uppercase tracking-[0.3em] text-slate-500">
+                  Attach customer (coming soon)
+                </span>
+              )}
+            </div>
           </div>
         <div className="flex flex-wrap gap-2">
           <HbButton as={Link} href={quoteHref} size="sm" variant="secondary">
