@@ -8,6 +8,7 @@ import {
   smartFollowupFromCallSummary,
   smartNextActionFromCallSummary,
 } from "@/lib/domain/communications/followups";
+import { deriveFollowupRecommendation } from "@/lib/domain/communications/followupRecommendations";
 
 export type CallScriptDescriptor = {
   subject?: string | null;
@@ -30,11 +31,31 @@ export type PhoneCallMessageActionResult =
   | { ok: true; messageId: string; error: null }
   | { ok: false; messageId: null; error: "auth_error" | "db_error" | "validation_error" };
 
+export type FollowupDraftFromCallSummaryResult = SmartFollowupResult & {
+  daysSinceQuote: number | null;
+  outcome: string | null;
+};
+
 function normalizeText(value: string | null | undefined): string {
   if (typeof value !== "string") {
     return "";
   }
   return value.trim();
+}
+
+function calculateDaysSinceQuote(value?: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  const diffMs = Date.now() - parsed.getTime();
+  if (diffMs <= 0) {
+    return 0;
+  }
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
 function buildCallLogBody(script: CallScriptDescriptor, subject: string, agentName: string): string {
@@ -209,9 +230,31 @@ export type CreateFollowupDraftFromCallSummaryInput = {
 
 export async function createFollowupDraftFromCallSummaryAction(
   input: CreateFollowupDraftFromCallSummaryInput,
-): Promise<SmartFollowupResult | null> {
+): Promise<FollowupDraftFromCallSummaryResult | null> {
   try {
     const supabase = await createServerClient();
+    let daysSinceQuote: number | null = null;
+    try {
+      const { data: quoteRecord, error: quoteError } = await supabase
+        .from("quotes")
+        .select("created_at")
+        .eq("workspace_id", input.workspaceId)
+        .eq("id", input.quoteId)
+        .maybeSingle();
+      if (quoteError) {
+        console.error(
+          "[phone-call-message-action] Failed to load quote for follow-up recommendation",
+          { error: quoteError, quoteId: input.quoteId, workspaceId: input.workspaceId },
+        );
+      } else {
+        daysSinceQuote = calculateDaysSinceQuote(quoteRecord?.created_at ?? null);
+      }
+    } catch (error) {
+      console.error(
+        "[phone-call-message-action] Unexpected error while loading quote for follow-up recommendation",
+        { error, quoteId: input.quoteId, workspaceId: input.workspaceId },
+      );
+    }
     const response = await smartFollowupFromCallSummary({
       supabaseClient: supabase,
       workspaceId: input.workspaceId,
@@ -219,12 +262,17 @@ export async function createFollowupDraftFromCallSummaryAction(
       quoteId: input.quoteId,
       summaryNote: input.summaryNote,
       outcome: input.outcome,
+      daysSinceQuote,
     });
     if (!response.ok) {
       console.error("[phone-call-message-action] Follow-up draft failed", response.error);
       return null;
     }
-    return response.data;
+    return {
+      ...response.data,
+      daysSinceQuote,
+      outcome: input.outcome ?? null,
+    };
   } catch (error) {
     console.error("[phone-call-message-action] Follow-up draft action failed", error);
     return null;
@@ -255,11 +303,15 @@ export type CreateMessageDraftFromFollowupInput = {
   workspaceId?: string | null;
   jobId: string;
   quoteId: string;
+  callId?: string | null;
   channel: string;
   subject: string;
   body: string;
   via?: string;
   status?: string;
+  outcome?: string | null;
+  daysSinceQuote?: number | null;
+  modelChannelSuggestion?: string | null;
 };
 
 export type CreateMessageDraftFromFollowupResult = {
@@ -300,9 +352,24 @@ export async function createMessageDraftFromFollowupAction(
   }
 
   try {
-    const channel = input.channel;
     const via = input.via ?? "email";
     const status = input.status ?? "draft";
+    const recommendation = deriveFollowupRecommendation({
+      outcome: input.outcome ?? null,
+      daysSinceQuote:
+        typeof input.daysSinceQuote === "number" ? input.daysSinceQuote : null,
+      modelChannelSuggestion: input.modelChannelSuggestion ?? null,
+    });
+    const channel = recommendation?.recommendedChannel ?? input.channel;
+    console.log("[phone-call-message-action] Follow-up message insert", {
+      callId: input.callId ?? null,
+      jobId: input.jobId,
+      quoteId: input.quoteId,
+      channelSuggestion: input.modelChannelSuggestion ?? null,
+      recommendation,
+      recommendedDelayDays: recommendation?.recommendedDelayDays ?? null,
+      shouldSkipFollowup: recommendation?.shouldSkipFollowup ?? false,
+    });
     const { data, error } = await supabase
       .from("messages")
       .insert({

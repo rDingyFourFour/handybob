@@ -1,11 +1,7 @@
 "use server";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-
-import {
-  SmartFollowupActionResponse,
-  smartFollowupFromQuote,
-} from "@/app/(app)/quotes/[id]/followupAiActions";
+import type { SmartFollowupActionResponse } from "@/app/(app)/quotes/[id]/followupAiActions";
 
 export type SmartFollowupFromCallSummaryInput = {
   supabaseClient: SupabaseClient;
@@ -14,6 +10,7 @@ export type SmartFollowupFromCallSummaryInput = {
   quoteId: string;
   summaryNote: string;
   outcome: string | null;
+  daysSinceQuote?: number | null;
 };
 
 export async function smartFollowupFromCallSummary({
@@ -23,6 +20,7 @@ export async function smartFollowupFromCallSummary({
   workspaceId,
   jobId,
   quoteId,
+  daysSinceQuote,
 }: SmartFollowupFromCallSummaryInput): Promise<SmartFollowupActionResponse> {
   void supabaseClient;
   const normalizedSummary = summaryNote?.trim() ?? "";
@@ -34,6 +32,9 @@ export async function smartFollowupFromCallSummary({
     .join("\n\n")
     .trim();
 
+  const { smartFollowupFromQuote } = await import(
+    "@/app/(app)/quotes/[id]/followupAiActions"
+  );
   const response = await smartFollowupFromQuote({
     description: composedDescription,
     quoteId,
@@ -42,11 +43,138 @@ export async function smartFollowupFromCallSummary({
     status: null,
     totalAmount: null,
     customerName: null,
-    daysSinceQuote: null,
+    daysSinceQuote: typeof daysSinceQuote === "number" ? daysSinceQuote : null,
+    outcome,
   });
 
   return response;
 }
+
+export type FollowupRecommendation = {
+  recommendedChannel: "sms" | "email" | "call" | null;
+  recommendedDelayLabel: string | null;
+  reason: string | null;
+};
+
+type DeriveFollowupRecommendationArgs = {
+  outcome: string | null;
+  daysSinceQuote: number | null;
+  modelChannelSuggestion?: string | null;
+};
+
+type RecommendationCore = {
+  recommendedChannel: FollowupRecommendation["recommendedChannel"];
+  recommendedDelayLabel: string | null;
+  reason: string | null;
+};
+
+function normalizeFollowupRecommendationArgs({
+  outcome,
+  daysSinceQuote,
+  modelChannelSuggestion,
+}: DeriveFollowupRecommendationArgs): {
+  normalizedOutcome: string;
+  normalizedDays: number | null;
+  modelChannel: FollowupRecommendation["recommendedChannel"] | null;
+} {
+  const normalizedOutcome = outcome?.trim().toLowerCase() ?? "";
+  const normalizedModelChannel =
+    typeof modelChannelSuggestion === "string"
+      ? modelChannelSuggestion.trim().toLowerCase()
+      : null;
+  const validChannels: Array<FollowupRecommendation["recommendedChannel"]> = [
+    "sms",
+    "email",
+    "call",
+  ];
+  const modelChannel = normalizedModelChannel
+    ? (validChannels.includes(
+        normalizedModelChannel as FollowupRecommendation["recommendedChannel"],
+      )
+        ? (normalizedModelChannel as FollowupRecommendation["recommendedChannel"])
+        : null)
+    : null;
+  const normalizedDays =
+    typeof daysSinceQuote === "number" && Number.isFinite(daysSinceQuote)
+      ? daysSinceQuote
+      : null;
+  return { normalizedOutcome, normalizedDays, modelChannel };
+}
+
+function buildRecommendationCore(
+  args: DeriveFollowupRecommendationArgs,
+): RecommendationCore {
+  const { normalizedOutcome, normalizedDays, modelChannel } =
+    normalizeFollowupRecommendationArgs(args);
+
+  const getLeftVoicemailDelay = (): string => {
+    if (normalizedDays === null || normalizedDays <= 1) {
+      return "later today";
+    }
+    if (normalizedDays <= 7) {
+      return "tomorrow";
+    }
+    return "in 2 days";
+  };
+
+  const isLeftVoicemail =
+    normalizedOutcome.includes("left voicemail") ||
+    normalizedOutcome.includes("no answer");
+  if (isLeftVoicemail) {
+    return {
+      recommendedChannel: modelChannel ?? "sms",
+      recommendedDelayLabel: getLeftVoicemailDelay(),
+      reason:
+        "You left a voicemail, so a quick SMS is usually the most effective follow-up.",
+    };
+  }
+
+  const isTalkedToCustomer = normalizedOutcome.includes("talked to customer");
+  if (isTalkedToCustomer) {
+    const channel =
+      normalizedDays !== null && (normalizedDays === 0 || normalizedDays === 1)
+        ? "email"
+        : modelChannel ?? "email";
+    const delay =
+      normalizedDays !== null && normalizedDays > 3 ? "in 3 days" : "tomorrow";
+    return {
+      recommendedChannel: channel,
+      recommendedDelayLabel: delay,
+      reason:
+        "You already spoke with the customer; a short recap email works well as a follow-up.",
+    };
+  }
+
+  if (normalizedOutcome.includes("call rescheduled")) {
+    return {
+      recommendedChannel: modelChannel ?? "call",
+      recommendedDelayLabel: "at the rescheduled time",
+      reason:
+        "The call is already rescheduled; the next step is simply to complete that call.",
+    };
+  }
+
+  const fallbackDelay =
+    normalizedDays === null || normalizedDays <= 3 ? "tomorrow" : "in a few days";
+  return {
+    recommendedChannel: modelChannel ?? "sms",
+    recommendedDelayLabel: fallbackDelay,
+    reason: "Based on this outcome, a simple follow-up message is recommended.",
+  };
+}
+
+export async function deriveFollowupRecommendationMetadata({
+  outcome,
+  daysSinceQuote,
+  modelChannelSuggestion,
+}: DeriveFollowupRecommendationArgs): Promise<FollowupRecommendation> {
+  return buildRecommendationCore({
+    outcome,
+    daysSinceQuote,
+    modelChannelSuggestion,
+  });
+}
+
 
 export type NextActionSuggestion = {
   type: "call_again" | "send_sms" | "send_email" | "close_lost" | "do_nothing";

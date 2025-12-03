@@ -247,6 +247,12 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     quoteParams.set("description", description);
   }
   const quoteHref = `/quotes/new?${quoteParams.toString()}`;
+  const callAgentParams = new URLSearchParams();
+  callAgentParams.set("jobId", job.id);
+  if (callScriptQuoteId) {
+    callAgentParams.set("quoteId", callScriptQuoteId);
+  }
+  const callAgentHref = `/calls/new?${callAgentParams.toString()}`;
 
   return (
     <div className="hb-shell pt-20 pb-8">
@@ -257,14 +263,17 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
             <h1 className="hb-heading-2 text-2xl font-semibold">{jobTitle}</h1>
             <p className="text-sm text-slate-400">Status: {job.status ?? "—"}</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <HbButton as={Link} href={quoteHref} size="sm" variant="secondary">
-              Generate quote from job
-            </HbButton>
-            <HbButton as="a" href="/jobs" size="sm">
-              Back to jobs
-            </HbButton>
-          </div>
+        <div className="flex flex-wrap gap-2">
+          <HbButton as={Link} href={quoteHref} size="sm" variant="secondary">
+            Generate quote from job
+          </HbButton>
+          <HbButton as={Link} href={callAgentHref} size="sm" variant="secondary">
+            Open phone agent
+          </HbButton>
+          <HbButton as="a" href="/jobs" size="sm">
+            Back to jobs
+          </HbButton>
+        </div>
         </header>
         <div className="grid gap-3 text-sm text-slate-400 md:grid-cols-2">
           <p>Urgency: {job.urgency ?? "—"}</p>
@@ -350,6 +359,8 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           customerName={customerName}
           customerFirstName={customerFirstName}
           customerPhone={customerPhone}
+          mode="job"
+          context="job-sidebar"
         />
       ) : (
         <HbCard className="space-y-2">

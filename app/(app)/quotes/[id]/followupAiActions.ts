@@ -1,5 +1,10 @@
 "use server";
 
+import {
+  deriveFollowupRecommendationMetadata,
+  type FollowupRecommendation,
+} from "@/lib/domain/communications/followups";
+
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini";
 
@@ -12,12 +17,14 @@ export type SmartFollowupInput = {
   totalAmount?: number | null;
   customerName?: string | null;
   daysSinceQuote?: number | null;
+  outcome?: string | null;
 };
 
 export type SmartFollowupResult = {
   subject: string;
   body: string;
   channelSuggestion?: "sms" | "email" | null;
+  recommendation?: FollowupRecommendation | null;
 };
 
 export type SmartFollowupErrorCode = "ai_disabled" | "ai_error";
@@ -354,6 +361,12 @@ export async function smartFollowupFromQuote(
     }
 
     const normalized = normalizeParsedFollowup(parsed);
+    const recommendation = await deriveFollowupRecommendationMetadata({
+      outcome: input.outcome ?? null,
+      daysSinceQuote,
+      modelChannelSuggestion: normalized.channelSuggestion ?? null,
+    });
+    normalized.recommendation = recommendation;
 
     if (!normalized.body) {
       console.error("[followup] normalized body was empty");
