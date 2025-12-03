@@ -15,6 +15,7 @@ import {
   type NextActionSuggestion,
 } from "@/lib/domain/communications/followupRecommendations";
 import { findMatchingFollowupMessage } from "@/lib/domain/communications/followupMessages";
+import { markFollowupDoneAction } from "../actions/markFollowupDone";
 
 type CallRecord = {
   id: string;
@@ -113,6 +114,20 @@ function formatFollowupTimingText(days: number | null): string {
   }
   return `Suggested timing: in about ${days} days.`;
 }
+
+function previewMessageText(message: MessageRecord | null): string | null {
+  if (!message) {
+    return null;
+  }
+  const source = (message.body && message.body.trim()) || (message.subject && message.subject.trim());
+  if (!source) {
+    return null;
+  }
+  const cleaned = source.replace(/\s+/g, " ");
+  return cleaned.length > 120 ? `${cleaned.slice(0, 117)}…` : cleaned;
+}
+
+type StepStatus = "complete" | "current" | "upcoming";
 
 function MessageCard({ title, body }: { title: string; body: string }) {
   return (
@@ -317,6 +332,7 @@ export default async function CallSessionPage({
       })
     : null;
   const hasRecommendedFollowupAlready = Boolean(matchingFollowupMessage);
+  const matchingFollowupPreview = previewMessageText(matchingFollowupMessage);
   const followupMessageLink = matchingFollowupMessage
     ? `/messages/${matchingFollowupMessage.id}`
     : "/messages";
@@ -346,6 +362,35 @@ export default async function CallSessionPage({
       : dueInfo.dueStatus === "upcoming"
       ? "text-slate-300"
       : "text-slate-500";
+
+  const hasSummary = Boolean(call.body?.trim());
+  const notesStarted = Boolean(latestPhoneMessage?.outcome?.trim() || hasSummary);
+  const followupHandled = hasRecommendedFollowupAlready || shouldSkipFollowup;
+  const scriptReady = Boolean(callScriptQuoteId);
+
+  const step1Status: StepStatus = scriptReady ? "complete" : "current";
+  let step2Status: StepStatus = scriptReady ? "current" : "upcoming";
+  let step3Status: StepStatus = "upcoming";
+
+  if (notesStarted) {
+    step2Status = followupHandled ? "complete" : "current";
+  }
+  if (followupHandled && hasSummary) {
+    step2Status = "complete";
+    step3Status = "complete";
+  }
+
+  const stepperSteps = [
+    { label: "Review call script", status: step1Status },
+    { label: "Capture call outcome", status: step2Status },
+    { label: "Summarize and send follow-up", status: step3Status },
+  ] as const;
+
+  const stepStatusClasses: Record<StepStatus, string> = {
+    complete: "border border-emerald-200 bg-emerald-200/5 text-emerald-200",
+    current: "border border-emerald-200 bg-slate-900 text-white",
+    upcoming: "border border-slate-800 text-slate-500",
+  };
   console.log("[calls/[id]] followup recommendation", {
     callId: call.id,
     jobId: job?.id ?? null,
@@ -602,6 +647,11 @@ export default async function CallSessionPage({
                     <p className="text-xs text-slate-400">
                       Review or send it from there when you’re ready.
                     </p>
+                    {matchingFollowupPreview && (
+                      <p className="text-[11px] italic text-slate-500">
+                        Preview: {matchingFollowupPreview}
+                      </p>
+                    )}
                     <p className="text-xs text-slate-400">
                       Original timing recommendation: {recommendedTimingLabel}.
                     </p>
@@ -635,6 +685,18 @@ export default async function CallSessionPage({
                     <p className="text-xs text-slate-400">
                       If you accept this, HandyBob will create a draft in Messages for you to review.
                     </p>
+                    <form action={markFollowupDoneAction} className="text-right">
+                      <input type="hidden" name="callId" value={call.id} />
+                      <input type="hidden" name="workspaceId" value={workspace.id} />
+                      <input type="hidden" name="jobId" value={jobId ?? ""} />
+                      <input type="hidden" name="quoteId" value={callScriptQuoteId ?? ""} />
+                      <button
+                        type="submit"
+                        className="text-sm font-semibold text-emerald-200 hover:text-emerald-100"
+                      >
+                        Mark follow-up done
+                      </button>
+                    </form>
                     <Link
                       href="/messages"
                       className="text-sm font-semibold text-sky-300 hover:text-sky-200"
@@ -688,6 +750,17 @@ export default async function CallSessionPage({
             <div className="border-t border-slate-800 pt-4 space-y-4">
               <div className="space-y-2">
                 <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Guided call workspace</p>
+                <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.1em]">
+                  {stepperSteps.map((step, index) => (
+                    <span
+                      key={`${step.label}-${step.status}`}
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold ${stepStatusClasses[step.status]}`}
+                    >
+                      <span className="text-[10px]">{index + 1}.</span>
+                      <span className="whitespace-nowrap text-xs">{step.label}</span>
+                    </span>
+                  ))}
+                </div>
                 <p className="text-[11px] text-slate-500">
                   Use the Start guided call button, work through the script, then capture a summary
                   to unlock the follow-up suggestion.

@@ -12,6 +12,16 @@ import HbButton from "@/components/ui/hb-button";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import JobMaterialsPanel from "./JobMaterialsPanel";
 import JobCallScriptPanel, { type PhoneMessageSummary } from "./JobCallScriptPanel";
+import {
+  computeFollowupDueInfo,
+  deriveFollowupRecommendation,
+  type FollowupDueStatus,
+  type FollowupDueInfo,
+} from "@/lib/domain/communications/followupRecommendations";
+import {
+  findMatchingFollowupMessage,
+  type FollowupMessageRef,
+} from "@/lib/domain/communications/followupMessages";
 
 type JobRecord = {
   id: string;
@@ -41,6 +51,17 @@ type JobQuoteSummary = {
   smart_quote_used: boolean | null;
 };
 
+type LatestCallRecord = {
+  id: string;
+  job_id: string | null;
+  quote_id: string | null;
+  body: string | null;
+  status: string | null;
+  channel: string | null;
+  via: string | null;
+  created_at: string | null;
+};
+
 const smartQuoteBadgeClasses =
   "inline-flex items-center gap-2 rounded-full border px-3 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] bg-amber-500/10 border-amber-400/40 text-amber-300";
 const smartQuoteBadgeDotClasses = "h-1.5 w-1.5 rounded-full bg-amber-300";
@@ -68,6 +89,28 @@ function fallbackCard(title: string, body: string, action?: ReactNode) {
       </HbCard>
     </div>
   );
+}
+
+function calculateDaysSince(value?: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  const diffMs = Date.now() - parsed.getTime();
+  if (diffMs <= 0) {
+    return 0;
+  }
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+}
+
+function startOfToday(date?: Date) {
+  const base = date ? new Date(date) : new Date();
+  base.setHours(0, 0, 0, 0);
+  base.setMilliseconds(0);
+  return base;
 }
 
 export default async function JobDetailPage(props: { params: Promise<{ id: string }> }) {
@@ -254,6 +297,98 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
   }
   const callAgentHref = `/calls/new?${callAgentParams.toString()}`;
 
+  let latestCall: LatestCallRecord | null = null;
+  try {
+    const { data, error } = await supabase
+      .from<LatestCallRecord>("calls")
+      .select("id, job_id, quote_id, body, status, channel, via, created_at")
+      .eq("workspace_id", workspace.id)
+      .eq("job_id", job.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.error("[job-detail] Latest call lookup failed", error);
+    } else {
+      latestCall = data ?? null;
+    }
+  } catch (error) {
+    console.error("[job-detail] Latest call query failed", error);
+  }
+
+  const todayStart = startOfToday();
+  let todayFollowupMessages: FollowupMessageRef[] = [];
+  try {
+    const { data, error } = await supabase
+      .from<FollowupMessageRef>("messages")
+      .select("id, job_id, quote_id, channel, via, created_at")
+      .eq("workspace_id", workspace.id)
+      .eq("job_id", job.id)
+      .gte("created_at", todayStart.toISOString())
+      .in("channel", ["sms", "email", "phone"])
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.error("[job-detail] Today’s follow-up messages lookup failed", error);
+    } else {
+      todayFollowupMessages = data ?? [];
+    }
+  } catch (error) {
+    console.error("[job-detail] Today’s follow-up messages query failed", error);
+  }
+
+  const quoteCandidate = quotes.find((quote) => quote.id === callScriptQuoteId) ?? null;
+  const quoteCreatedAt = quoteCandidate?.created_at ?? null;
+  const daysSinceQuote = calculateDaysSince(quoteCreatedAt);
+  const callOutcome =
+    latestCall?.body?.trim() ||
+    latestCall?.status?.trim() ||
+    null;
+  const followupRecommendation =
+    callOutcome &&
+    deriveFollowupRecommendation({
+      outcome: callOutcome,
+      daysSinceQuote,
+      modelChannelSuggestion: null,
+    });
+  const followupDueInfo: FollowupDueInfo = computeFollowupDueInfo({
+    quoteCreatedAt,
+    callCreatedAt: latestCall?.created_at ?? null,
+    recommendation: followupRecommendation,
+  });
+  const matchingFollowupMessage =
+    followupRecommendation &&
+    findMatchingFollowupMessage({
+      messages: todayFollowupMessages,
+      recommendedChannel: followupRecommendation.recommendedChannel,
+      jobId: job.id,
+      quoteId: latestCall?.quote_id ?? callScriptQuoteId,
+    });
+  console.log("[job-followup-status]", {
+    jobId: job.id,
+    callId: latestCall?.id ?? null,
+    dueStatus: followupDueInfo.dueStatus,
+    hasMessage: Boolean(matchingFollowupMessage),
+    messageId: matchingFollowupMessage?.id ?? null,
+  });
+  const followupStatusLabels: Record<FollowupDueStatus, string> = {
+    overdue: "Overdue",
+    "due-today": "Due today",
+    upcoming: "Upcoming",
+    none: "Done",
+  };
+  const followupStatusClasses: Record<FollowupDueStatus, string> = {
+    overdue: "border border-amber-200 text-amber-200 bg-amber-200/10",
+    "due-today": "border border-emerald-200 text-emerald-200 bg-emerald-200/10",
+    upcoming: "border border-slate-600 text-slate-200 bg-slate-900/80",
+    none: "border border-slate-700 text-slate-400 bg-slate-950/40",
+  };
+  const followupStatusChipLabel = latestCall
+    ? followupStatusLabels[followupDueInfo.dueStatus]
+    : null;
+  const followupStatusChipClass = latestCall
+    ? followupStatusClasses[followupDueInfo.dueStatus]
+    : "";
+
   return (
     <div className="hb-shell pt-20 pb-8">
       <HbCard className="space-y-5">
@@ -275,6 +410,39 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           </HbButton>
         </div>
         </header>
+        {followupStatusChipLabel && (
+          <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-sm text-slate-200">
+            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Next follow-up</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <span
+                className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.3em] font-semibold ${followupStatusChipClass}`}
+              >
+                {followupStatusChipLabel}
+              </span>
+              <span className="text-sm text-slate-300">{followupDueInfo.dueLabel}</span>
+              {matchingFollowupMessage && (
+                <Link
+                  href={`/messages/${matchingFollowupMessage.id}`}
+                  className="text-sm font-semibold text-sky-300 hover:text-sky-200"
+                >
+                  View follow-up message
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
+        {!followupStatusChipLabel && (
+          <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-sm text-slate-200">
+            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Next follow-up</p>
+            <p className="text-sm text-slate-400">
+              No calls yet –{" "}
+              <Link className="font-semibold text-emerald-200 hover:text-emerald-100" href={callAgentHref}>
+                start with the phone agent
+              </Link>
+              .
+            </p>
+          </div>
+        )}
         <div className="grid gap-3 text-sm text-slate-400 md:grid-cols-2">
           <p>Urgency: {job.urgency ?? "—"}</p>
           <p>Source: {job.source ?? "—"}</p>

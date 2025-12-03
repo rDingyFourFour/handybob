@@ -264,6 +264,9 @@ export function computeFollowupDueInfo({
   const effectiveNow = now;
   const normalizedCallDate = parseDate(callCreatedAt);
   const hasValidCallDate = normalizedCallDate !== null;
+  // TODO: once calls expose a follow_up_state column (e.g. none/due/done/snoozed), this module
+  // should accept that state so callers can short-circuit “no follow-up due” for done/snoozed calls
+  // without relying solely on dueStatus calculations.
   if (!recommendation || recommendation.recommendedDelayDays == null) {
     const info: FollowupDueInfo = {
       dueDateISO: hasValidCallDate ? normalizedCallDate!.toISOString() : null,

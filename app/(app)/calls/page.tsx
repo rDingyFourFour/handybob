@@ -12,12 +12,14 @@ import {
   deriveFollowupRecommendation,
   isActionableFollowupDue,
   type FollowupDueInfo,
+  type FollowupDueStatus,
   type NextActionSuggestion,
 } from "@/lib/domain/communications/followupRecommendations";
 import {
   findMatchingFollowupMessage,
   type FollowupMessageRef,
 } from "@/lib/domain/communications/followupMessages";
+import { markFollowupDoneAction } from "./actions/markFollowupDone";
 
 const CHANNEL_HINTS = {
   phone: { icon: "📞", label: "Phone" },
@@ -33,6 +35,12 @@ function startOfToday(date?: Date) {
   base.setMilliseconds(0);
   return base;
 }
+
+const QUEUE_GROUPS: Array<{ status: FollowupDueStatus; label: string }> = [
+  { status: "overdue", label: "Overdue" },
+  { status: "due-today", label: "Due today" },
+  { status: "upcoming", label: "Upcoming" },
+];
 
 type CallRow = {
   id: string;
@@ -266,15 +274,18 @@ export default async function CallsPage({
   const summaryFilteredCalls = callsWithFollowups.filter(
     (call) => !call.body?.trim(),
   );
-const followupQueueCalls = callsWithFollowups.filter((call) => {
-  const recommendation = call.followupRecommendation;
-  return (
-    recommendation &&
-    !recommendation.shouldSkipFollowup &&
-    isActionableFollowupDue(call.followupDueInfo.dueStatus)
-    && !call.hasMatchingFollowupToday
-  );
-});
+  const followupQueueCalls = callsWithFollowups.filter((call) => {
+    // TODO: once the calls table exposes an explicit follow-up state (none/due/done/snoozed),
+    // respect that instead of computing status purely from messages and outcomes; skip rows where
+    // the follow-up_state indicates “done” even if dueStatus might still be actionable.
+    const recommendation = call.followupRecommendation;
+    return (
+      recommendation &&
+      !recommendation.shouldSkipFollowup &&
+      isActionableFollowupDue(call.followupDueInfo.dueStatus)
+      && !call.hasMatchingFollowupToday
+    );
+  });
   const activeCalls = followupQueueActive
     ? followupQueueCalls
     : summaryModeActive
@@ -286,6 +297,12 @@ const followupQueueCalls = callsWithFollowups.filter((call) => {
     queueCount: followupQueueCalls.length,
     summaryNeedsCount: summaryFilteredCalls.length,
   });
+  if (followupQueueActive) {
+    console.log("[followup-queue] active view", {
+      workspaceId: workspace.id,
+      rows: followupQueueCalls.length,
+    });
+  }
 
   const filterJobLabel = filteredJob
     ? filteredJob.title ?? `Job ${filteredJob.id.slice(0, 8)}…`
@@ -319,6 +336,138 @@ const followupQueueCalls = callsWithFollowups.filter((call) => {
       ? "All recent calls across your workspace."
       : "Simple log of recent calls.";
 
+  const renderCallRow = (call: EnrichedCallRow) => {
+    const summaryMissing = !call.body?.trim();
+    const normalizedChannel = (call.channel ?? "phone").toLowerCase();
+    const knownChannel = normalizedChannel in CHANNEL_HINTS;
+    const channelKey = (knownChannel ? normalizedChannel : "phone") as keyof typeof CHANNEL_HINTS;
+    const channelHint = CHANNEL_HINTS[channelKey];
+    const rawChannelLabel = !knownChannel && call.channel ? call.channel : null;
+    const lastUpdated = formatDateTime(call.updated_at ?? call.created_at, "—");
+    const rowDueInfo = call.followupDueInfo;
+    const showRowDue = rowDueInfo.dueStatus !== "none";
+
+    return (
+      <div
+        key={call.id}
+        className={`flex flex-col gap-3 rounded-lg border px-4 py-3 transition ${
+          summaryMissing
+            ? "border-amber-200/70 bg-amber-100/10 hover:bg-amber-100/20 border-l-4 border-l-amber-400"
+            : "border-slate-800 bg-slate-950/60 hover:bg-slate-900/80"
+        }`}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {call.job_id ? (
+                <Link
+                  href={`/jobs/${call.job_id}`}
+                  className="text-base font-semibold text-white hover:text-slate-200"
+                >
+                  Job #{call.job_id.slice(0, 8)}…
+                </Link>
+              ) : (
+                <span className="text-base font-semibold text-slate-200">
+                  Call {call.id.slice(0, 8)}…
+                </span>
+              )}
+              {call.quote_id && (
+                <Link
+                  href={`/quotes/${call.quote_id}`}
+                  className="text-sm font-medium text-slate-400 hover:text-slate-200"
+                >
+                  Quote #{call.quote_id.slice(0, 8)}…
+                </Link>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+              <span className="flex items-center gap-1 text-slate-200">
+                <span aria-hidden>{channelHint.icon}</span>
+                <span className="font-semibold text-slate-100">
+                  {channelHint.label}
+                  {rawChannelLabel ? ` (${rawChannelLabel})` : ""}
+                </span>
+              </span>
+              {call.via && <span className="text-slate-400">via {call.via}</span>}
+              <span className="text-slate-400">Status: {call.status ?? "unknown"}</span>
+              <span
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] ${
+                  summaryMissing
+                    ? "border-amber-200 bg-amber-100/20 text-amber-200"
+                    : "border-emerald-200 bg-emerald-100/20 text-emerald-200"
+                }`}
+              >
+                {summaryMissing ? "Summary needed" : "Summary recorded"}
+              </span>
+              {call.hasMatchingFollowupToday && (
+                call.matchingFollowupMessageId ? (
+                  <Link
+                    href={`/messages/${call.matchingFollowupMessageId}`}
+                    className="inline-flex items-center rounded-full border border-slate-800 px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] text-slate-100 hover:border-slate-600"
+                  >
+                    Follow-up created
+                  </Link>
+                ) : (
+                  <span className="inline-flex items-center rounded-full border border-slate-800 px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                    Follow-up created
+                  </span>
+                )
+              )}
+              {showRowDue && (
+                <span
+                  className={`text-[11px] font-semibold ${
+                    rowDueInfo.dueStatus === "overdue"
+                      ? "text-amber-200"
+                      : rowDueInfo.dueStatus === "due-today"
+                      ? "text-emerald-200"
+                      : "text-slate-400"
+                  }`}
+                >
+                  {rowDueInfo.dueLabel}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-slate-400">
+              From: {call.from_number ?? "Unknown"}
+            </p>
+            {call.customer_id && (
+              <p className="text-xs text-slate-500">
+                Customer: {call.customer_id.slice(0, 8)}…
+              </p>
+            )}
+            <p className="text-xs text-slate-500">
+              Priority: {call.priority ?? "normal"} · Needs follow-up:{" "}
+              {call.needs_followup ? "Yes" : "No"}
+            </p>
+            <p className="text-xs text-slate-500">Last updated {lastUpdated}</p>
+          </div>
+        <div className="flex flex-col items-end gap-2 text-right">
+          <Link
+            href={`/calls/${call.id}`}
+            className="inline-flex items-center rounded-full border border-slate-800/60 px-2 py-0.5 font-semibold text-slate-100 hover:border-slate-600"
+          >
+            View call
+          </Link>
+          {followupQueueActive && (
+          <form action={markFollowupDoneAction} className="flex flex-col items-end text-xs font-semibold text-emerald-200">
+              <input type="hidden" name="callId" value={call.id} />
+              <input type="hidden" name="workspaceId" value={workspace.id} />
+              <input type="hidden" name="jobId" value={call.job_id ?? ""} />
+              <input type="hidden" name="quoteId" value={call.quote_id ?? ""} />
+              <button type="submit" className="text-emerald-200 hover:text-emerald-100">
+                Mark done
+              </button>
+            </form>
+          )}
+          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+            {formatDateTime(call.created_at, "—")}
+          </p>
+        </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="hb-shell pt-20 pb-8 space-y-4">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -329,6 +478,23 @@ const followupQueueCalls = callsWithFollowups.filter((call) => {
             Step 1: pick a call · Step 2: run guided call · Step 3: log summary & follow-up.
           </p>
           <p className="hb-muted text-sm">{headerSubtitle}</p>
+          {followupQueueActive ? (
+            <p className="mt-1 text-sm font-semibold text-emerald-200">
+              Showing {followupQueueCalls.length} calls needing follow-up today.
+            </p>
+          ) : (
+            followupQueueCalls.length > 0 && (
+              <p className="mt-1 text-sm text-slate-400">
+                You have {followupQueueCalls.length.toLocaleString()} calls in your follow-up queue today.{" "}
+                <Link
+                  href={followupQueueHref}
+                  className="font-semibold text-emerald-200 hover:text-emerald-100"
+                >
+                  View queue
+                </Link>
+              </p>
+            )
+          )}
           {summaryFilter === "needs" && (
             <p className="mt-1 text-sm font-semibold text-emerald-200">
               Showing calls that still need a summary.
@@ -485,132 +651,32 @@ const followupQueueCalls = callsWithFollowups.filter((call) => {
               </p>
             </div>
           )
-        ) : (
-          <div className="space-y-3">
-            {activeCalls.map((call) => {
-              const summaryMissing = !call.body?.trim();
-              const normalizedChannel = (call.channel ?? "phone").toLowerCase();
-              const knownChannel = normalizedChannel in CHANNEL_HINTS;
-              const channelKey = (knownChannel ? normalizedChannel : "phone") as keyof typeof CHANNEL_HINTS;
-              const channelHint = CHANNEL_HINTS[channelKey];
-              const rawChannelLabel =
-                !knownChannel && call.channel ? call.channel : null;
-              const lastUpdated = formatDateTime(call.updated_at ?? call.created_at, "—");
-              const rowDueInfo = call.followupDueInfo;
-              const showRowDue = rowDueInfo.dueStatus !== "none";
-
+        ) : followupQueueActive ? (
+          <div className="space-y-5">
+            {QUEUE_GROUPS.map(({ status, label }) => {
+              const grouped = activeCalls.filter(
+                (call) => call.followupDueInfo.dueStatus === status,
+              );
+              if (grouped.length === 0) {
+                return null;
+              }
               return (
-                <div
-                  key={call.id}
-                  className={`flex flex-col gap-3 rounded-lg border px-4 py-3 transition ${
-                    summaryMissing
-                      ? "border-amber-200/70 bg-amber-100/10 hover:bg-amber-100/20 border-l-4 border-l-amber-400"
-                      : "border-slate-800 bg-slate-950/60 hover:bg-slate-900/80"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {call.job_id ? (
-                          <Link
-                            href={`/jobs/${call.job_id}`}
-                            className="text-base font-semibold text-white hover:text-slate-200"
-                          >
-                            Job #{call.job_id.slice(0, 8)}…
-                          </Link>
-                        ) : (
-                          <span className="text-base font-semibold text-slate-200">
-                            Call {call.id.slice(0, 8)}…
-                          </span>
-                        )}
-                        {call.quote_id && (
-                          <Link
-                            href={`/quotes/${call.quote_id}`}
-                            className="text-sm font-medium text-slate-400 hover:text-slate-200"
-                          >
-                            Quote #{call.quote_id.slice(0, 8)}…
-                          </Link>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-                        <span className="flex items-center gap-1 text-slate-200">
-                          <span aria-hidden>{channelHint.icon}</span>
-                          <span className="font-semibold text-slate-100">
-                            {channelHint.label}
-                            {rawChannelLabel ? ` (${rawChannelLabel})` : ""}
-                          </span>
-                        </span>
-                        {call.via && <span className="text-slate-400">via {call.via}</span>}
-                        <span className="text-slate-400">Status: {call.status ?? "unknown"}</span>
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] ${
-                            summaryMissing
-                              ? "border-amber-200 bg-amber-100/20 text-amber-200"
-                              : "border-emerald-200 bg-emerald-100/20 text-emerald-200"
-                          }`}
-                        >
-                          {summaryMissing ? "Summary needed" : "Summary recorded"}
-                        </span>
-                        {call.hasMatchingFollowupToday && (
-                          call.matchingFollowupMessageId ? (
-                            <Link
-                              href={`/messages/${call.matchingFollowupMessageId}`}
-                              className="inline-flex items-center rounded-full border border-slate-800 px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] text-slate-100 hover:border-slate-600"
-                            >
-                              Follow-up created
-                            </Link>
-                          ) : (
-                            <span className="inline-flex items-center rounded-full border border-slate-800 px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] text-slate-400">
-                              Follow-up created
-                            </span>
-                          )
-                        )}
-                        {showRowDue && (
-                          <span
-                            className={`text-[11px] font-semibold ${
-                              rowDueInfo.dueStatus === "overdue"
-                                ? "text-amber-200"
-                                : rowDueInfo.dueStatus === "due-today"
-                                ? "text-emerald-200"
-                                : "text-slate-400"
-                            }`}
-                          >
-                            {rowDueInfo.dueLabel}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-slate-400">
-                        From: {call.from_number ?? "Unknown"}
-                      </p>
-                      {call.customer_id && (
-                        <p className="text-xs text-slate-500">
-                          Customer: {call.customer_id.slice(0, 8)}…
-                        </p>
-                      )}
-                      <p className="text-xs text-slate-500">
-                        Priority: {call.priority ?? "normal"} · Needs follow-up:{" "}
-                        {call.needs_followup ? "Yes" : "No"}
-                      </p>
-                      <p className="text-xs text-slate-500">Last updated {lastUpdated}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-2 text-right">
-                      <Link
-                        href={`/calls/${call.id}`}
-                        className="inline-flex items-center rounded-full border border-slate-800/60 px-2 py-0.5 font-semibold text-slate-100 hover:border-slate-600"
-                      >
-                        View call
-                      </Link>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                        {formatDateTime(call.created_at, "—")}
-                      </p>
-                    </div>
+                <div key={status} className="space-y-3">
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-400">{label}</p>
+                  <div className="space-y-3">
+                    {grouped.map((call) => renderCallRow(call))}
                   </div>
                 </div>
               );
             })}
           </div>
+        ) : (
+          <div className="space-y-3">
+            {activeCalls.map((call) => renderCallRow(call))}
+          </div>
         )}
       </HbCard>
+
     </div>
   );
 }
