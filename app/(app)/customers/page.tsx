@@ -180,15 +180,29 @@ export default async function CustomersPage({
     }
   }
 
-  const resultCountLabel = `${customers.length} customer${customers.length === 1 ? "" : "s"}`;
+  const totalCustomers = customers.length;
+  const hasCreatedAtField = customers.some((customer) => customer.created_at !== undefined);
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const recentCustomersCount =
+    hasCreatedAtField && totalCustomers > 0
+      ? customers.reduce((count, customer) => {
+          if (!customer.created_at) {
+            return count;
+          }
+          const createdDate = new Date(customer.created_at);
+          if (Number.isNaN(createdDate.getTime())) {
+            return count;
+          }
+          return createdDate >= sevenDaysAgo ? count + 1 : count;
+        }, 0)
+      : null;
+  const isSearching = trimmedSearchQuery.length > 0;
+
+  const resultCountLabel = `${totalCustomers} customer${totalCustomers === 1 ? "" : "s"}`;
   const resultsLabel = hasSearch
     ? `Showing ${resultCountLabel} for "${trimmedSearchQuery}".`
     : `Showing ${resultCountLabel}.`;
-
-  const emptyTitle = hasSearch ? "No matching customers" : "No customers yet";
-  const emptyBody = hasSearch
-    ? `No customers match "${trimmedSearchQuery}". Try different keywords or clear the search.`
-    : "You can create one using the button below.";
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -217,6 +231,21 @@ export default async function CustomersPage({
             <h2 className="hb-card-heading text-lg font-semibold">All customers</h2>
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{resultsLabel}</p>
           </div>
+          {totalCustomers > 0 && (
+            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">
+              <span className="text-[11px] uppercase tracking-[0.3em] text-slate-500">At a glance</span>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-[11px] text-slate-200">
+                  Total customers: {totalCustomers}
+                </span>
+                {recentCustomersCount && recentCustomersCount > 0 && (
+                  <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-[11px] text-slate-200">
+                    Added in last 7 days: {recentCustomersCount}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
           <form action="/customers" method="get" className="flex flex-wrap items-center gap-2">
             <label htmlFor="customer-search" className="sr-only">
               Search customers
@@ -234,15 +263,41 @@ export default async function CustomersPage({
             </button>
           </form>
           {customers.length === 0 ? (
-            <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-6 text-sm text-slate-400">
-              <div className="space-y-2">
-                <h2 className="hb-card-heading text-lg font-semibold text-slate-100">{emptyTitle}</h2>
-                <p>{emptyBody}</p>
+            isSearching ? (
+              <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-6 text-sm text-slate-400">
+                <div className="space-y-2">
+                  <h2 className="hb-card-heading text-lg font-semibold text-slate-100">
+                    {`No customers found for '${trimmedSearchQuery}'`}
+                  </h2>
+                  <p className="text-sm text-slate-400">
+                    Try a different name, phone, or email.{" "}
+                    <Link
+                      href="/customers"
+                      className="text-amber-400 underline-offset-2 hover:underline"
+                    >
+                      Clear search and view all customers
+                    </Link>
+                    .
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <HbButton as={Link} href="/customers/new" variant="ghost" size="sm">
+                    Add as new customer
+                  </HbButton>
+                </div>
               </div>
-              <HbButton as={Link} href="/customers/new">
-                Add your first customer
-              </HbButton>
-            </div>
+            ) : (
+              <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-6 text-sm text-slate-400">
+                <div className="space-y-2">
+                  <h2 className="hb-card-heading text-lg font-semibold text-slate-100">No customers yet</h2>
+                  <p>Add your first customer to start tracking jobs, calls, and invoices for them.</p>
+                  <p className="text-xs text-slate-500">You can also create customers from jobs later.</p>
+                </div>
+                <HbButton as={Link} href="/customers/new">
+                  Add customer
+                </HbButton>
+              </div>
+            )
           ) : (
             <div className="space-y-1 rounded-2xl border border-slate-800 bg-slate-900/50">
               <div

@@ -1,3 +1,5 @@
+import { deriveFollowupRecommendation } from "./followupRecommendations";
+
 export type FollowupMessageRef = {
   id: string;
   job_id: string | null;
@@ -7,6 +9,68 @@ export type FollowupMessageRef = {
   via: string | null;
   created_at: string | null;
 };
+
+export type CallFollowupDescriptor = {
+  id: string;
+  job_id: string | null;
+  quote_id: string | null;
+  created_at: string | null;
+  outcome: string | null;
+  daysSinceQuote: number | null;
+  modelChannelSuggestion?: string | null;
+};
+
+type CollectCallFollowupMessageIdsArgs = {
+  calls: CallFollowupDescriptor[];
+  messages: FollowupMessageRef[];
+};
+
+export type CallFollowupMessageCollection = {
+  messageIds: Set<string>;
+  messageToCallId: Map<string, string>;
+};
+
+export function collectCallFollowupMessageIds({
+  calls,
+  messages,
+}: CollectCallFollowupMessageIdsArgs): CallFollowupMessageCollection {
+  const callFollowupIds = new Set<string>();
+  const messageToCallId = new Map<string, string>();
+  if (!calls.length || !messages.length) {
+    return {
+      messageIds: callFollowupIds,
+      messageToCallId,
+    };
+  }
+  for (const call of calls) {
+    if (!call.outcome) {
+      continue;
+    }
+    const recommendation = deriveFollowupRecommendation({
+      outcome: call.outcome,
+      daysSinceQuote: call.daysSinceQuote,
+      modelChannelSuggestion: call.modelChannelSuggestion ?? null,
+    });
+    const recommendedChannel = recommendation?.recommendedChannel ?? null;
+    if (!recommendedChannel) {
+      continue;
+    }
+    const matchingMessage = findMatchingFollowupMessage({
+      messages,
+      recommendedChannel,
+      jobId: call.job_id ?? null,
+      quoteId: call.quote_id ?? null,
+    });
+    if (matchingMessage) {
+      callFollowupIds.add(matchingMessage.id);
+      messageToCallId.set(matchingMessage.id, call.id);
+    }
+  }
+  return {
+    messageIds: callFollowupIds,
+    messageToCallId,
+  };
+}
 
 type FindMatchingFollowupMessageArgs = {
   messages: FollowupMessageRef[];
@@ -51,6 +115,50 @@ export function findMatchingFollowupMessage({
       return true;
     }) ?? null
   );
+}
+
+type FindLatestFollowupMessageArgs = FindMatchingFollowupMessageArgs;
+
+export function findLatestFollowupMessage({
+  messages,
+  invoiceId,
+  jobId,
+  quoteId,
+  recommendedChannel,
+}: FindLatestFollowupMessageArgs): FollowupMessageRef | null {
+  const sortedMessages = [...messages]
+    .filter((message) => Boolean(message.channel) && Boolean(message.created_at))
+    .sort((a, b) => {
+      const aTime = new Date(a.created_at!).getTime();
+      const bTime = new Date(b.created_at!).getTime();
+      if (Number.isNaN(aTime) || Number.isNaN(bTime)) return 0;
+      return bTime - aTime;
+    });
+
+  const matchingByChannel = findMatchingFollowupMessage({
+    messages: sortedMessages,
+    invoiceId,
+    jobId,
+    quoteId,
+    recommendedChannel,
+  });
+  if (matchingByChannel) {
+    return matchingByChannel;
+  }
+
+  for (const message of sortedMessages) {
+    if (invoiceId && message.invoice_id === invoiceId) {
+      return message;
+    }
+    if (quoteId && message.quote_id === quoteId) {
+      return message;
+    }
+    if (jobId && message.job_id === jobId) {
+      return message;
+    }
+  }
+
+  return sortedMessages[0] ?? null;
 }
 
 type InvoiceFollowupTemplateInput = {

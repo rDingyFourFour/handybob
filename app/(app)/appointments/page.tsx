@@ -317,7 +317,7 @@ export default async function AppointmentsPage({
       ? "Visits scheduled for this week"
       : activeRange === "next-7"
       ? "Visits scheduled for the next 7 days"
-    : "All upcoming work";
+      : "All upcoming work";
   const historyToggleHref = showPast
     ? buildRangeHref(activeRange, false)
     : buildRangeHref(activeRange, true);
@@ -325,20 +325,44 @@ export default async function AppointmentsPage({
   const now = new Date();
   const tomorrowStart = new Date(todayStart);
   tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-  const allUpcomingHref = buildRangeHref("upcoming", showPast);
-  const emptyStateHeading = activeRange === "today" ? "No visits today" : "No appointments scheduled";
-  const emptyStateMessage =
-    activeRange === "today" ? (
-      <>
-        No visits today. Check{" "}
-        <Link href={allUpcomingHref} className="font-semibold text-slate-100 hover:text-slate-50">
-          All upcoming
-        </Link>{" "}
-        or schedule from a job.
-      </>
-    ) : (
-      "Create a visit to help keep your crew and customers aligned."
-    );
+  const defaultViewHref = buildRangeHref("upcoming", false);
+  const totalUpcoming = appointments.length;
+  const next7DaysEnd = new Date(todayStart);
+  next7DaysEnd.setDate(next7DaysEnd.getDate() + 7);
+  let todayCount = 0;
+  let next7DaysCount = 0;
+  appointments.forEach((appt) => {
+    if (!appt.start_time) {
+      return;
+    }
+    const startDate = new Date(appt.start_time);
+    if (Number.isNaN(startDate.getTime())) {
+      return;
+    }
+    if (startDate >= todayStart && startDate < tomorrowStart) {
+      todayCount += 1;
+    }
+    if (startDate >= todayStart && startDate < next7DaysEnd) {
+      next7DaysCount += 1;
+    }
+  });
+  const isDefaultUpcomingView = !showPast && activeRange === "upcoming";
+  const upcomingDates = appointments
+    .map((appt) => (appt.start_time ? new Date(appt.start_time) : null))
+    .filter((date): date is Date => Boolean(date) && !Number.isNaN(date.getTime()));
+  const nextVisitDate = upcomingDates.reduce<Date | null>((earliest, date) => {
+    if (!earliest) {
+      return date;
+    }
+    return date.getTime() < earliest.getTime() ? date : earliest;
+  }, null);
+  const nextVisitLabel = nextVisitDate ? formatDateLabel(nextVisitDate.toISOString()) : null;
+  const todayFocusHelperText =
+    todayCount > 0
+      ? `You have ${todayCount} appointment${todayCount === 1 ? "" : "s"} today. Use "Today" to focus on just today’s visits.`
+      : totalUpcoming > 0 && nextVisitLabel
+      ? `No appointments scheduled today. Next visit is on ${nextVisitLabel}.`
+      : null;
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -347,6 +371,27 @@ export default async function AppointmentsPage({
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Appointments</p>
           <h1 className="hb-heading-1 text-3xl font-semibold">Appointments</h1>
           <p className="hb-muted text-sm">Upcoming visits and scheduled work.</p>
+          {totalUpcoming > 0 && (
+            <div className="mt-3 flex-col gap-2 rounded-2xl border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-400">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-[11px] uppercase tracking-[0.3em] text-slate-500">At a glance</span>
+                <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-[11px] font-semibold text-slate-200">
+                  Total upcoming: {totalUpcoming}
+                </span>
+                <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-[11px] font-semibold text-slate-200">
+                  Today: {todayCount}
+                </span>
+                <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-[11px] font-semibold text-slate-200">
+                  Next 7 days: {next7DaysCount}
+                </span>
+              </div>
+            </div>
+          )}
+          {todayFocusHelperText && (
+            <div className="mt-2 rounded-2xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-300">
+              {todayFocusHelperText}
+            </div>
+          )}
         </div>
         <HbButton as={Link} href="/appointments/new" size="sm" variant="secondary">
           New appointment
@@ -405,23 +450,41 @@ export default async function AppointmentsPage({
           <p className="hb-muted text-sm">We couldn’t load this page. Try refreshing or come back later.</p>
         </HbCard>
       ) : appointments.length === 0 ? (
-        <HbCard className="space-y-3">
-          <h2 className="hb-card-heading text-lg font-semibold">{emptyStateHeading}</h2>
-          <p className="hb-muted text-sm">{emptyStateMessage}</p>
-          <div className="flex flex-wrap gap-2">
-            <HbButton as={Link} href="/appointments/new">
-              Schedule an appointment
-            </HbButton>
-            {activeRange === "today" && (
-              <Link
-                href={allUpcomingHref}
-                className="text-xs uppercase tracking-[0.3em] text-slate-400 transition hover:text-slate-100"
-              >
+        isDefaultUpcomingView ? (
+          <HbCard className="space-y-3">
+            <h2 className="hb-card-heading text-lg font-semibold">No upcoming appointments yet</h2>
+            <div className="flex flex-wrap gap-2">
+              <HbButton as={Link} href="/appointments/new">
+                New appointment
+              </HbButton>
+            </div>
+            <p className="hb-muted text-sm">
+              Create a job first, then attach an appointment to that job to keep the visit tied to the work order.
+            </p>
+            <p className="text-xs text-slate-500">
+              Prefer starting from jobs?{" "}
+              <Link href="/jobs" className="text-amber-400 underline-offset-2 hover:underline">
+                Go to jobs
+              </Link>{" "}
+              to begin there.
+            </p>
+          </HbCard>
+        ) : (
+          <HbCard className="space-y-3">
+            <h2 className="hb-card-heading text-lg font-semibold">No appointments match your current filters</h2>
+            <p className="hb-muted text-sm">
+              Try selecting “All upcoming” or toggling the history view to widen the window.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <HbButton as={Link} href={defaultViewHref}>
                 View all upcoming
-              </Link>
-            )}
-          </div>
-        </HbCard>
+              </HbButton>
+              <HbButton as={Link} href={historyToggleHref} variant="ghost" size="sm">
+                {historyToggleLabel}
+              </HbButton>
+            </div>
+          </HbCard>
+        )
       ) : (
         <HbCard className="space-y-4">
           <div className="grid gap-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-500 md:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">

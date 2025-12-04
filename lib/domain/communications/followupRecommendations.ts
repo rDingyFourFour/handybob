@@ -161,6 +161,53 @@ export type NextActionSuggestion = {
   shouldSkipFollowup: boolean;
 };
 
+type InvoiceAutomationArgs = {
+  invoiceStatus?: string | null;
+  daysOverdue?: number | null;
+};
+
+export function deriveInvoiceCollectionsRecommendation({
+  invoiceStatus,
+  daysOverdue,
+}: InvoiceAutomationArgs): NextActionSuggestion {
+  const normalizedStatus = invoiceStatus?.trim().toLowerCase() ?? "";
+  const overdueDays = typeof daysOverdue === "number" ? daysOverdue : 0;
+
+  if (normalizedStatus === "paid" || normalizedStatus === "voided" || normalizedStatus === "void") {
+    return {
+      primaryActionLabel: "No follow-up needed",
+      secondaryActionLabel: "Timing suggestion: —",
+      recommendedChannel: null,
+      rationale: "The invoice is resolved, so no further follow-up is required.",
+      recommendedDelayDays: null,
+      recommendedTimingLabel: "No follow-up needed",
+      shouldSkipFollowup: true,
+    };
+  }
+
+  if (normalizedStatus === "overdue" || overdueDays > 0) {
+    return {
+      primaryActionLabel: "Send friendly payment reminder",
+      secondaryActionLabel: "Timing suggestion: Today",
+      recommendedChannel: "email",
+      rationale: "The invoice is overdue, so a gentle email reminder makes sense.",
+      recommendedDelayDays: 0,
+      recommendedTimingLabel: "Today",
+      shouldSkipFollowup: false,
+    };
+  }
+
+  return {
+    primaryActionLabel: "Schedule a reminder before the due date",
+    secondaryActionLabel: "Timing suggestion: Before due date",
+    recommendedChannel: "email",
+    rationale: "The invoice is due soon; plan a reminder before it becomes overdue.",
+    recommendedDelayDays: 0,
+    recommendedTimingLabel: "Before due date",
+    shouldSkipFollowup: false,
+  };
+}
+
 export function deriveFollowupRecommendation({
   outcome,
   daysSinceQuote,

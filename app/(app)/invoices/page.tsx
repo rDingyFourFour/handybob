@@ -13,7 +13,6 @@ import {
   deriveInvoiceFollowupRecommendation,
   getInvoiceFollowupBaseDate,
   getInvoiceSentDate,
-  isActionableFollowupDue,
   type FollowupDueInfo,
   type InvoiceFollowupRecommendation,
 } from "@/lib/domain/communications/followupRecommendations";
@@ -76,6 +75,10 @@ function resolveStatusFilter(raw?: string | string[] | undefined): StatusFilterK
     return value;
   }
   return "all";
+}
+
+function isPaidOrVoidedStatus(statusKey: string) {
+  return statusKey === "paid" || statusKey === "void" || statusKey === "voided";
 }
 
 type FollowupViewMode = "all" | "queue";
@@ -296,18 +299,19 @@ export default async function InvoicesPage({
     };
   });
 
-  const actionableInvoices = enrichedInvoices.filter((row) => {
-    const isActionableStatus = row.statusKey !== "paid" && row.statusKey !== "draft";
-    return (
-      isActionableStatus &&
-      !row.followupRecommendation.shouldSkipFollowup &&
-      isActionableFollowupDue(row.followupDueInfo.dueStatus)
-    );
+  const collectionsQueueInvoices = enrichedInvoices.filter((row) => {
+    const overdueStatus = row.followupDueInfo.dueStatus === "overdue";
+    return !isPaidOrVoidedStatus(row.statusKey) && overdueStatus;
   });
 
-  const invoicesToDisplay = followupsQueueActive ? actionableInvoices : enrichedInvoices;
+  const invoicesToDisplay = followupsQueueActive ? collectionsQueueInvoices : enrichedInvoices;
   const visibleCountLabel =
     invoicesToDisplay.length === 1 ? "invoice" : "invoices";
+  const totalCount = enrichedInvoices.length;
+  const unpaidCount = enrichedInvoices.filter((row) => row.statusKey !== "paid").length;
+  const overdueCount = enrichedInvoices.filter((row) => row.statusKey === "overdue").length;
+  const hasInvoices = totalCount > 0;
+  const resetFiltersHref = buildFollowupsHref("all", "all");
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -316,6 +320,20 @@ export default async function InvoicesPage({
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Invoices</p>
           <h1 className="hb-heading-1 text-3xl font-semibold">Invoices</h1>
           <p className="hb-muted text-sm">See what’s billed, due, and ready to collect.</p>
+          {totalCount > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-400">
+              <span className="text-[11px] uppercase tracking-[0.3em] text-slate-500">At a glance</span>
+              <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-[11px] font-semibold text-slate-200">
+                Total invoices: {totalCount}
+              </span>
+              <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-[11px] font-semibold text-slate-200">
+                Unpaid: {unpaidCount}
+              </span>
+              <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-[11px] font-semibold text-slate-200">
+                Overdue: {overdueCount}
+              </span>
+            </div>
+          )}
         </div>
         <HbButton as={Link} href="/invoices/new" size="sm" variant="secondary">
           New invoice
@@ -355,7 +373,7 @@ export default async function InvoicesPage({
       </div>
       {followupsQueueActive && (
         <p className="text-sm font-semibold text-emerald-200">
-          Showing {actionableInvoices.length.toLocaleString()} invoices needing follow-up today.
+          Showing {collectionsQueueInvoices.length.toLocaleString()} invoices needing collections follow-up.
         </p>
       )}
 
@@ -364,17 +382,56 @@ export default async function InvoicesPage({
           <h2 className="hb-card-heading text-lg font-semibold">Something went wrong</h2>
           <p className="hb-muted text-sm">We couldn’t load this page. Try again or go back.</p>
         </HbCard>
-      ) : invoices.length === 0 ? (
-        <HbCard className="space-y-3">
-          <h2 className="hb-card-heading text-lg font-semibold">No invoices yet</h2>
-          <p className="hb-muted text-sm">Invoices are generated from quotes or jobs once you bill a customer.</p>
-          <Link
-            href="/quotes"
-            className="text-xs uppercase tracking-[0.3em] text-slate-500 transition hover:text-slate-100"
-          >
-            → Create a quote first
-          </Link>
-        </HbCard>
+      ) : invoicesToDisplay.length === 0 ? (
+        followupsQueueActive ? (
+          <HbCard className="space-y-3">
+            <h2 className="hb-card-heading text-lg font-semibold">Collections queue is empty</h2>
+            <p className="hb-muted text-sm">
+              There are no unpaid overdue invoices needing attention right now. Once something is overdue, it will appear here.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <HbButton as={Link} href={resetFiltersHref}>
+                View all invoices
+              </HbButton>
+            </div>
+          </HbCard>
+        ) : !hasInvoices ? (
+          <HbCard className="space-y-3">
+            <h2 className="hb-card-heading text-lg font-semibold">No invoices yet</h2>
+            <p className="hb-muted text-sm">
+              Create your first invoice from an accepted quote or directly from a job to start tracking payments.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <HbButton as={Link} href="/invoices/new">
+                New invoice
+              </HbButton>
+              <Link
+                href="/jobs"
+                className="text-xs uppercase tracking-[0.3em] text-slate-500 transition hover:text-slate-100"
+              >
+                View jobs
+              </Link>
+            </div>
+          </HbCard>
+        ) : (
+          <HbCard className="space-y-3">
+            <h2 className="hb-card-heading text-lg font-semibold">No invoices match your current filters</h2>
+            <p className="hb-muted text-sm">
+              Try switching to “All” or clearing follow-up filters so every invoice in your workspace is visible.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <HbButton as={Link} href={resetFiltersHref}>
+                Show all invoices
+              </HbButton>
+              <Link
+                href={buildStatusHref("all")}
+                className="text-xs uppercase tracking-[0.3em] text-slate-500 transition hover:text-slate-100"
+              >
+                Reset status filters
+              </Link>
+            </div>
+          </HbCard>
+        )
       ) : (
         <HbCard className="space-y-4">
           <div className="flex items-center justify-between">
@@ -411,6 +468,12 @@ export default async function InvoicesPage({
                 followupRecommendation,
                 followupDueInfo,
               } = row;
+              const needsCollectionsFollowUp =
+                !isPaidOrVoidedStatus(row.statusKey) && followupDueInfo.dueStatus === "overdue";
+              const collectionsPillLabel = followupsQueueActive ? "Collections queue" : "Needs follow-up";
+              const collectionsPillClass = followupsQueueActive
+                ? "border border-amber-500/40 bg-amber-500/10 text-amber-200"
+                : "border border-slate-700/40 bg-slate-950/60 text-slate-300";
               const showDuePill =
                 !followupRecommendation.shouldSkipFollowup &&
                 followupDueInfo.dueStatus !== "none";
@@ -458,6 +521,13 @@ export default async function InvoicesPage({
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] ${duePillClass}`}
                         >
                           {followupDueInfo.dueLabel}
+                        </span>
+                      )}
+                      {needsCollectionsFollowUp && (
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] ${collectionsPillClass}`}
+                        >
+                          {collectionsPillLabel}
                         </span>
                       )}
                     </div>

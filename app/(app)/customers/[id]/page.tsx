@@ -17,6 +17,27 @@ type CustomerRecord = {
   created_at: string | null;
 };
 
+type JobRow = {
+  id: string;
+  title: string | null;
+  status: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type CallRow = {
+  id: string;
+  status: string | null;
+  created_at: string | null;
+};
+
+type MessageRow = {
+  id: string;
+  subject: string | null;
+  channel: string | null;
+  created_at: string | null;
+};
+
 function formatDate(value: string | null) {
   if (!value) return null;
   const parsed = new Date(value);
@@ -54,7 +75,35 @@ function formatTimelineDate(value: string | null) {
   });
 }
 
+const RELATIONSHIP_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const INACTIVE_JOB_STATUSES = new Set(["completed", "closed", "cancelled", "canceled"]);
+
+function isJobActive(status: string | null) {
+  const normalized = status?.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  return !INACTIVE_JOB_STATUSES.has(normalized);
+}
+
+function formatRelativeContactLabel(date: Date) {
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs < 0) {
+    return "Today";
+  }
+  const diffDays = Math.floor(diffMs / ONE_DAY_MS);
+  if (diffDays <= 0) {
+    return "Today";
+  }
+  if (diffDays === 1) {
+    return "1 day ago";
+  }
+  return `${diffDays} days ago`;
+}
+
 type TimelineEventType = "job" | "call" | "message";
+type ContactActivityType = "call" | "message";
 
 type TimelineEvent = {
   id: string;
@@ -62,6 +111,11 @@ type TimelineEvent = {
   timestamp: string | null;
   description: string;
   href: string;
+};
+
+type ContactActivity = {
+  type: ContactActivityType;
+  timestamp: string;
 };
 
 function fallbackCard(title: string, body: string) {
@@ -143,12 +197,25 @@ export default async function CustomerDetailPage(props: {
     return fallbackCard("Customer not found", "We couldn’t find that customer. It may have been deleted.");
   }
 
+  const customerId = customer.id;
   const displayName = customer.name ?? "Unnamed customer";
   const contactLine = [customer.email, customer.phone].filter(Boolean).join(" · ");
   const createdLabel = formatDate(customer.created_at);
   const sinceLabel = formatShortDate(customer.created_at);
+  const quickActions =
+    customerId
+      ? [
+          { label: "New job", href: `/jobs/new?customerId=${customerId}` },
+          { label: "Open phone agent", href: `/calls?customerId=${customerId}` },
+          { label: "New appointment", href: `/appointments/new?customerId=${customerId}` },
+          { label: "New invoice", href: `/invoices/new?customerId=${customerId}` },
+        ]
+      : [];
 
   const timelineEvents: TimelineEvent[] = [];
+  let jobs: JobRow[] = [];
+  let calls: CallRow[] = [];
+  let messages: MessageRow[] = [];
   try {
     const [jobsData, callsData, messagesData] = await Promise.all([
       supabase
@@ -174,6 +241,10 @@ export default async function CustomerDetailPage(props: {
         .limit(5),
     ]);
 
+    jobs = jobsData.data ?? [];
+    calls = callsData.data ?? [];
+    messages = messagesData.data ?? [];
+
     if (jobsData.error || callsData.error || messagesData.error) {
       console.error("[customer-detail] Activity fetch failed", {
         jobsError: jobsData.error,
@@ -181,7 +252,7 @@ export default async function CustomerDetailPage(props: {
         messagesError: messagesData.error,
       });
     } else {
-      (jobsData.data ?? []).forEach((job) => {
+      jobs.forEach((job) => {
         const statusLabel = job.status === "completed" ? "completed" : "created";
         const timestamp = job.status === "completed" ? job.updated_at ?? job.created_at : job.created_at;
         const title = job.title ? ` · ${job.title}` : "";
@@ -193,7 +264,7 @@ export default async function CustomerDetailPage(props: {
           href: `/jobs/${job.id}`,
         });
       });
-      (callsData.data ?? []).forEach((call) => {
+      calls.forEach((call) => {
         timelineEvents.push({
           id: `call-${call.id}`,
           type: "call",
@@ -202,7 +273,7 @@ export default async function CustomerDetailPage(props: {
           href: `/calls/${call.id}`,
         });
       });
-      (messagesData.data ?? []).forEach((message) => {
+      messages.forEach((message) => {
         const subjectSegment = message.subject ? `: ${message.subject}` : "";
         timelineEvents.push({
           id: `message-${message.id}`,
@@ -217,12 +288,70 @@ export default async function CustomerDetailPage(props: {
     console.error("[customer-detail] Activity query failed", error);
   }
 
+  const totalJobs = jobs.length;
+  const activeJobs = jobs.reduce((count, job) => (isJobActive(job.status) ? count + 1 : count), 0);
+  const relationshipWindowStart = new Date().getTime() - RELATIONSHIP_WINDOW_MS;
+  const recentCallsCount = calls.reduce((count, call) => {
+    if (!call.created_at) {
+      return count;
+    }
+    const parsed = new Date(call.created_at).getTime();
+    if (Number.isNaN(parsed)) {
+      return count;
+    }
+    return parsed >= relationshipWindowStart ? count + 1 : count;
+  }, 0);
+  const recentMessagesCount = messages.reduce((count, message) => {
+    if (!message.created_at) {
+      return count;
+    }
+    const parsed = new Date(message.created_at).getTime();
+    if (Number.isNaN(parsed)) {
+      return count;
+    }
+    return parsed >= relationshipWindowStart ? count + 1 : count;
+  }, 0);
+  const contactActivities: ContactActivity[] = [];
+  calls.forEach((call) => {
+    if (call.created_at) {
+      contactActivities.push({ type: "call", timestamp: call.created_at });
+    }
+  });
+  messages.forEach((message) => {
+    if (message.created_at) {
+      contactActivities.push({ type: "message", timestamp: message.created_at });
+    }
+  });
+  const lastContactActivity = contactActivities.reduce<ContactActivity | null>((latest, activity) => {
+    const activityTime = new Date(activity.timestamp).getTime();
+    if (Number.isNaN(activityTime)) {
+      return latest;
+    }
+    if (!latest) {
+      return activity;
+    }
+    const latestTime = new Date(latest.timestamp).getTime();
+    if (activityTime > latestTime) {
+      return activity;
+    }
+    return latest;
+  }, null);
+  const lastContactDate = lastContactActivity ? new Date(lastContactActivity.timestamp) : null;
+  const lastContactText =
+    lastContactDate && !Number.isNaN(lastContactDate.getTime())
+      ? `Last contacted: ${formatRelativeContactLabel(lastContactDate)} via ${
+          lastContactActivity?.type === "call" ? "Call" : "Message"
+        }`
+      : "No contact recorded yet.";
+  const callCount = calls.length;
+  const messageCount = messages.length;
+
   const sortedEvents = timelineEvents
     .filter((event) => event.timestamp)
     .sort((a, b) => new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime())
     .slice(0, 6);
   const timelineEmpty = sortedEvents.length === 0;
-  const phoneAgentHref = `/calls/new?customerId=${customer.id}`;
+  const phoneAgentHref = `/calls/new?customerId=${customerId}`;
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -232,6 +361,7 @@ export default async function CustomerDetailPage(props: {
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Customer details</p>
             <h1 className="hb-heading-1 text-3xl font-semibold">{displayName}</h1>
             {contactLine && <p className="text-sm text-slate-400">{contactLine}</p>}
+            <p className="text-sm text-slate-400">{lastContactText}</p>
             {createdLabel && (
               <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
                 Created {createdLabel}
@@ -239,6 +369,100 @@ export default async function CustomerDetailPage(props: {
             )}
             {sinceLabel && (
               <p className="text-xs text-slate-400">Customer since {sinceLabel}</p>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">
+              <span className="text-[11px] uppercase tracking-[0.3em] text-slate-500">At a glance</span>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-[11px] text-slate-200">
+                  Jobs: {totalJobs}
+                </span>
+                <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-[11px] text-slate-200">
+                  Calls: {callCount}
+                </span>
+                <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-[11px] text-slate-200">
+                  Messages: {messageCount}
+                </span>
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-400">
+              <span className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Relationship health</span>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1 text-[11px] text-slate-200">
+                  {totalJobs} total jobs
+                </span>
+                {activeJobs > 0 && (
+                  <span className="rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1 text-[11px] text-slate-200">
+                    {activeJobs} active jobs
+                  </span>
+                )}
+                {recentCallsCount > 0 && (
+                  <span className="rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1 text-[11px] text-slate-200">
+                    {recentCallsCount} recent calls
+                  </span>
+                )}
+                {recentMessagesCount > 0 && (
+                  <span className="rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1 text-[11px] text-slate-200">
+                    {recentMessagesCount} recent messages
+                  </span>
+                )}
+              </div>
+            </div>
+            {customerId && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/40 px-3 py-3 text-sm text-slate-200">
+                <span className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                  Start something for this customer
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  <HbButton
+                    as={Link}
+                    href={`/jobs/new?customerId=${customerId}`}
+                    variant="secondary"
+                    size="sm"
+                    className="whitespace-nowrap"
+                  >
+                    New job
+                  </HbButton>
+                  <HbButton
+                    as={Link}
+                    href={`/appointments/new?customerId=${customerId}`}
+                    variant="ghost"
+                    size="sm"
+                    className="whitespace-nowrap"
+                  >
+                    New appointment
+                  </HbButton>
+                  <HbButton
+                    as={Link}
+                    href={`/invoices/new?customerId=${customerId}`}
+                    variant="ghost"
+                    size="sm"
+                    className="whitespace-nowrap"
+                  >
+                    New invoice
+                  </HbButton>
+                </div>
+              </div>
+            )}
+            {quickActions.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <span className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                  Quick actions
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {quickActions.map((action) => (
+                    <HbButton
+                      key={action.label}
+                      as={Link}
+                      href={action.href}
+                      variant="ghost"
+                      size="sm"
+                      className="whitespace-nowrap"
+                    >
+                      {action.label}
+                    </HbButton>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
           <div className="flex gap-2">

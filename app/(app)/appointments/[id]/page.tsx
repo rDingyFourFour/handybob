@@ -20,6 +20,12 @@ type AppointmentRecord = {
   status: "scheduled" | "completed" | "cancelled" | "canceled" | null;
 };
 
+type JobQuoteSummary = {
+  id: string;
+  status: string | null;
+  created_at: string | null;
+};
+
 type JobCustomer = {
   id: string;
   name: string | null;
@@ -33,6 +39,7 @@ type AppointmentDetailRow = AppointmentRecord & {
     status: string | null;
     customer_id: string | null;
     customers?: JobCustomer | JobCustomer[] | null;
+    quotes?: JobQuoteSummary[] | null;
   } | null;
 };
 
@@ -186,18 +193,23 @@ export default async function AppointmentDetailPage(props: {
           start_time,
           end_time,
           status,
-          job:jobs (
-            id,
-            title,
-            status,
-            customer_id,
-            customers (
-              id,
-              name,
-              phone
-            )
-          )
-        `
+    job:jobs (
+      id,
+      title,
+      status,
+      customer_id,
+      customers (
+        id,
+        name,
+        phone
+      )
+      quotes (
+        id,
+        status,
+        created_at
+      )
+    )
+  `
       )
       .eq("workspace_id", workspace.id)
       .eq("id", id)
@@ -225,6 +237,41 @@ export default async function AppointmentDetailPage(props: {
   const jobHref = jobSummary?.id ? `/jobs/${jobSummary.id}` : null;
   const customerHref = customer?.id ? `/customers/${customer.id}` : null;
   const phoneAgentHref = jobSummary?.id ? `/calls/new?jobId=${jobSummary.id}` : null;
+  const acceptedQuote =
+    jobSummary?.quotes?.find((quote) => quote.status?.toLowerCase() === "accepted") ?? null;
+  const invoiceHref =
+    jobSummary?.id && acceptedQuote
+      ? `/invoices/new?jobId=${jobSummary.id}&quoteId=${acceptedQuote.id}`
+      : null;
+  const phoneAgentHelperText = !jobSummary?.id
+    ? "Link this appointment to a job to use the phone agent."
+    : null;
+  const invoiceHelperText =
+    jobSummary?.id && !invoiceHref ? "Create and accept a quote on the job to invoice this visit." : null;
+  const normalizedStatus = appointment.status ?? "scheduled";
+  const startDate = appointment.start_time ? new Date(appointment.start_time) : null;
+  const now = new Date();
+  const diffMs = startDate ? startDate.getTime() - now.getTime() : null;
+  const scheduledDateLabel = formatDate(appointment.start_time);
+  const scheduledTimeLabel = formatTimeRange(appointment.start_time, appointment.end_time);
+  let timingHint = "Time TBD";
+  if (startDate && typeof diffMs === "number") {
+    if (diffMs > 0) {
+      const diffMinutes = Math.max(1, Math.round(diffMs / (1000 * 60)));
+      if (diffMinutes >= 60 * 24) {
+        const diffDays = Math.round(diffMinutes / (60 * 24));
+        timingHint = `Starts in ${diffDays} day${diffDays === 1 ? "" : "s"}`;
+      } else if (diffMinutes >= 60) {
+        const diffHours = Math.round(diffMinutes / 60);
+        timingHint = `Starts in ${diffHours} hour${diffHours === 1 ? "" : "s"}`;
+      } else {
+        timingHint = `Starts in ${diffMinutes} minute${diffMinutes === 1 ? "" : "s"}`;
+      }
+    } else {
+      timingHint = `Started on ${formatDate(appointment.start_time)}`;
+    }
+  }
+  const isPastScheduled = Boolean(startDate && typeof diffMs === "number" && diffMs < 0 && normalizedStatus === "scheduled");
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -237,16 +284,38 @@ export default async function AppointmentDetailPage(props: {
         </div>
       )}
       <HbCard className="space-y-6">
-        <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <header className="flex flex-col gap-3">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Appointment details</p>
             <h1 className="hb-heading-2 text-2xl font-semibold text-slate-50">{title}</h1>
             <p className="text-sm text-slate-400">Visit card for the work ahead.</p>
-          </div>
-          <div className={`inline-flex items-center gap-2 rounded-full px-4 py-1 text-xs font-semibold ${currentStatus.className}`}>
-            {currentStatus.label}
+            <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-[11px] uppercase tracking-[0.3em] text-slate-500">At a glance</span>
+                <span
+                  className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] ${currentStatus.className}`}
+                >
+                  {currentStatus.label}
+                </span>
+                <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-[11px] font-semibold text-slate-200">
+                  {scheduledDateLabel}
+                </span>
+                <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-[11px] font-semibold text-slate-200">
+                  {scheduledTimeLabel}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">{timingHint}</p>
+            </div>
           </div>
         </header>
+        {isPastScheduled && (
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            <p className="font-semibold text-amber-100">This appointment time has passed.</p>
+            <p className="text-xs text-amber-100/70">
+              Consider marking it as completed or canceled so your schedule stays up to date. Use the status controls below to update it.
+            </p>
+          </div>
+        )}
 
         <div className="grid gap-6 text-sm text-slate-300 md:grid-cols-2">
           <div className="space-y-1">
@@ -304,10 +373,27 @@ export default async function AppointmentDetailPage(props: {
                 Open phone agent
               </HbButton>
             )}
+            {invoiceHref && (
+              <HbButton
+                as={Link}
+                href={invoiceHref}
+                size="sm"
+                variant="secondary"
+                className="whitespace-nowrap"
+              >
+                Create invoice from this visit
+              </HbButton>
+            )}
             <HbButton as={Link} href="/appointments" size="sm" variant="ghost">
               Back to appointments
             </HbButton>
           </div>
+          {phoneAgentHelperText && (
+            <p className="text-xs text-slate-400">{phoneAgentHelperText}</p>
+          )}
+          {invoiceHelperText && (
+            <p className="text-xs text-slate-400">{invoiceHelperText}</p>
+          )}
         </section>
       </HbCard>
     </div>

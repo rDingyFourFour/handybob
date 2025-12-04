@@ -8,10 +8,8 @@ import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import {
   computeFollowupDueInfo,
-  deriveFollowupRecommendation,
   type FollowupDueInfo,
 } from "@/lib/domain/communications/followupRecommendations";
-import { findMatchingFollowupMessage } from "@/lib/domain/communications/followupMessages";
 
 type MessageRecord = {
   id: string;
@@ -27,11 +25,7 @@ type MessageRecord = {
 type LatestCallRecord = {
   id: string;
   job_id: string | null;
-  quote_id: string | null;
-  body: string | null;
-  status: string | null;
-  channel: string | null;
-  via: string | null;
+  workspace_id: string;
   created_at: string | null;
 };
 
@@ -46,21 +40,6 @@ function formatDate(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function calculateDaysSince(value?: string | null): number | null {
-  if (!value) {
-    return null;
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-  const diffMs = Date.now() - parsed.getTime();
-  if (diffMs <= 0) {
-    return 0;
-  }
-  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
 type StatusCardProps = {
@@ -160,12 +139,18 @@ export default async function MessageDetailPage({
     try {
       const { data, error } = await supabase
         .from<LatestCallRecord>("calls")
-        .select("id, job_id, quote_id, body, status, channel, via, created_at")
+        .select("id, job_id, workspace_id, created_at")
         .eq("workspace_id", workspace.id)
         .eq("job_id", message.job_id)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      console.log("[messages/[id]] Latest call lookup", {
+        messageId: message.id,
+        jobId: message.job_id,
+        latestCallId: data?.id ?? null,
+        error: error ?? null,
+      });
       if (error) {
         console.error("[messages/[id]] Latest call lookup failed", error);
       } else {
@@ -182,49 +167,29 @@ export default async function MessageDetailPage({
   const viaLabel = message.via?.trim() || "Unknown";
 
   let quoteCreatedAt: string | null = null;
-  if (latestCall?.quote_id) {
+  if (message.quote_id) {
     try {
       const { data } = await supabase
         .from<{ created_at: string | null }>("quotes")
         .select("created_at")
         .eq("workspace_id", workspace.id)
-        .eq("id", latestCall.quote_id)
+        .eq("id", message.quote_id)
         .maybeSingle();
       quoteCreatedAt = data?.created_at ?? null;
     } catch (error) {
       console.error("[messages/[id]] Quote lookup failed", error);
     }
   }
-  const daysSinceQuote = calculateDaysSince(quoteCreatedAt);
-  const callOutcome =
-    latestCall?.body?.trim() ||
-    latestCall?.status?.trim() ||
-    null;
-  const followupRecommendation =
-    callOutcome &&
-    deriveFollowupRecommendation({
-      outcome: callOutcome,
-      daysSinceQuote,
-      modelChannelSuggestion: null,
-    });
+  const followupRecommendation = null;
   const followupDueInfo: FollowupDueInfo = computeFollowupDueInfo({
     quoteCreatedAt,
     callCreatedAt: latestCall?.created_at ?? null,
     recommendation: followupRecommendation,
   });
-  const matchingFollowupMessage =
-    followupRecommendation &&
-    findMatchingFollowupMessage({
-      messages: [message],
-      recommendedChannel: followupRecommendation.recommendedChannel,
-      jobId: message.job_id,
-      quoteId: latestCall?.quote_id ?? message.quote_id ?? null,
-    });
   console.log("[message-followup-status]", {
     messageId: message.id,
     callId: latestCall?.id ?? null,
     dueStatus: followupDueInfo.dueStatus,
-    satisfiesRecommendation: Boolean(matchingFollowupMessage),
   });
 
   return (
@@ -288,14 +253,6 @@ export default async function MessageDetailPage({
                 >
                   Call {latestCall.id.slice(0, 8)} on {formatDate(latestCall.created_at)}
                 </Link>
-                <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                  Channel: {(latestCall.channel ?? "Unknown").toUpperCase()}
-                </span>
-                {matchingFollowupMessage && (
-                  <span className="inline-flex items-center rounded-full border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-emerald-200">
-                    Satisfies follow-up recommendation
-                  </span>
-                )}
               </div>
               <p className="text-xs text-slate-500">Next follow-up: {followupDueInfo.dueLabel}</p>
             </div>
