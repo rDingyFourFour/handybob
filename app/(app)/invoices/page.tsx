@@ -6,20 +6,106 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import HbCard from "@/components/ui/hb-card";
+import HbButton from "@/components/ui/hb-button";
+import {
+  calculateDaysSinceDate,
+  computeFollowupDueInfo,
+  deriveInvoiceFollowupRecommendation,
+  getInvoiceFollowupBaseDate,
+  getInvoiceSentDate,
+  isActionableFollowupDue,
+  type FollowupDueInfo,
+  type InvoiceFollowupRecommendation,
+} from "@/lib/domain/communications/followupRecommendations";
 
 type InvoiceRow = {
   id: string;
+  invoice_number: number | null;
   user_id: string;
   job_id: string | null;
   status: string | null;
   total: number | null;
-  created_at: string | null;
+  issued_at: string | null;
   due_at: string | null;
-  paid_at: string | null;
-  public_token?: string | null;
+  created_at: string | null;
+  customer_name: string | null;
+  customer_email: string | null;
+  job?: {
+    id: string | null;
+    title: string | null;
+    customer_id: string | null;
+    customers?: { id: string; name: string | null } | { id: string; name: string | null }[] | null;
+  } | null;
 };
 
-export default async function InvoicesPage() {
+const STATUS_CLASSES: Record<string, string> = {
+  draft: "border border-slate-700 bg-slate-900/40 text-slate-200",
+  sent: "border border-amber-500/40 bg-amber-500/10 text-amber-200",
+  overdue: "border border-rose-500/40 bg-rose-500/10 text-rose-200",
+  paid: "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200",
+};
+
+function getStatusLabel(status: string | null) {
+  if (!status) return "Draft";
+  if (status.toLowerCase() === "paid") return "Paid";
+  if (status.toLowerCase() === "overdue") return "Overdue";
+  if (status.toLowerCase() === "sent") return "Sent";
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+type StatusFilterKey = "all" | "unpaid" | "overdue";
+
+const STATUS_FILTERS: Array<{ key: StatusFilterKey; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "unpaid", label: "Unpaid" },
+  { key: "overdue", label: "Overdue" },
+];
+
+function buildStatusHref(filter: StatusFilterKey) {
+  const params = new URLSearchParams();
+  if (filter !== "all") {
+    params.set("status", filter);
+  }
+  const query = params.toString();
+  return query ? `/invoices?${query}` : "/invoices";
+}
+
+function resolveStatusFilter(raw?: string | string[] | undefined): StatusFilterKey {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (value === "unpaid" || value === "overdue") {
+    return value;
+  }
+  return "all";
+}
+
+type FollowupViewMode = "all" | "queue";
+
+function buildFollowupsHref(mode: FollowupViewMode, statusFilter: StatusFilterKey) {
+  const params = new URLSearchParams();
+  if (statusFilter !== "all") {
+    params.set("status", statusFilter);
+  }
+  if (mode === "queue") {
+    params.set("followups", "queue");
+  }
+  const query = params.toString();
+  return query ? `/invoices?${query}` : "/invoices";
+}
+
+function getSearchParamValue(raw?: string | string[] | undefined): string | undefined {
+  if (Array.isArray(raw)) {
+    return raw[0];
+  }
+  return raw;
+}
+
+
+export default async function InvoicesPage({
+  searchParams: searchParamsPromise,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const searchParams = await searchParamsPromise;
   let supabase;
   try {
     supabase = await createServerClient();
@@ -43,16 +129,53 @@ export default async function InvoicesPage() {
     redirect("/");
   }
 
+  const statusFilterKey = resolveStatusFilter(searchParams?.status);
+  const followupsFilter = getSearchParamValue(searchParams?.followups);
+  const followupsQueueActive = followupsFilter === "queue";
+  const followupsQueueHref = buildFollowupsHref("queue", statusFilterKey);
+  const followupsAllHref = buildFollowupsHref("all", statusFilterKey);
+
   let invoices: InvoiceRow[] = [];
   let invoicesError: unknown = null;
 
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("invoices")
-      .select("id, user_id, job_id, status, total, created_at, due_at, paid_at, public_token")
+      .select(
+        `
+          id,
+          invoice_number,
+          user_id,
+          job_id,
+          status,
+          total,
+          issued_at,
+          due_at,
+          created_at,
+          customer_name,
+          customer_email,
+          job:jobs (
+            id,
+            title,
+            customer_id,
+            customers (
+              id,
+              name
+            )
+          )
+        `
+      )
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false, nulls: "last" })
-      .limit(50);
+      .order("issued_at", { ascending: false, nulls: "last" })
+      .limit(100);
+
+    if (statusFilterKey === "overdue") {
+      query = query.eq("status", "overdue");
+    } else if (statusFilterKey === "unpaid") {
+      query = query.not("status", "eq", "paid");
+    }
+
+    const { data, error } = await query;
     if (error) {
       console.error("[invoices] Failed to load invoices:", error);
       invoicesError = error;
@@ -72,6 +195,119 @@ export default async function InvoicesPage() {
   }
 
   const shortId = (value: string) => value.slice(0, 8);
+  const followupChipClass = (active: boolean) =>
+    `rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+      active
+        ? "bg-slate-50 text-slate-950 shadow-sm shadow-slate-900/40"
+        : "text-slate-400 hover:text-slate-100"
+    }`;
+
+  const now = new Date();
+
+  type EnrichedInvoiceRow = {
+    invoice: InvoiceRow;
+    invoiceLabel: string;
+    customerName: string;
+    jobTitle: string;
+    amountLabel: string;
+    issuedLabel: string;
+    dueLabel: string;
+    statusKey: string;
+    statusLabel: string;
+    statusClass: string;
+    highlightClass: string;
+    followupRecommendation: InvoiceFollowupRecommendation;
+    followupDueInfo: FollowupDueInfo;
+  };
+
+  const enrichedInvoices: EnrichedInvoiceRow[] = invoices.map((invoice) => {
+    const jobCustomer =
+      invoice.job?.customers && Array.isArray(invoice.job.customers)
+        ? invoice.job.customers[0] ?? null
+        : invoice.job?.customers ?? null;
+    const customerName = jobCustomer?.name ?? invoice.customer_name ?? "Customer TBD";
+    const jobId = invoice.job?.id ?? null;
+    const jobTitle = invoice.job?.title ?? "Job TBD";
+    const metadataCustomerId = jobCustomer?.id ?? invoice.job?.customer_id ?? null;
+    const invoiceLabel = invoice.invoice_number
+      ? `#${invoice.invoice_number}`
+      : `Inv ${shortId(invoice.id)}`;
+    const amountLabel =
+      invoice.total != null ? formatCurrency(invoice.total) : "—";
+    const statusKey = invoice.status?.toLowerCase() ?? "draft";
+    const statusLabel = getStatusLabel(invoice.status);
+    const statusClass = STATUS_CLASSES[statusKey] ?? STATUS_CLASSES.draft;
+    const issuedLabel = formatDate(invoice.issued_at);
+    const dueLabel = formatDate(invoice.due_at);
+    const highlightClass =
+      statusKey === "overdue"
+        ? "border-rose-500/60 bg-slate-900/80 ring-1 ring-rose-500/30"
+        : "";
+    const daysSinceInvoiceSent = calculateDaysSinceDate(
+      getInvoiceSentDate({
+        issuedAt: invoice.issued_at,
+        createdAt: invoice.created_at,
+      }),
+    );
+    const followupRecommendation = deriveInvoiceFollowupRecommendation({
+      outcome: invoice.status ?? "invoice_sent",
+      daysSinceInvoiceSent,
+      status: invoice.status,
+      metadata: {
+        invoiceId: invoice.id,
+        jobId,
+        customerId: metadataCustomerId,
+      },
+    });
+    const followupBaseDate = getInvoiceFollowupBaseDate({
+      dueAt: invoice.due_at,
+      issuedAt: invoice.issued_at,
+      createdAt: invoice.created_at,
+    });
+    const followupDueInfo = computeFollowupDueInfo({
+      quoteCreatedAt: followupBaseDate,
+      recommendation: followupRecommendation,
+      now,
+    });
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[invoice-followup-due]", {
+        invoiceId: invoice.id,
+        status: statusKey,
+        baseDate: followupBaseDate,
+        recommendedDelayDays: followupRecommendation.recommendedDelayDays,
+        dueStatus: followupDueInfo.dueStatus,
+        dueLabel: followupDueInfo.dueLabel,
+      });
+    }
+    return {
+      invoice,
+      invoiceLabel,
+      customerName,
+      jobTitle,
+      amountLabel,
+      issuedLabel,
+      dueLabel,
+      statusKey,
+      statusLabel,
+      statusClass,
+      highlightClass,
+      followupRecommendation,
+      followupDueInfo,
+    };
+  });
+
+  const actionableInvoices = enrichedInvoices.filter((row) => {
+    const isActionableStatus = row.statusKey !== "paid" && row.statusKey !== "draft";
+    return (
+      isActionableStatus &&
+      !row.followupRecommendation.shouldSkipFollowup &&
+      isActionableFollowupDue(row.followupDueInfo.dueStatus)
+    );
+  });
+
+  const invoicesToDisplay = followupsQueueActive ? actionableInvoices : enrichedInvoices;
+  const visibleCountLabel =
+    invoicesToDisplay.length === 1 ? "invoice" : "invoices";
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -79,11 +315,49 @@ export default async function InvoicesPage() {
         <div className="space-y-1">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Invoices</p>
           <h1 className="hb-heading-1 text-3xl font-semibold">Invoices</h1>
-          <p className="hb-muted text-sm">
-            Track what’s due, what’s paid, and what needs your attention.
-          </p>
+          <p className="hb-muted text-sm">See what’s billed, due, and ready to collect.</p>
         </div>
+        <HbButton as={Link} href="/invoices/new" size="sm" variant="secondary">
+          New invoice
+        </HbButton>
       </header>
+      <div className="flex flex-wrap items-center gap-2">
+        {STATUS_FILTERS.map((filter) => {
+          const isActive = filter.key === statusFilterKey;
+          return (
+            <Link
+              key={filter.key}
+              href={buildStatusHref(filter.key)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+                isActive
+                  ? "bg-slate-50 text-slate-950 shadow-sm shadow-slate-900/40"
+                  : "text-slate-400 hover:text-slate-100"
+              }`}
+            >
+              {filter.label}
+            </Link>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          href={followupsAllHref}
+          className={followupChipClass(!followupsQueueActive)}
+        >
+          All invoices
+        </Link>
+        <Link
+          href={followupsQueueHref}
+          className={followupChipClass(followupsQueueActive)}
+        >
+          Follow-up queue
+        </Link>
+      </div>
+      {followupsQueueActive && (
+        <p className="text-sm font-semibold text-emerald-200">
+          Showing {actionableInvoices.length.toLocaleString()} invoices needing follow-up today.
+        </p>
+      )}
 
       {invoicesError ? (
         <HbCard className="space-y-3">
@@ -93,7 +367,7 @@ export default async function InvoicesPage() {
       ) : invoices.length === 0 ? (
         <HbCard className="space-y-3">
           <h2 className="hb-card-heading text-lg font-semibold">No invoices yet</h2>
-          <p className="hb-muted text-sm">There&apos;s nothing to show here yet.</p>
+          <p className="hb-muted text-sm">Invoices are generated from quotes or jobs once you bill a customer.</p>
           <Link
             href="/quotes"
             className="text-xs uppercase tracking-[0.3em] text-slate-500 transition hover:text-slate-100"
@@ -104,56 +378,95 @@ export default async function InvoicesPage() {
       ) : (
         <HbCard className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="hb-card-heading text-lg font-semibold">All invoices</h2>
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-              Showing {invoices.length} invoice{invoices.length === 1 ? "" : "s"}
-            </p>
+            <div>
+              <h2 className="hb-card-heading text-lg font-semibold">All invoices</h2>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                Showing {invoicesToDisplay.length} {visibleCountLabel}, newest issued first
+              </p>
+            </div>
           </div>
+
+          <div className="grid gap-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-500 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1fr]">
+            <span>Invoice #</span>
+            <span>Customer</span>
+            <span>Job</span>
+            <span className="text-right">Amount</span>
+            <span>Status</span>
+            <span>Due date</span>
+          </div>
+
           <div className="space-y-2">
-            {invoices.map((invoice) => {
-              const totalLabel = invoice.total != null ? formatCurrency(invoice.total) : "—";
-              const dateLabel = formatDate(invoice.due_at ?? invoice.created_at);
-              const statusLabel = invoice.status ?? "draft";
-              const shortInvoiceId = shortId(invoice.id);
+            {invoicesToDisplay.map((row) => {
+              const {
+                invoice,
+                invoiceLabel,
+                customerName,
+                jobTitle,
+                amountLabel,
+                statusLabel,
+                statusClass,
+                highlightClass,
+                dueLabel,
+                issuedLabel,
+                followupRecommendation,
+                followupDueInfo,
+              } = row;
+              const showDuePill =
+                !followupRecommendation.shouldSkipFollowup &&
+                followupDueInfo.dueStatus !== "none";
+              const duePillClass =
+                followupDueInfo.dueStatus === "overdue"
+                  ? "border border-rose-500/40 bg-rose-500/10 text-rose-200"
+                  : followupDueInfo.dueStatus === "due-today"
+                  ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                  : "border border-slate-800/60 bg-slate-900/80 text-slate-300";
+
               return (
-                <article
+                <Link
                   key={invoice.id}
-                  className="rounded-2xl border border-slate-800/60 bg-slate-900/60 px-4 py-3 transition hover:border-slate-600"
+                  href={`/invoices/${invoice.id}`}
+                  className={`group grid gap-3 rounded-2xl border border-slate-800/60 bg-slate-900/60 px-4 py-3 transition hover:border-slate-600 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1fr] ${highlightClass}`}
                 >
-                  <div className="flex flex-col gap-3 text-sm text-slate-400 md:flex-row md:items-center md:justify-between">
-                    <div className="space-y-1">
-                      <p className="text-base font-semibold text-slate-100">Invoice {shortInvoiceId}</p>
-                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Status: {statusLabel}</p>
-                      {invoice.job_id ? (
-                        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                          Job:{" "}
-                          <Link
-                            href={`/jobs/${invoice.job_id}`}
-                            className="text-xs uppercase tracking-[0.3em] text-sky-300 hover:text-sky-200"
-                          >
-                            View job
-                          </Link>
-                        </p>
-                      ) : (
-                        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job: N/A</p>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-100">{invoiceLabel}</p>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Issued {issuedLabel}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-100">{customerName}</p>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Customer</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-100">{jobTitle}</p>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Job</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-slate-100">{amountLabel}</p>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Amount</p>
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] ${statusClass}`}>
+                        {statusLabel}
+                      </span>
+                      {followupRecommendation.shouldSkipFollowup ? (
+                        <span className="inline-flex items-center rounded-full border border-slate-700/40 px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] text-slate-400">
+                          No follow-up needed
+                        </span>
+                      ) : null}
+                      {showDuePill && (
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] uppercase tracking-[0.3em] ${duePillClass}`}
+                        >
+                          {followupDueInfo.dueLabel}
+                        </span>
                       )}
                     </div>
-                    <div className="text-right space-y-1">
-                      <p className="text-slate-100">{totalLabel}</p>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Total:</p>
-                    </div>
-                    <div className="text-right space-y-1 text-[11px] uppercase tracking-[0.3em]">
-                      <p className="text-slate-100">{dateLabel}</p>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Due</p>
-                      <Link
-                        href={`/invoices/${invoice.id}`}
-                        className="text-xs uppercase tracking-[0.3em] text-sky-300 hover:text-sky-200"
-                      >
-                        View invoice
-                      </Link>
-                    </div>
                   </div>
-                </article>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-100">{dueLabel}</p>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Due date</p>
+                  </div>
+                </Link>
               );
             })}
           </div>

@@ -76,9 +76,11 @@ function formatActivityLabel(activity?: ActivityEntry | null) {
 export default async function CustomersPage({
   searchParams,
 }: {
-  searchParams?: { q?: string };
+  searchParams?: Promise<{ q?: string }>;
 }) {
-  const searchQueryRaw = searchParams?.q ?? "";
+  const searchParamsPromise = searchParams;
+  const resolvedSearchParams = await searchParamsPromise;
+  const searchQueryRaw = resolvedSearchParams?.q ?? "";
   const trimmedSearchQuery = searchQueryRaw.trim();
   const normalizedSearchQuery = normalizeSearchQuery(trimmedSearchQuery);
   const searchPattern = buildSearchPattern(normalizedSearchQuery);

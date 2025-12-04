@@ -205,6 +205,98 @@ export function deriveFollowupRecommendation({
   };
 }
 
+export type InvoiceFollowupRecommendation = {
+  primaryActionLabel: string;
+  secondaryActionLabel?: string;
+  recommendedChannel: "email" | "sms";
+  rationale: string;
+  recommendedDelayDays: number | null;
+  recommendedTimingLabel: string;
+  shouldSkipFollowup: boolean;
+};
+
+type InvoiceFollowupMetadata = {
+  invoiceId?: string | null;
+  jobId?: string | null;
+  customerId?: string | null;
+};
+
+type DeriveInvoiceFollowupRecommendationArgs = {
+  outcome: string | null;
+  daysSinceInvoiceSent: number | null;
+  status: string | null;
+  metadata?: InvoiceFollowupMetadata;
+};
+
+export function deriveInvoiceFollowupRecommendation({
+  outcome,
+  daysSinceInvoiceSent,
+  status,
+  metadata,
+}: DeriveInvoiceFollowupRecommendationArgs): InvoiceFollowupRecommendation {
+  const normalizedStatus = status?.trim().toLowerCase() ?? "";
+  const normalizedOutcome = outcome?.trim().toLowerCase() ?? "invoice_sent";
+  let primaryActionLabel = "No follow-up needed";
+  let rationale =
+    normalizedStatus === "paid"
+      ? "Invoice is marked as paid, so no further follow-up is needed."
+      : "Invoice is still a draft, so it is not ready for a follow-up.";
+  let recommendedDelayDays: number | null = null;
+  let recommendedTimingLabel = "No follow-up recommended";
+  let shouldSkipFollowup = false;
+
+  if (normalizedStatus === "paid") {
+    shouldSkipFollowup = true;
+  } else if (normalizedStatus === "draft") {
+    shouldSkipFollowup = true;
+  } else if (normalizedStatus === "overdue") {
+    primaryActionLabel = "Send payment reminder";
+    rationale = "The invoice is overdue; follow up with the customer today.";
+    recommendedDelayDays = 0;
+    recommendedTimingLabel = "Today";
+  } else if (
+    normalizedStatus === "sent" &&
+    typeof daysSinceInvoiceSent === "number" &&
+    daysSinceInvoiceSent >= 3
+  ) {
+    primaryActionLabel = "Send gentle reminder";
+    rationale = "It’s been several days since this invoice was sent.";
+    recommendedDelayDays = 0;
+    recommendedTimingLabel = "Today";
+  } else {
+    primaryActionLabel = "Schedule follow-up";
+    rationale = "Give the customer a few days before following up.";
+    recommendedDelayDays = 3;
+    recommendedTimingLabel = "Later this week";
+  }
+
+  const recommendation: InvoiceFollowupRecommendation = {
+    primaryActionLabel,
+    secondaryActionLabel: shouldSkipFollowup
+      ? undefined
+      : `Timing: ${recommendedTimingLabel}`,
+    recommendedChannel: "email",
+    rationale,
+    recommendedDelayDays,
+    recommendedTimingLabel,
+    shouldSkipFollowup,
+  };
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[invoice-followup-reco]", {
+      invoiceId: metadata?.invoiceId ?? null,
+      jobId: metadata?.jobId ?? null,
+      customerId: metadata?.customerId ?? null,
+      status: normalizedStatus,
+      outcome: normalizedOutcome,
+      daysSinceInvoiceSent,
+      recommendation,
+    });
+  }
+
+  return recommendation;
+}
+
 export type FollowupDueStatus = "none" | "due-today" | "upcoming" | "overdue";
 
 export type FollowupDueInfo = {
@@ -349,4 +441,38 @@ export function computeFollowupDueInfo({
 
 export function isActionableFollowupDue(status: FollowupDueStatus | null | undefined): boolean {
   return status === "overdue" || status === "due-today";
+}
+
+export function getInvoiceSentDate({
+  issuedAt,
+  createdAt,
+}: {
+  issuedAt?: string | null;
+  createdAt?: string | null;
+}): string | null {
+  return issuedAt ?? createdAt ?? null;
+}
+
+export function getInvoiceFollowupBaseDate({
+  dueAt,
+  issuedAt,
+  createdAt,
+}: {
+  dueAt?: string | null;
+  issuedAt?: string | null;
+  createdAt?: string | null;
+}): string | null {
+  return dueAt ?? issuedAt ?? createdAt ?? null;
+}
+
+export function calculateDaysSinceDate(value?: string | null): number | null {
+  const parsed = parseDate(value);
+  if (!parsed) {
+    return null;
+  }
+  const diffMs = Date.now() - parsed.getTime();
+  if (diffMs <= 0) {
+    return 0;
+  }
+  return Math.floor(diffMs / ONE_DAY_MS);
 }

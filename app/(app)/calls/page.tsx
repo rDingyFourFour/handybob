@@ -189,7 +189,7 @@ export default async function CallsPage({
   let todayFollowupMessages: FollowupMessageRef[] = [];
   const { data: todayMessagesRows, error: todayMessagesError } = await supabase
     .from<FollowupMessageRef>("messages")
-    .select("id, job_id, quote_id, channel, via, created_at")
+    .select("id, job_id, quote_id, invoice_id, channel, via, created_at")
     .eq("workspace_id", workspace.id)
     .gte("created_at", todayStart.toISOString())
     .in("channel", ["sms", "email", "phone"])

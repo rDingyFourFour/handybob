@@ -14,14 +14,9 @@ import JobMaterialsPanel from "./JobMaterialsPanel";
 import JobCallScriptPanel, { type PhoneMessageSummary } from "./JobCallScriptPanel";
 import {
   computeFollowupDueInfo,
-  deriveFollowupRecommendation,
   type FollowupDueStatus,
   type FollowupDueInfo,
 } from "@/lib/domain/communications/followupRecommendations";
-import {
-  findMatchingFollowupMessage,
-  type FollowupMessageRef,
-} from "@/lib/domain/communications/followupMessages";
 
 type JobRecord = {
   id: string;
@@ -54,13 +49,53 @@ type JobQuoteSummary = {
 type LatestCallRecord = {
   id: string;
   job_id: string | null;
-  quote_id: string | null;
-  body: string | null;
-  status: string | null;
-  channel: string | null;
-  via: string | null;
+  workspace_id: string | null;
   created_at: string | null;
 };
+
+type JobAppointmentRow = {
+  id: string;
+  start_time: string | null;
+  end_time: string | null;
+  status: string | null;
+};
+
+const appointmentStatusClasses: Record<string, string> = {
+  scheduled: "border border-amber-500/40 bg-amber-500/10 text-amber-200",
+  completed: "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200",
+  cancelled: "border border-rose-500/40 bg-rose-500/10 text-rose-200",
+  canceled: "border border-rose-500/40 bg-rose-500/10 text-rose-200",
+};
+
+function appointmentStatusLabel(status: string | null) {
+  if (!status) {
+    return "Scheduled";
+  }
+  if (status === "cancelled" || status === "canceled") {
+    return "Canceled";
+  }
+  return `${status.charAt(0).toUpperCase()}${status.slice(1)}`;
+}
+
+function appointmentStatusClass(status: string | null) {
+  if (!status) {
+    return appointmentStatusClasses.scheduled;
+  }
+  return appointmentStatusClasses[status] ?? "border border-slate-700 bg-slate-900/60 text-slate-200";
+}
+
+function formatAppointmentTimeRange(start: string | null, end: string | null) {
+  if (!start) {
+    return "Time TBD";
+  }
+  const options: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+  const startLabel = new Date(start).toLocaleTimeString(undefined, options);
+  if (!end) {
+    return startLabel;
+  }
+  const endLabel = new Date(end).toLocaleTimeString(undefined, options);
+  return `${startLabel} — ${endLabel}`;
+}
 
 const smartQuoteBadgeClasses =
   "inline-flex items-center gap-2 rounded-full border px-3 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] bg-amber-500/10 border-amber-400/40 text-amber-300";
@@ -89,21 +124,6 @@ function fallbackCard(title: string, body: string, action?: ReactNode) {
       </HbCard>
     </div>
   );
-}
-
-function calculateDaysSince(value?: string | null): number | null {
-  if (!value) {
-    return null;
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-  const diffMs = Date.now() - parsed.getTime();
-  if (diffMs <= 0) {
-    return 0;
-  }
-  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
 function startOfToday(date?: Date) {
@@ -196,6 +216,30 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     return fallbackCard("Job not found", "We couldn’t find that job. It may have been deleted.");
   }
 
+  let upcomingAppointments: JobAppointmentRow[] = [];
+  let upcomingAppointmentsError = false;
+  try {
+    const todayIso = startOfToday().toISOString();
+    const { data, error } = await supabase
+      .from<JobAppointmentRow>("appointments")
+      .select("id, start_time, end_time, status")
+      .eq("workspace_id", workspace.id)
+      .eq("job_id", job.id)
+      .gte("start_time", todayIso)
+      .order("start_time", { ascending: true })
+      .limit(5);
+
+    if (error) {
+      console.error("[job-detail] Failed to load upcoming appointments", error);
+      upcomingAppointmentsError = true;
+    } else {
+      upcomingAppointments = data ?? [];
+    }
+  } catch (error) {
+    console.error("[job-detail] Upcoming appointments query failed", error);
+    upcomingAppointmentsError = true;
+  }
+
   let quotes: JobQuoteSummary[] = [];
   let quotesError = false;
   try {
@@ -245,6 +289,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     materialsQuoteId,
   });
   const callScriptQuoteId = materialsQuoteId ?? quotes[0]?.id ?? null;
+  const acceptedQuote = quotes.find((quote) => quote.status?.toLowerCase() === "accepted") ?? null;
   console.log("[call-script-ui-job] job call script quote candidate", {
     jobId: job.id,
     callScriptQuoteId,
@@ -301,7 +346,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
   try {
     const { data, error } = await supabase
       .from<LatestCallRecord>("calls")
-      .select("id, job_id, quote_id, body, status, channel, via, created_at")
+      .select("id, job_id, workspace_id, created_at")
       .eq("workspace_id", workspace.id)
       .eq("job_id", job.id)
       .order("created_at", { ascending: false })
@@ -316,59 +361,19 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     console.error("[job-detail] Latest call query failed", error);
   }
 
-  const todayStart = startOfToday();
-  let todayFollowupMessages: FollowupMessageRef[] = [];
-  try {
-    const { data, error } = await supabase
-      .from<FollowupMessageRef>("messages")
-      .select("id, job_id, quote_id, channel, via, created_at")
-      .eq("workspace_id", workspace.id)
-      .eq("job_id", job.id)
-      .gte("created_at", todayStart.toISOString())
-      .in("channel", ["sms", "email", "phone"])
-      .order("created_at", { ascending: false });
-    if (error) {
-      console.error("[job-detail] Today’s follow-up messages lookup failed", error);
-    } else {
-      todayFollowupMessages = data ?? [];
-    }
-  } catch (error) {
-    console.error("[job-detail] Today’s follow-up messages query failed", error);
-  }
-
   const quoteCandidate = quotes.find((quote) => quote.id === callScriptQuoteId) ?? null;
   const quoteCreatedAt = quoteCandidate?.created_at ?? null;
-  const daysSinceQuote = calculateDaysSince(quoteCreatedAt);
-  const callOutcome =
-    latestCall?.body?.trim() ||
-    latestCall?.status?.trim() ||
-    null;
-  const followupRecommendation =
-    callOutcome &&
-    deriveFollowupRecommendation({
-      outcome: callOutcome,
-      daysSinceQuote,
-      modelChannelSuggestion: null,
-    });
   const followupDueInfo: FollowupDueInfo = computeFollowupDueInfo({
     quoteCreatedAt,
     callCreatedAt: latestCall?.created_at ?? null,
-    recommendation: followupRecommendation,
+    recommendation: null,
   });
-  const matchingFollowupMessage =
-    followupRecommendation &&
-    findMatchingFollowupMessage({
-      messages: todayFollowupMessages,
-      recommendedChannel: followupRecommendation.recommendedChannel,
-      jobId: job.id,
-      quoteId: latestCall?.quote_id ?? callScriptQuoteId,
-    });
   console.log("[job-followup-status]", {
     jobId: job.id,
     callId: latestCall?.id ?? null,
     dueStatus: followupDueInfo.dueStatus,
-    hasMessage: Boolean(matchingFollowupMessage),
-    messageId: matchingFollowupMessage?.id ?? null,
+    hasMessage: false,
+    messageId: null,
   });
   const followupStatusLabels: Record<FollowupDueStatus, string> = {
     overdue: "Overdue",
@@ -417,6 +422,19 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           <HbButton as={Link} href={quoteHref} size="sm" variant="secondary">
             Generate quote from job
           </HbButton>
+          {acceptedQuote && (
+            <HbButton
+              as={Link}
+              href={`/invoices/new?jobId=${job.id}&quoteId=${acceptedQuote.id}`}
+              size="sm"
+              variant="secondary"
+            >
+              Create invoice
+            </HbButton>
+          )}
+          <HbButton as={Link} href={`/appointments/new?jobId=${job.id}`} size="sm" variant="secondary">
+            Schedule visit
+          </HbButton>
           <HbButton as={Link} href={callAgentHref} size="sm" variant="secondary">
             Open phone agent
           </HbButton>
@@ -435,14 +453,6 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
                 {followupStatusChipLabel}
               </span>
               <span className="text-sm text-slate-300">{followupDueInfo.dueLabel}</span>
-              {matchingFollowupMessage && (
-                <Link
-                  href={`/messages/${matchingFollowupMessage.id}`}
-                  className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-                >
-                  View follow-up message
-                </Link>
-              )}
             </div>
           </div>
         )}
@@ -479,6 +489,56 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Description:</p>
           <p className="text-sm text-slate-300">{job.description_raw ?? "No description provided."}</p>
         </div>
+      </HbCard>
+      <HbCard className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Upcoming visits</p>
+            <h2 className="hb-heading-3 text-xl font-semibold">Scheduled appointments for this job</h2>
+          </div>
+          <Link
+            href="/appointments"
+            className="text-xs uppercase tracking-[0.3em] text-slate-400 transition hover:text-slate-200"
+          >
+            View all appointments
+          </Link>
+        </div>
+        {upcomingAppointmentsError ? (
+          <p className="text-sm text-slate-400">
+            Something went wrong loading upcoming visits. Try refreshing the page.
+          </p>
+        ) : upcomingAppointments.length === 0 ? (
+          <div className="space-y-2 text-sm text-slate-400">
+            <p>No upcoming appointments for this job yet.</p>
+            <HbButton as={Link} href={`/appointments/new?jobId=${job.id}`} size="sm" variant="secondary">
+              Schedule a visit
+            </HbButton>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {upcomingAppointments.map((appointment) => (
+              <Link
+                key={appointment.id}
+                href={`/appointments/${appointment.id}`}
+                className="group flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-200 transition hover:border-slate-600 hover:bg-slate-900"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-slate-100">{formatDate(appointment.start_time)}</p>
+                  <p className="text-xs text-slate-400">
+                    {formatAppointmentTimeRange(appointment.start_time, appointment.end_time)}
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.3em] font-semibold ${appointmentStatusClass(
+                    appointment.status,
+                  )}`}
+                >
+                  {appointmentStatusLabel(appointment.status)}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
       </HbCard>
       <HbCard className="space-y-4">
         <div>

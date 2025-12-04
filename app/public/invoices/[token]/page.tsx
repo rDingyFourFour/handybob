@@ -16,10 +16,12 @@ type MediaItem = {
 };
 
 export default async function PublicInvoicePage({
-  params,
+  params: paramsPromise,
 }: {
-  params: { token: string };
+  params: Promise<{ token: string }>;
 }) {
+  // Accept params as a promise and derive the token once.
+  const { token } = await paramsPromise;
   // Server-only: resolve invoice via admin client by public_token; no auth required on public link.
   const supabase = createAdminClient();
 
@@ -45,7 +47,7 @@ export default async function PublicInvoicePage({
         )
       `
     )
-    .eq("public_token", params.token)
+    .eq("public_token", token)
     .single();
 
   if (!invoice) {
