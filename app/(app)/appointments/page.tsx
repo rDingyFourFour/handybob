@@ -7,6 +7,12 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
+import { DEFAULT_TIMEZONE } from "@/utils/dashboard/time";
+import {
+  AppointmentStatus,
+  isTodayAppointment,
+  normalizeAppointmentStatus,
+} from "@/lib/domain/appointments/dateUtils";
 
 type FilterRange = "today" | "tomorrow" | "this-week" | "next-7" | "upcoming";
 
@@ -23,8 +29,6 @@ const QUICK_FILTERS: Array<{ key: FilterRange; label: string }> = [
 ];
 
 const ALL_RANGE_OPTIONS: FilterRange[] = ["today", "tomorrow", "this-week", "next-7", "upcoming"];
-
-type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "canceled" | "no_show";
 
 type AppointmentRow = {
   id: string;
@@ -331,13 +335,17 @@ export default async function AppointmentsPage({
     : buildRangeHref(activeRange, true);
   const historyToggleLabel = showPast ? "Hide past appointments" : "Show past appointments";
   const now = new Date();
+  const timezone = DEFAULT_TIMEZONE;
   const tomorrowStart = new Date(todayStart);
   tomorrowStart.setDate(tomorrowStart.getDate() + 1);
   const defaultViewHref = buildRangeHref("upcoming", false);
   const totalUpcoming = appointments.length;
   const next7DaysEnd = new Date(todayStart);
   next7DaysEnd.setDate(next7DaysEnd.getDate() + 7);
-  let todayCount = 0;
+  const todayAppointments = appointments.filter((appt) =>
+    isTodayAppointment(appt.start_time, now, timezone, appt.status ?? undefined)
+  );
+  const todayCount = todayAppointments.length;
   let next7DaysCount = 0;
   appointments.forEach((appt) => {
     if (!appt.start_time) {
@@ -346,9 +354,6 @@ export default async function AppointmentsPage({
     const startDate = new Date(appt.start_time);
     if (Number.isNaN(startDate.getTime())) {
       return;
-    }
-    if (startDate >= todayStart && startDate < tomorrowStart) {
-      todayCount += 1;
     }
     if (startDate >= todayStart && startDate < next7DaysEnd) {
       next7DaysCount += 1;
@@ -371,6 +376,7 @@ export default async function AppointmentsPage({
       : totalUpcoming > 0 && nextVisitLabel
       ? `No appointments scheduled today. Next visit is on ${nextVisitLabel}.`
       : null;
+  const appointmentsToRender = activeRange === "today" ? todayAppointments : appointments;
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -512,7 +518,7 @@ export default async function AppointmentsPage({
           </div>
 
             <div className="space-y-2">
-              {appointments.map((appt) => {
+              {appointmentsToRender.map((appt) => {
                 const jobCustomer =
                   appt.job?.customers && Array.isArray(appt.job.customers)
                   ? appt.job.customers[0] ?? null
@@ -528,12 +534,11 @@ export default async function AppointmentsPage({
                   : `Visit ${shortId(appt.id)}`;
               const startDate = appt.start_time ? new Date(appt.start_time) : null;
               const endDate = appt.end_time ? new Date(appt.end_time) : null;
-              const isToday =
-                startDate && startDate >= todayStart && startDate < tomorrowStart;
+              const normalizedStatus = normalizeAppointmentStatus(appt.status) ?? "scheduled";
+              const isTodayRow = isTodayAppointment(appt.start_time, now, timezone, normalizedStatus);
               const inProgress =
                 startDate && startDate <= now && (!endDate || now <= endDate);
-              const highlightClass = isToday || inProgress ? "border-slate-500/60 bg-slate-900/80 ring-1 ring-amber-400/30" : "";
-              const normalizedStatus: AppointmentStatus = appt.status ?? "scheduled";
+              const highlightClass = isTodayRow || inProgress ? "border-slate-500/60 bg-slate-900/80 ring-1 ring-amber-400/30" : "";
               const statusLabel = appointmentStatusLabel(normalizedStatus);
               const statusClass = appointmentStatusClass(normalizedStatus);
               const isPastScheduled =
@@ -541,7 +546,7 @@ export default async function AppointmentsPage({
               const contextLabel = normalizedStatus === "scheduled"
                 ? isPastScheduled
                   ? "Past scheduled"
-                  : isToday
+                  : isTodayRow
                   ? "Today"
                   : "Upcoming"
                 : null;

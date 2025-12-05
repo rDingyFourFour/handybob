@@ -11,6 +11,8 @@ import {
   FollowupMessageRef,
   CallFollowupDescriptor,
   collectCallFollowupMessageIds,
+  computeFollowupMessageCounts,
+  parseFollowupMessageTimestamp,
 } from "@/lib/domain/communications/followupMessages";
 
 const ONE_DAY_MS = 1000 * 60 * 60 * 24;
@@ -101,18 +103,6 @@ function formatShortDate(value: string | null) {
   return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function parseMessageTimestamp(message: Pick<MessageRow, "created_at" | "sent_at">) {
-  return parseTimestampValue(message.created_at ?? message.sent_at ?? null);
-}
-
-function isMessageFromThisWeek(message: MessageRow, weekAgoStart: Date) {
-  const parsed = parseMessageTimestamp(message);
-  if (!parsed) {
-    return false;
-  }
-  return parsed.getTime() >= weekAgoStart.getTime();
-}
-
 const bodyPreview = (body: string | null) => {
   const trimmed = body?.trim() ?? "";
   if (!trimmed) return "No preview available";
@@ -176,7 +166,9 @@ export default async function MessagesPage({
   })();
   const trimmedSearchQuery = rawSearchQuery.trim();
   const isSearching = trimmedSearchQuery.length > 0;
-  const filterMode = resolveMessageFilterMode(resolvedSearchParams?.filter);
+  const filterMode = resolveMessageFilterMode(
+    resolvedSearchParams?.filterMode ?? resolvedSearchParams?.filter,
+  );
   const messageFilterSubtitle =
     filterMode === "followups"
       ? "Showing follow-up messages across your workspace."
@@ -192,6 +184,7 @@ export default async function MessagesPage({
   const buildFilterHref = (mode: MessageFilterMode) => {
     const params = new URLSearchParams();
     if (mode !== "all") {
+      params.set("filterMode", mode);
       params.set("filter", mode);
     }
     if (trimmedSearchQuery) {
@@ -402,40 +395,21 @@ export default async function MessagesPage({
     isJobOrQuoteMessage: Boolean(message.job_id || message.quote_id),
   }));
 
-  const todayStart = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
-  const weekAgoStart = new Date(todayStart);
-  weekAgoStart.setDate(weekAgoStart.getDate() - 6);
-
-  let followupsTodayCount = 0;
-  let followupsThisWeekCount = 0;
-  for (const row of messageRows) {
-    if (!row.isCallFollowup) {
-      continue;
-    }
-    const parsed = parseMessageTimestamp(row);
-    if (!parsed) {
-      continue;
-    }
-    if (
-      parsed.getUTCFullYear() === now.getUTCFullYear() &&
-      parsed.getUTCMonth() === now.getUTCMonth() &&
-      parsed.getUTCDate() === now.getUTCDate()
-    ) {
-      followupsTodayCount += 1;
-    }
-    if (parsed.getTime() >= weekAgoStart.getTime()) {
-      followupsThisWeekCount += 1;
-    }
-  }
+  const followupMessageRows = messageRows.filter((message) => message.isCallFollowup);
+  const {
+    todayCount: followupsTodayCount,
+    weekCount: followupsThisWeekCount,
+    bounds: followupMessageBounds,
+  } = computeFollowupMessageCounts(followupMessageRows, now);
+  const weekAgoStart = followupMessageBounds.weekAgoStart;
 
   const filteredMessages = messageRows.filter((message) => {
     if (filterMode === "followups") {
       return message.isCallFollowup;
     }
     if (filterMode === "this-week") {
-      return isMessageFromThisWeek(message, weekAgoStart);
+      const parsed = parseFollowupMessageTimestamp(message);
+      return parsed ? parsed.getTime() >= weekAgoStart.getTime() : false;
     }
     return true;
   });

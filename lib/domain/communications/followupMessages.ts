@@ -1,5 +1,69 @@
 import { deriveFollowupRecommendation } from "./followupRecommendations";
 
+export type FollowupMessageTimestampBounds = {
+  todayStart: Date;
+  tomorrowStart: Date;
+  weekAgoStart: Date;
+};
+
+type TimestampedMessage = Pick<FollowupMessageRef, "created_at" | "sent_at">;
+
+export function createFollowupMessageTimestampBounds(now: Date = new Date()): FollowupMessageTimestampBounds {
+  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setUTCDate(tomorrowStart.getUTCDate() + 1);
+  const weekAgoStart = new Date(todayStart);
+  weekAgoStart.setUTCDate(weekAgoStart.getUTCDate() - 6);
+  return {
+    todayStart,
+    tomorrowStart,
+    weekAgoStart,
+  };
+}
+
+export function parseFollowupMessageTimestamp(message: TimestampedMessage) {
+  if (!message.created_at && !message.sent_at) {
+    return null;
+  }
+  const parsed = new Date(message.created_at ?? message.sent_at ?? "");
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export type FollowupMessageCountsResult = {
+  todayCount: number;
+  weekCount: number;
+  bounds: FollowupMessageTimestampBounds;
+};
+
+export function computeFollowupMessageCounts(
+  messages: TimestampedMessage[],
+  now: Date = new Date()
+): FollowupMessageCountsResult {
+  const bounds = createFollowupMessageTimestampBounds(now);
+  let todayCount = 0;
+  let weekCount = 0;
+
+  for (const message of messages) {
+    const parsed = parseFollowupMessageTimestamp(message);
+    if (!parsed) {
+      continue;
+    }
+    const time = parsed.getTime();
+    if (time >= bounds.todayStart.getTime() && time < bounds.tomorrowStart.getTime()) {
+      todayCount += 1;
+    }
+    if (time >= bounds.weekAgoStart.getTime()) {
+      weekCount += 1;
+    }
+  }
+
+  return {
+    todayCount,
+    weekCount,
+    bounds,
+  };
+}
+
 export type FollowupMessageRef = {
   id: string;
   job_id: string | null;

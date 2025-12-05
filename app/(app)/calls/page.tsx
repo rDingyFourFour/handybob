@@ -115,9 +115,10 @@ export default async function CallsPage({
   const jobIdFilter = Array.isArray(rawJobId) ? rawJobId[0] : rawJobId ?? null;
   const summaryFilter = rawSummary === "needs" ? "needs" : null;
   const rawFollowups = searchParams?.followups;
-  const followupsFilter = Array.isArray(rawFollowups)
+  const followupsModeValue = Array.isArray(rawFollowups)
     ? rawFollowups[0]
     : rawFollowups ?? null;
+  const followupsMode = followupsModeValue === "queue" ? "queue" : "all";
   let filteredJob: FilteredJobSummary | null = null;
 
   if (jobIdFilter) {
@@ -135,7 +136,7 @@ export default async function CallsPage({
     filteredJob = jobRow ?? null;
   }
 
-  const followupQueueActive = followupsFilter === "queue";
+  const followupQueueActive = followupsMode === "queue";
 
   let query = supabase.from("calls").select("*").eq("workspace_id", workspace.id);
 
@@ -480,9 +481,18 @@ export default async function CallsPage({
           </p>
           <p className="hb-muted text-sm">{headerSubtitle}</p>
           {followupQueueActive ? (
-            <p className="mt-1 text-sm font-semibold text-emerald-200">
-              Showing {followupQueueCalls.length} calls needing follow-up today.
-            </p>
+            <>
+              <p className="mt-1 text-sm font-semibold text-emerald-200">
+                Showing {followupQueueCalls.length} calls needing follow-up today.
+              </p>
+              <p className="mt-2 text-sm text-slate-400">
+                Work through this list, then head back to your dashboard to see the rest of today’s priorities.{" "}
+                <Link href="/dashboard" className="font-semibold text-emerald-200 hover:text-emerald-100">
+                  Go to dashboard
+                </Link>
+                .
+              </p>
+            </>
           ) : (
             followupQueueCalls.length > 0 && (
               <p className="mt-1 text-sm text-slate-400">
@@ -609,6 +619,13 @@ export default async function CallsPage({
               <p className="hb-muted text-sm">
                 You’re all caught up for today. Switch back to “All calls” to review recent sessions,
                 or open Jobs to find more customers to follow up with.
+              </p>
+              <p className="text-sm text-slate-400">
+                You’re caught up on follow-up calls for now. Nice work.{" "}
+                <Link href="/dashboard" className="font-semibold text-emerald-200 hover:text-emerald-100">
+                  Check your dashboard for other priorities
+                </Link>
+                .
               </p>
               <HbButton
                 as={Link}

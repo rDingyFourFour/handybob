@@ -11,16 +11,34 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@//utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { getJobsSummaryForWorkspace } from "@/lib/domain/jobs";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import { DEFAULT_TIMEZONE } from "@/utils/dashboard/time";
-import { AppointmentsSkeleton } from "@/components/dashboard/AppointmentsSkeleton";
+import { ACTIVE_APPOINTMENT_STATUSES, isTodayAppointment } from "@/lib/domain/appointments/dateUtils";
+import {
+  calculateDaysSinceDate,
+  computeFollowupDueInfo,
+  deriveFollowupRecommendation,
+  deriveInvoiceFollowupRecommendation,
+  getInvoiceFollowupBaseDate,
+  getInvoiceSentDate,
+  isActionableFollowupDue,
+} from "@/lib/domain/communications/followupRecommendations";
+import {
+  CallFollowupDescriptor,
+  FollowupMessageRef,
+  collectCallFollowupMessageIds,
+  computeFollowupMessageCounts,
+  createFollowupMessageTimestampBounds,
+  findMatchingFollowupMessage,
+  parseFollowupMessageTimestamp,
+} from "@/lib/domain/communications/followupMessages";
 import { ActivitySkeleton } from "@/components/dashboard/ActivitySkeleton";
 import { LeadsAttentionList } from "@/components/dashboard/LeadsAttentionList";
 import { QuotesAttentionList } from "@/components/dashboard/QuotesAttentionList";
 import { InvoicesAttentionList } from "@/components/dashboard/InvoicesAttentionList";
 import { CallsAttentionList } from "@/components/dashboard/CallsAttentionList";
 import { RecentActivityWidget } from "@/components/dashboard/RecentActivityWidget";
-import { AppointmentsWidget } from "@/components/dashboard/AppointmentsWidget";
 import { getAttentionItems, getAttentionCutoffs } from "@/lib/domain/attention";
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
@@ -81,6 +99,51 @@ type MessageThreadRow = {
   job_id?: string | null;
   job?: { title: string | null } | { title: string | null }[] | null;
   customers?: { id: string | null; name: string | null } | { id: string | null; name: string | null }[] | null;
+};
+
+type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "canceled" | "no_show";
+
+type DashboardAppointmentRow = {
+  id: string;
+  title: string | null;
+  start_time: string | null;
+  status: AppointmentStatus | null;
+  job?: {
+    id: string | null;
+    title: string | null;
+    customers?: { id: string | null; name: string | null } | { id: string | null; name: string | null }[] | null;
+  } | null;
+};
+
+type FollowupCallRow = {
+  id: string;
+  job_id: string | null;
+  quote_id: string | null;
+  status: string | null;
+  body: string | null;
+  transcript: string | null;
+  ai_summary: string | null;
+  created_at: string | null;
+};
+
+type FollowupMessageRow = {
+  id: string;
+  job_id: string | null;
+  quote_id: string | null;
+  invoice_id: string | null;
+  channel: string | null;
+  via: string | null;
+  direction: string | null;
+  created_at: string | null;
+  sent_at: string | null;
+};
+
+type InvoiceFollowupRow = {
+  id: string;
+  status: string | null;
+  due_at: string | null;
+  issued_at: string | null;
+  created_at: string | null;
 };
 export async function updateAutomationPreferences(formData: FormData) {
   "use server";
@@ -189,10 +252,11 @@ export default async function DashboardPage() {
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
+  const todayStartIso = todayStart.toISOString();
 
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
-  const todayEndIso = todayEnd.toISOString();
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+  const tomorrowStartIso = tomorrowStart.toISOString();
 
   const dayAgo = new Date();
   dayAgo.setHours(dayAgo.getHours() - 24);
@@ -226,7 +290,12 @@ export default async function DashboardPage() {
     staleQuotesRes,
     automationPrefsRes;
   let workspaceCustomersCountRes,
-    workspaceJobsCountRes;
+    workspaceJobsCountRes,
+    appointmentsTodayRes,
+    followupCallsRes,
+    followupMessagesRes,
+    invoiceFollowupsRes,
+    jobsSummaryRes;
 
   try {
     [
@@ -242,6 +311,11 @@ export default async function DashboardPage() {
       automationPrefsRes,
       workspaceCustomersCountRes,
       workspaceJobsCountRes,
+      appointmentsTodayRes,
+      followupCallsRes,
+      followupMessagesRes,
+      invoiceFollowupsRes,
+      jobsSummaryRes,
     ] = await Promise.all([
       supabase
         .from("jobs")
@@ -382,6 +456,75 @@ export default async function DashboardPage() {
         .from("jobs")
         .select("id", { count: "exact", head: true })
         .eq("workspace_id", workspace.id),
+      supabase
+        .from("appointments")
+        .select(
+          `
+            id,
+            title,
+            start_time,
+            status,
+            job:jobs (
+              id,
+              title,
+              customers ( id, name )
+            )
+          `,
+          { count: "exact" }
+        )
+        .eq("workspace_id", workspace.id)
+        .in("status", ACTIVE_APPOINTMENT_STATUSES)
+        .gte("start_time", todayStartIso)
+        .lt("start_time", tomorrowStartIso)
+        .order("start_time", { ascending: true })
+        .limit(5),
+      supabase
+        .from("calls")
+        .select(
+          `
+            id,
+            job_id,
+            quote_id,
+            status,
+            body,
+            transcript,
+            ai_summary,
+            created_at
+          `
+        )
+        .eq("workspace_id", workspace.id)
+        .order("created_at", { ascending: false })
+        .limit(200),
+      supabase
+        .from("messages")
+        .select(
+          `
+            id,
+            direction,
+            channel,
+            via,
+            subject,
+            body,
+            status,
+            customer_id,
+            job_id,
+            quote_id,
+            invoice_id,
+            created_at,
+            sent_at
+          `
+        )
+        .eq("workspace_id", workspace.id)
+        .order("created_at", { ascending: false })
+        .limit(200),
+      supabase
+        .from("invoices")
+        .select("id, status, due_at, issued_at, created_at")
+        .eq("workspace_id", workspace.id)
+        .in("status", ["sent", "overdue"])
+        .order("due_at", { ascending: false })
+        .limit(200),
+      getJobsSummaryForWorkspace({ supabase, workspaceId: workspace.id }),
     ]);
   } catch (error) {
     console.error("[dashboard] Failed to load dashboard data:", error);
@@ -418,7 +561,311 @@ export default async function DashboardPage() {
     0
   );
 
+  const allDashboardAppointments =
+    (appointmentsTodayRes.data ?? []) as DashboardAppointmentRow[];
+  console.log("[dashboard-appointments-source]", {
+    total: allDashboardAppointments.length,
+    sample: allDashboardAppointments.slice(0, 5).map((appointment) => ({
+      id: appointment.id,
+      start_time: appointment.start_time,
+    })),
+  });
+  const todayTimezone = workspaceTimeZone ?? DEFAULT_TIMEZONE;
+  const todayNow = new Date();
+  const todayAppointments = allDashboardAppointments.filter((appointment) =>
+    isTodayAppointment(appointment.start_time, todayNow, todayTimezone, appointment.status ?? undefined)
+  );
+  const todayAppointmentsCount = todayAppointments.length;
+  console.log("[dashboard-appointments-today]", {
+    sourceTotal: allDashboardAppointments.length,
+    todayCount: todayAppointmentsCount,
+    todayIds: todayAppointments.map((appointment) => appointment.id),
+  });
+  const followupCallRows = (followupCallsRes.data ?? []) as FollowupCallRow[];
+  const jobIds = Array.from(
+    new Set(followupCallRows.map((call) => call.job_id).filter((jobId): jobId is string => Boolean(jobId)))
+  );
+  const quoteCandidatesByJob: Record<string, { id: string; created_at: string | null }> = {};
+  if (jobIds.length > 0) {
+    const quoteLimit = Math.max(30, jobIds.length * 3);
+    const { data: quoteRows } = await supabase
+      .from("quotes")
+      .select("id, job_id, created_at")
+      .in("job_id", jobIds)
+      .order("created_at", { ascending: false })
+      .limit(quoteLimit);
+    (quoteRows ?? []).forEach((quote) => {
+      if (!quote.job_id) return;
+      if (!quoteCandidatesByJob[quote.job_id]) {
+        quoteCandidatesByJob[quote.job_id] = { id: quote.id, created_at: quote.created_at ?? null };
+      }
+    });
+  }
+
+  const followupMessageRows = (followupMessagesRes.data ?? []) as FollowupMessageRow[];
+  const followupMessageRefs: FollowupMessageRef[] = followupMessageRows.map((message) => ({
+    id: message.id,
+    job_id: message.job_id ?? null,
+    quote_id: message.quote_id ?? null,
+    invoice_id: message.invoice_id ?? null,
+    channel: message.channel ?? null,
+    via: message.via ?? null,
+    created_at: message.created_at,
+  }));
+  const followupMessageBounds = createFollowupMessageTimestampBounds(todayNow);
+  const todayFollowupMessageRefs = followupMessageRefs.filter((message) => {
+    const parsed = parseFollowupMessageTimestamp(message);
+    if (!parsed) {
+      return false;
+    }
+    const timestamp = parsed.getTime();
+    return (
+      timestamp >= followupMessageBounds.todayStart.getTime() &&
+      timestamp < followupMessageBounds.tomorrowStart.getTime()
+    );
+  });
+  const callDescriptors: CallFollowupDescriptor[] = followupCallRows.map((call) => {
+    const quoteCandidate =
+      call.job_id && quoteCandidatesByJob[call.job_id] ? quoteCandidatesByJob[call.job_id] : null;
+    const quoteId = quoteCandidate?.id ?? null;
+    const quoteCreatedAt = quoteCandidate?.created_at ?? null;
+    const quoteDate = quoteCreatedAt ? new Date(quoteCreatedAt) : null;
+    const daysSinceQuote =
+      quoteDate && !Number.isNaN(quoteDate.getTime())
+        ? Math.floor((todayNow.getTime() - quoteDate.getTime()) / ONE_DAY_MS)
+        : null;
+    const outcome = call.body?.trim() || call.status?.trim() || null;
+    return {
+      id: call.id,
+      job_id: call.job_id,
+      quote_id: quoteId,
+      created_at: call.created_at,
+      outcome,
+      daysSinceQuote,
+      modelChannelSuggestion: null,
+    };
+  });
+
+  const { messageIds: callFollowupMessageIds } = collectCallFollowupMessageIds({
+    calls: callDescriptors,
+    messages: followupMessageRefs,
+  });
+
+  const callsWithFollowups = followupCallRows.map((call) => {
+    const quoteCandidate =
+      call.job_id && quoteCandidatesByJob[call.job_id] ? quoteCandidatesByJob[call.job_id] : null;
+    const quoteCreatedAt = quoteCandidate?.created_at ?? null;
+    const quoteDate = quoteCreatedAt ? new Date(quoteCreatedAt) : null;
+    const daysSinceQuote =
+      quoteDate && !Number.isNaN(quoteDate.getTime())
+        ? Math.floor((todayNow.getTime() - quoteDate.getTime()) / ONE_DAY_MS)
+        : null;
+    const outcome = call.body?.trim() || call.status?.trim() || null;
+    const followupRecommendation =
+      outcome &&
+      deriveFollowupRecommendation({
+        outcome,
+        daysSinceQuote,
+        modelChannelSuggestion: null,
+      });
+    const recommendedChannel = followupRecommendation?.recommendedChannel ?? null;
+    const matchingFollowupMessage =
+      followupRecommendation &&
+      findMatchingFollowupMessage({
+        messages: todayFollowupMessageRefs,
+        recommendedChannel,
+        jobId: call.job_id ?? null,
+        quoteId: quoteCandidate?.id ?? call.quote_id ?? null,
+      });
+    const hasMatchingFollowupToday = Boolean(matchingFollowupMessage);
+    const followupDueInfo = computeFollowupDueInfo({
+      quoteCreatedAt,
+      callCreatedAt: call.created_at,
+      invoiceDueAt: null,
+      recommendedDelayDays: followupRecommendation?.recommendedDelayDays ?? null,
+      now: todayNow,
+    });
+    return {
+      ...call,
+      followupRecommendation,
+      followupDueInfo,
+      hasMatchingFollowupToday,
+    };
+  });
+
+  const actionableCallFollowups = callsWithFollowups.filter((call) => {
+    const recommendation = call.followupRecommendation;
+    return (
+      recommendation &&
+      !recommendation.shouldSkipFollowup &&
+      isActionableFollowupDue(call.followupDueInfo.dueStatus) &&
+      !call.hasMatchingFollowupToday
+    );
+  });
+  const actionableCallsCount = actionableCallFollowups.length;
+  const actionableCallIds = actionableCallFollowups.slice(0, 5).map((call) => call.id);
+
+  const messageRows = followupMessageRows.map((message) => ({
+    ...message,
+    isCallFollowup: callFollowupMessageIds.has(message.id),
+  }));
+  const { todayCount: followupMessagesTodayCount, weekCount: followupMessagesThisWeekCount } =
+    computeFollowupMessageCounts(
+      messageRows.filter((message) => message.isCallFollowup),
+      todayNow
+    );
+
+  const invoiceFollowupRows = (invoiceFollowupsRes.data ?? []) as InvoiceFollowupRow[];
+  const actionableInvoiceIds: string[] = [];
+  invoiceFollowupRows.forEach((invoice) => {
+    const followupBaseDate = getInvoiceFollowupBaseDate({
+      dueAt: invoice.due_at,
+      issuedAt: invoice.issued_at,
+      createdAt: invoice.created_at,
+    });
+    const sentDate = getInvoiceSentDate({
+      issuedAt: invoice.issued_at,
+      createdAt: invoice.created_at,
+    });
+    const daysSinceInvoiceSent = calculateDaysSinceDate(sentDate);
+    const followupRecommendation = deriveInvoiceFollowupRecommendation({
+      outcome: null,
+      daysSinceInvoiceSent,
+      status: invoice.status,
+    });
+    if (followupRecommendation.shouldSkipFollowup) {
+      return;
+    }
+    const followupDueInfo = computeFollowupDueInfo({
+      quoteCreatedAt: followupBaseDate,
+      callCreatedAt: null,
+      invoiceDueAt: followupBaseDate,
+      recommendedDelayDays: followupRecommendation.recommendedDelayDays ?? null,
+      now: todayNow,
+    });
+    if (isActionableFollowupDue(followupDueInfo.dueStatus)) {
+      actionableInvoiceIds.push(invoice.id);
+    }
+  });
+  const actionableInvoiceCount = actionableInvoiceIds.length;
+
+  console.log("[dashboard-followups]", {
+    actionableCallsCount,
+    actionableInvoiceCount,
+    followupMessagesTodayCount,
+    followupMessagesThisWeekCount,
+    actionableCallIds,
+    actionableInvoiceIds: actionableInvoiceIds.slice(0, 5),
+    followupMessageIds: messageRows
+      .filter((message) => message.isCallFollowup)
+      .slice(0, 5)
+      .map((message) => message.id),
+  });
+
+  const jobsSummary = jobsSummaryRes ?? { open: 0, scheduled: 0, completedLast30Days: 0 };
+  const openJobsCount = (jobsSummary.open ?? 0) + (jobsSummary.scheduled ?? 0);
+
   const automationPrefsRow = (automationPrefsRes as { data: AutomationPreferencesRow | null }).data;
+
+  const unpaidInvoicesCount = unpaidInvoicesRes.data?.length ?? 0;
+  const followupCallsHref = "/calls?followups=queue";
+  const followupMessagesHref = "/messages?filterMode=followups";
+  const followupInvoicesHref = "/invoices?status=unpaid";
+  console.log("[dashboard-followups-nav]", {
+    followupCallsHref,
+    followupMessagesHref,
+    followupInvoicesHref,
+  });
+
+  const appointmentsPriorityHref = "/appointments";
+  const callsFollowupQueueCount = actionableCallsCount;
+  const prioritiesNav = {
+    appointmentsHref: appointmentsPriorityHref,
+    followupCallsHref,
+    followupMessagesHref,
+    followupInvoicesHref,
+  };
+  console.log("[dashboard-priorities]", {
+    workspaceId: workspace.id,
+    todayAppointmentsCount,
+    callsFollowupQueueCount,
+    messagesFollowupsTodayCount: followupMessagesTodayCount,
+    messagesFollowupsThisWeekCount: followupMessagesThisWeekCount,
+    unpaidInvoicesCount,
+  });
+  console.log("[dashboard-priorities-nav]", prioritiesNav);
+
+  const priorityItems = [
+    {
+      label: "Appointments today",
+      count: todayAppointmentsCount,
+      description:
+        todayAppointmentsCount === 0
+          ? "No visits scheduled for today."
+          : `You have ${todayAppointmentsCount.toLocaleString()} visits scheduled for today.`,
+      href: appointmentsPriorityHref,
+      ctaLabel: "Open appointments",
+    },
+    {
+      label: "Calls needing follow-up",
+      count: callsFollowupQueueCount,
+      description:
+        callsFollowupQueueCount === 0
+          ? "No follow-up calls waiting right now."
+          : `You have ${callsFollowupQueueCount.toLocaleString()} calls ready for a follow-up.`,
+      href: followupCallsHref,
+      ctaLabel: "Review follow-up calls",
+    },
+    {
+      label: "Follow-up messages this week",
+      count: followupMessagesThisWeekCount,
+      description:
+        followupMessagesThisWeekCount === 0
+          ? "No follow-up messages recorded yet this week."
+          : `You’ve sent ${followupMessagesThisWeekCount.toLocaleString()} follow-ups this week. Check the message queue.`,
+      href: followupMessagesHref,
+      ctaLabel: "Open Messages",
+    },
+    {
+      label: "Unpaid invoices",
+      count: unpaidInvoicesCount,
+      description:
+        unpaidInvoicesCount === 0
+          ? "No unpaid invoices to chase right now."
+          : `You have ${unpaidInvoicesCount.toLocaleString()} unpaid invoices that may need a nudge.`,
+      href: followupInvoicesHref,
+      ctaLabel: "View invoices",
+    },
+  ];
+
+  const todaySummaryTiles = [
+    {
+      label: "Follow-ups due today",
+      count: actionableCallsCount,
+      helper: "Calls/messages HandyBob thinks you should follow up on.",
+      href: "/calls?followups=queue",
+    },
+    {
+      label: "Appointments today",
+      count: todayAppointmentsCount,
+      helper: "Visits on the schedule today.",
+      href: "/appointments?range=today",
+    },
+    {
+      label: "Unpaid invoices",
+      count: unpaidInvoicesCount,
+      helper: "Invoices that still need payment.",
+      href: "/invoices?status=unpaid",
+    },
+    {
+      label: "Open jobs",
+      count: openJobsCount,
+      helper: "Active work HandyBob is tracking.",
+      href: "/jobs",
+    },
+  ] as const;
+  const followupsAreClear =
+    actionableCallsCount === 0 && actionableInvoiceCount === 0 && followupMessagesTodayCount === 0;
 
   const prefs: AutomationPrefs = {
     notifyUrgentLeads: automationPrefsRow?.notify_urgent_leads ?? true,
@@ -517,218 +964,325 @@ export default async function DashboardPage() {
   return (
     <div className="hb-shell pt-20 pb-8 space-y-8">
       <div className="space-y-6 relative">
-        <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="hb-heading-1 text-3xl font-semibold">{workspace.name ?? "Workspace"}</h1>
-        </div>
-        <HbButton as={Link} href="/jobs/new" size="sm" variant="secondary">
-          New job
-        </HbButton>
-      </header>
-
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="hb-heading-2">Today</h2>
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Daily check-in</p>
-        </div>
-        <div className="space-y-4">
-          {/* DEBUG: Today&apos;s appointments card */}
-          <HbCard className="space-y-2">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex flex-col gap-1">
-                <h3 className="hb-card-heading text-2xl font-bold tracking-tight">Today&apos;s appointments</h3>
-                <p className="hb-muted text-sm">Quick view of your day.</p>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-300">
-                <Link href="/appointments" className="text-xs text-slate-300">
-                  View all
-                </Link>
-                <Link href="/calendar" className="text-xs text-slate-300">
-                  Calendar
-                </Link>
-              </div>
-            </div>
-
-            <Suspense fallback={<AppointmentsSkeleton rows={3} />}>
-              <AppointmentsWidget
-                workspaceId={workspace.id}
-                workspaceTimeZone={workspaceTimeZone}
-                todayEndIso={todayEndIso}
-              />
-            </Suspense>
-          </HbCard>
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="hb-heading-2">This Week</h2>
-          <p className="hb-muted">Pipeline, billing, and automation highlights.</p>
-        </div>
-
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-          <HbCard className="space-y-1">
-            <div className="flex items-center justify-between">
-              <h3 className="hb-card-heading">New leads</h3>
-              <Link href="/jobs?status=lead" className="hb-button-ghost text-xs">
-                View leads
-              </Link>
-            </div>
-            <p className="text-2xl font-semibold">{leadsRes.data?.length ?? 0}</p>
-            <p className="text-xs text-slate-400">From calls and web form submissions.</p>
-            <p className="text-[11px] text-slate-500">
-              Web: {leadSourceCounts.web} · Calls: {leadSourceCounts.calls} · Manual: {leadSourceCounts.manual} · Other: {leadSourceCounts.other}
-            </p>
-          </HbCard>
-          <HbCard>
-            <h3 className="hb-card-heading">Pending quotes</h3>
-            <p className="text-2xl font-semibold">{pendingQuotesRes.data?.length ?? 0}</p>
-          </HbCard>
-          <div className="hb-card">
-            <h3 className="hb-card-heading">Unpaid invoices</h3>
-            <p className="text-2xl font-semibold">{unpaidInvoicesRes.data?.length ?? 0}</p>
-          </div>
-          <div className="hb-card">
-            <h3 className="hb-card-heading">Inbound messages (24h)</h3>
-            <p className="text-2xl font-semibold">{inboundMessagesCount}</p>
-          </div>
-        </div>
-
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-          <div className="hb-card">
-            <h3 className="hb-card-heading">Paid quotes this month</h3>
-            <p className="text-2xl font-semibold">{paidQuotesCount}</p>
-          </div>
-          <div className="hb-card">
-            <h3 className="hb-card-heading">Quote revenue this month</h3>
-            <p className="text-2xl font-semibold">{formatCurrency(collectedThisMonth)}</p>
-          </div>
-          <div className="hb-card">
-            <h3 className="hb-card-heading">Invoices paid this month</h3>
-            <p className="text-2xl font-semibold">{paidInvoicesCount}</p>
-          </div>
-          <div className="hb-card">
-            <h3 className="hb-card-heading">Total collected this month</h3>
-            <p className="text-2xl font-semibold">
-              {formatCurrency(collectedThisMonth + collectedInvoicesThisMonth)}
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <h1 className="hb-heading-1 text-3xl font-semibold">{workspace.name ?? "Workspace"}</h1>
+            <p className="hb-muted text-sm">
+              Use this page to see what needs attention today: follow-ups, visits, and open invoices.
             </p>
           </div>
-        </div>
+          <HbButton as={Link} href="/jobs/new" size="sm" variant="secondary">
+            New job
+          </HbButton>
+        </header>
 
-        <div className="grid gap-5 md:grid-cols-2">
-          <HbCard className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="hb-card-heading">Customers</h3>
-                <p className="text-2xl font-semibold">{workspaceCustomersCount}</p>
-              </div>
-              <Link href="/customers" className="hb-button-ghost text-xs">
-                View customers
-              </Link>
-            </div>
-            <p className="hb-muted text-sm">People you’ve worked with or are following up with.</p>
-          </HbCard>
-        </div>
-
-        {invoiceLoadFailed && (
-          <div className="hb-card space-y-2">
-            <p className="font-semibold text-slate-100">Unable to load invoices right now.</p>
-            <form action={retryDashboardData}>
-              <button type="submit" className="hb-button px-3 py-1 text-sm">
-                Retry
-              </button>
-            </form>
-          </div>
-        )}
-
-      </section>
-
-      <section className="space-y-3">
-        <div className="hb-card space-y-2">
+        <section className="space-y-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h3 className="hb-card-heading">Recent activity</h3>
-              <p className="text-xs text-slate-400">Last 5 events across jobs</p>
-            </div>
-            <Link href="/jobs?tab=timeline" className="hb-button-ghost text-xs">
-              View timeline
+            <h2 className="hb-heading-2">Today at a glance</h2>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Daily control center</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {todaySummaryTiles.map((tile) => (
+              <DashboardTodayTile
+                key={tile.label}
+                title={tile.label}
+                count={tile.count}
+                helper={tile.helper}
+                href={tile.href}
+              />
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="hb-heading-2">Today’s priorities</h2>
+            <p className="hb-muted text-sm">Command center</p>
+          </div>
+          <HbCard className="space-y-5">
+            {priorityItems.map((item) => (
+              <DashboardPriorityRow
+                key={item.label}
+                label={item.label}
+                count={item.count}
+                description={item.description}
+                href={item.href}
+                ctaLabel={item.ctaLabel}
+              />
+            ))}
+          </HbCard>
+        </section>
+
+        <section className="space-y-3">
+          <div className="space-y-1">
+            <h2 className="hb-heading-2">Today’s appointments</h2>
+            <p className="hb-muted text-sm">
+              Quick view of today’s visits. Go to Appointments for filters and history.
+            </p>
+          </div>
+          <HbCard className="space-y-3">
+            {todayAppointments.length === 0 ? (
+              <p className="hb-muted text-sm">
+                No visits scheduled for today. Use “Schedule visit” from a job to add one.
+              </p>
+            ) : (
+              todayAppointments.map((appointment) => {
+                const job = Array.isArray(appointment.job) ? appointment.job[0] ?? null : appointment.job ?? null;
+                const customer = Array.isArray(job?.customers)
+                  ? job?.customers[0] ?? null
+                  : job?.customers ?? null;
+                const customerName = customer?.name ?? "Unknown customer";
+                const jobTitle = job?.title ?? "No job linked";
+                const timezone = workspaceTimeZone ?? DEFAULT_TIMEZONE;
+
+                return (
+                  <div
+                    key={appointment.id}
+                    className="grid gap-3 text-sm text-slate-200 sm:grid-cols-[110px_minmax(0,1fr)_auto] sm:items-center"
+                  >
+                    <div className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                      {formatAppointmentTimeLabel(appointment.start_time, timezone)}
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <p className="text-sm font-semibold text-slate-100">{customerName}</p>
+                      {job?.id ? (
+                        <Link
+                          href={`/jobs/${job.id}`}
+                          className="text-xs text-slate-400 transition hover:text-slate-100"
+                        >
+                          {jobTitle}
+                        </Link>
+                      ) : (
+                        <span className="text-xs text-slate-500">{jobTitle}</span>
+                      )}
+                    </div>
+                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] ${appointmentStatusClass(appointment.status)}`}>
+                      {appointmentStatusLabel(appointment.status)}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </HbCard>
+          <div className="flex justify-end">
+            <Link
+              href="/appointments"
+              className="text-xs uppercase tracking-[0.3em] text-slate-400 transition hover:text-slate-100"
+            >
+              View all appointments
             </Link>
           </div>
-          <Suspense fallback={<ActivitySkeleton rows={5} />}>
-            <RecentActivityWidget workspaceId={workspace.id} workspaceTimeZone={workspaceTimeZone} />
-          </Suspense>
-        </div>
-      </section>
+        </section>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Attention Needed</h2>
-          <p className="text-sm text-slate-400">Work trending toward urgency.</p>
-        </div>
-        <div className="hb-card space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="hb-card-heading">Attention</h3>
-              <p className="hb-muted text-sm">Quick triage of work that needs action.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {urgentEmergencyCount > 0 ? (
-                <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-red-200">
-                  Emergency {urgentEmergencyCount}
-                </span>
-              ) : null}
-              <div className="rounded-lg bg-slate-900 px-3 py-2 text-right">
-                <p className="text-xs uppercase text-slate-500">Open items</p>
-                <p className="text-2xl font-semibold">{attentionCount}</p>
+        <section className="space-y-3">
+          <div className="hb-card space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="hb-card-heading">Follow-ups</h3>
+                <p className="hb-muted text-sm">
+                  Quick view of calls, messages, and invoices that still need follow-up.
+                </p>
               </div>
+              {followupsAreClear && (
+                <span className="text-xs uppercase tracking-[0.3em] text-emerald-300">
+                  No follow-ups due right now. Nice work.
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <FollowupStatChip
+                label="Calls needing follow-up"
+                count={actionableCallsCount}
+                helper="Actionable calls from today’s followup queue."
+                href={followupCallsHref}
+                disabled={actionableCallsCount === 0}
+              />
+              <FollowupStatChip
+                label="Invoices needing follow-up"
+                count={actionableInvoiceCount}
+                helper="Overdue or unpaid invoices with follow-ups due."
+                href={followupInvoicesHref}
+                disabled={actionableInvoiceCount === 0}
+              />
+              <FollowupStatChip
+                label="Follow-up messages today"
+                count={followupMessagesTodayCount}
+                helper="Outbound follow-ups linked to calls."
+                href={followupMessagesHref}
+                disabled={followupMessagesTodayCount === 0}
+              />
             </div>
           </div>
-          {urgentEmergencyCount > 0 ? (
-            <div className="rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm text-red-200 flex items-center justify-between">
-              <span>
-                You have {urgentEmergencyCount} urgent lead{urgentEmergencyCount === 1 ? "" : "s"} (AI urgency: emergency).
-              </span>
-              <Link href="/jobs?status=lead&ai_urgency=emergency" className="hb-button-ghost text-xs">
-                View urgent leads
-              </Link>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="hb-heading-2">This Week</h2>
+            <p className="hb-muted">Pipeline, billing, and automation highlights.</p>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <HbCard className="space-y-1">
+              <div className="flex items-center justify-between">
+                <h3 className="hb-card-heading">New leads</h3>
+                <Link href="/jobs?status=lead" className="hb-button-ghost text-xs">
+                  View leads
+                </Link>
+              </div>
+              <p className="text-2xl font-semibold">{leadsRes.data?.length ?? 0}</p>
+              <p className="text-xs text-slate-400">From calls and web form submissions.</p>
+              <p className="text-[11px] text-slate-500">
+                Web: {leadSourceCounts.web} · Calls: {leadSourceCounts.calls} · Manual: {leadSourceCounts.manual} · Other: {leadSourceCounts.other}
+              </p>
+            </HbCard>
+            <HbCard>
+              <h3 className="hb-card-heading">Pending quotes</h3>
+              <p className="text-2xl font-semibold">{pendingQuotesRes.data?.length ?? 0}</p>
+            </HbCard>
+            <div className="hb-card">
+              <h3 className="hb-card-heading">Unpaid invoices</h3>
+              <p className="text-2xl font-semibold">{unpaidInvoicesRes.data?.length ?? 0}</p>
             </div>
-          ) : (
-            <div className="rounded border border-slate-800/60 bg-slate-900/80 px-3 py-2 text-sm text-slate-400 flex items-center justify-between">
-              <span>No urgent leads right now.</span>
-              <Link href="/jobs?status=lead&ai_urgency=emergency" className="hb-button-ghost text-xs">
-                View urgent leads
-              </Link>
+            <div className="hb-card">
+              <h3 className="hb-card-heading">Inbound messages (24h)</h3>
+              <p className="text-2xl font-semibold">{inboundMessagesCount}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <div className="hb-card">
+              <h3 className="hb-card-heading">Paid quotes this month</h3>
+              <p className="text-2xl font-semibold">{paidQuotesCount}</p>
+            </div>
+            <div className="hb-card">
+              <h3 className="hb-card-heading">Quote revenue this month</h3>
+              <p className="text-2xl font-semibold">{formatCurrency(collectedThisMonth)}</p>
+            </div>
+            <div className="hb-card">
+              <h3 className="hb-card-heading">Invoices paid this month</h3>
+              <p className="text-2xl font-semibold">{paidInvoicesCount}</p>
+            </div>
+            <div className="hb-card">
+              <h3 className="hb-card-heading">Total collected this month</h3>
+              <p className="text-2xl font-semibold">
+                {formatCurrency(collectedThisMonth + collectedInvoicesThisMonth)}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <HbCard className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="hb-card-heading">Customers</h3>
+                  <p className="text-2xl font-semibold">{workspaceCustomersCount}</p>
+                </div>
+                <Link href="/customers" className="hb-button-ghost text-xs">
+                  View customers
+                </Link>
+              </div>
+              <p className="hb-muted text-sm">People you’ve worked with or are following up with.</p>
+            </HbCard>
+          </div>
+
+          {invoiceLoadFailed && (
+            <div className="hb-card space-y-2">
+              <p className="font-semibold text-slate-100">Unable to load invoices right now.</p>
+              <form action={retryDashboardData}>
+                <button type="submit" className="hb-button px-3 py-1 text-sm">
+                  Retry
+                </button>
+              </form>
             </div>
           )}
-          <div className="grid gap-5 xl:grid-cols-4 md:grid-cols-2">
-          <AttentionCard title="New leads (7 days)" count={leadsRes.data?.length ?? 0} href="/jobs">
-            <LeadsAttentionList items={attentionItems.leads} />
-          </AttentionCard>
-          <AttentionCard
-            title="Overdue invoices"
-            count={overdueInvoices.length}
-            href="/invoices"
-            badge="Overdue"
-            badgeClassName="border border-red-500/30 bg-red-500/10 text-red-200"
-          >
-            <InvoicesAttentionList items={attentionItems.invoices} />
-          </AttentionCard>
-          <AttentionCard title="Quotes to follow up" count={staleQuotes.length} href="/quotes">
-            <QuotesAttentionList items={attentionItems.quotes} />
-          </AttentionCard>
-          <AttentionCard
-            title="Incomplete tasks"
-            count={callsNeedingReview.length}
-            href="/calls?filter=needs_processing"
-            badge="Unprocessed"
-            badgeClassName="border border-amber-500/30 bg-amber-500/10 text-amber-200"
-          >
-            <CallsAttentionList items={attentionItems.calls} />
-          </AttentionCard>
+        </section>
+
+        <section className="space-y-3">
+          <div className="hb-card space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="hb-card-heading">Recent activity</h3>
+                <p className="text-xs text-slate-400">Last 5 events across jobs</p>
+              </div>
+              <Link href="/jobs?tab=timeline" className="hb-button-ghost text-xs">
+                View timeline
+              </Link>
+            </div>
+            <Suspense fallback={<ActivitySkeleton rows={5} />}>
+              <RecentActivityWidget workspaceId={workspace.id} workspaceTimeZone={workspaceTimeZone} />
+            </Suspense>
           </div>
-        </div>
-      </section>
-    </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Attention Needed</h2>
+            <p className="text-sm text-slate-400">Work trending toward urgency.</p>
+          </div>
+          <div className="hb-card space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="hb-card-heading">Attention</h3>
+                <p className="hb-muted text-sm">Quick triage of work that needs action.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {urgentEmergencyCount > 0 ? (
+                  <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-red-200">
+                    Emergency {urgentEmergencyCount}
+                  </span>
+                ) : null}
+                <div className="rounded-lg bg-slate-900 px-3 py-2 text-right">
+                  <p className="text-xs uppercase text-slate-500">Open items</p>
+                  <p className="text-2xl font-semibold">{attentionCount}</p>
+                </div>
+              </div>
+            </div>
+            {urgentEmergencyCount > 0 ? (
+              <div className="rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm text-red-200 flex items-center justify-between">
+                <span>
+                  You have {urgentEmergencyCount} urgent lead{urgentEmergencyCount === 1 ? "" : "s"} (AI urgency: emergency).
+                </span>
+                <Link href="/jobs?status=lead&ai_urgency=emergency" className="hb-button-ghost text-xs">
+                  View urgent leads
+                </Link>
+              </div>
+            ) : (
+              <div className="rounded border border-slate-800/60 bg-slate-900/80 px-3 py-2 text-sm text-slate-400 flex items-center justify-between">
+                <span>No urgent leads right now.</span>
+                <Link href="/jobs?status=lead&ai_urgency=emergency" className="hb-button-ghost text-xs">
+                  View urgent leads
+                </Link>
+              </div>
+            )}
+            <div className="grid gap-5 xl:grid-cols-4 md:grid-cols-2">
+              <AttentionCard title="New leads (7 days)" count={leadsRes.data?.length ?? 0} href="/jobs">
+                <LeadsAttentionList items={attentionItems.leads} />
+              </AttentionCard>
+              <AttentionCard
+                title="Overdue invoices"
+                count={overdueInvoices.length}
+                href="/invoices"
+                badge="Overdue"
+                badgeClassName="border border-red-500/30 bg-red-500/10 text-red-200"
+              >
+                <InvoicesAttentionList items={attentionItems.invoices} />
+              </AttentionCard>
+              <AttentionCard title="Quotes to follow up" count={staleQuotes.length} href="/quotes">
+                <QuotesAttentionList items={attentionItems.quotes} />
+              </AttentionCard>
+              <AttentionCard
+                title="Incomplete tasks"
+                count={callsNeedingReview.length}
+                href="/calls?filter=needs_processing"
+                badge="Unprocessed"
+                badgeClassName="border border-amber-500/30 bg-amber-500/10 text-amber-200"
+              >
+                <CallsAttentionList items={attentionItems.calls} />
+              </AttentionCard>
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
@@ -768,5 +1322,126 @@ function AttentionCard({
       </div>
       <div>{children}</div>
     </div>
+  );
+}
+
+type DashboardPriorityRowProps = {
+  label: string;
+  count: number;
+  description: string;
+  href: string;
+  ctaLabel: string;
+};
+
+function DashboardPriorityRow({
+  label,
+  count,
+  description,
+  href,
+  ctaLabel,
+}: DashboardPriorityRowProps) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-1">
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{label}</p>
+        <p className="text-2xl font-semibold text-slate-100">{count.toLocaleString()}</p>
+        <p className="text-sm text-slate-400">{description}</p>
+      </div>
+      <HbButton as={Link} href={href} size="sm" variant="ghost" className="self-start">
+        {ctaLabel}
+      </HbButton>
+    </div>
+  );
+}
+
+type DashboardTodayTileProps = {
+  title: string;
+  count: number;
+  helper: string;
+  href: string;
+};
+
+function DashboardTodayTile({ title, count, helper, href }: DashboardTodayTileProps) {
+  return (
+    <Link href={href} className="group block">
+      <div className="h-full">
+        <HbCard className="h-full space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{title}</p>
+            <span className="text-xs uppercase tracking-[0.3em] text-slate-400 transition group-hover:text-slate-100">
+              View
+            </span>
+          </div>
+          <p className="text-3xl font-semibold text-slate-100">{count.toLocaleString()}</p>
+          <p className="text-sm text-slate-400">{helper}</p>
+        </HbCard>
+      </div>
+    </Link>
+  );
+}
+
+function formatAppointmentTimeLabel(value: string | null, timezone: string) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
+function appointmentStatusLabel(status: AppointmentStatus | null) {
+  if (!status || status === "scheduled") {
+    return "Scheduled";
+  }
+  if (status === "completed") {
+    return "Completed";
+  }
+  if (status === "no_show") {
+    return "No-show";
+  }
+  if (status === "cancelled" || status === "canceled") {
+    return "Canceled";
+  }
+  return `${status.charAt(0).toUpperCase()}${status.slice(1)}`;
+}
+
+function appointmentStatusClass(status: AppointmentStatus | null) {
+  if (status === "completed") {
+    return "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  }
+  if (status === "cancelled" || status === "canceled" || status === "no_show") {
+    return "border border-rose-500/40 bg-rose-500/10 text-rose-200";
+  }
+  return "border border-amber-500/40 bg-amber-500/10 text-amber-200";
+}
+
+const ONE_DAY_MS = 1000 * 60 * 60 * 24;
+
+type FollowupStatChipProps = {
+  label: string;
+  count: number;
+  helper: string;
+  href: string;
+  disabled?: boolean;
+};
+
+function FollowupStatChip({ label, count, helper, href, disabled }: FollowupStatChipProps) {
+  return (
+    <Link
+      href={href}
+      className={`group min-w-[12rem] flex-1 rounded-2xl border px-4 py-3 text-sm transition ${
+        disabled
+          ? "border-slate-800/60 bg-slate-900/40 text-slate-500 pointer-events-none"
+          : "border-slate-700 bg-slate-950/60 text-slate-100 hover:border-slate-500"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{label}</p>
+        <p className="text-2xl font-semibold">{count.toLocaleString()}</p>
+      </div>
+      <p className="mt-2 text-xs text-slate-400">{helper}</p>
+    </Link>
   );
 }
