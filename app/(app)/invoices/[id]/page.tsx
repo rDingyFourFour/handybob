@@ -311,7 +311,9 @@ export default async function InvoiceDetailPage(props: {
   });
   const followupDueInfo = computeFollowupDueInfo({
     quoteCreatedAt: followupBaseDate,
-    recommendation: followupRecommendation,
+    callCreatedAt: null,
+    invoiceDueAt: invoice.due_at ?? null,
+    recommendedDelayDays: followupRecommendation.recommendedDelayDays,
   });
   if (process.env.NODE_ENV !== "production") {
     console.log("[invoice-followup-reco]", {
@@ -345,8 +347,10 @@ export default async function InvoiceDetailPage(props: {
     ? "Create another follow-up message"
     : "Prepare follow-up message";
   const followupButtonVariant = followupExists ? "ghost" : "secondary";
+  const workspaceLabel = workspace.name ?? "Workspace";
+  // TODO: read the workspace brand name from settings once it’s available in this scope.
   const followupHelperText = !followupExists
-    ? `HandyBob will create a message draft in Messages via ${channelLabel} using this invoice context.`
+    ? `${workspaceLabel} will create a message draft in Messages via ${channelLabel} using this invoice context.`
     : null;
   if (process.env.NODE_ENV !== "production") {
     console.log("[invoice-followup-status]", {
@@ -395,6 +399,9 @@ export default async function InvoiceDetailPage(props: {
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Invoice details</p>
           <h1 className="hb-heading-1 text-3xl font-semibold">Invoice {invoiceLabel}</h1>
           <p className="hb-muted text-sm">Review charges before sending or collecting payment.</p>
+          <p className="text-xs text-slate-400">
+            Review the balance and due date here, and send a follow-up if payment is still outstanding.
+          </p>
         </div>
         <HbButton as="a" href="/invoices" size="sm" variant="ghost">
           Back to invoices

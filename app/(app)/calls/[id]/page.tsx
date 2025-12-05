@@ -12,7 +12,7 @@ import JobCallScriptPanel, {
 import {
   computeFollowupDueInfo,
   deriveFollowupRecommendation,
-  type NextActionSuggestion,
+  type FollowupRecommendation,
 } from "@/lib/domain/communications/followupRecommendations";
 import { findMatchingFollowupMessage } from "@/lib/domain/communications/followupMessages";
 import { markFollowupDoneAction } from "../actions/markFollowupDone";
@@ -313,7 +313,7 @@ export default async function CallSessionPage({
     : null;
 
   const daysSinceQuote = calculateDaysSince(callScriptQuoteCandidate?.created_at ?? null);
-  const followupRecommendation: NextActionSuggestion | null = deriveFollowupRecommendation({
+  const followupRecommendation: FollowupRecommendation | null = deriveFollowupRecommendation({
     outcome: latestPhoneMessage?.outcome ?? null,
     daysSinceQuote,
     modelChannelSuggestion: null,
@@ -352,14 +352,15 @@ export default async function CallSessionPage({
   const dueInfo = computeFollowupDueInfo({
     quoteCreatedAt: callScriptQuoteCandidate?.created_at ?? null,
     callCreatedAt: call.created_at,
-    recommendation: followupRecommendation,
+    invoiceDueAt: null,
+    recommendedDelayDays: followupRecommendation?.recommendedDelayDays ?? null,
   });
   const dueTextClass =
     dueInfo.dueStatus === "overdue"
       ? "text-amber-200"
       : dueInfo.dueStatus === "due-today"
       ? "text-emerald-200"
-      : dueInfo.dueStatus === "upcoming"
+      : dueInfo.dueStatus === "scheduled"
       ? "text-slate-300"
       : "text-slate-500";
 

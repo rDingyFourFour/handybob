@@ -7,6 +7,9 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
+import { markAppointmentCompleted, markAppointmentNoShow } from "./appointmentActions";
+
+type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "canceled" | "no_show";
 
 type AppointmentRecord = {
   id: string;
@@ -17,7 +20,7 @@ type AppointmentRecord = {
   location: string | null;
   start_time: string | null;
   end_time: string | null;
-  status: "scheduled" | "completed" | "cancelled" | "canceled" | null;
+  status: AppointmentStatus | null;
 };
 
 type JobQuoteSummary = {
@@ -43,14 +46,27 @@ type AppointmentDetailRow = AppointmentRecord & {
   } | null;
 };
 
-const STATUS_META: Record<
-  Extract<AppointmentRecord["status"], Exclude<AppointmentRecord["status"], null>>,
-  { label: string; className: string }
-> = {
-  scheduled: { label: "Scheduled", className: "bg-amber-500/10 text-amber-200 border border-amber-500/40" },
-  completed: { label: "Completed", className: "bg-emerald-500/10 text-emerald-200 border border-emerald-500/40" },
-  cancelled: { label: "Canceled", className: "bg-rose-500/10 text-rose-200 border border-rose-500/40" },
-  canceled: { label: "Canceled", className: "bg-rose-500/10 text-rose-200 border border-rose-500/40" },
+const STATUS_META: Record<AppointmentStatus, { label: string; className: string }> = {
+  scheduled: {
+    label: "Scheduled",
+    className: "bg-amber-500/10 text-amber-200 border border-amber-500/40",
+  },
+  completed: {
+    label: "Completed",
+    className: "bg-emerald-500/10 text-emerald-200 border border-emerald-500/40",
+  },
+  cancelled: {
+    label: "Canceled",
+    className: "bg-rose-500/10 text-rose-200 border border-rose-500/40",
+  },
+  canceled: {
+    label: "Canceled",
+    className: "bg-rose-500/10 text-rose-200 border border-rose-500/40",
+  },
+  no_show: {
+    label: "No-show",
+    className: "bg-rose-500/10 text-rose-200 border border-rose-500/40",
+  },
 };
 
 function formatDate(value: string | null) {
@@ -124,9 +140,60 @@ function resolveCustomer(
 
 function statusMeta(status: AppointmentRecord["status"]) {
   if (!status) {
-    return { label: "Scheduled", className: "bg-amber-500/10 text-amber-200 border border-amber-500/40" };
+    return STATUS_META.scheduled;
   }
-  return STATUS_META[status] ?? STATUS_META.scheduled;
+  return STATUS_META[status as AppointmentStatus] ?? STATUS_META.scheduled;
+}
+
+function formatStatusDateTime(value: string | null) {
+  if (!value) {
+    return "a time TBD";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "a time TBD";
+  }
+  const today = new Date();
+  const dayLabel =
+    parsed.getFullYear() === today.getFullYear() &&
+    parsed.getMonth() === today.getMonth() &&
+    parsed.getDate() === today.getDate()
+      ? "Today"
+      : (() => {
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          if (
+            parsed.getFullYear() === tomorrow.getFullYear() &&
+            parsed.getMonth() === tomorrow.getMonth() &&
+            parsed.getDate() === tomorrow.getDate()
+          ) {
+            return "Tomorrow";
+          }
+          return parsed.toLocaleDateString(undefined, {
+            weekday: "long",
+            month: "short",
+            day: "numeric",
+          });
+        })();
+  const timeLabel = parsed.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `${dayLabel} at ${timeLabel}`;
+}
+
+function buildStatusHelperText(status: AppointmentStatus, time: string | null) {
+  const timing = formatStatusDateTime(time);
+  if (status === "completed") {
+    return `Completed on ${timing}`;
+  }
+  if (status === "no_show") {
+    return `Marked as no-show for ${timing}`;
+  }
+  if (status === "cancelled" || status === "canceled") {
+    return `Canceled for ${timing}`;
+  }
+  return `Scheduled for ${timing}`;
 }
 
 export default async function AppointmentDetailPage(props: {
@@ -136,6 +203,13 @@ export default async function AppointmentDetailPage(props: {
   const { id } = await props.params;
   const searchParams = await props.searchParams;
   const showSuccessHint = searchParams?.created === "true";
+  const statusUpdateParam = Array.isArray(searchParams?.statusUpdated)
+    ? searchParams?.statusUpdated[0]
+    : searchParams?.statusUpdated;
+  const validStatusUpdates: AppointmentStatus[] = ["completed", "no_show", "cancelled", "canceled"];
+  const statusUpdated = validStatusUpdates.includes(statusUpdateParam as AppointmentStatus)
+    ? (statusUpdateParam as AppointmentStatus)
+    : null;
 
   if (!id || !id.trim()) {
     redirect("/appointments");
@@ -193,17 +267,17 @@ export default async function AppointmentDetailPage(props: {
           start_time,
           end_time,
           status,
-    job:jobs (
-      id,
-      title,
-      status,
-      customer_id,
-      customers (
+      job:jobs (
         id,
-        name,
-        phone
-      )
-      quotes (
+        title,
+        status,
+        customer_id,
+        customer:customers (
+          id,
+          name,
+          phone
+        ),
+        quotes (
         id,
         status,
         created_at
@@ -231,7 +305,9 @@ export default async function AppointmentDetailPage(props: {
   }
 
   const title = appointment.title ?? "Visit details";
-  const currentStatus = statusMeta(appointment.status);
+  const normalizedStatus: AppointmentStatus =
+    (appointment.status ?? "scheduled") as AppointmentStatus;
+  const currentStatus = statusMeta(normalizedStatus);
   const jobSummary = appointment.job;
   const customer = resolveCustomer(jobSummary);
   const jobHref = jobSummary?.id ? `/jobs/${jobSummary.id}` : null;
@@ -248,14 +324,13 @@ export default async function AppointmentDetailPage(props: {
     : null;
   const invoiceHelperText =
     jobSummary?.id && !invoiceHref ? "Create and accept a quote on the job to invoice this visit." : null;
-  const normalizedStatus = appointment.status ?? "scheduled";
   const startDate = appointment.start_time ? new Date(appointment.start_time) : null;
   const now = new Date();
   const diffMs = startDate ? startDate.getTime() - now.getTime() : null;
   const scheduledDateLabel = formatDate(appointment.start_time);
   const scheduledTimeLabel = formatTimeRange(appointment.start_time, appointment.end_time);
   let timingHint = "Time TBD";
-  if (startDate && typeof diffMs === "number") {
+  if (normalizedStatus === "scheduled" && startDate && typeof diffMs === "number") {
     if (diffMs > 0) {
       const diffMinutes = Math.max(1, Math.round(diffMs / (1000 * 60)));
       if (diffMinutes >= 60 * 24) {
@@ -270,8 +345,14 @@ export default async function AppointmentDetailPage(props: {
     } else {
       timingHint = `Started on ${formatDate(appointment.start_time)}`;
     }
+  } else {
+    timingHint = buildStatusHelperText(normalizedStatus, appointment.start_time);
   }
   const isPastScheduled = Boolean(startDate && typeof diffMs === "number" && diffMs < 0 && normalizedStatus === "scheduled");
+  const statusHelperText = buildStatusHelperText(normalizedStatus, appointment.start_time);
+  const canMarkCompleted = normalizedStatus !== "completed" && normalizedStatus !== "cancelled" && normalizedStatus !== "canceled";
+  const canMarkNoShow =
+    normalizedStatus !== "no_show" && normalizedStatus !== "cancelled" && normalizedStatus !== "canceled";
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -283,12 +364,25 @@ export default async function AppointmentDetailPage(props: {
           </Link>
         </div>
       )}
+      {statusUpdated && (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/40 px-4 py-3 text-sm text-slate-200">
+          {statusUpdated === "completed" && "Appointment marked as completed."}
+          {statusUpdated === "no_show" && "Appointment recorded as a no-show."}
+          {(statusUpdated === "cancelled" || statusUpdated === "canceled") && "Appointment marked as canceled."}
+          <Link href="/appointments" className="ml-2 font-semibold text-slate-100 hover:text-slate-50">
+            Back to appointments
+          </Link>
+        </div>
+      )}
       <HbCard className="space-y-6">
         <header className="flex flex-col gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Appointment details</p>
-            <h1 className="hb-heading-2 text-2xl font-semibold text-slate-50">{title}</h1>
-            <p className="text-sm text-slate-400">Visit card for the work ahead.</p>
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Appointment details</p>
+          <h1 className="hb-heading-2 text-2xl font-semibold text-slate-50">{title}</h1>
+          <p className="text-sm text-slate-400">{statusHelperText}</p>
+          <p className="text-xs text-slate-400">
+            Use this page to confirm visit details, log what happened, and mark the appointment completed so your schedule stays accurate.
+          </p>
             <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-[11px] uppercase tracking-[0.3em] text-slate-500">At a glance</span>
@@ -308,6 +402,34 @@ export default async function AppointmentDetailPage(props: {
             </div>
           </div>
         </header>
+        <section className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Update status</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <form action={markAppointmentCompleted}>
+              <input type="hidden" name="appointmentId" value={appointment.id} />
+              <HbButton
+                type="submit"
+                variant="secondary"
+                size="sm"
+                disabled={!canMarkCompleted}
+              >
+                Mark visit done
+              </HbButton>
+            </form>
+            <form action={markAppointmentNoShow}>
+              <input type="hidden" name="appointmentId" value={appointment.id} />
+              <HbButton
+                type="submit"
+                variant="ghost"
+                size="sm"
+                disabled={!canMarkNoShow}
+              >
+                Mark as no-show
+              </HbButton>
+            </form>
+          </div>
+          <p className="text-xs text-slate-400">Quickly log whether the visit landed or the customer didn’t show.</p>
+        </section>
         {isPastScheduled && (
           <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
             <p className="font-semibold text-amber-100">This appointment time has passed.</p>

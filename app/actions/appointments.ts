@@ -24,6 +24,11 @@ export async function createAppointment(formData: FormData) {
   const workspaceContext = await getCurrentWorkspace({ supabase });
   const { workspace, user } = workspaceContext;
 
+  if (!workspace?.id) {
+    console.error("[appointments/create] No workspace_id available, aborting create.");
+    throw new Error("Workspace context is missing; cannot schedule appointment.");
+  }
+
   const dateRaw = formData.get("date");
   const startRaw = formData.get("startTime");
   if (typeof dateRaw !== "string" || typeof startRaw !== "string") {
@@ -62,6 +67,12 @@ export async function createAppointment(formData: FormData) {
 
   const jobIdRaw = formData.get("jobId");
   const jobId = typeof jobIdRaw === "string" && jobIdRaw.trim() ? jobIdRaw.trim() : null;
+  if (!jobId) {
+    console.error("[appointments/create] Missing jobId; appointments must be linked to a job.");
+    throw new Error(
+      "Every appointment must be linked to a job. Start from a job or choose one before scheduling."
+    );
+  }
   let jobTitle: string | null = null;
   if (jobId) {
     const { data: jobRow } = await supabase
@@ -91,25 +102,30 @@ export async function createAppointment(formData: FormData) {
   const locationRaw = formData.get("location");
   const location = typeof locationRaw === "string" && locationRaw.trim() ? locationRaw.trim() : null;
 
+  const insertPayload = {
+    user_id: user.id,
+    workspace_id: workspace.id,
+    job_id: jobId,
+    title,
+    status: normalizedStatus,
+    notes: notes ?? "",
+    location: location ?? "",
+    start_time: startDate.toISOString(),
+    end_time: endTimeIso,
+  };
+
+  console.log("[appointments/create] Insert payload:", insertPayload);
+
   const { error, data } = await supabase
     .from("appointments")
-    .insert({
-      user_id: user.id,
-      workspace_id: workspace.id,
-      job_id: jobId,
-      title,
-      status: normalizedStatus,
-      notes,
-      location,
-      start_time: startDate.toISOString(),
-      end_time: endTimeIso,
-    })
+    .insert(insertPayload)
     .select("id")
     .maybeSingle();
 
   if (error || !data?.id) {
     console.error("[appointments/create] Failed to create appointment:", error);
-    throw new Error("Unable to schedule appointment right now.");
+    console.error("[appointments/create] Insert payload that failed:", insertPayload);
+    throw new Error(error?.message || "Unable to schedule appointment right now.");
   }
 
   revalidatePath("/appointments");

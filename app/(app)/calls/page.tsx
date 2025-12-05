@@ -13,7 +13,7 @@ import {
   isActionableFollowupDue,
   type FollowupDueInfo,
   type FollowupDueStatus,
-  type NextActionSuggestion,
+  type FollowupRecommendation,
 } from "@/lib/domain/communications/followupRecommendations";
 import {
   findMatchingFollowupMessage,
@@ -39,7 +39,7 @@ function startOfToday(date?: Date) {
 const QUEUE_GROUPS: Array<{ status: FollowupDueStatus; label: string }> = [
   { status: "overdue", label: "Overdue" },
   { status: "due-today", label: "Due today" },
-  { status: "upcoming", label: "Upcoming" },
+  { status: "scheduled", label: "Upcoming" },
 ];
 
 type CallRow = {
@@ -67,7 +67,7 @@ type QuoteCandidateSummary = {
 
 type EnrichedCallRow = CallRow & {
   quoteCreatedAt: string | null;
-  followupRecommendation: NextActionSuggestion | null;
+  followupRecommendation: FollowupRecommendation | null;
   followupDueInfo: FollowupDueInfo;
   hasMatchingFollowupToday: boolean;
   matchingFollowupMessageId: string | null;
@@ -237,7 +237,8 @@ export default async function CallsPage({
     const followupDueInfo = computeFollowupDueInfo({
       quoteCreatedAt,
       callCreatedAt: call.created_at,
-      recommendation: followupRecommendation,
+      invoiceDueAt: null,
+      recommendedDelayDays: followupRecommendation?.recommendedDelayDays ?? null,
       now,
     });
     if (process.env.NODE_ENV !== "production") {

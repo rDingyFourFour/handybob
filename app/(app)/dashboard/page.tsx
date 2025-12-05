@@ -112,7 +112,7 @@ const onboardingSteps = [
   {
     title: "Add your business details",
     description: "Personalize your workspace name, payment info, and public messaging.",
-    href: "/settings/workspace",
+    href: "/settings",
   },
   {
     title: "Add your first customer",
@@ -132,7 +132,7 @@ const onboardingSteps = [
   {
     title: "Turn on your public booking link",
     description: "Share a link so customers can request service directly.",
-    href: "/settings/workspace",
+    href: "/settings",
   },
 ];
 

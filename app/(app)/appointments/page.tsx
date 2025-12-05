@@ -24,6 +24,8 @@ const QUICK_FILTERS: Array<{ key: FilterRange; label: string }> = [
 
 const ALL_RANGE_OPTIONS: FilterRange[] = ["today", "tomorrow", "this-week", "next-7", "upcoming"];
 
+type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "canceled" | "no_show";
+
 type AppointmentRow = {
   id: string;
   workspace_id: string;
@@ -33,7 +35,7 @@ type AppointmentRow = {
   location: string | null;
   start_time: string | null;
   end_time: string | null;
-  status: string | null;
+  status: AppointmentStatus | null;
   job?: {
     id: string | null;
     title: string | null;
@@ -72,9 +74,15 @@ function formatDateLabel(value: string | null) {
   });
 }
 
-function appointmentStatusLabel(status: string | null) {
-  if (!status) {
+function appointmentStatusLabel(status: AppointmentStatus | null) {
+  if (!status || status === "scheduled") {
     return "Scheduled";
+  }
+  if (status === "completed") {
+    return "Completed";
+  }
+  if (status === "no_show") {
+    return "No-show";
   }
   if (status === "cancelled" || status === "canceled") {
     return "Canceled";
@@ -82,11 +90,11 @@ function appointmentStatusLabel(status: string | null) {
   return `${status.charAt(0).toUpperCase()}${status.slice(1)}`;
 }
 
-function appointmentStatusClass(status: string | null) {
+function appointmentStatusClass(status: AppointmentStatus | null) {
   if (status === "completed") {
     return "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   }
-  if (status === "cancelled" || status === "canceled") {
+  if (status === "cancelled" || status === "canceled" || status === "no_show") {
     return "border border-rose-500/40 bg-rose-500/10 text-rose-200";
   }
   return "border border-amber-500/40 bg-amber-500/10 text-amber-200";
@@ -392,6 +400,14 @@ export default async function AppointmentsPage({
               {todayFocusHelperText}
             </div>
           )}
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+            <p className="max-w-lg">
+              Need the full calendar view? Open your calendar for today’s schedule.
+            </p>
+            <HbButton as={Link} href="/calendar" variant="ghost" size="sm">
+              Open calendar
+            </HbButton>
+          </div>
         </div>
         <HbButton as={Link} href="/appointments/new" size="sm" variant="secondary">
           New appointment
@@ -495,10 +511,10 @@ export default async function AppointmentsPage({
             <span>Status</span>
           </div>
 
-          <div className="space-y-2">
-            {appointments.map((appt) => {
-              const jobCustomer =
-                appt.job?.customers && Array.isArray(appt.job.customers)
+            <div className="space-y-2">
+              {appointments.map((appt) => {
+                const jobCustomer =
+                  appt.job?.customers && Array.isArray(appt.job.customers)
                   ? appt.job.customers[0] ?? null
                   : (appt.job?.customers ?? null);
               const customerName = jobCustomer?.name ?? shortId(jobCustomer?.id ?? null);
@@ -517,6 +533,18 @@ export default async function AppointmentsPage({
               const inProgress =
                 startDate && startDate <= now && (!endDate || now <= endDate);
               const highlightClass = isToday || inProgress ? "border-slate-500/60 bg-slate-900/80 ring-1 ring-amber-400/30" : "";
+              const normalizedStatus: AppointmentStatus = appt.status ?? "scheduled";
+              const statusLabel = appointmentStatusLabel(normalizedStatus);
+              const statusClass = appointmentStatusClass(normalizedStatus);
+              const isPastScheduled =
+                normalizedStatus === "scheduled" && startDate && startDate < now;
+              const contextLabel = normalizedStatus === "scheduled"
+                ? isPastScheduled
+                  ? "Past scheduled"
+                  : isToday
+                  ? "Today"
+                  : "Upcoming"
+                : null;
 
               return (
                 <Link
@@ -551,10 +579,16 @@ export default async function AppointmentsPage({
                     )}
                   </div>
                   <div className="space-y-1 text-right">
-                    <p className="text-sm font-semibold text-slate-100">
-                      {appt.status ?? "scheduled"}
-                    </p>
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Status</p>
+                    <span
+                      className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.3em] font-semibold ${statusClass}`}
+                    >
+                      {statusLabel}
+                    </span>
+                    {contextLabel && (
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                        {contextLabel}
+                      </p>
+                    )}
                   </div>
                 </Link>
               );

@@ -269,7 +269,9 @@ export default async function InvoicesPage({
     });
     const followupDueInfo = computeFollowupDueInfo({
       quoteCreatedAt: followupBaseDate,
-      recommendation: followupRecommendation,
+      callCreatedAt: null,
+      invoiceDueAt: invoice.due_at ?? null,
+      recommendedDelayDays: followupRecommendation.recommendedDelayDays,
       now,
     });
     if (process.env.NODE_ENV !== "production") {

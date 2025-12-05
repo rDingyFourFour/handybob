@@ -1,98 +1,141 @@
 export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
-import { createServerClient } from "@/utils/supabase/server";
 import HbCard from "@/components/ui/hb-card";
-import HbButton from "@/components/ui/hb-button";
+import { createServerClient } from "@/utils/supabase/server";
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "—";
-  return parsed.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+async function saveOwnerProfile(formData: FormData) {
+  "use server";
+
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const displayName = (formData.get("display_name") as string | null)?.trim() || null;
+  const contactEmail = (formData.get("contact_email") as string | null)?.trim() || null;
+  const contactPhone = (formData.get("contact_phone") as string | null)?.trim() || null;
+
+  const metadataUpdate: Record<string, string | null> = {
+    full_name: displayName,
+    name: displayName,
+    contact_email: contactEmail,
+    contact_phone: contactPhone,
+  };
+
+  const { error } = await supabase.auth.updateUser({
+    data: metadataUpdate,
   });
-}
 
-function fallbackCard(title: string, body: string) {
-  return (
-    <div className="hb-shell pt-20 pb-8">
-      <HbCard className="space-y-3">
-        <h1 className="hb-heading-1 text-2xl font-semibold">{title}</h1>
-        <p className="hb-muted text-sm">{body}</p>
-        <HbButton as="a" href="/dashboard" size="sm">
-          Back to dashboard
-        </HbButton>
-      </HbCard>
-    </div>
-  );
+  if (error) {
+    console.error("[profile-settings] Failed to save profile metadata", error);
+    throw error;
+  }
+
+  revalidatePath("/settings/profile");
 }
 
 export default async function ProfileSettingsPage() {
-  let supabase;
-  try {
-    supabase = await createServerClient();
-  } catch (error) {
-    console.error("[settings/profile] Failed to init Supabase client:", error);
-    return fallbackCard(
-      "Something went wrong",
-      "We couldn’t load this page. Try again or go back."
-    );
-  }
-
+  const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
     redirect("/");
-    return null;
   }
 
-  const fullName =
-    (user.user_metadata as { full_name?: string; name?: string } | undefined)?.full_name ??
-    (user.user_metadata as { full_name?: string; name?: string } | undefined)?.name ??
-    null;
+  const metadata = (user.user_metadata as
+    | {
+        full_name?: string | null;
+        name?: string | null;
+        contact_email?: string | null;
+        contact_phone?: string | null;
+      }
+    | undefined) ?? {};
 
-  const createdLabel = formatDate(user.created_at);
+  const initialDisplayName = metadata.full_name ?? metadata.name ?? "";
+  const initialContactEmail = metadata.contact_email ?? user.email ?? "";
+  const initialContactPhone = metadata.contact_phone ?? user.phone ?? "";
 
   return (
-    <div className="hb-shell pt-20 pb-8 space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="hb-heading-2 text-2xl font-semibold text-slate-100">Profile</h1>
-          <p className="text-sm text-slate-400">Your account details for this workspace.</p>
+    <div className="hb-shell pt-20 pb-8">
+      <div className="mx-auto max-w-3xl space-y-6">
+        <div className="space-y-2">
+          <h1 className="hb-heading-2 text-2xl font-semibold text-slate-100">Owner profile</h1>
+          <p className="text-sm text-slate-400">
+            Control how customers see your responses and messages.
+          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <HbButton as="a" href="/dashboard" size="sm">
-            Back to dashboard
-          </HbButton>
-          <HbButton as="a" href="/settings/workspace" variant="ghost" size="sm">
-            Back to settings
-          </HbButton>
-        </div>
+
+        <HbCard className="space-y-4">
+          <p className="text-sm text-slate-300">
+            We’ll use these details in call summaries and follow-up drafts so the tone and contact info feel human.
+          </p>
+          <form action={saveOwnerProfile} className="space-y-4">
+            <div>
+              <label className="hb-label" htmlFor="display_name">
+                Display name
+              </label>
+              <input
+                id="display_name"
+                name="display_name"
+                className="hb-input"
+                defaultValue={initialDisplayName}
+                placeholder="Your name as customers see it"
+              />
+              <p className="text-xs text-slate-500">
+                Used in call summaries, follow-up drafts, and message signatures.
+              </p>
+            </div>
+
+            <div>
+              <label className="hb-label" htmlFor="contact_email">
+                Contact email
+              </label>
+              <input
+                id="contact_email"
+                name="contact_email"
+                type="email"
+                className="hb-input"
+                defaultValue={initialContactEmail}
+                placeholder="reply@yourbusiness.com"
+              />
+              <p className="text-xs text-slate-500">
+                We’ll use this address as a reply-to or signature mention in follow-ups and emails.
+              </p>
+            </div>
+
+            <div>
+              <label className="hb-label" htmlFor="contact_phone">
+                Phone number (optional)
+              </label>
+              <input
+                id="contact_phone"
+                name="contact_phone"
+                className="hb-input"
+                defaultValue={initialContactPhone}
+                placeholder="+1 (555) 123-4567"
+              />
+              <p className="text-xs text-slate-500">
+                Optional—add a number to mention in call summaries or outbound follow-ups.
+              </p>
+            </div>
+
+            <div className="flex justify-end">
+              <button className="hb-button" type="submit">
+                Save profile
+              </button>
+            </div>
+          </form>
+        </HbCard>
       </div>
-      <HbCard className="space-y-4">
-        <div className="space-y-1 text-sm text-slate-300">
-          <p>
-            <span className="font-semibold text-slate-100">Email:</span> {user.email ?? "—"}
-          </p>
-          <p>
-            <span className="font-semibold text-slate-100">User ID:</span> {user.id}
-          </p>
-          <p>
-            <span className="font-semibold text-slate-100">Name:</span> {fullName ?? "—"}
-          </p>
-          <p>
-            <span className="font-semibold text-slate-100">Joined:</span> {createdLabel}
-          </p>
-        </div>
-      </HbCard>
     </div>
   );
 }

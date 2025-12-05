@@ -180,11 +180,11 @@ export default async function MessageDetailPage({
       console.error("[messages/[id]] Quote lookup failed", error);
     }
   }
-  const followupRecommendation = null;
   const followupDueInfo: FollowupDueInfo = computeFollowupDueInfo({
     quoteCreatedAt,
     callCreatedAt: latestCall?.created_at ?? null,
-    recommendation: followupRecommendation,
+    invoiceDueAt: null,
+    recommendedDelayDays: null,
   });
   console.log("[message-followup-status]", {
     messageId: message.id,

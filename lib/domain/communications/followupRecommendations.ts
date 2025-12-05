@@ -1,4 +1,15 @@
-import type { FollowupRecommendation } from "./followups";
+type FollowupChannel = "sms" | "email" | "call" | null;
+
+export type FollowupRecommendation = {
+  recommendedChannel: FollowupChannel;
+  primaryActionLabel: string;
+  secondaryActionLabel: string | null;
+  rationale: string;
+  recommendedDelayDays: number | null;
+  recommendedTimingLabel: string;
+  shouldSkipFollowup: boolean;
+  recommendedDelayLabel: string | null;
+};
 
 type DeriveFollowupRecommendationArgs = {
   outcome: string | null;
@@ -212,7 +223,7 @@ export function deriveFollowupRecommendation({
   outcome,
   daysSinceQuote,
   modelChannelSuggestion,
-}: DeriveFollowupRecommendationArgs): NextActionSuggestion | null {
+}: DeriveFollowupRecommendationArgs): FollowupRecommendation | null {
   if (!outcome && daysSinceQuote === null && !modelChannelSuggestion) {
     return null;
   }
@@ -237,9 +248,10 @@ export function deriveFollowupRecommendation({
     return "Send follow-up message";
   };
   const primaryActionLabel = formatPrimaryLabel(core.recommendedChannel);
-  const secondaryActionLabel = core.recommendedTimingLabel
-    ? `Timing suggestion: ${core.recommendedTimingLabel}`
-    : undefined;
+  const secondaryActionLabel =
+    core.shouldSkipFollowup || !core.recommendedTimingLabel
+      ? null
+      : `Timing suggestion: ${core.recommendedTimingLabel}`;
   const rationale = core.reason ?? "Follow up to keep things moving.";
   return {
     primaryActionLabel,
@@ -249,6 +261,7 @@ export function deriveFollowupRecommendation({
     recommendedDelayDays: core.recommendedDelayDays,
     recommendedTimingLabel: core.recommendedTimingLabel,
     shouldSkipFollowup: core.shouldSkipFollowup,
+    recommendedDelayLabel: core.recommendedDelayLabel,
   };
 }
 
@@ -344,10 +357,11 @@ export function deriveInvoiceFollowupRecommendation({
   return recommendation;
 }
 
-export type FollowupDueStatus = "none" | "due-today" | "upcoming" | "overdue";
+export type FollowupDueStatus = "none" | "due-today" | "scheduled" | "overdue";
 
 export type FollowupDueInfo = {
-  dueDateISO: string | null;
+  baseDate: string | null;
+  dueDate: string | null;
   dueStatus: FollowupDueStatus;
   dueLabel: string;
   recommendedDelayDays: number | null;
@@ -365,124 +379,85 @@ function parseDate(value: ParseDateInput): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-type FollowupBaseDateArgs = {
-  quoteCreatedAt?: string | null;
-  callCreatedAt?: string | null;
-  now: Date;
-};
-
-export function getFollowupBaseDate({
-  quoteCreatedAt,
-  callCreatedAt,
-  now,
-}: FollowupBaseDateArgs): Date {
-  const quoteDate = parseDate(quoteCreatedAt);
-  if (quoteDate) {
-    return quoteDate;
-  }
-  const callDate = parseDate(callCreatedAt);
-  if (callDate) {
-    return callDate;
-  }
-  return now;
-}
-
 type ComputeFollowupDueInfoArgs = {
   quoteCreatedAt?: string | null;
   callCreatedAt?: string | null;
-  recommendation: NextActionSuggestion | null;
+  invoiceDueAt?: string | null;
+  recommendedDelayDays?: number | null;
   now?: Date;
 };
 
 export function computeFollowupDueInfo({
   quoteCreatedAt,
   callCreatedAt,
-  recommendation,
-  now = new Date(),
+  invoiceDueAt,
+  recommendedDelayDays,
+  now,
 }: ComputeFollowupDueInfoArgs): FollowupDueInfo {
-  const effectiveNow = now;
-  const normalizedCallDate = parseDate(callCreatedAt);
-  const hasValidCallDate = normalizedCallDate !== null;
-  // TODO: once calls expose a follow_up_state column (e.g. none/due/done/snoozed), this module
-  // should accept that state so callers can short-circuit “no follow-up due” for done/snoozed calls
-  // without relying solely on dueStatus calculations.
-  if (!recommendation || recommendation.recommendedDelayDays == null) {
-    const info: FollowupDueInfo = {
-      dueDateISO: hasValidCallDate ? normalizedCallDate!.toISOString() : null,
-      dueStatus: "none",
-      dueLabel: "No follow-up due",
-      recommendedDelayDays: recommendation?.recommendedDelayDays ?? null,
-    };
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[followup-due-info]", {
-        quoteCreatedAt,
-        callCreatedAt,
-        recommendedDelayDays: info.recommendedDelayDays,
-        dueStatus: info.dueStatus,
-        dueLabel: info.dueLabel,
-      });
+  const effectiveNow = now ? new Date(now.getTime()) : new Date();
+  const normalizedDelay =
+    typeof recommendedDelayDays === "number" && Number.isFinite(recommendedDelayDays)
+      ? recommendedDelayDays
+      : null;
+  const parsedQuoteDate = parseDate(quoteCreatedAt);
+  const parsedCallDate = parseDate(callCreatedAt);
+  const parsedInvoiceDueDate = parseDate(invoiceDueAt);
+
+  const baseDateCandidate =
+    parsedInvoiceDueDate ?? parsedQuoteDate ?? parsedCallDate ?? effectiveNow;
+  const baseDate = baseDateCandidate ? new Date(baseDateCandidate.getTime()) : null;
+  const baseDateIso = baseDate ? baseDate.toISOString() : null;
+
+  let dueDate: Date | null = null;
+  if (normalizedDelay !== null && baseDate) {
+    dueDate = new Date(baseDate.getTime() + normalizedDelay * ONE_DAY_MS);
+    if (Number.isNaN(dueDate.getTime())) {
+      dueDate = null;
     }
-    return info;
   }
 
-  const baseDate = getFollowupBaseDate({
-    quoteCreatedAt,
-    callCreatedAt,
-    now: effectiveNow,
-  });
-
-  const dueDate = new Date(baseDate.getTime() + recommendation.recommendedDelayDays * ONE_DAY_MS);
-  if (Number.isNaN(dueDate.getTime())) {
-    const info: FollowupDueInfo = {
-      dueDateISO: null,
-      dueStatus: "none",
-      dueLabel: "No follow-up due",
-      recommendedDelayDays: recommendation.recommendedDelayDays,
-    };
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[followup-due-info]", {
-        quoteCreatedAt,
-        callCreatedAt,
-        recommendedDelayDays: info.recommendedDelayDays,
-        dueStatus: info.dueStatus,
-        dueLabel: info.dueLabel,
-      });
-    }
-    return info;
-  }
-
-  const diffMs = Math.floor((dueDate.getTime() - effectiveNow.getTime()) / ONE_DAY_MS);
   let dueStatus: FollowupDueStatus;
   let dueLabel: string;
-  if (diffMs < 0) {
-    dueStatus = "overdue";
-    dueLabel = "Overdue";
-  } else if (diffMs === 0) {
-    dueStatus = "due-today";
-    dueLabel = "Due today";
-  } else if (diffMs === 1) {
-    dueStatus = "upcoming";
-    dueLabel = "Due tomorrow";
+
+  if (normalizedDelay === null || !dueDate) {
+    dueStatus = "none";
+    dueLabel = "No follow-up due";
   } else {
-    dueStatus = "upcoming";
-    dueLabel = `Due in ${diffMs} days`;
+    const diffMs = Math.floor((dueDate.getTime() - effectiveNow.getTime()) / ONE_DAY_MS);
+    if (diffMs < 0) {
+      dueStatus = "overdue";
+      dueLabel = "Overdue";
+    } else if (diffMs === 0) {
+      dueStatus = "due-today";
+      dueLabel = "Due today";
+    } else if (diffMs === 1) {
+      dueStatus = "scheduled";
+      dueLabel = "Due tomorrow";
+    } else {
+      dueStatus = "scheduled";
+      dueLabel = `Due in ${diffMs} days`;
+    }
   }
 
   const info: FollowupDueInfo = {
-    dueDateISO: dueDate.toISOString(),
+    baseDate: baseDateIso,
+    dueDate: dueDate ? dueDate.toISOString() : null,
     dueStatus,
     dueLabel,
-    recommendedDelayDays: recommendation.recommendedDelayDays,
+    recommendedDelayDays: normalizedDelay,
   };
+
   if (process.env.NODE_ENV !== "production") {
     console.log("[followup-due-info]", {
       quoteCreatedAt,
       callCreatedAt,
+      invoiceDueAt,
       recommendedDelayDays: info.recommendedDelayDays,
       dueStatus: info.dueStatus,
       dueLabel: info.dueLabel,
     });
   }
+
   return info;
 }
 

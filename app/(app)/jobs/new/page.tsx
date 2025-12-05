@@ -76,7 +76,16 @@ async function createJobAction(formData: FormData) {
   redirect("/jobs");
 }
 
-export default async function NewJobPage() {
+export default async function NewJobPage({
+  searchParams: searchParamsPromise,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const searchParams = await searchParamsPromise;
+  const rawCustomerId = searchParams?.customerId;
+  const requestedCustomerId = Array.isArray(rawCustomerId) ? rawCustomerId[0] : rawCustomerId ?? null;
+  const customerIdFromQuery = requestedCustomerId?.trim() ? requestedCustomerId.trim() : null;
+
   let supabase;
   try {
     supabase = await createServerClient();
@@ -119,6 +128,25 @@ export default async function NewJobPage() {
     .order("name");
   const customers = (customersData ?? []) as { id: string; name: string | null }[];
 
+  let customerFromQuery: { id: string; name: string | null } | null = null;
+  if (customerIdFromQuery) {
+    try {
+      const { data: customerRow, error: customerError } = await supabase
+        .from("customers")
+        .select("id, name")
+        .eq("workspace_id", workspace.id)
+        .eq("id", customerIdFromQuery)
+        .maybeSingle();
+      if (customerError) {
+        console.error("[jobs/new] Failed to load customer from query", customerError);
+      } else {
+        customerFromQuery = customerRow ?? null;
+      }
+    } catch (error) {
+      console.error("[jobs/new] Customer lookup failed", error);
+    }
+  }
+
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
       <header className="space-y-2">
@@ -127,11 +155,17 @@ export default async function NewJobPage() {
         <p className="hb-muted text-sm">
           Start by capturing a lead or active job. You can send quotes and schedule work from here later.
         </p>
+        {customerFromQuery && (
+          <p className="text-sm text-slate-400">
+            You’re creating a job for {customerFromQuery.name ?? customerFromQuery.id}.
+          </p>
+        )}
       </header>
       <JobFormShell
         customers={customers}
         createJobAction={createJobAction}
         workspaceId={workspace.id}
+        selectedCustomer={customerFromQuery}
       />
     </div>
   );

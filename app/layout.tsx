@@ -52,9 +52,7 @@ export default async function RootLayout({
     { label: "Appointments", href: "/appointments" },
     { label: "Calls", href: "/calls" },
     { label: "Messages", href: "/messages" },
-    { label: "Calendar", href: "/calendar" },
-    { label: "Settings", href: "/settings/workspace" },
-    { label: "Profile", href: "/settings/profile" },
+    { label: "Settings", href: "/settings" },
   ];
 
   // Derived from Supabase auth (user resolved via supabase.auth.getUser); true whenever we have a signed-in user/session.

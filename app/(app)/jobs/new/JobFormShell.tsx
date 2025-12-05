@@ -19,6 +19,7 @@ type JobFormShellProps = {
   createJobAction: CreateJobAction;
   customers: JobCustomer[];
   workspaceId: string;
+  selectedCustomer?: JobCustomer | null;
 };
 
 type AiStatus = "idle" | "loading" | "disabled" | "error" | "applied";
@@ -31,7 +32,12 @@ const aiBaseHints: Record<AiStatus, string> = {
   applied: "Smart Job Intake applied. Review and edit the fields below.",
 };
 
-export default function JobFormShell({ createJobAction, customers, workspaceId }: JobFormShellProps) {
+export default function JobFormShell({
+  createJobAction,
+  customers,
+  workspaceId,
+  selectedCustomer,
+}: JobFormShellProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState("lead");
@@ -228,7 +234,7 @@ export default function JobFormShell({ createJobAction, customers, workspaceId }
               name="customerId"
               required
               className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm"
-              defaultValue=""
+              defaultValue={selectedCustomer?.id ?? ""}
             >
               <option value="" disabled>
                 Select a customer…
@@ -239,6 +245,11 @@ export default function JobFormShell({ createJobAction, customers, workspaceId }
                 </option>
               ))}
             </select>
+            {selectedCustomer && (
+              <p className="text-[11px] text-slate-400">
+                You’re creating a job for {selectedCustomer.name ?? "this customer"}.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

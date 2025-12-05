@@ -366,7 +366,8 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
   const followupDueInfo: FollowupDueInfo = computeFollowupDueInfo({
     quoteCreatedAt,
     callCreatedAt: latestCall?.created_at ?? null,
-    recommendation: null,
+    invoiceDueAt: null,
+    recommendedDelayDays: null,
   });
   console.log("[job-followup-status]", {
     jobId: job.id,
@@ -378,13 +379,13 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
   const followupStatusLabels: Record<FollowupDueStatus, string> = {
     overdue: "Overdue",
     "due-today": "Due today",
-    upcoming: "Upcoming",
+    scheduled: "Upcoming",
     none: "Done",
   };
   const followupStatusClasses: Record<FollowupDueStatus, string> = {
     overdue: "border border-amber-200 text-amber-200 bg-amber-200/10",
     "due-today": "border border-emerald-200 text-emerald-200 bg-emerald-200/10",
-    upcoming: "border border-slate-600 text-slate-200 bg-slate-900/80",
+    scheduled: "border border-slate-600 text-slate-200 bg-slate-900/80",
     none: "border border-slate-700 text-slate-400 bg-slate-950/40",
   };
   const followupStatusChipLabel = latestCall

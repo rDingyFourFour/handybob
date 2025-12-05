@@ -1,5 +1,6 @@
 "use server";
 
+import type { FollowupRecommendation } from "./followupRecommendations";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SmartFollowupActionResponse } from "@/app/(app)/quotes/[id]/followupAiActions";
 
@@ -50,11 +51,7 @@ export async function smartFollowupFromCallSummary({
   return response;
 }
 
-export type FollowupRecommendation = {
-  recommendedChannel: "sms" | "email" | "call" | null;
-  recommendedDelayLabel: string | null;
-  reason: string | null;
-};
+export type { FollowupRecommendation };
 
 type DeriveFollowupRecommendationArgs = {
   outcome: string | null;

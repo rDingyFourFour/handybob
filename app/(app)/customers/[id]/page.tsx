@@ -370,6 +370,9 @@ export default async function CustomerDetailPage(props: {
             {sinceLabel && (
               <p className="text-xs text-slate-400">Customer since {sinceLabel}</p>
             )}
+            <p className="text-xs text-slate-400">
+              Create a job to track work, schedule visits, and send quotes for this customer.
+            </p>
             <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">
               <span className="text-[11px] uppercase tracking-[0.3em] text-slate-500">At a glance</span>
               <div className="flex flex-wrap gap-2">
@@ -448,22 +451,31 @@ export default async function CustomerDetailPage(props: {
                 <span className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
                   Quick actions
                 </span>
-                <div className="flex flex-wrap gap-2">
-                  {quickActions.map((action) => (
-                    <HbButton
-                      key={action.label}
-                      as={Link}
-                      href={action.href}
-                      variant="ghost"
-                      size="sm"
-                      className="whitespace-nowrap"
-                    >
-                      {action.label}
-                    </HbButton>
-                  ))}
-                </div>
+              <div className="flex flex-wrap gap-2">
+                {quickActions.map((action) => (
+                  <HbButton
+                    key={action.label}
+                    as={Link}
+                    href={action.href}
+                    variant="ghost"
+                    size="sm"
+                    className="whitespace-nowrap"
+                  >
+                    {action.label}
+                  </HbButton>
+                ))}
+                <HbButton
+                  as={Link}
+                  href={`/jobs/new?customerId=${customer.id}`}
+                  variant="ghost"
+                  size="sm"
+                  className="whitespace-nowrap"
+                >
+                  Create job for this customer
+                </HbButton>
               </div>
-            )}
+            </div>
+          )}
           </div>
           <div className="flex gap-2">
             <HbButton as="a" href="/customers" variant="ghost" size="sm">

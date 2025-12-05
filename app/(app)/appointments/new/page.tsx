@@ -76,17 +76,18 @@ export default async function AppointmentsNewPage({
 
   const rawJobId = searchParams?.jobId;
   const requestedJobId = Array.isArray(rawJobId) ? rawJobId[0] : rawJobId ?? null;
-  const jobId = requestedJobId?.trim() ? requestedJobId.trim() : null;
+  const jobIdFromQuery = requestedJobId?.trim() ? requestedJobId.trim() : null;
+  const hasJobContext = Boolean(jobIdFromQuery);
   let job: JobSummary | null = null;
   let jobLookupError = false;
 
-  if (jobId) {
+  if (jobIdFromQuery) {
     try {
       const { data, error } = await supabase
         .from<JobSummary>("jobs")
         .select("id, title, status, customer_id, customers(id, name, phone)")
         .eq("workspace_id", workspace.id)
-        .eq("id", jobId)
+        .eq("id", jobIdFromQuery)
         .maybeSingle();
       if (error) {
         console.error("[appointments/new] Failed to load job", error);
@@ -106,7 +107,9 @@ export default async function AppointmentsNewPage({
 
   const headerSubtitle = job
     ? "Scheduling for this job gives your crew and customers clarity about when to show up."
-    : "Create a visit to document when your team will be on site.";
+    : hasJobContext
+    ? "We couldn’t load the job you referenced—create or open the job first."
+    : "Appointments must be linked to a job. Start from a job and use the schedule shortcut.";
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -137,14 +140,31 @@ export default async function AppointmentsNewPage({
           </div>
         ) : jobLookupError ? (
           <p className="text-sm text-rose-300">Unable to preload the requested job at the moment.</p>
-        ) : jobId ? (
-          <p className="text-sm text-slate-400">Job {shortId(jobId)} (no job found). Fill in the visit details below.</p>
+        ) : jobIdFromQuery ? (
+          <p className="text-sm text-slate-400">
+            Job {shortId(jobIdFromQuery)} (no job found). Fill in the visit details below.
+          </p>
         ) : null}
       </header>
 
       <HbCard className="space-y-5">
-        <form action={createAppointment} className="space-y-5">
-          {jobId && <input type="hidden" name="jobId" value={jobId} />}
+        {!hasJobContext ? (
+          <div className="space-y-3 text-sm text-slate-100">
+            <p className="text-lg font-semibold text-slate-50">Job context required</p>
+            <p>
+              Appointments must be linked to a job so they stay connected to the work order and its customer.
+            </p>
+            <p>
+              Go to a job detail and use “Schedule appointment” or “New appointment for this job” to open this page with
+              the right context.
+            </p>
+            <HbButton as={Link} href="/jobs" size="sm" variant="secondary">
+              Open jobs
+            </HbButton>
+          </div>
+        ) : (
+          <form action={createAppointment} className="space-y-5">
+            <input type="hidden" name="jobId" value={jobIdFromQuery} />
 
           <div className="space-y-2">
             <label htmlFor="title" className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-500">
@@ -272,7 +292,8 @@ export default async function AppointmentsNewPage({
               </HbButton>
             )}
           </div>
-        </form>
+          </form>
+        )}
       </HbCard>
     </div>
   );
