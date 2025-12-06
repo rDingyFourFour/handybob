@@ -60,6 +60,16 @@ const STATUS_FILTERS: Array<{ key: StatusFilterKey; label: string }> = [
   { key: "overdue", label: "Overdue" },
 ];
 
+const ONE_DAY_MS = 1000 * 60 * 60 * 24;
+const BOOLEAN_TRUE_VALUES = new Set(["1", "true"]);
+function parseBooleanFlag(raw?: string | string[] | undefined) {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) {
+    return false;
+  }
+  return BOOLEAN_TRUE_VALUES.has(value.toLowerCase());
+}
+
 function buildStatusHref(filter: StatusFilterKey) {
   const params = new URLSearchParams();
   if (filter !== "all") {
@@ -134,9 +144,14 @@ export default async function InvoicesPage({
 
   const statusFilterKey = resolveStatusFilter(searchParams?.status);
   const followupsFilter = getSearchParamValue(searchParams?.followups);
+  const agingParam = getSearchParamValue(searchParams?.aging);
+  const agingFilterEnabled = parseBooleanFlag(agingParam);
   const followupsQueueActive = followupsFilter === "queue";
   const followupsQueueHref = buildFollowupsHref("queue", statusFilterKey);
   const followupsAllHref = buildFollowupsHref("all", statusFilterKey);
+  const agingActiveHref = buildStatusHref("unpaid");
+  const agingInactiveHref = "/invoices?status=unpaid&aging=1";
+  const agingChipHref = agingFilterEnabled ? agingActiveHref : agingInactiveHref;
 
   let invoices: InvoiceRow[] = [];
   let invoicesError: unknown = null;
@@ -306,7 +321,22 @@ export default async function InvoicesPage({
     return !isPaidOrVoidedStatus(row.statusKey) && overdueStatus;
   });
 
-  const invoicesToDisplay = followupsQueueActive ? collectionsQueueInvoices : enrichedInvoices;
+  const agingCutoffMs = 14 * ONE_DAY_MS;
+  const isUnpaidInvoiceRow = (row: EnrichedInvoiceRow) =>
+    !isPaidOrVoidedStatus(row.statusKey);
+  let invoicesToDisplay = followupsQueueActive ? collectionsQueueInvoices : enrichedInvoices;
+  if (agingFilterEnabled) {
+    invoicesToDisplay = invoicesToDisplay.filter((row) => {
+      if (!isUnpaidInvoiceRow(row)) {
+        return false;
+      }
+      const createdAt = row.invoice.created_at ? new Date(row.invoice.created_at) : null;
+      if (!createdAt || Number.isNaN(createdAt.getTime())) {
+        return false;
+      }
+      return now.getTime() - createdAt.getTime() > agingCutoffMs;
+    });
+  }
   const visibleCountLabel =
     invoicesToDisplay.length === 1 ? "invoice" : "invoices";
   const totalCount = enrichedInvoices.length;
@@ -314,10 +344,11 @@ export default async function InvoicesPage({
   const unpaidCount = unpaidInvoiceRows.length;
   const overdueCount = enrichedInvoices.filter((row) => row.statusKey === "overdue").length;
   const hasInvoices = totalCount > 0;
+  const agingFilterEmptyState =
+    agingFilterEnabled && invoicesToDisplay.length === 0 && unpaidCount > 0;
   const resetFiltersHref = buildFollowupsHref("all", "all");
   if (statusFilterKey === "unpaid") {
     console.log("[invoices-dashboard-source]", {
-      workspaceId: workspace.id,
       statusFilter: statusFilterKey,
       unpaidCount,
       unpaidIds: unpaidInvoiceRows.slice(0, 5).map((row) => row.invoice.id),
@@ -381,6 +412,18 @@ export default async function InvoicesPage({
         >
           Follow-up queue
         </Link>
+        {statusFilterKey === "unpaid" && (
+          <Link
+            href={agingChipHref}
+            className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] transition ${
+              agingFilterEnabled
+                ? "bg-slate-50 text-slate-950 shadow-sm shadow-slate-900/40"
+                : "text-slate-400 hover:text-slate-100"
+            }`}
+          >
+            Aging
+          </Link>
+        )}
       </div>
       {followupsQueueActive && (
         <p className="text-sm font-semibold text-emerald-200">
@@ -394,7 +437,19 @@ export default async function InvoicesPage({
           <p className="hb-muted text-sm">We couldn’t load this page. Try again or go back.</p>
         </HbCard>
       ) : invoicesToDisplay.length === 0 ? (
-        followupsQueueActive ? (
+        agingFilterEmptyState ? (
+          <HbCard className="space-y-3">
+            <h2 className="hb-card-heading text-lg font-semibold">No aging unpaid invoices</h2>
+            <p className="hb-muted text-sm">
+              No unpaid invoices are older than 14 days. Try clearing the “Aging” filter to see all unpaid invoices.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <HbButton as={Link} href={buildStatusHref("unpaid")}>
+                Show unpaid invoices
+              </HbButton>
+            </div>
+          </HbCard>
+        ) : followupsQueueActive ? (
           <HbCard className="space-y-3">
             <h2 className="hb-card-heading text-lg font-semibold">Collections queue is empty</h2>
             <p className="hb-muted text-sm">

@@ -203,6 +203,9 @@ export default async function AppointmentsPage({
     ? (requestedRange as FilterRange)
     : "today";
   const showPast = searchParams?.showPast === "1";
+  const rawHistory = searchParams?.history;
+  const historyFilter = Array.isArray(rawHistory) ? rawHistory[0] : rawHistory;
+  const attentionHistoryActive = historyFilter?.toLowerCase() === "attention";
 
   const todayStart = startOfToday();
   let rangeStart = todayStart;
@@ -224,6 +227,7 @@ export default async function AppointmentsPage({
   }
   const rangeStartIso = rangeStart.toISOString();
   const rangeEndIso = rangeEnd ? rangeEnd.toISOString() : null;
+  const shouldLoadPast = showPast || attentionHistoryActive;
 
   let appointments: AppointmentRow[] = [];
   let appointmentsError: unknown = null;
@@ -277,7 +281,7 @@ export default async function AppointmentsPage({
   let pastAppointments: AppointmentRow[] = [];
   let pastAppointmentsError: unknown = null;
 
-  if (showPast) {
+  if (shouldLoadPast) {
     try {
       const { data, error } = await supabase
         .from("appointments")
@@ -382,7 +386,23 @@ export default async function AppointmentsPage({
       : totalUpcoming > 0 && nextVisitLabel
       ? `No appointments scheduled today. Next visit is on ${nextVisitLabel}.`
       : null;
-  const appointmentsToRender = activeRange === "today" ? todayAppointments : appointments;
+  const attentionCandidates = [...appointments, ...pastAppointments];
+  const attentionAppointments = attentionCandidates.filter((appointment) => {
+    const normalizedStatus = normalizeAppointmentStatus(appointment.status) ?? "scheduled";
+    if (normalizedStatus !== "scheduled") {
+      return false;
+    }
+    const endTime = appointment.end_time ? new Date(appointment.end_time) : null;
+    if (!endTime || Number.isNaN(endTime.getTime())) {
+      return false;
+    }
+    return endTime.getTime() < now.getTime();
+  });
+  const appointmentsToRender = attentionHistoryActive
+    ? attentionAppointments
+    : activeRange === "today"
+    ? todayAppointments
+    : appointments;
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -425,6 +445,11 @@ export default async function AppointmentsPage({
           New appointment
         </HbButton>
       </header>
+      {attentionHistoryActive && (
+        <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 px-3 py-2 text-sm text-slate-300">
+          Showing scheduled visits in the past that may need cleanup.
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         {QUICK_FILTERS.map((option) => {
@@ -476,6 +501,18 @@ export default async function AppointmentsPage({
         <HbCard className="space-y-3">
           <h2 className="hb-card-heading text-lg font-semibold">Something went wrong</h2>
           <p className="hb-muted text-sm">We couldn’t load this page. Try refreshing or come back later.</p>
+        </HbCard>
+      ) : attentionHistoryActive && appointmentsToRender.length === 0 ? (
+        <HbCard className="space-y-3">
+          <h2 className="hb-card-heading text-lg font-semibold">No missed appointments right now</h2>
+          <p className="hb-muted text-sm">
+            No scheduled visits look missed right now. Try clearing this filter to see all appointments.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <HbButton as={Link} href="/appointments" variant="ghost" size="sm">
+              Clear attention filter
+            </HbButton>
+          </div>
         </HbCard>
       ) : appointments.length === 0 ? (
         isDefaultUpcomingView ? (

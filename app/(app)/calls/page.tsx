@@ -26,6 +26,15 @@ const QUEUE_GROUPS: Array<{ status: FollowupDueStatus; label: string }> = [
   { status: "scheduled", label: "Upcoming" },
 ];
 
+const BOOLEAN_TRUE_VALUES = new Set(["1", "true", "yes"]);
+function parseBooleanFlag(raw?: string | string[] | undefined) {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) {
+    return false;
+  }
+  return BOOLEAN_TRUE_VALUES.has(value.toLowerCase());
+}
+
 type FilteredJobSummary = {
   id: string;
   title: string | null;
@@ -73,6 +82,8 @@ export default async function CallsPage({
     : rawFollowups ?? null;
   const followupsMode = followupsModeValue === "queue" ? "queue" : "all";
   let filteredJob: FilteredJobSummary | null = null;
+  const rawNeedsOutcome = searchParams?.needsOutcome;
+  const needsOutcomeFilterEnabled = parseBooleanFlag(rawNeedsOutcome);
 
   if (jobIdFilter) {
     const { data: jobRow, error: jobError } = await supabase
@@ -95,6 +106,8 @@ export default async function CallsPage({
     calls: rawCalls,
     allEnrichedCalls: callsWithFollowups,
     queueCalls: followupQueueCalls,
+    queueCount,
+    queueIds,
   } = await loadFollowupQueueData({
     supabase,
     workspaceId: workspace.id,
@@ -117,11 +130,20 @@ export default async function CallsPage({
     : summaryModeActive
     ? summaryFilteredCalls
     : callsWithFollowups;
+  const callsAfterOutcomeFilter = needsOutcomeFilterEnabled
+    ? activeCalls.filter((call) => {
+        const normalized = call.outcome?.trim();
+        return !normalized;
+      })
+    : activeCalls;
+  const callsToRender = callsAfterOutcomeFilter;
+  const needsOutcomeFilterExhausted =
+    needsOutcomeFilterEnabled && activeCalls.length > 0 && callsToRender.length === 0;
   console.log("[calls-followups-queue-debug]", {
     sourceTotal: callsWithFollowups.length,
-    queueCount: followupQueueCalls.length,
+    queueCount,
     dueTodayQueueCount: queueDueTodayCalls.length,
-    queueIds: followupQueueCalls.slice(0, 10).map((call) => call.id),
+    queueIds: queueIds.slice(0, 10),
     dueTodayQueueIds: queueDueTodayCalls.slice(0, 10).map((call) => call.id),
     queueSample: followupQueueCalls
       .slice(0, 3)
@@ -160,6 +182,26 @@ export default async function CallsPage({
   const clearFiltersHref = jobIdFilter
     ? `/calls?jobId=${encodeURIComponent(jobIdFilter)}`
     : "/calls";
+  const buildCallsHrefWithOutcome = (includeOutcome: boolean) => {
+    const params = new URLSearchParams();
+    if (jobIdFilter) {
+      params.set("jobId", jobIdFilter);
+    }
+    if (summaryFilter === "needs") {
+      params.set("summary", "needs");
+    }
+    if (followupsMode === "queue") {
+      params.set("followups", "queue");
+    }
+    if (includeOutcome) {
+      params.set("needsOutcome", "true");
+    }
+    const query = params.toString();
+    return query ? `/calls?${query}` : "/calls";
+  };
+  const needsOutcomeChipHref = needsOutcomeFilterEnabled
+    ? buildCallsHrefWithOutcome(false)
+    : buildCallsHrefWithOutcome(true);
 
   const headerSubtitle =
     !jobIdFilter && !summaryFilter
@@ -339,6 +381,11 @@ export default async function CallsPage({
               Showing calls that still need a summary.
             </p>
           )}
+          {needsOutcomeFilterEnabled && (
+            <p className="mt-1 text-sm font-semibold text-emerald-200">
+              Showing calls that still need an outcome.
+            </p>
+          )}
           {jobIdFilter && filterJobLabel && (
             <div className="mt-2 space-y-2 text-slate-400">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Filtered by job</p>
@@ -418,6 +465,16 @@ export default async function CallsPage({
                 </Link>
               </>
             )}
+            <Link
+              href={needsOutcomeChipHref}
+              className={`rounded-full border px-3 py-1 font-semibold uppercase tracking-[0.3em] ${
+                needsOutcomeFilterEnabled
+                  ? "border-emerald-200 bg-emerald-100/20 text-emerald-200"
+                  : "border-slate-800/60 text-slate-100 hover:border-slate-600"
+              }`}
+            >
+              Needs outcome
+            </Link>
           </div>
         </div>
         <HbButton
@@ -438,8 +495,22 @@ export default async function CallsPage({
         <p className="px-4 text-sm text-slate-400">{listHelperText}</p>
       )}
       <HbCard className="space-y-3">
-        {activeCalls.length === 0 ? (
-          followupQueueActive ? (
+        {callsToRender.length === 0 ? (
+          needsOutcomeFilterExhausted ? (
+            <div className="space-y-4">
+              <h2 className="hb-card-heading text-lg font-semibold">
+                No calls missing an outcome right now.
+              </h2>
+              <p className="hb-muted text-sm">
+                No calls are currently missing an outcome. Try clearing filters to see all calls.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <HbButton as={Link} href={clearFiltersHref} size="sm" variant="secondary">
+                  View all calls
+                </HbButton>
+              </div>
+            </div>
+          ) : followupQueueActive ? (
             <div className="space-y-4">
               <h2 className="hb-card-heading text-lg font-semibold">
                 No follow-ups due right now.
@@ -500,7 +571,7 @@ export default async function CallsPage({
         ) : followupQueueActive ? (
           <div className="space-y-5">
             {QUEUE_GROUPS.map(({ status, label }) => {
-              const grouped = activeCalls.filter(
+              const grouped = callsToRender.filter(
                 (call) => call.followupDueInfo.dueStatus === status,
               );
               if (grouped.length === 0) {
@@ -518,7 +589,7 @@ export default async function CallsPage({
           </div>
         ) : (
           <div className="space-y-3">
-            {activeCalls.map((call) => renderCallRow(call))}
+            {callsToRender.map((call) => renderCallRow(call))}
           </div>
         )}
       </HbCard>

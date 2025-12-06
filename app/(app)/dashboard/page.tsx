@@ -5,81 +5,53 @@
 // Authenticated dashboard page; expects a signed-in user and loads workspace context via createServerClient + getCurrentWorkspace.
 import { buildLog } from "@/utils/debug/buildLog";
 import Link from "next/link";
-import type { ReactNode } from "react";
 import { Suspense } from "react";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@//utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { getJobsSummaryForWorkspace } from "@/lib/domain/jobs";
-import { formatCurrency } from "@/utils/timeline/formatters";
 import { DEFAULT_TIMEZONE } from "@/utils/dashboard/time";
-import { ACTIVE_APPOINTMENT_STATUSES, isTodayAppointment } from "@/lib/domain/appointments/dateUtils";
+import {
+  ACTIVE_APPOINTMENT_STATUSES,
+  isTodayAppointment,
+  normalizeAppointmentStatus,
+} from "@/lib/domain/appointments/dateUtils";
 import {
   calculateDaysSinceDate,
   computeFollowupDueInfo,
+  deriveFollowupRecommendation,
   deriveInvoiceFollowupRecommendation,
   getInvoiceFollowupBaseDate,
   getInvoiceSentDate,
   isActionableFollowupDue,
-  isDashboardFollowupDueToday,
 } from "@/lib/domain/communications/followupRecommendations";
-import { collectCallFollowupMessageIds, computeFollowupMessageCounts } from "@/lib/domain/communications/followupMessages";
-import { loadFollowupQueueData } from "@/lib/domain/communications/followupQueue";
+import {
+  CallFollowupDescriptor,
+  FollowupMessageRef,
+  collectCallFollowupMessageIds,
+  computeFollowupMessageCounts,
+  createFollowupMessageTimestampBounds,
+  findMatchingFollowupMessage,
+  parseFollowupMessageTimestamp,
+} from "@/lib/domain/communications/followupMessages";
+import {
+  loadFollowupQueueData,
+} from "@/lib/domain/communications/followupQueue";
 import { ActivitySkeleton } from "@/components/dashboard/ActivitySkeleton";
-import { LeadsAttentionList } from "@/components/dashboard/LeadsAttentionList";
-import { QuotesAttentionList } from "@/components/dashboard/QuotesAttentionList";
-import { InvoicesAttentionList } from "@/components/dashboard/InvoicesAttentionList";
-import { CallsAttentionList } from "@/components/dashboard/CallsAttentionList";
 import { RecentActivityWidget } from "@/components/dashboard/RecentActivityWidget";
-import { getAttentionItems, getAttentionCutoffs } from "@/lib/domain/attention";
+import { getAttentionCutoffs } from "@/lib/domain/attention";
+import {
+  buildAttentionSummary,
+  buildAttentionCounts,
+  buildAttentionDebugSnapshot,
+} from "@/lib/domain/dashboard/attention";
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 
 export const dynamic = "force-dynamic";
 
 buildLog("app/(app)/dashboard/page module loaded");
-
-type AutomationPrefs = {
-  notifyUrgentLeads: boolean;
-  showOverdueWork: boolean;
-};
-
-type AutomationPreferencesRow = {
-  notify_urgent_leads?: boolean | null;
-  show_overdue_work?: boolean | null;
-};
-
-type CallReviewRow = {
-  id: string;
-  status: string | null;
-  created_at: string | null;
-  from_number?: string | null;
-  priority?: string | null;
-  needs_followup?: boolean | null;
-  attention_reason?: string | null;
-  ai_urgency?: string | null;
-  jobs?: { id: string; title: string | null } | { id: string; title: string | null }[] | null;
-  customers?: { id: string; name: string | null } | { id: string; name: string | null }[] | null;
-};
-
-type OverdueInvoiceRow = {
-  id: string;
-  status: string | null;
-  total: number | null;
-  due_at: string | null;
-  job_id?: string | null;
-  job?: { title: string | null; customers?: { name: string | null } | { name: string | null }[] | null } | { title: string | null; customers?: { name: string | null } | { name: string | null }[] | null }[] | null;
-};
-
-type StaleQuoteRow = {
-  id: string;
-  status: string | null;
-  total: number | null;
-  created_at: string | null;
-  job_id?: string | null;
-  job?: { title: string | null; customers?: { name: string | null } | { name: string | null }[] | null } | { title: string | null; customers?: { name: string | null } | { name: string | null }[] | null }[] | null;
-};
 
 type MessageThreadRow = {
   id: string;
@@ -100,12 +72,24 @@ type DashboardAppointmentRow = {
   id: string;
   title: string | null;
   start_time: string | null;
+  end_time: string | null;
   status: AppointmentStatus | null;
   job?: {
     id: string | null;
     title: string | null;
     customers?: { id: string | null; name: string | null } | { id: string | null; name: string | null }[] | null;
   } | null;
+};
+
+type FollowupCallRow = {
+  id: string;
+  job_id: string | null;
+  quote_id: string | null;
+  status: string | null;
+  body: string | null;
+  transcript: string | null;
+  ai_summary: string | null;
+  created_at: string | null;
 };
 
 type FollowupMessageRow = {
@@ -253,7 +237,6 @@ export default async function DashboardPage() {
   // Attention model cutoffs (centralized in lib/domain/attention)
   const {
     newLeadWindowStart,
-    staleQuoteCutoff: quoteStaleThreshold,
     overdueInvoiceCutoff: invoiceOverdueThreshold,
   } = await getAttentionCutoffs(todayStart);
   // Attention cards pull:
@@ -261,54 +244,41 @@ export default async function DashboardPage() {
   // - Overdue invoices / stale quotes: status filters plus date thresholds above.
   // Automation prefs control visibility of overdue work blocks.
 
-  let leadsRes,
-    pendingQuotesRes,
-    unpaidInvoicesRes,
+  let unpaidInvoicesRes,
     paidQuotesThisMonthRes,
     paidInvoicesThisMonthRes,
     inboundMessagesRes,
-    callsNeedingReviewRes,
-    overdueInvoicesRes,
-    staleQuotesRes,
-    automationPrefsRes;
+    overdueInvoicesRes;
   let workspaceCustomersCountRes,
     workspaceJobsCountRes,
+    quotedJobsRes,
     appointmentsTodayRes,
+    followupCallsRes,
     followupMessagesRes,
-    invoiceFollowupsRes;
+    invoiceFollowupsRes,
+    jobsSummaryRes;
 
   try {
     [
-      leadsRes,
-      pendingQuotesRes,
       unpaidInvoicesRes,
       paidQuotesThisMonthRes,
       paidInvoicesThisMonthRes,
       inboundMessagesRes,
-      callsNeedingReviewRes,
       overdueInvoicesRes,
-      staleQuotesRes,
-      automationPrefsRes,
       workspaceCustomersCountRes,
       workspaceJobsCountRes,
+      quotedJobsRes,
       appointmentsTodayRes,
+      followupCallsRes,
       followupMessagesRes,
       invoiceFollowupsRes,
+      jobsSummaryRes,
     ] = await Promise.all([
-      supabase
-        .from("jobs")
-        .select("id")
-        .eq("workspace_id", workspace.id)
-        .eq("status", "lead")
-        .gte("created_at", newLeadWindowStart.toISOString()),
-
-      supabase.from("quotes").select("id").eq("workspace_id", workspace.id).eq("status", "sent"),
-
       supabase
         .from("invoices")
         .select("id")
         .eq("workspace_id", workspace.id)
-        .not("status", "eq", "paid"),
+        .in("status", ["sent", "overdue"]),
 
       supabase
         .from("quotes")
@@ -358,28 +328,6 @@ export default async function DashboardPage() {
         .limit(15),
 
       supabase
-        .from("calls")
-        .select(
-          `
-            id,
-            status,
-            created_at,
-            from_number,
-            priority,
-            needs_followup,
-            attention_reason,
-            ai_urgency,
-            job_id,
-            jobs ( id, title ),
-            customers ( id, name )
-          `
-        )
-        .eq("workspace_id", workspace.id)
-        .or("transcript.is.null,ai_summary.is.null,job_id.is.null,needs_followup.eq.true")
-        .order("created_at", { ascending: false })
-        .limit(5),
-
-      supabase
         .from("invoices")
         .select(
           `
@@ -401,32 +349,6 @@ export default async function DashboardPage() {
         .limit(10),
 
       supabase
-        .from("quotes")
-        .select(
-          `
-            id,
-            status,
-            total,
-            created_at,
-            job_id,
-            job:jobs (
-              title,
-              customers ( name )
-            )
-          `
-        )
-        .eq("workspace_id", workspace.id)
-        .eq("status", "sent")
-        .lt("created_at", quoteStaleThreshold.toISOString())
-        .order("created_at", { ascending: true })
-        .limit(10),
-
-      supabase
-        .from("automation_preferences")
-        .select("notify_urgent_leads, show_overdue_work")
-        .eq("workspace_id", workspace.id)
-        .maybeSingle(),
-      supabase
         .from("customers")
         .select("id", { count: "exact", head: true })
         .eq("workspace_id", workspace.id),
@@ -435,12 +357,20 @@ export default async function DashboardPage() {
         .select("id", { count: "exact", head: true })
         .eq("workspace_id", workspace.id),
       supabase
+        .from("jobs")
+        .select("id, status, created_at, updated_at")
+        .eq("workspace_id", workspace.id)
+        .eq("status", "quoted")
+        .order("created_at", { ascending: false })
+        .limit(200),
+      supabase
         .from("appointments")
         .select(
           `
             id,
             title,
             start_time,
+            end_time,
             status,
             job:jobs (
               id,
@@ -554,13 +484,61 @@ export default async function DashboardPage() {
     isTodayAppointment(appointment.start_time, todayNow, todayTimezone, appointment.status ?? undefined)
   );
   const todayAppointmentsCount = todayAppointments.length;
+  const weekAnchor = new Date(todayNow);
+  weekAnchor.setHours(0, 0, 0, 0);
+  const weekDayIndex = weekAnchor.getDay();
+  const weekStart = new Date(weekAnchor);
+  weekStart.setDate(weekAnchor.getDate() - weekDayIndex);
+  const weeklyDateKeys = new Set<string>();
+  for (let offset = 0; offset < 7; offset++) {
+    const candidate = new Date(weekStart);
+    candidate.setDate(weekStart.getDate() + offset);
+    weeklyDateKeys.add(formatDateKey(candidate, todayTimezone));
+  }
+  const appointmentsThisWeekCount = allDashboardAppointments.reduce((count, appointment) => {
+    const status = normalizeAppointmentStatus(appointment.status);
+    if (!status || !ACTIVE_APPOINTMENT_STATUSES.includes(status)) {
+      return count;
+    }
+    const parsed = appointment.start_time ? new Date(appointment.start_time) : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) {
+      return count;
+    }
+    return weeklyDateKeys.has(formatDateKey(parsed, todayTimezone)) ? count + 1 : count;
+  }, 0);
   console.log("[dashboard-appointments-today]", {
     sourceTotal: allDashboardAppointments.length,
     todayCount: todayAppointmentsCount,
     todayIds: todayAppointments.map((appointment) => appointment.id),
   });
+  const followupCallRows = (followupCallsRes.data ?? []) as FollowupCallRow[];
+  const { queueCount, queueIds } = await loadFollowupQueueData({
+    supabase,
+    workspaceId: workspace.id,
+    limit: 200,
+  });
+  const jobIds = Array.from(
+    new Set(followupCallRows.map((call) => call.job_id).filter((jobId): jobId is string => Boolean(jobId)))
+  );
+  const quoteCandidatesByJob: Record<string, { id: string; created_at: string | null }> = {};
+  if (jobIds.length > 0) {
+    const quoteLimit = Math.max(30, jobIds.length * 3);
+    const { data: quoteRows } = await supabase
+      .from("quotes")
+      .select("id, job_id, created_at")
+      .in("job_id", jobIds)
+      .order("created_at", { ascending: false })
+      .limit(quoteLimit);
+    (quoteRows ?? []).forEach((quote) => {
+      if (!quote.job_id) return;
+      if (!quoteCandidatesByJob[quote.job_id]) {
+        quoteCandidatesByJob[quote.job_id] = { id: quote.id, created_at: quote.created_at ?? null };
+      }
+    });
+  }
+
   const followupMessageRows = (followupMessagesRes.data ?? []) as FollowupMessageRow[];
-  const followupMessageRefs = followupMessageRows.map((message) => ({
+  const followupMessageRefs: FollowupMessageRef[] = followupMessageRows.map((message) => ({
     id: message.id,
     job_id: message.job_id ?? null,
     quote_id: message.quote_id ?? null,
@@ -569,35 +547,128 @@ export default async function DashboardPage() {
     via: message.via ?? null,
     created_at: message.created_at,
   }));
-
-  const { callDescriptors, queueCalls: dashboardQueueCalls } = await loadFollowupQueueData({
-    supabase,
-    workspaceId: workspace.id,
-    limit: 200,
+  const followupMessageBounds = createFollowupMessageTimestampBounds(todayNow);
+  const todayFollowupMessageRefs = followupMessageRefs.filter((message) => {
+    const parsed = parseFollowupMessageTimestamp(message);
+    if (!parsed) {
+      return false;
+    }
+    const timestamp = parsed.getTime();
+    return (
+      timestamp >= followupMessageBounds.todayStart.getTime() &&
+      timestamp < followupMessageBounds.tomorrowStart.getTime()
+    );
   });
-
-  const queueDueTodayCalls = dashboardQueueCalls.filter((call) =>
-    isDashboardFollowupDueToday(call.followupDueInfo, call.hasMatchingFollowupToday),
-  );
-  const actionableCallsCount = dashboardQueueCalls.length;
-  const actionableCallIds = dashboardQueueCalls.slice(0, 5).map((call) => call.id);
-  const callsDueTodayCount = queueDueTodayCalls.length;
-  const callsDueTodayIds = queueDueTodayCalls.slice(0, 5).map((call) => call.id);
+  const callDescriptors: CallFollowupDescriptor[] = followupCallRows.map((call) => {
+    const quoteCandidate =
+      call.job_id && quoteCandidatesByJob[call.job_id] ? quoteCandidatesByJob[call.job_id] : null;
+    const quoteId = quoteCandidate?.id ?? null;
+    const quoteCreatedAt = quoteCandidate?.created_at ?? null;
+    const quoteDate = quoteCreatedAt ? new Date(quoteCreatedAt) : null;
+    const daysSinceQuote =
+      quoteDate && !Number.isNaN(quoteDate.getTime())
+        ? Math.floor((todayNow.getTime() - quoteDate.getTime()) / ONE_DAY_MS)
+        : null;
+    const outcome = call.body?.trim() || call.status?.trim() || null;
+    return {
+      id: call.id,
+      job_id: call.job_id,
+      quote_id: quoteId,
+      created_at: call.created_at,
+      outcome,
+      daysSinceQuote,
+      modelChannelSuggestion: null,
+    };
+  });
 
   const { messageIds: callFollowupMessageIds } = collectCallFollowupMessageIds({
     calls: callDescriptors,
     messages: followupMessageRefs,
   });
 
+  const callsWithFollowups = followupCallRows.map((call) => {
+    const quoteCandidate =
+      call.job_id && quoteCandidatesByJob[call.job_id] ? quoteCandidatesByJob[call.job_id] : null;
+    const quoteCreatedAt = quoteCandidate?.created_at ?? null;
+    const quoteDate = quoteCreatedAt ? new Date(quoteCreatedAt) : null;
+    const daysSinceQuote =
+      quoteDate && !Number.isNaN(quoteDate.getTime())
+        ? Math.floor((todayNow.getTime() - quoteDate.getTime()) / ONE_DAY_MS)
+        : null;
+    const outcome = call.body?.trim() || call.status?.trim() || null;
+    const followupRecommendation =
+      outcome &&
+      deriveFollowupRecommendation({
+        outcome,
+        daysSinceQuote,
+        modelChannelSuggestion: null,
+      });
+    const recommendedChannel = followupRecommendation?.recommendedChannel ?? null;
+    const matchingFollowupMessage =
+      followupRecommendation &&
+      findMatchingFollowupMessage({
+        messages: todayFollowupMessageRefs,
+        recommendedChannel,
+        jobId: call.job_id ?? null,
+        quoteId: quoteCandidate?.id ?? call.quote_id ?? null,
+      });
+    const hasMatchingFollowupToday = Boolean(matchingFollowupMessage);
+    const followupDueInfo = computeFollowupDueInfo({
+      quoteCreatedAt,
+      callCreatedAt: call.created_at,
+      invoiceDueAt: null,
+      recommendedDelayDays: followupRecommendation?.recommendedDelayDays ?? null,
+      now: todayNow,
+    });
+    return {
+      ...call,
+      followupRecommendation,
+      followupDueInfo,
+      hasMatchingFollowupToday,
+    };
+  });
+
+  const actionableCallFollowups = callsWithFollowups.filter((call) => {
+    const recommendation = call.followupRecommendation;
+    return (
+      recommendation &&
+      !recommendation.shouldSkipFollowup &&
+      isActionableFollowupDue(call.followupDueInfo.dueStatus) &&
+      !call.hasMatchingFollowupToday
+    );
+  });
+  const actionableCallsCount = actionableCallFollowups.length;
+  const actionableCallIds = actionableCallFollowups.slice(0, 5).map((call) => call.id);
   const messageRows = followupMessageRows.map((message) => ({
     ...message,
     isCallFollowup: callFollowupMessageIds.has(message.id),
   }));
-  const callFollowupMessages = messageRows.filter((message) => message.isCallFollowup);
   const { todayCount: followupMessagesTodayCount, weekCount: followupMessagesThisWeekCount } =
-    computeFollowupMessageCounts(callFollowupMessages, todayNow);
+    computeFollowupMessageCounts(
+      messageRows.filter((message) => message.isCallFollowup),
+      todayNow
+    );
 
   const invoiceFollowupRows = (invoiceFollowupsRes.data ?? []) as InvoiceFollowupRow[];
+  const invoiceStatusesToInclude = new Set(["sent", "overdue", "queued"]);
+  const invoicesSentThisWeekCount = invoiceFollowupRows.reduce((count, invoice) => {
+    const normalizedStatus = invoice.status?.toLowerCase();
+    if (!normalizedStatus || !invoiceStatusesToInclude.has(normalizedStatus)) {
+      return count;
+    }
+    const sentDateValue = getInvoiceSentDate({
+      issuedAt: invoice.issued_at,
+      createdAt: invoice.created_at,
+    });
+    if (!sentDateValue) {
+      return count;
+    }
+    const parsedSentDate = new Date(sentDateValue);
+    if (Number.isNaN(parsedSentDate.getTime())) {
+      return count;
+    }
+    return weeklyDateKeys.has(formatDateKey(parsedSentDate, todayTimezone)) ? count + 1 : count;
+  }, 0);
   const actionableInvoiceIds: string[] = [];
   invoiceFollowupRows.forEach((invoice) => {
     const followupBaseDate = getInvoiceFollowupBaseDate({
@@ -633,12 +704,10 @@ export default async function DashboardPage() {
 
   console.log("[dashboard-followups]", {
     actionableCallsCount,
-    callsDueTodayCount,
     actionableInvoiceCount,
     followupMessagesTodayCount,
     followupMessagesThisWeekCount,
     actionableCallIds,
-    callsDueTodayIds,
     actionableInvoiceIds: actionableInvoiceIds.slice(0, 5),
     followupMessageIds: messageRows
       .filter((message) => message.isCallFollowup)
@@ -646,17 +715,25 @@ export default async function DashboardPage() {
       .map((message) => message.id),
   });
 
+  const jobsSummary = jobsSummaryRes ?? { open: 0, scheduled: 0, completedLast30Days: 0 };
+  console.log("[dashboard-week-summary]", {
+    workspaceId: workspace.id,
+    appointmentsThisWeekCount,
+    invoicesSentThisWeekCount,
+    followupMessagesThisWeekCount,
+    paidQuotesCount,
+    collectedThisMonth,
+    inboundMessagesCount,
+    paidInvoicesCount,
+    collectedInvoicesThisMonth,
+  });
 
-  const automationPrefsRow = (automationPrefsRes as { data: AutomationPreferencesRow | null }).data;
+  console.log("[dashboard-jobs-summary]", {
+    workspaceId: workspace.id,
+    jobsSummary,
+  });
 
   const unpaidInvoicesCount = unpaidInvoicesRes.data?.length ?? 0;
-  const dashboardUnpaidInvoiceIds = (unpaidInvoicesRes.data ?? []).map((invoice) => invoice.id);
-  console.log("[dashboard-invoices-debug]", {
-    workspaceId: workspace.id,
-    sourceTotal: dashboardUnpaidInvoiceIds.length,
-    unpaidCount: unpaidInvoicesCount,
-    unpaidIds: dashboardUnpaidInvoiceIds.slice(0, 5),
-  });
   const followupCallsHref = "/calls?followups=queue";
   const followupMessagesHref = "/messages?filterMode=followups";
   const followupInvoicesHref = "/invoices?status=unpaid";
@@ -667,7 +744,7 @@ export default async function DashboardPage() {
   });
 
   const appointmentsPriorityHref = "/appointments";
-  const callsFollowupQueueCount = actionableCallsCount;
+  const callsFollowupQueueCount = queueCount;
   const prioritiesNav = {
     appointmentsHref: appointmentsPriorityHref,
     followupCallsHref,
@@ -683,24 +760,14 @@ export default async function DashboardPage() {
     unpaidInvoicesCount,
   });
   console.log("[dashboard-priorities-nav]", prioritiesNav);
-  console.log("[dashboard-followups-consistency]", {
+  console.log("[dashboard-priorities-consistency]", {
     workspaceId: workspace.id,
-    actionableCallsCount,
     callsFollowupQueueCount,
-    followupsTileCount: actionableCallsCount,
+    followupQueueCountFromLoader: queueCount,
+    followupQueueIds: queueIds.slice(0, 5),
   });
 
   const priorityItems = [
-    {
-      label: "Appointments today",
-      count: todayAppointmentsCount,
-      description:
-        todayAppointmentsCount === 0
-          ? "No visits scheduled for today."
-          : `You have ${todayAppointmentsCount.toLocaleString()} visits scheduled for today.`,
-      href: appointmentsPriorityHref,
-      ctaLabel: "Open appointments",
-    },
     {
       label: "Calls needing follow-up",
       count: callsFollowupQueueCount,
@@ -732,61 +799,97 @@ export default async function DashboardPage() {
       ctaLabel: "View invoices",
     },
   ];
-  console.log("[dashboard-priorities-consistency]", {
-    workspaceId: workspace.id,
-    todayAppointmentsCount,
-    callsFollowupQueueCount,
-    unpaidInvoicesCount,
-    messagesFollowupsTodayCount: followupMessagesTodayCount,
-    messagesFollowupsThisWeekCount: followupMessagesThisWeekCount,
-  });
 
-  const followupsAreClear =
-    actionableCallsCount === 0 &&
-    actionableInvoiceCount === 0 &&
-    followupMessagesTodayCount === 0;
+  const attentionRows = [
+    {
+      key: "overdueInvoices",
+      count: attentionCounts.overdueInvoicesCount,
+      label: `Overdue invoices (${attentionCounts.overdueInvoicesCount.toLocaleString()})`,
+      description: "Invoices past their due date.",
+      href: "/invoices?status=unpaid",
+    },
+    {
+      key: "stalledJobs",
+      count: attentionCounts.stalledJobsCount,
+      label: `Stalled quotes (${attentionCounts.stalledJobsCount.toLocaleString()})`,
+      description: "Quoted jobs with no movement for more than a week.",
+      href: "/jobs?status=quoted",
+    },
+    {
+      key: "missedAppointments",
+      count: attentionCounts.missedAppointmentsCount,
+      label: `Missed appointments (${attentionCounts.missedAppointmentsCount.toLocaleString()})`,
+      description: "Visits that were scheduled in the past but never marked complete.",
+      href: "/appointments?history=attention",
+    },
+    {
+      key: "callsMissingOutcome",
+      count: attentionCounts.callsMissingOutcomeCount,
+      label: `Calls missing outcome (${attentionCounts.callsMissingOutcomeCount.toLocaleString()})`,
+      description: "Calls that still need an outcome logged.",
+      href: "/calls?needsOutcome=true",
+    },
+    {
+      key: "agingUnpaidInvoices",
+      count: attentionCounts.agingUnpaidInvoicesCount,
+      label: `Aging unpaid invoices (${attentionCounts.agingUnpaidInvoicesCount.toLocaleString()})`,
+      description: "Unpaid invoices older than two weeks.",
+      href: "/invoices?status=unpaid&aging=1",
+    },
+  ];
+  const attentionItemsToShow = attentionRows.filter((row) => row.count > 0);
+  const hasAttentionItems = attentionItemsToShow.length > 0;
 
-  const prefs: AutomationPrefs = {
-    notifyUrgentLeads: automationPrefsRow?.notify_urgent_leads ?? true,
-    showOverdueWork: automationPrefsRow?.show_overdue_work ?? true,
-  };
-
-  const defaultAttentionItems = {
-    leads: [],
-    invoices: [],
-    quotes: [],
-    calls: [],
-    urgentEmergencyCount: 0,
-    leadSourceCounts: { web: 0, calls: 0, manual: 0, other: 0 },
-  };
-
-  let attentionItems = defaultAttentionItems;
-  try {
-    attentionItems = await getAttentionItems(workspace.id, {
-      workspaceTimeZone,
-    });
-  } catch (error) {
-    console.error("[dashboard] Failed to load attention items:", error);
-    attentionItems = defaultAttentionItems;
-  }
-  const callsNeedingReviewRaw = (callsNeedingReviewRes.data ?? []) as CallReviewRow[];
-  const callsNeedingReview = callsNeedingReviewRaw.map((call) => ({
-    ...call,
-    jobs: Array.isArray(call.jobs) ? call.jobs[0] ?? null : call.jobs ?? null,
-    customers: Array.isArray(call.customers) ? call.customers[0] ?? null : call.customers ?? null,
-  }));
-  const overdueInvoicesRaw = (overdueInvoicesRes.data ?? []) as OverdueInvoiceRow[];
-  const overdueInvoices = overdueInvoicesRaw.map((inv) => ({
-    ...inv,
-    job: Array.isArray(inv.job) ? inv.job[0] ?? null : inv.job ?? null,
-  }));
-  const staleQuotesRaw = (staleQuotesRes.data ?? []) as StaleQuoteRow[];
-  const staleQuotes = staleQuotesRaw.map((quote) => ({
-    ...quote,
-    job: Array.isArray(quote.job) ? quote.job[0] ?? null : quote.job ?? null,
-  }));
   const invoiceLoadFailed =
     Boolean(overdueInvoicesRes.error) || Boolean(paidInvoicesThisMonthRes.error);
+
+  const quotedJobs = (quotedJobsRes.data ?? []) as {
+    id: string;
+    status: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+  }[];
+  const attentionJobRows = quotedJobs.map((job) => ({
+    id: job.id,
+    status: job.status,
+    created_at: job.created_at,
+    last_activity_at: job.updated_at,
+  }));
+  const attentionInvoiceRows = invoiceFollowupRows.map((invoice) => ({
+    id: invoice.id,
+    status: invoice.status,
+    created_at: invoice.created_at,
+    due_date: invoice.due_at,
+  }));
+  const attentionAppointmentRows = allDashboardAppointments.map((appointment) => ({
+    id: appointment.id,
+    status: appointment.status,
+    start_time: appointment.start_time,
+    end_time: appointment.end_time,
+  }));
+  const attentionCallRows = followupCallRows.map((call) => ({
+    id: call.id,
+    created_at: call.created_at,
+    outcome: call.outcome ?? null,
+  }));
+  const attentionMessageRows = followupMessageRows.map((message) => ({
+    id: message.id,
+    created_at: message.created_at,
+  }));
+  const attentionSummary = buildAttentionSummary({
+    jobs: attentionJobRows,
+    invoices: attentionInvoiceRows,
+    appointments: attentionAppointmentRows,
+    calls: attentionCallRows,
+    messages: attentionMessageRows,
+  });
+  const attentionCounts = buildAttentionCounts(attentionSummary);
+  const attentionDebug = buildAttentionDebugSnapshot(attentionSummary);
+  console.log("[dashboard-attention-summary]", {
+    workspaceId: workspace.id,
+    ...attentionCounts,
+    ...attentionDebug,
+  });
 
   const workspaceCustomersCount = workspaceCustomersCountRes.count ?? 0;
   const workspaceJobsCount = workspaceJobsCountRes.count ?? 0;
@@ -827,19 +930,6 @@ export default async function DashboardPage() {
     );
   }
 
-  const attentionCount =
-    (leadsRes.data?.length ?? 0) +
-    callsNeedingReview.length +
-    (prefs.showOverdueWork ? overdueInvoices.length + staleQuotes.length : 0);
-
-  const urgentEmergencyCount = attentionItems.urgentEmergencyCount;
-  const leadSourceCounts = {
-    web: attentionItems.leadSourceCounts?.web ?? 0,
-    calls: attentionItems.leadSourceCounts?.calls ?? 0,
-    manual: attentionItems.leadSourceCounts?.manual ?? 0,
-    other: attentionItems.leadSourceCounts?.other ?? 0,
-  };
-
   return (
     <div className="hb-shell pt-20 pb-8 space-y-8">
       <div className="space-y-6 relative">
@@ -854,25 +944,6 @@ export default async function DashboardPage() {
             New job
           </HbButton>
         </header>
-
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="hb-heading-2">Today’s priorities</h2>
-            <p className="hb-muted text-sm">Command center</p>
-          </div>
-          <HbCard className="space-y-5">
-            {priorityItems.map((item) => (
-              <DashboardPriorityRow
-                key={item.label}
-                label={item.label}
-                count={item.count}
-                description={item.description}
-                href={item.href}
-                ctaLabel={item.ctaLabel}
-              />
-            ))}
-          </HbCard>
-        </section>
 
         <section className="space-y-3">
           <div className="space-y-1">
@@ -936,126 +1007,102 @@ export default async function DashboardPage() {
         </section>
 
         <section className="space-y-3">
-          <div className="hb-card space-y-3">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="hb-card-heading">Follow-ups</h3>
-                <p className="hb-muted text-sm">
-                  Quick view of calls, messages, and invoices that still need follow-up.
-                </p>
-              </div>
-              {followupsAreClear && (
-                <span className="text-xs uppercase tracking-[0.3em] text-emerald-300">
-                  No follow-ups due right now. Nice work.
-                </span>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <FollowupStatChip
-                label="Calls needing follow-up"
-                count={actionableCallsCount}
-                helper="Actionable calls from today’s followup queue."
-                href={followupCallsHref}
-                disabled={actionableCallsCount === 0}
-              />
-              <FollowupStatChip
-                label="Invoices needing follow-up"
-                count={actionableInvoiceCount}
-                helper="Overdue or unpaid invoices with follow-ups due."
-                href={followupInvoicesHref}
-                disabled={actionableInvoiceCount === 0}
-              />
-              <FollowupStatChip
-                label="Follow-up messages today"
-                count={followupMessagesTodayCount}
-                helper="Outbound follow-ups linked to calls."
-                href={followupMessagesHref}
-                disabled={followupMessagesTodayCount === 0}
-              />
-            </div>
+          <div className="flex items-center justify-between">
+            <h2 className="hb-heading-2">Today’s priorities</h2>
+            <p className="hb-muted text-sm">Command center</p>
           </div>
+          <HbCard className="space-y-5">
+            {priorityItems.map((item) => (
+              <DashboardPriorityRow
+                key={item.label}
+                label={item.label}
+                count={item.count}
+                description={item.description}
+                href={item.href}
+                ctaLabel={item.ctaLabel}
+              />
+            ))}
+          </HbCard>
         </section>
 
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="hb-heading-2">This Week</h2>
-            <p className="hb-muted">Pipeline, billing, and automation highlights.</p>
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-            <HbCard className="space-y-1">
+        <section className="space-y-3">
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <h3 className="hb-card-heading">New leads</h3>
-                <Link href="/jobs?status=lead" className="hb-button-ghost text-xs">
-                  View leads
-                </Link>
+                <h2 className="hb-heading-2">This week</h2>
+                <p className="hb-muted text-sm">Weekly highlights</p>
               </div>
-              <p className="text-2xl font-semibold">{leadsRes.data?.length ?? 0}</p>
-              <p className="text-xs text-slate-400">From calls and web form submissions.</p>
-              <p className="text-[11px] text-slate-500">
-                Web: {leadSourceCounts.web} · Calls: {leadSourceCounts.calls} · Manual: {leadSourceCounts.manual} · Other: {leadSourceCounts.other}
-              </p>
-            </HbCard>
-            <HbCard>
-              <h3 className="hb-card-heading">Pending quotes</h3>
-              <p className="text-2xl font-semibold">{pendingQuotesRes.data?.length ?? 0}</p>
-            </HbCard>
-            <div className="hb-card">
-              <h3 className="hb-card-heading">Unpaid invoices</h3>
-              <p className="text-2xl font-semibold">{unpaidInvoicesRes.data?.length ?? 0}</p>
+              <HbCard className="space-y-4">
+                <Link href={appointmentsPriorityHref} className="group block">
+                  <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-800/80 px-3 py-3 transition hover:border-slate-600">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Appointments</p>
+                      <p className="text-2xl font-semibold text-slate-100">{appointmentsThisWeekCount.toLocaleString()}</p>
+                      <p className="text-sm text-slate-400">Visits scheduled for this calendar week.</p>
+                    </div>
+                    <span className="text-xs uppercase tracking-[0.3em] text-slate-400">View</span>
+                  </div>
+                </Link>
+                <Link href="/invoices" className="group block">
+                  <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-800/80 px-3 py-3 transition hover:border-slate-600">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Invoices sent</p>
+                      <p className="text-2xl font-semibold text-slate-100">{invoicesSentThisWeekCount.toLocaleString()}</p>
+                      <p className="text-sm text-slate-400">Invoices issued within this week.</p>
+                    </div>
+                    <span className="text-xs uppercase tracking-[0.3em] text-slate-400">View</span>
+                  </div>
+                </Link>
+                <Link href={followupMessagesHref} className="group block">
+                  <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-800/80 px-3 py-3 transition hover:border-slate-600">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Follow-up messages</p>
+                      <p className="text-2xl font-semibold text-slate-100">{followupMessagesThisWeekCount.toLocaleString()}</p>
+                      <p className="text-sm text-slate-400">Messages logged as follow-ups this week.</p>
+                    </div>
+                    <span className="text-xs uppercase tracking-[0.3em] text-slate-400">View</span>
+                  </div>
+                </Link>
+                {invoiceLoadFailed && (
+                  <div className="rounded border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+                    <p>Unable to load invoices right now.</p>
+                    <form action={retryDashboardData} className="mt-2 flex justify-end">
+                      <button type="submit" className="hb-button px-3 py-1 text-xs">
+                        Retry
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </HbCard>
             </div>
-            <div className="hb-card">
-              <h3 className="hb-card-heading">Inbound messages (24h)</h3>
-              <p className="text-2xl font-semibold">{inboundMessagesCount}</p>
-            </div>
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-            <div className="hb-card">
-              <h3 className="hb-card-heading">Paid quotes this month</h3>
-              <p className="text-2xl font-semibold">{paidQuotesCount}</p>
-            </div>
-            <div className="hb-card">
-              <h3 className="hb-card-heading">Quote revenue this month</h3>
-              <p className="text-2xl font-semibold">{formatCurrency(collectedThisMonth)}</p>
-            </div>
-            <div className="hb-card">
-              <h3 className="hb-card-heading">Invoices paid this month</h3>
-              <p className="text-2xl font-semibold">{paidInvoicesCount}</p>
-            </div>
-            <div className="hb-card">
-              <h3 className="hb-card-heading">Total collected this month</h3>
-              <p className="text-2xl font-semibold">
-                {formatCurrency(collectedThisMonth + collectedInvoicesThisMonth)}
-              </p>
-            </div>
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-2">
-            <HbCard className="space-y-2">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="hb-card-heading">Customers</h3>
-                  <p className="text-2xl font-semibold">{workspaceCustomersCount}</p>
-                </div>
-                <Link href="/customers" className="hb-button-ghost text-xs">
-                  View customers
-                </Link>
+                <h2 className="hb-heading-2">Attention needed</h2>
+                <p className="hb-muted text-sm">Issues trending toward urgency</p>
               </div>
-              <p className="hb-muted text-sm">People you’ve worked with or are following up with.</p>
-            </HbCard>
-          </div>
-
-          {invoiceLoadFailed && (
-            <div className="hb-card space-y-2">
-              <p className="font-semibold text-slate-100">Unable to load invoices right now.</p>
-              <form action={retryDashboardData}>
-                <button type="submit" className="hb-button px-3 py-1 text-sm">
-                  Retry
-                </button>
-              </form>
+              <HbCard className="space-y-3">
+                {hasAttentionItems ? (
+                  attentionItemsToShow.map((row) => (
+                    <Link
+                      key={row.key}
+                      href={row.href}
+                      className="group flex items-center justify-between gap-4 rounded-2xl border border-slate-800/60 px-4 py-3 transition hover:border-slate-600"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-slate-100">{row.label}</p>
+                        <p className="text-xs text-slate-400">{row.description}</p>
+                      </div>
+                      <span className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Open</span>
+                    </Link>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-400">
+                    🎉 Nothing needs special attention right now.
+                  </p>
+                )}
+              </HbCard>
             </div>
-          )}
+          </div>
         </section>
 
         <section className="space-y-3">
@@ -1075,113 +1122,7 @@ export default async function DashboardPage() {
           </div>
         </section>
 
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Attention Needed</h2>
-            <p className="text-sm text-slate-400">Work trending toward urgency.</p>
-          </div>
-          <div className="hb-card space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="hb-card-heading">Attention</h3>
-                <p className="hb-muted text-sm">Quick triage of work that needs action.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                {urgentEmergencyCount > 0 ? (
-                  <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-red-200">
-                    Emergency {urgentEmergencyCount}
-                  </span>
-                ) : null}
-                <div className="rounded-lg bg-slate-900 px-3 py-2 text-right">
-                  <p className="text-xs uppercase text-slate-500">Open items</p>
-                  <p className="text-2xl font-semibold">{attentionCount}</p>
-                </div>
-              </div>
-            </div>
-            {urgentEmergencyCount > 0 ? (
-              <div className="rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm text-red-200 flex items-center justify-between">
-                <span>
-                  You have {urgentEmergencyCount} urgent lead{urgentEmergencyCount === 1 ? "" : "s"} (AI urgency: emergency).
-                </span>
-                <Link href="/jobs?status=lead&ai_urgency=emergency" className="hb-button-ghost text-xs">
-                  View urgent leads
-                </Link>
-              </div>
-            ) : (
-              <div className="rounded border border-slate-800/60 bg-slate-900/80 px-3 py-2 text-sm text-slate-400 flex items-center justify-between">
-                <span>No urgent leads right now.</span>
-                <Link href="/jobs?status=lead&ai_urgency=emergency" className="hb-button-ghost text-xs">
-                  View urgent leads
-                </Link>
-              </div>
-            )}
-            <div className="grid gap-5 xl:grid-cols-4 md:grid-cols-2">
-              <AttentionCard title="New leads (7 days)" count={leadsRes.data?.length ?? 0} href="/jobs">
-                <LeadsAttentionList items={attentionItems.leads} />
-              </AttentionCard>
-              <AttentionCard
-                title="Overdue invoices"
-                count={overdueInvoices.length}
-                href="/invoices"
-                badge="Overdue"
-                badgeClassName="border border-red-500/30 bg-red-500/10 text-red-200"
-              >
-                <InvoicesAttentionList items={attentionItems.invoices} />
-              </AttentionCard>
-              <AttentionCard title="Quotes to follow up" count={staleQuotes.length} href="/quotes">
-                <QuotesAttentionList items={attentionItems.quotes} />
-              </AttentionCard>
-              <AttentionCard
-                title="Incomplete tasks"
-                count={callsNeedingReview.length}
-                href="/calls?filter=needs_processing"
-                badge="Unprocessed"
-                badgeClassName="border border-amber-500/30 bg-amber-500/10 text-amber-200"
-              >
-                <CallsAttentionList items={attentionItems.calls} />
-              </AttentionCard>
-            </div>
-          </div>
-        </section>
       </div>
-    </div>
-  );
-}
-
-function AttentionCard({
-  title,
-  count,
-  href,
-  badge,
-  badgeClassName,
-  children,
-}: {
-  title: string;
-  count: number;
-  href: string;
-  badge?: string;
-  badgeClassName?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="hb-card space-y-1.5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="hb-card-heading">{title}</h3>
-          <p className="text-2xl font-semibold text-slate-100">{count}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {badge && (
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] ${badgeClassName}`}>
-              {badge}
-            </span>
-          )}
-          <Link href={href} className="hb-button-ghost text-xs">
-            View
-          </Link>
-        </div>
-      </div>
-      <div>{children}</div>
     </div>
   );
 }
@@ -1252,29 +1193,13 @@ function appointmentStatusClass(status: AppointmentStatus | null) {
   return "border border-amber-500/40 bg-amber-500/10 text-amber-200";
 }
 
-type FollowupStatChipProps = {
-  label: string;
-  count: number;
-  helper: string;
-  href: string;
-  disabled?: boolean;
-};
-
-function FollowupStatChip({ label, count, helper, href, disabled }: FollowupStatChipProps) {
-  return (
-    <Link
-      href={href}
-      className={`group min-w-[12rem] flex-1 rounded-2xl border px-4 py-3 text-sm transition ${
-        disabled
-          ? "border-slate-800/60 bg-slate-900/40 text-slate-500 pointer-events-none"
-          : "border-slate-700 bg-slate-950/60 text-slate-100 hover:border-slate-500"
-      }`}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{label}</p>
-        <p className="text-2xl font-semibold">{count.toLocaleString()}</p>
-      </div>
-      <p className="mt-2 text-xs text-slate-400">{helper}</p>
-    </Link>
-  );
+function formatDateKey(value: Date, timezone: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(value);
 }
+
+const ONE_DAY_MS = 1000 * 60 * 60 * 24;
