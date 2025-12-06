@@ -7,18 +7,11 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import { formatDateTime } from "@/utils/timeline/formatters";
+import { buildFollowupDebugSnapshot, type FollowupDueStatus } from "@/lib/domain/communications/followupRecommendations";
 import {
-  computeFollowupDueInfo,
-  deriveFollowupRecommendation,
-  isActionableFollowupDue,
-  type FollowupDueInfo,
-  type FollowupDueStatus,
-  type FollowupRecommendation,
-} from "@/lib/domain/communications/followupRecommendations";
-import {
-  findMatchingFollowupMessage,
-  type FollowupMessageRef,
-} from "@/lib/domain/communications/followupMessages";
+  FollowupEnrichedCallRow,
+  loadFollowupQueueData,
+} from "@/lib/domain/communications/followupQueue";
 import { markFollowupDoneAction } from "./actions/markFollowupDone";
 
 const CHANNEL_HINTS = {
@@ -27,51 +20,11 @@ const CHANNEL_HINTS = {
   email: { icon: "✉️", label: "Email" },
 } as const;
 
-const ONE_DAY_MS = 1000 * 60 * 60 * 24;
-
-function startOfToday(date?: Date) {
-  const base = date ? new Date(date) : new Date();
-  base.setHours(0, 0, 0, 0);
-  base.setMilliseconds(0);
-  return base;
-}
-
 const QUEUE_GROUPS: Array<{ status: FollowupDueStatus; label: string }> = [
   { status: "overdue", label: "Overdue" },
   { status: "due-today", label: "Due today" },
   { status: "scheduled", label: "Upcoming" },
 ];
-
-type CallRow = {
-  id: string;
-  workspace_id: string;
-  created_at: string | null;
-  from_number: string | null;
-  status: string | null;
-  priority: string | null;
-  needs_followup: boolean | null;
-  job_id: string | null;
-  customer_id: string | null;
-  quote_id: string | null;
-  body: string | null;
-  channel: string | null;
-  via: string | null;
-  updated_at: string | null;
-};
-
-type QuoteCandidateSummary = {
-  id: string;
-  job_id: string | null;
-  created_at: string | null;
-};
-
-type EnrichedCallRow = CallRow & {
-  quoteCreatedAt: string | null;
-  followupRecommendation: FollowupRecommendation | null;
-  followupDueInfo: FollowupDueInfo;
-  hasMatchingFollowupToday: boolean;
-  matchingFollowupMessageId: string | null;
-};
 
 type FilteredJobSummary = {
   id: string;
@@ -138,174 +91,49 @@ export default async function CallsPage({
 
   const followupQueueActive = followupsMode === "queue";
 
-  let query = supabase.from("calls").select("*").eq("workspace_id", workspace.id);
-
-  if (jobIdFilter) {
-    query = query.eq("job_id", jobIdFilter);
-  }
-
-  query = query.order("created_at", { ascending: false }).limit(50);
-
-  const callsRes = await query;
-  if (callsRes.error) {
-    console.error("[calls/index] Supabase error loading calls", {
-      workspaceId: workspace.id,
-      error: callsRes.error,
-    });
-  } else {
-    console.log("[calls/index] Loaded calls", {
-      count: callsRes.data?.length ?? 0,
-      workspaceId: workspace.id,
-    });
-  }
-
-  const calls = (callsRes.data ?? []) as CallRow[];
-  const jobIds = Array.from(
-    new Set(calls.map((call) => call.job_id).filter((jobId): jobId is string => Boolean(jobId))),
-  );
-  const quoteCandidatesByJob: Record<string, QuoteCandidateSummary> = {};
-  if (jobIds.length > 0) {
-    const { data: quoteRows, error: quoteError } = await supabase
-      .from<QuoteCandidateSummary>("quotes")
-      .select("id, job_id, created_at")
-      .in("job_id", jobIds)
-      .order("created_at", { ascending: false })
-      .limit(Math.max(jobIds.length * 3, 30));
-
-    if (quoteError) {
-      console.error("[calls/index] Failed to load quote candidates", quoteError);
-    }
-
-    (quoteRows ?? []).forEach((quote) => {
-      if (!quote.job_id) {
-        return;
-      }
-      if (!quoteCandidatesByJob[quote.job_id]) {
-        quoteCandidatesByJob[quote.job_id] = quote;
-      }
-    });
-  }
-
-  const todayStart = startOfToday();
-  let todayFollowupMessages: FollowupMessageRef[] = [];
-  const { data: todayMessagesRows, error: todayMessagesError } = await supabase
-    .from<FollowupMessageRef>("messages")
-    .select("id, job_id, quote_id, invoice_id, channel, via, created_at")
-    .eq("workspace_id", workspace.id)
-    .gte("created_at", todayStart.toISOString())
-    .in("channel", ["sms", "email", "phone"])
-    .order("created_at", { ascending: false })
-    .limit(200);
-  if (todayMessagesError) {
-    console.error("[followup-messages] Failed to load today's messages", todayMessagesError);
-  } else {
-    todayFollowupMessages = todayMessagesRows ?? [];
-  }
-
-  const now = new Date();
-  const callsWithFollowups: EnrichedCallRow[] = calls.map((call) => {
-    const quoteCandidate =
-      call.job_id && quoteCandidatesByJob[call.job_id]
-        ? quoteCandidatesByJob[call.job_id]
-        : null;
-    const quoteCreatedAt = quoteCandidate?.created_at ?? null;
-    const quoteDate = quoteCreatedAt ? new Date(quoteCreatedAt) : null;
-    const daysSinceQuote =
-      quoteDate && !Number.isNaN(quoteDate.getTime())
-        ? Math.floor((now.getTime() - quoteDate.getTime()) / ONE_DAY_MS)
-        : null;
-    const trimmedBody = call.body?.trim();
-    const trimmedStatus = call.status?.trim();
-    const recommendationOutcome = trimmedBody || trimmedStatus || null;
-    const followupRecommendation =
-      recommendationOutcome &&
-      deriveFollowupRecommendation({
-        outcome: recommendationOutcome,
-        daysSinceQuote,
-        modelChannelSuggestion: null,
-      });
-    const recommendedChannel = followupRecommendation?.recommendedChannel ?? null;
-    const matchingFollowupMessage =
-      followupRecommendation &&
-      findMatchingFollowupMessage({
-        messages: todayFollowupMessages,
-        recommendedChannel,
-        jobId: call.job_id ?? null,
-        quoteId: quoteCandidate?.id ?? call.quote_id ?? null,
-      });
-    const hasMatchingFollowupToday = Boolean(matchingFollowupMessage);
-    const matchingFollowupMessageId = matchingFollowupMessage?.id ?? null;
-    const followupDueInfo = computeFollowupDueInfo({
-      quoteCreatedAt,
-      callCreatedAt: call.created_at,
-      invoiceDueAt: null,
-      recommendedDelayDays: followupRecommendation?.recommendedDelayDays ?? null,
-      now,
-    });
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[followup-reco]", {
-        callId: call.id,
-        jobId: call.job_id ?? null,
-        quoteId: quoteCandidate?.id ?? call.quote_id ?? null,
-        recommendedChannel,
-        recommendedDelayDays:
-          followupRecommendation?.recommendedDelayDays ?? null,
-        shouldSkipFollowup:
-          followupRecommendation?.shouldSkipFollowup ?? null,
-      });
-      console.log("[followup-queue-status]", {
-        callId: call.id,
-        jobId: call.job_id ?? null,
-        quoteId: quoteCandidate?.id ?? call.quote_id ?? null,
-        recommendedChannel,
-        dueStatus: followupDueInfo.dueStatus,
-        hasMatchingFollowupToday,
-        matchingFollowupMessageId,
-      });
-    }
-    return {
-      ...call,
-      quoteCreatedAt,
-      followupRecommendation,
-      followupDueInfo,
-      hasMatchingFollowupToday,
-      matchingFollowupMessageId,
-    };
+  const {
+    calls: rawCalls,
+    allEnrichedCalls: callsWithFollowups,
+    queueCalls: followupQueueCalls,
+  } = await loadFollowupQueueData({
+    supabase,
+    workspaceId: workspace.id,
+    jobId: jobIdFilter,
+    limit: 50,
   });
+
+  console.log("[calls/index] Loaded calls", {
+    count: rawCalls.length,
+    workspaceId: workspace.id,
+  });
+
+  const queueDueTodayCalls = followupQueueCalls.filter(
+    (call) => call.followupDueInfo.dueStatus === "due-today",
+  );
   const summaryModeActive = !followupQueueActive && summaryFilter === "needs";
-  const summaryFilteredCalls = callsWithFollowups.filter(
-    (call) => !call.body?.trim(),
-  );
-  const followupQueueCalls = callsWithFollowups.filter((call) => {
-    // TODO: once the calls table exposes an explicit follow-up state (none/due/done/snoozed),
-    // respect that instead of computing status purely from messages and outcomes; skip rows where
-    // the follow-up_state indicates “done” even if dueStatus might still be actionable.
-    const recommendation = call.followupRecommendation;
-    return (
-      recommendation &&
-      !recommendation.shouldSkipFollowup &&
-      isActionableFollowupDue(call.followupDueInfo.dueStatus)
-      && !call.hasMatchingFollowupToday
-    );
-  });
+  const summaryFilteredCalls = callsWithFollowups.filter((call) => !call.body?.trim());
   const activeCalls = followupQueueActive
     ? followupQueueCalls
     : summaryModeActive
     ? summaryFilteredCalls
     : callsWithFollowups;
-  console.log("[followup-queue]", {
-    workspaceId: workspace.id,
-    totalCalls: callsWithFollowups.length,
+  console.log("[calls-followups-queue-debug]", {
+    sourceTotal: callsWithFollowups.length,
     queueCount: followupQueueCalls.length,
-    summaryNeedsCount: summaryFilteredCalls.length,
+    dueTodayQueueCount: queueDueTodayCalls.length,
+    queueIds: followupQueueCalls.slice(0, 10).map((call) => call.id),
+    dueTodayQueueIds: queueDueTodayCalls.slice(0, 10).map((call) => call.id),
+    queueSample: followupQueueCalls
+      .slice(0, 3)
+      .map((call) =>
+        buildFollowupDebugSnapshot(call.id, call.followupDueInfo, call.hasMatchingFollowupToday)
+      ),
+    dueTodaySample: queueDueTodayCalls
+      .slice(0, 3)
+      .map((call) =>
+        buildFollowupDebugSnapshot(call.id, call.followupDueInfo, call.hasMatchingFollowupToday)
+      ),
   });
-  if (followupQueueActive) {
-    console.log("[followup-queue] active view", {
-      workspaceId: workspace.id,
-      rows: followupQueueCalls.length,
-    });
-  }
-
   const filterJobLabel = filteredJob
     ? filteredJob.title ?? `Job ${filteredJob.id.slice(0, 8)}…`
     : jobIdFilter
@@ -338,7 +166,7 @@ export default async function CallsPage({
       ? "All recent calls across your workspace."
       : "Simple log of recent calls.";
 
-  const renderCallRow = (call: EnrichedCallRow) => {
+  const renderCallRow = (call: FollowupEnrichedCallRow) => {
     const summaryMissing = !call.body?.trim();
     const normalizedChannel = (call.channel ?? "phone").toLowerCase();
     const knownChannel = normalizedChannel in CHANNEL_HINTS;

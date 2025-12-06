@@ -402,6 +402,32 @@ export default async function MessagesPage({
     bounds: followupMessageBounds,
   } = computeFollowupMessageCounts(followupMessageRows, now);
   const weekAgoStart = followupMessageBounds.weekAgoStart;
+  const followupTodayIds = followupMessageRows
+    .filter((message) => {
+      const parsed = parseFollowupMessageTimestamp(message);
+      if (!parsed) return false;
+      const time = parsed.getTime();
+      return (
+        time >= followupMessageBounds.todayStart.getTime() &&
+        time < followupMessageBounds.tomorrowStart.getTime()
+      );
+    })
+    .map((message) => message.id);
+  const followupWeekIds = followupMessageRows
+    .filter((message) => {
+      const parsed = parseFollowupMessageTimestamp(message);
+      if (!parsed) return false;
+      return parsed.getTime() >= followupMessageBounds.weekAgoStart.getTime();
+    })
+    .map((message) => message.id);
+  console.log("[messages-followups-dashboard-source]", {
+    workspaceId: workspace.id,
+    totalMessagesLoaded: messages.length,
+    followupsTodayCount,
+    followupsThisWeekCount,
+    todayIds: followupTodayIds.slice(0, 5),
+    weekIds: followupWeekIds.slice(0, 5),
+  });
 
   const filteredMessages = messageRows.filter((message) => {
     if (filterMode === "followups") {

@@ -310,10 +310,19 @@ export default async function InvoicesPage({
   const visibleCountLabel =
     invoicesToDisplay.length === 1 ? "invoice" : "invoices";
   const totalCount = enrichedInvoices.length;
-  const unpaidCount = enrichedInvoices.filter((row) => row.statusKey !== "paid").length;
+  const unpaidInvoiceRows = enrichedInvoices.filter((row) => row.statusKey !== "paid");
+  const unpaidCount = unpaidInvoiceRows.length;
   const overdueCount = enrichedInvoices.filter((row) => row.statusKey === "overdue").length;
   const hasInvoices = totalCount > 0;
   const resetFiltersHref = buildFollowupsHref("all", "all");
+  if (statusFilterKey === "unpaid") {
+    console.log("[invoices-dashboard-source]", {
+      workspaceId: workspace.id,
+      statusFilter: statusFilterKey,
+      unpaidCount,
+      unpaidIds: unpaidInvoiceRows.slice(0, 5).map((row) => row.invoice.id),
+    });
+  }
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">

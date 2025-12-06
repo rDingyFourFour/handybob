@@ -294,15 +294,16 @@ export default async function InvoiceDetailPage(props: {
     createdAt: invoice.created_at,
   });
   const daysSinceInvoiceSent = calculateDaysSinceDate(invoiceSentDate);
+  const followupMetadata = {
+    invoiceId: invoice.id,
+    jobId,
+    customerId,
+  };
   const followupRecommendation = deriveInvoiceFollowupRecommendation({
     outcome: invoice.status ?? "invoice_sent",
     daysSinceInvoiceSent,
     status: invoice.status,
-    metadata: {
-      invoiceId: invoice.id,
-      jobId,
-      customerId,
-    },
+    metadata: followupMetadata,
   });
   const followupBaseDate = getInvoiceFollowupBaseDate({
     dueAt: invoice.due_at,
@@ -317,9 +318,7 @@ export default async function InvoiceDetailPage(props: {
   });
   if (process.env.NODE_ENV !== "production") {
     console.log("[invoice-followup-reco]", {
-      invoiceId: invoice.id,
-      jobId,
-      customerId,
+      ...followupMetadata,
       recommendation: followupRecommendation,
       dueInfo: followupDueInfo,
     });

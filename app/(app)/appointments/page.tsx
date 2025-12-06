@@ -346,6 +346,12 @@ export default async function AppointmentsPage({
     isTodayAppointment(appt.start_time, now, timezone, appt.status ?? undefined)
   );
   const todayCount = todayAppointments.length;
+  console.log("[appointments-dashboard-source]", {
+    workspaceId: workspace.id,
+    totalAppointments: totalUpcoming,
+    todayCount,
+    todayIds: todayAppointments.slice(0, 5).map((appointment) => appointment.id),
+  });
   let next7DaysCount = 0;
   appointments.forEach((appt) => {
     if (!appt.start_time) {

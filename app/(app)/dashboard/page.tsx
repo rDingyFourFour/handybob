@@ -18,21 +18,14 @@ import { ACTIVE_APPOINTMENT_STATUSES, isTodayAppointment } from "@/lib/domain/ap
 import {
   calculateDaysSinceDate,
   computeFollowupDueInfo,
-  deriveFollowupRecommendation,
   deriveInvoiceFollowupRecommendation,
   getInvoiceFollowupBaseDate,
   getInvoiceSentDate,
   isActionableFollowupDue,
+  isDashboardFollowupDueToday,
 } from "@/lib/domain/communications/followupRecommendations";
-import {
-  CallFollowupDescriptor,
-  FollowupMessageRef,
-  collectCallFollowupMessageIds,
-  computeFollowupMessageCounts,
-  createFollowupMessageTimestampBounds,
-  findMatchingFollowupMessage,
-  parseFollowupMessageTimestamp,
-} from "@/lib/domain/communications/followupMessages";
+import { collectCallFollowupMessageIds, computeFollowupMessageCounts } from "@/lib/domain/communications/followupMessages";
+import { loadFollowupQueueData } from "@/lib/domain/communications/followupQueue";
 import { ActivitySkeleton } from "@/components/dashboard/ActivitySkeleton";
 import { LeadsAttentionList } from "@/components/dashboard/LeadsAttentionList";
 import { QuotesAttentionList } from "@/components/dashboard/QuotesAttentionList";
@@ -113,17 +106,6 @@ type DashboardAppointmentRow = {
     title: string | null;
     customers?: { id: string | null; name: string | null } | { id: string | null; name: string | null }[] | null;
   } | null;
-};
-
-type FollowupCallRow = {
-  id: string;
-  job_id: string | null;
-  quote_id: string | null;
-  status: string | null;
-  body: string | null;
-  transcript: string | null;
-  ai_summary: string | null;
-  created_at: string | null;
 };
 
 type FollowupMessageRow = {
@@ -292,10 +274,8 @@ export default async function DashboardPage() {
   let workspaceCustomersCountRes,
     workspaceJobsCountRes,
     appointmentsTodayRes,
-    followupCallsRes,
     followupMessagesRes,
-    invoiceFollowupsRes,
-    jobsSummaryRes;
+    invoiceFollowupsRes;
 
   try {
     [
@@ -312,10 +292,8 @@ export default async function DashboardPage() {
       workspaceCustomersCountRes,
       workspaceJobsCountRes,
       appointmentsTodayRes,
-      followupCallsRes,
       followupMessagesRes,
       invoiceFollowupsRes,
-      jobsSummaryRes,
     ] = await Promise.all([
       supabase
         .from("jobs")
@@ -330,7 +308,7 @@ export default async function DashboardPage() {
         .from("invoices")
         .select("id")
         .eq("workspace_id", workspace.id)
-        .in("status", ["sent", "overdue"]),
+        .not("status", "eq", "paid"),
 
       supabase
         .from("quotes")
@@ -581,29 +559,8 @@ export default async function DashboardPage() {
     todayCount: todayAppointmentsCount,
     todayIds: todayAppointments.map((appointment) => appointment.id),
   });
-  const followupCallRows = (followupCallsRes.data ?? []) as FollowupCallRow[];
-  const jobIds = Array.from(
-    new Set(followupCallRows.map((call) => call.job_id).filter((jobId): jobId is string => Boolean(jobId)))
-  );
-  const quoteCandidatesByJob: Record<string, { id: string; created_at: string | null }> = {};
-  if (jobIds.length > 0) {
-    const quoteLimit = Math.max(30, jobIds.length * 3);
-    const { data: quoteRows } = await supabase
-      .from("quotes")
-      .select("id, job_id, created_at")
-      .in("job_id", jobIds)
-      .order("created_at", { ascending: false })
-      .limit(quoteLimit);
-    (quoteRows ?? []).forEach((quote) => {
-      if (!quote.job_id) return;
-      if (!quoteCandidatesByJob[quote.job_id]) {
-        quoteCandidatesByJob[quote.job_id] = { id: quote.id, created_at: quote.created_at ?? null };
-      }
-    });
-  }
-
   const followupMessageRows = (followupMessagesRes.data ?? []) as FollowupMessageRow[];
-  const followupMessageRefs: FollowupMessageRef[] = followupMessageRows.map((message) => ({
+  const followupMessageRefs = followupMessageRows.map((message) => ({
     id: message.id,
     job_id: message.job_id ?? null,
     quote_id: message.quote_id ?? null,
@@ -612,108 +569,33 @@ export default async function DashboardPage() {
     via: message.via ?? null,
     created_at: message.created_at,
   }));
-  const followupMessageBounds = createFollowupMessageTimestampBounds(todayNow);
-  const todayFollowupMessageRefs = followupMessageRefs.filter((message) => {
-    const parsed = parseFollowupMessageTimestamp(message);
-    if (!parsed) {
-      return false;
-    }
-    const timestamp = parsed.getTime();
-    return (
-      timestamp >= followupMessageBounds.todayStart.getTime() &&
-      timestamp < followupMessageBounds.tomorrowStart.getTime()
-    );
+
+  const { callDescriptors, queueCalls: dashboardQueueCalls } = await loadFollowupQueueData({
+    supabase,
+    workspaceId: workspace.id,
+    limit: 200,
   });
-  const callDescriptors: CallFollowupDescriptor[] = followupCallRows.map((call) => {
-    const quoteCandidate =
-      call.job_id && quoteCandidatesByJob[call.job_id] ? quoteCandidatesByJob[call.job_id] : null;
-    const quoteId = quoteCandidate?.id ?? null;
-    const quoteCreatedAt = quoteCandidate?.created_at ?? null;
-    const quoteDate = quoteCreatedAt ? new Date(quoteCreatedAt) : null;
-    const daysSinceQuote =
-      quoteDate && !Number.isNaN(quoteDate.getTime())
-        ? Math.floor((todayNow.getTime() - quoteDate.getTime()) / ONE_DAY_MS)
-        : null;
-    const outcome = call.body?.trim() || call.status?.trim() || null;
-    return {
-      id: call.id,
-      job_id: call.job_id,
-      quote_id: quoteId,
-      created_at: call.created_at,
-      outcome,
-      daysSinceQuote,
-      modelChannelSuggestion: null,
-    };
-  });
+
+  const queueDueTodayCalls = dashboardQueueCalls.filter((call) =>
+    isDashboardFollowupDueToday(call.followupDueInfo, call.hasMatchingFollowupToday),
+  );
+  const actionableCallsCount = dashboardQueueCalls.length;
+  const actionableCallIds = dashboardQueueCalls.slice(0, 5).map((call) => call.id);
+  const callsDueTodayCount = queueDueTodayCalls.length;
+  const callsDueTodayIds = queueDueTodayCalls.slice(0, 5).map((call) => call.id);
 
   const { messageIds: callFollowupMessageIds } = collectCallFollowupMessageIds({
     calls: callDescriptors,
     messages: followupMessageRefs,
   });
 
-  const callsWithFollowups = followupCallRows.map((call) => {
-    const quoteCandidate =
-      call.job_id && quoteCandidatesByJob[call.job_id] ? quoteCandidatesByJob[call.job_id] : null;
-    const quoteCreatedAt = quoteCandidate?.created_at ?? null;
-    const quoteDate = quoteCreatedAt ? new Date(quoteCreatedAt) : null;
-    const daysSinceQuote =
-      quoteDate && !Number.isNaN(quoteDate.getTime())
-        ? Math.floor((todayNow.getTime() - quoteDate.getTime()) / ONE_DAY_MS)
-        : null;
-    const outcome = call.body?.trim() || call.status?.trim() || null;
-    const followupRecommendation =
-      outcome &&
-      deriveFollowupRecommendation({
-        outcome,
-        daysSinceQuote,
-        modelChannelSuggestion: null,
-      });
-    const recommendedChannel = followupRecommendation?.recommendedChannel ?? null;
-    const matchingFollowupMessage =
-      followupRecommendation &&
-      findMatchingFollowupMessage({
-        messages: todayFollowupMessageRefs,
-        recommendedChannel,
-        jobId: call.job_id ?? null,
-        quoteId: quoteCandidate?.id ?? call.quote_id ?? null,
-      });
-    const hasMatchingFollowupToday = Boolean(matchingFollowupMessage);
-    const followupDueInfo = computeFollowupDueInfo({
-      quoteCreatedAt,
-      callCreatedAt: call.created_at,
-      invoiceDueAt: null,
-      recommendedDelayDays: followupRecommendation?.recommendedDelayDays ?? null,
-      now: todayNow,
-    });
-    return {
-      ...call,
-      followupRecommendation,
-      followupDueInfo,
-      hasMatchingFollowupToday,
-    };
-  });
-
-  const actionableCallFollowups = callsWithFollowups.filter((call) => {
-    const recommendation = call.followupRecommendation;
-    return (
-      recommendation &&
-      !recommendation.shouldSkipFollowup &&
-      isActionableFollowupDue(call.followupDueInfo.dueStatus) &&
-      !call.hasMatchingFollowupToday
-    );
-  });
-  const actionableCallsCount = actionableCallFollowups.length;
-  const actionableCallIds = actionableCallFollowups.slice(0, 5).map((call) => call.id);
-
   const messageRows = followupMessageRows.map((message) => ({
     ...message,
     isCallFollowup: callFollowupMessageIds.has(message.id),
   }));
+  const callFollowupMessages = messageRows.filter((message) => message.isCallFollowup);
   const { todayCount: followupMessagesTodayCount, weekCount: followupMessagesThisWeekCount } =
-    computeFollowupMessageCounts(
-      messageRows.filter((message) => message.isCallFollowup),
-      todayNow
-    );
+    computeFollowupMessageCounts(callFollowupMessages, todayNow);
 
   const invoiceFollowupRows = (invoiceFollowupsRes.data ?? []) as InvoiceFollowupRow[];
   const actionableInvoiceIds: string[] = [];
@@ -751,10 +633,12 @@ export default async function DashboardPage() {
 
   console.log("[dashboard-followups]", {
     actionableCallsCount,
+    callsDueTodayCount,
     actionableInvoiceCount,
     followupMessagesTodayCount,
     followupMessagesThisWeekCount,
     actionableCallIds,
+    callsDueTodayIds,
     actionableInvoiceIds: actionableInvoiceIds.slice(0, 5),
     followupMessageIds: messageRows
       .filter((message) => message.isCallFollowup)
@@ -762,12 +646,17 @@ export default async function DashboardPage() {
       .map((message) => message.id),
   });
 
-  const jobsSummary = jobsSummaryRes ?? { open: 0, scheduled: 0, completedLast30Days: 0 };
-  const openJobsCount = (jobsSummary.open ?? 0) + (jobsSummary.scheduled ?? 0);
 
   const automationPrefsRow = (automationPrefsRes as { data: AutomationPreferencesRow | null }).data;
 
   const unpaidInvoicesCount = unpaidInvoicesRes.data?.length ?? 0;
+  const dashboardUnpaidInvoiceIds = (unpaidInvoicesRes.data ?? []).map((invoice) => invoice.id);
+  console.log("[dashboard-invoices-debug]", {
+    workspaceId: workspace.id,
+    sourceTotal: dashboardUnpaidInvoiceIds.length,
+    unpaidCount: unpaidInvoicesCount,
+    unpaidIds: dashboardUnpaidInvoiceIds.slice(0, 5),
+  });
   const followupCallsHref = "/calls?followups=queue";
   const followupMessagesHref = "/messages?filterMode=followups";
   const followupInvoicesHref = "/invoices?status=unpaid";
@@ -794,6 +683,12 @@ export default async function DashboardPage() {
     unpaidInvoicesCount,
   });
   console.log("[dashboard-priorities-nav]", prioritiesNav);
+  console.log("[dashboard-followups-consistency]", {
+    workspaceId: workspace.id,
+    actionableCallsCount,
+    callsFollowupQueueCount,
+    followupsTileCount: actionableCallsCount,
+  });
 
   const priorityItems = [
     {
@@ -837,35 +732,19 @@ export default async function DashboardPage() {
       ctaLabel: "View invoices",
     },
   ];
+  console.log("[dashboard-priorities-consistency]", {
+    workspaceId: workspace.id,
+    todayAppointmentsCount,
+    callsFollowupQueueCount,
+    unpaidInvoicesCount,
+    messagesFollowupsTodayCount: followupMessagesTodayCount,
+    messagesFollowupsThisWeekCount: followupMessagesThisWeekCount,
+  });
 
-  const todaySummaryTiles = [
-    {
-      label: "Follow-ups due today",
-      count: actionableCallsCount,
-      helper: "Calls/messages HandyBob thinks you should follow up on.",
-      href: "/calls?followups=queue",
-    },
-    {
-      label: "Appointments today",
-      count: todayAppointmentsCount,
-      helper: "Visits on the schedule today.",
-      href: "/appointments?range=today",
-    },
-    {
-      label: "Unpaid invoices",
-      count: unpaidInvoicesCount,
-      helper: "Invoices that still need payment.",
-      href: "/invoices?status=unpaid",
-    },
-    {
-      label: "Open jobs",
-      count: openJobsCount,
-      helper: "Active work HandyBob is tracking.",
-      href: "/jobs",
-    },
-  ] as const;
   const followupsAreClear =
-    actionableCallsCount === 0 && actionableInvoiceCount === 0 && followupMessagesTodayCount === 0;
+    actionableCallsCount === 0 &&
+    actionableInvoiceCount === 0 &&
+    followupMessagesTodayCount === 0;
 
   const prefs: AutomationPrefs = {
     notifyUrgentLeads: automationPrefsRow?.notify_urgent_leads ?? true,
@@ -975,24 +854,6 @@ export default async function DashboardPage() {
             New job
           </HbButton>
         </header>
-
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="hb-heading-2">Today at a glance</h2>
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Daily control center</p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {todaySummaryTiles.map((tile) => (
-              <DashboardTodayTile
-                key={tile.label}
-                title={tile.label}
-                count={tile.count}
-                helper={tile.helper}
-                href={tile.href}
-              />
-            ))}
-          </div>
-        </section>
 
         <section className="space-y-3">
           <div className="flex items-center justify-between">
@@ -1354,32 +1215,6 @@ function DashboardPriorityRow({
   );
 }
 
-type DashboardTodayTileProps = {
-  title: string;
-  count: number;
-  helper: string;
-  href: string;
-};
-
-function DashboardTodayTile({ title, count, helper, href }: DashboardTodayTileProps) {
-  return (
-    <Link href={href} className="group block">
-      <div className="h-full">
-        <HbCard className="h-full space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{title}</p>
-            <span className="text-xs uppercase tracking-[0.3em] text-slate-400 transition group-hover:text-slate-100">
-              View
-            </span>
-          </div>
-          <p className="text-3xl font-semibold text-slate-100">{count.toLocaleString()}</p>
-          <p className="text-sm text-slate-400">{helper}</p>
-        </HbCard>
-      </div>
-    </Link>
-  );
-}
-
 function formatAppointmentTimeLabel(value: string | null, timezone: string) {
   if (!value) return "—";
   const parsed = new Date(value);
@@ -1416,8 +1251,6 @@ function appointmentStatusClass(status: AppointmentStatus | null) {
   }
   return "border border-amber-500/40 bg-amber-500/10 text-amber-200";
 }
-
-const ONE_DAY_MS = 1000 * 60 * 60 * 24;
 
 type FollowupStatChipProps = {
   label: string;

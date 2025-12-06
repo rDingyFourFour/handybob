@@ -498,3 +498,47 @@ export function calculateDaysSinceDate(value?: string | null): number | null {
   }
   return Math.floor(diffMs / ONE_DAY_MS);
 }
+
+export function isDashboardFollowupDueToday(
+  dueInfo: FollowupDueInfo | null | undefined,
+  hasMatchingFollowupToday: boolean,
+): boolean {
+  if (!dueInfo) {
+    return false;
+  }
+  const actionable = isActionableFollowupDue(dueInfo.dueStatus);
+  return actionable && dueInfo.dueStatus === "due-today" && !hasMatchingFollowupToday;
+}
+
+export function buildFollowupDebugSnapshot(
+  callId: string,
+  dueInfo: FollowupDueInfo,
+  hasMatchingFollowupToday: boolean,
+) {
+  return {
+    callId,
+    dueStatus: dueInfo.dueStatus,
+    dueLabel: dueInfo.dueLabel,
+    recommendedDelayDays: dueInfo.recommendedDelayDays,
+    hasMatchingFollowupToday,
+    isActionable: isActionableFollowupDue(dueInfo.dueStatus),
+    isDashboardDueToday: isDashboardFollowupDueToday(dueInfo, hasMatchingFollowupToday),
+  };
+}
+
+export function callIsFollowupQueueCandidate({
+  followupRecommendation,
+  followupDueInfo,
+  hasMatchingFollowupToday,
+}: {
+  followupRecommendation: FollowupRecommendation | null;
+  followupDueInfo: FollowupDueInfo;
+  hasMatchingFollowupToday: boolean;
+}): boolean {
+  if (!followupRecommendation || followupRecommendation.shouldSkipFollowup) {
+    return false;
+  }
+  return (
+    isActionableFollowupDue(followupDueInfo.dueStatus) && !hasMatchingFollowupToday
+  );
+}
