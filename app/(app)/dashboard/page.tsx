@@ -50,6 +50,8 @@ import {
   buildAttentionSummary,
   buildAttentionCounts,
   hasAnyAttention as hasAnyAttentionHelper,
+  isInvoiceOverdueForAttention,
+  isInvoiceAgingUnpaidForAttention,
 } from "@/lib/domain/dashboard/attention";
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
@@ -107,6 +109,15 @@ type FollowupMessageRow = {
   direction: string | null;
   created_at: string | null;
   sent_at: string | null;
+};
+
+type DashboardUnpaidInvoiceRow = {
+  id: string;
+  status: string | null;
+  due_at: string | null;
+  due_date: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 type InvoiceFollowupRow = {
@@ -283,7 +294,7 @@ export default async function DashboardPage() {
     ] = await Promise.all([
       supabase
         .from("invoices")
-        .select("id")
+        .select("id, status, due_at, due_date, created_at, updated_at")
         .eq("workspace_id", workspace.id)
         .in("status", ["sent", "overdue"]),
 
@@ -458,6 +469,7 @@ export default async function DashboardPage() {
     (sum, quote) => sum + Number(quote.total ?? 0),
     0
   );
+  const unpaidInvoiceRows = (unpaidInvoicesRes.data ?? []) as DashboardUnpaidInvoiceRow[];
 
   const inboundMessages = (inboundMessagesRes.data ?? []) as MessageThreadRow[];
   const inboundThreadsMap = new Map<string, MessageThreadRow>();
@@ -743,7 +755,7 @@ export default async function DashboardPage() {
     jobsSummary,
   });
 
-  const unpaidInvoicesCount = unpaidInvoicesRes.data?.length ?? 0;
+  const unpaidInvoicesCount = unpaidInvoiceRows.length;
   const followupCallsHref = "/calls?followups=queue";
   const followupMessagesHref = "/messages?filterMode=followups";
   const followupInvoicesHref = "/invoices?status=unpaid";
@@ -831,14 +843,17 @@ export default async function DashboardPage() {
     created_at: job.created_at,
     updated_at: job.updated_at,
   }));
-  const attentionInvoiceRows: AttentionInvoiceRow[] = invoiceFollowupRows.map((invoice) => ({
-    id: invoice.id,
-    status: invoice.status,
-    created_at: invoice.created_at,
-    due_date: invoice.due_date ?? invoice.due_at ?? null,
-    due_at: invoice.due_at ?? invoice.due_date ?? null,
-    updated_at: invoice.updated_at ?? null,
-  }));
+  const attentionInvoiceRows: AttentionInvoiceRow[] = unpaidInvoiceRows.map((invoice) => {
+    const dueValue = invoice.due_at ?? invoice.due_date ?? null;
+    return {
+      id: invoice.id,
+      status: invoice.status,
+      created_at: invoice.created_at,
+      updated_at: invoice.updated_at,
+      due_date: dueValue,
+      due_at: dueValue,
+    };
+  });
   const attentionAppointmentRows: AttentionAppointmentRow[] = allDashboardAppointments.map(
     (appointment) => ({
       id: appointment.id,
@@ -864,6 +879,16 @@ export default async function DashboardPage() {
     messages: attentionMessageRows,
     today: todayNow,
   });
+  const firstAttentionInvoice = attentionInvoiceRows[0];
+  const firstInvoiceDebug = firstAttentionInvoice
+    ? {
+        id: firstAttentionInvoice.id,
+        status: firstAttentionInvoice.status,
+        due_date: firstAttentionInvoice.due_date ?? firstAttentionInvoice.due_at ?? null,
+        isOverdue: isInvoiceOverdueForAttention(firstAttentionInvoice, todayNow),
+        isAgingUnpaid: isInvoiceAgingUnpaidForAttention(firstAttentionInvoice, todayNow),
+      }
+    : null;
   console.log("[dashboard-attention-invoices-debug]", {
     workspaceId: workspace.id,
     attentionInvoiceRowsCount: attentionInvoiceRows.length,
@@ -874,6 +899,7 @@ export default async function DashboardPage() {
       status: row.status,
       due_date: row.due_date ?? row.due_at ?? null,
     })),
+    firstInvoiceDebug,
   });
   const attentionCounts = buildAttentionCounts(attentionSummary);
   const messagesNeedingAttentionCount = attentionSummary.messagesNeedingAttentionCount;
