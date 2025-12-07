@@ -30,7 +30,8 @@
     "react-dom": "19.2.1",
     "resend": "^6.5.1",
     "stripe": "^20.0.0",
-    "twilio": "^5.10.5"
+    "twilio": "^5.10.5",
+    "openai": "^4.35.0"
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^16.0.4",

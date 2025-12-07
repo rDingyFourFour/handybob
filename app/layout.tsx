@@ -52,6 +52,7 @@ export default async function RootLayout({
     { label: "Appointments", href: "/appointments" },
     { label: "Calls", href: "/calls" },
     { label: "Messages", href: "/messages" },
+    { label: "AskBob", href: "/askbob" },
     { label: "Settings", href: "/settings" },
   ];
 
