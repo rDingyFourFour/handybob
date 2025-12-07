@@ -26,6 +26,7 @@ export type FollowupCallRow = {
   id: string;
   workspace_id: string;
   job_id: string | null;
+  customer_id: string | null;
   status: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -84,6 +85,7 @@ export async function loadFollowupQueueData({
         id,
         workspace_id,
         job_id,
+        customer_id,
         status,
         created_at,
         updated_at,

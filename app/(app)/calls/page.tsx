@@ -218,6 +218,29 @@ export default async function CallsPage({
     const lastUpdated = formatDateTime(call.updated_at ?? call.created_at, "—");
     const rowDueInfo = call.followupDueInfo;
     const showRowDue = rowDueInfo.dueStatus !== "none";
+    const hasSmsRecommendation = call.followupRecommendation?.recommendedChannel === "sms";
+    const hasCustomerContext = Boolean(call.customer_id);
+    let followupMessagesHref: string | null = null;
+    const showFollowupLink = followupQueueActive && hasSmsRecommendation && hasCustomerContext;
+    if (showFollowupLink && call.customer_id) {
+      const params = new URLSearchParams();
+      params.set("filterMode", "followups");
+      params.set("filter", "followups");
+      params.set("compose", "1");
+      params.set("origin", "calls-followup");
+      params.set("customerId", call.customer_id);
+      if (call.job_id) {
+        params.set("jobId", call.job_id);
+      }
+      followupMessagesHref = `/messages?${params.toString()}`;
+      console.log("[calls-followup-message-link]", {
+        workspaceId: workspace.id,
+        callId: call.id,
+        customerId: call.customer_id ?? null,
+        jobId: call.job_id ?? null,
+        href: followupMessagesHref,
+      });
+    }
 
     return (
       <div
@@ -320,6 +343,14 @@ export default async function CallsPage({
           >
             View call
           </Link>
+          {followupMessagesHref && (
+            <Link
+              href={followupMessagesHref}
+              className="inline-flex items-center rounded-full border border-slate-800/60 px-2 py-0.5 font-semibold text-slate-100 hover:border-slate-600"
+            >
+              Send follow-up SMS
+            </Link>
+          )}
           {followupQueueActive && (
           <form action={markFollowupDoneAction} className="flex flex-col items-end text-xs font-semibold text-emerald-200">
               <input type="hidden" name="callId" value={call.id} />

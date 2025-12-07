@@ -14,6 +14,9 @@ import {
   computeFollowupMessageCounts,
   parseFollowupMessageTimestamp,
 } from "@/lib/domain/communications/followupMessages";
+import { MessagesWithInlineReplies, TopLevelComposer } from "./InlineComposer";
+import MessagesHeaderActions from "./MessagesHeaderActions";
+import { CustomerOption, JobOption } from "./types";
 
 const ONE_DAY_MS = 1000 * 60 * 60 * 24;
 
@@ -77,38 +80,6 @@ type ShellCardProps = {
   buttonHref?: string;
 };
 
-function formatDate(value: string | null) {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "—";
-  return parsed.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function parseTimestampValue(value: string | null) {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
-}
-
-function formatShortDate(value: string | null) {
-  const parsed = parseTimestampValue(value);
-  if (!parsed) return "—";
-  return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-const bodyPreview = (body: string | null) => {
-  const trimmed = body?.trim() ?? "";
-  if (!trimmed) return "No preview available";
-  return trimmed.length > 80 ? `${trimmed.slice(0, 80)}...` : trimmed;
-};
-
 function renderShellCard({
   title,
   subtitle,
@@ -169,6 +140,27 @@ export default async function MessagesPage({
   const filterMode = resolveMessageFilterMode(
     resolvedSearchParams?.filterMode ?? resolvedSearchParams?.filter,
   );
+  const requestedCustomerIdRaw =
+    resolvedSearchParams?.customerId ?? resolvedSearchParams?.customer_id;
+  const normalizedCustomerId = Array.isArray(requestedCustomerIdRaw)
+    ? requestedCustomerIdRaw[0] ?? null
+    : requestedCustomerIdRaw ?? null;
+  const initialCustomerId =
+    typeof normalizedCustomerId === "string" && normalizedCustomerId.trim()
+      ? normalizedCustomerId.trim()
+      : null;
+  const requestedJobIdRaw = resolvedSearchParams?.jobId ?? resolvedSearchParams?.job_id;
+  const normalizedJobId = Array.isArray(requestedJobIdRaw)
+    ? requestedJobIdRaw[0] ?? null
+    : requestedJobIdRaw ?? null;
+  const initialJobId =
+    typeof normalizedJobId === "string" && normalizedJobId.trim() ? normalizedJobId.trim() : null;
+  const rawComposeParam = resolvedSearchParams?.compose;
+  const normalizedComposeParam = Array.isArray(rawComposeParam) ? rawComposeParam[0] : rawComposeParam;
+  const composeOpen = normalizedComposeParam === "1";
+  const rawOriginParam = resolvedSearchParams?.origin;
+  const origin =
+    Array.isArray(rawOriginParam) ? rawOriginParam[0] ?? null : rawOriginParam ?? null;
   const messageFilterSubtitle =
     filterMode === "followups"
       ? "Showing follow-up messages across your workspace."
@@ -194,8 +186,8 @@ export default async function MessagesPage({
     return query ? `/messages?${query}` : "/messages";
   };
   const filterOptions: Array<{ label: string; mode: MessageFilterMode }> = [
-    { label: "All", mode: "all" },
-    { label: "Follow-ups", mode: "followups" },
+    { label: "All messages", mode: "all" },
+    { label: "Follow-up messages", mode: "followups" },
     { label: "This week", mode: "this-week" },
   ];
 
@@ -296,6 +288,42 @@ export default async function MessagesPage({
     });
   }
 
+  let customers: CustomerOption[] = [];
+  let jobs: JobOption[] = [];
+  try {
+    const { data: customerRows, error: customerError } = await supabase
+      .from<CustomerOption>("customers")
+      .select("id, name, phone")
+      .eq("workspace_id", workspace.id)
+      .order("name");
+    if (customerError) {
+      console.error("[messages] Failed to load customers:", customerError);
+    } else {
+      customers = customerRows ?? [];
+    }
+  } catch (error) {
+    console.error("[messages] Failed to load customers:", error);
+  }
+
+  try {
+    const { data: jobRows, error: jobError } = await supabase
+      .from<JobOption>("jobs")
+      .select("id, title, customer_id")
+      .eq("workspace_id", workspace.id)
+      .order("created_at", { ascending: false });
+    if (jobError) {
+      console.error("[messages] Failed to load jobs:", jobError);
+    } else {
+      jobs = jobRows ?? [];
+    }
+  } catch (error) {
+    console.error("[messages] Failed to load jobs:", error);
+  }
+
+  const jobFromSearch =
+    initialJobId && jobs.length > 0 ? jobs.find((job) => job.id === initialJobId) : undefined;
+  const topLevelCustomerId = initialCustomerId ?? jobFromSearch?.customer_id ?? null;
+
   const jobIds = Array.from(
     new Set(
       messages
@@ -389,6 +417,13 @@ export default async function MessagesPage({
     messages: followupMessageRefs,
   });
 
+  const callIdByMessageIdRecord: Record<string, string> = {};
+  callIdByMessageId.forEach((callId, messageId) => {
+    if (callId) {
+      callIdByMessageIdRecord[messageId] = callId;
+    }
+  });
+
   const messageRows: MessageRow[] = messages.map((message) => ({
     ...message,
     isCallFollowup: callFollowupMessageIds.has(message.id),
@@ -440,6 +475,21 @@ export default async function MessagesPage({
     return true;
   });
 
+  console.log("[messages-inline-debug]", {
+    openComposerId: null,
+    filteredCount: filteredMessages.length,
+  });
+
+  if (filterMode === "followups") {
+    console.log("[messages-filter-mode]", {
+      workspaceId: workspace.id,
+      filterMode,
+      filteredMessagesCount: filteredMessages.length,
+      followupsTodayCount,
+      followupsThisWeekCount,
+    });
+  }
+
   const filteredMessagesEmptyCopy =
     filterMode === "followups"
       ? isSearching
@@ -461,6 +511,30 @@ export default async function MessagesPage({
     filterMode,
   });
 
+  if (filterMode === "followups" && origin === "dashboard-followups") {
+    console.log("[messages-followups-dashboard-entry]", {
+      workspaceId: workspace.id,
+      filterMode,
+      followupsTodayCount,
+      followupsThisWeekCount,
+    });
+  }
+
+  if (composeOpen) {
+    console.log("[messages-compose-entry]", {
+      workspaceId: workspace.id,
+      filterMode,
+      hasCustomerId: Boolean(initialCustomerId),
+      hasJobId: Boolean(initialJobId),
+      origin,
+    });
+  }
+
+  console.log("[messages-index-summary]", {
+    workspaceId: workspace.id,
+    totalMessages: messages.length,
+  });
+
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
       <HbCard className="space-y-6">
@@ -468,6 +542,16 @@ export default async function MessagesPage({
           <div>
             <h1 className="hb-heading-2 text-2xl font-semibold">Messages</h1>
             <p className="text-sm text-slate-400">{messageFilterSubtitle}</p>
+            {filterMode === "followups" && (
+              <p className="text-sm text-slate-400">
+                Showing follow-up messages linked to recent calls or invoices.
+              </p>
+            )}
+            {filterMode === "followups" && origin === "dashboard-followups" && (
+              <p className="text-xs text-slate-500">
+                You’re viewing follow-up messages surfaced from your dashboard.
+              </p>
+            )}
             <div className="mt-3 flex flex-wrap gap-2">
               {filterOptions.map((option) => {
                 const isActive = option.mode === filterMode;
@@ -478,8 +562,22 @@ export default async function MessagesPage({
                 );
               })}
             </div>
+            {origin === "calls-followup" && composeOpen && (
+              <p className="mt-2 text-sm text-slate-400">
+                You’re sending a follow-up SMS for a recent call.
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
+            <MessagesHeaderActions
+              workspaceId={workspace.id}
+              customers={customers}
+              jobs={jobs}
+              initialCustomerId={initialCustomerId}
+              initialJobId={initialJobId}
+              initialComposerOpen={composeOpen}
+              initialComposerOrigin={origin}
+            />
             <HbButton as="a" href="/messages" variant="ghost" size="sm">
               Back to messages
             </HbButton>
@@ -488,6 +586,12 @@ export default async function MessagesPage({
             </HbButton>
           </div>
         </header>
+
+        <TopLevelComposer
+          workspaceId={workspace.id}
+          customerId={topLevelCustomerId}
+          jobId={initialJobId}
+        />
 
         {messageRows.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-400">
@@ -504,122 +608,26 @@ export default async function MessagesPage({
         )}
 
         {filteredMessages.length === 0 ? (
-          <div className="rounded-2xl border border-slate-800/60 bg-slate-900/60 px-4 py-6 text-sm text-slate-400">
-            {filteredMessagesEmptyCopy}
-          </div>
+          filterMode === "followups" && !isSearching ? (
+            <div className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-900/60 px-4 py-6 text-sm text-slate-400">
+              <h2 className="hb-card-heading text-lg font-semibold text-slate-100">
+                No follow-up messages yet.
+              </h2>
+              <p>
+                Once you send follow-ups for calls or invoices, they’ll show up here for easy review.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-800/60 bg-slate-900/60 px-4 py-6 text-sm text-slate-400">
+              {filteredMessagesEmptyCopy}
+            </div>
+          )
         ) : (
-          <div className="space-y-3">
-            {filteredMessages.map((message) => {
-              const subject = message.subject?.trim() || "(no subject)";
-              const preview = bodyPreview(message.body);
-              const statusLabel = message.status ?? "Unknown";
-              const channelLabel =
-                typeof message.channel === "string" && message.channel.length > 0
-                  ? `${message.channel.charAt(0).toUpperCase()}${message.channel.slice(1)}`
-                  : "—";
-              const timestamp = formatDate(message.sent_at ?? message.created_at);
-              const relatedShortDate = formatShortDate(message.created_at ?? message.sent_at);
-              const jobContextLabel = message.job_id ? `#${message.job_id.slice(0, 8)}` : null;
-              const relatedStub = jobContextLabel
-                ? `Job • ${jobContextLabel}`
-                : message.isCallFollowup
-                ? `Call • ${relatedShortDate}`
-                : `Message • ${relatedShortDate}`;
-              const callIdForMessage = callIdByMessageId.get(message.id) ?? null;
-              const primaryActionClass =
-                "rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] transition bg-slate-50 text-slate-950 shadow-sm shadow-slate-900/40";
-              const secondaryActionClass =
-                "rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] transition text-slate-400 hover:border-slate-600";
-
-              return (
-                <article
-                  key={message.id}
-                  className="rounded-2xl border border-slate-800/60 bg-slate-900/60 px-4 py-4 transition hover:border-slate-600"
-                >
-                  <div className="grid gap-3 text-sm text-slate-400 md:grid-cols-[minmax(0,1fr)_220px]">
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-start gap-3">
-                        <div className="min-w-0">
-                          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Subject:</p>
-                          <p className="text-sm font-semibold text-slate-100">{subject}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {message.isCallFollowup && (
-                            <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-200">
-                              Call follow-up
-                            </span>
-                          )}
-                          {!message.isCallFollowup && message.isJobOrQuoteMessage && (
-                            <span className="rounded-full border border-slate-700/60 bg-slate-900/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">
-                              Job/quote message
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Body:</p>
-                        <p className="text-sm text-slate-500">{preview}</p>
-                      </div>
-                    </div>
-                    <div className="space-y-2 text-sm text-slate-400">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Status: {statusLabel}</p>
-                        {message.isCallFollowup && (
-                          <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-200">
-                            Follow-up
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Channel: {channelLabel}</p>
-                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Sent: {timestamp}</p>
-                      <p className="text-[11px] text-slate-500">
-                        Related: <span className="text-slate-400">{relatedStub}</span>
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        <Link href={`/messages/${message.id}`} className={primaryActionClass}>
-                          View message
-                        </Link>
-                        {message.job_id && (
-                          <Link href={`/jobs/${message.job_id}`} className={secondaryActionClass}>
-                            Open job
-                          </Link>
-                        )}
-                        {callIdForMessage && (
-                          <Link href={`/calls/${callIdForMessage}`} className={secondaryActionClass}>
-                            Open call
-                          </Link>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-sky-300">
-                        {message.job_id ? (
-                          <span className="flex items-center gap-1">
-                            <span className="text-slate-500">Job:</span>
-                            <Link href={`/jobs/${message.job_id}`} className="text-sky-300 hover:text-sky-200">
-                              View job
-                            </Link>
-                          </span>
-                        ) : null}
-                        {message.customer_id ? (
-                          <span className="flex items-center gap-1">
-                            <span className="text-slate-500">Customer:</span>
-                            <Link
-                              href={`/customers/${message.customer_id}`}
-                              className="text-sky-300 hover:text-sky-200"
-                            >
-                              View customer
-                            </Link>
-                          </span>
-                        ) : null}
-                        {!message.job_id && !message.customer_id && (
-                          <span className="text-slate-500">No linked context</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+          <MessagesWithInlineReplies
+            workspaceId={workspace.id}
+            filteredMessages={filteredMessages}
+            callIdByMessageId={callIdByMessageIdRecord}
+          />
         )}
       </HbCard>
     </div>
