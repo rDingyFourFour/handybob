@@ -8,13 +8,6 @@ function parseDate(value?: string | null): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function getStartOfDay(reference: Date): Date {
-  const dayStart = new Date(reference);
-  dayStart.setHours(0, 0, 0, 0);
-  dayStart.setMilliseconds(0);
-  return dayStart;
-}
-
 function normalizeOutcome(outcome: string | null | undefined): string | null {
   const normalized = outcome?.trim();
   return normalized ? normalized : null;
@@ -24,13 +17,33 @@ function sampleIds(rows: Array<{ id: string }>, limit = 5) {
   return rows.slice(0, limit).map((row) => row.id);
 }
 
+const UNPAID_LIKE_STATUSES = new Set([
+  "sent",
+  "queued",
+  "unpaid",
+  "partial",
+  "overdue",
+]);
+const STALLED_JOB_STATUSES = new Set(["quoted", "scheduled"]);
+
 export type AttentionInvoiceRow = {
   id: string;
   status: string | null;
   created_at: string | null;
-  due_at: string | null;
   updated_at: string | null;
+  due_date?: string | null;
+  due_at?: string | null;
+  total_cents?: number | null;
 };
+
+function getInvoiceDueDate(invoice: AttentionInvoiceRow): Date | null {
+  const dueIso = invoice.due_date ?? invoice.due_at ?? null;
+  if (!dueIso) {
+    return null;
+  }
+  const parsed = new Date(dueIso);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
 export type AttentionJobRow = {
   id: string;
@@ -96,71 +109,111 @@ export type AttentionCounts = {
 
 export function isInvoiceOverdueForAttention(
   invoice: AttentionInvoiceRow,
-  reference: Date = new Date()
-) {
+  today: Date
+): boolean {
   const status = (invoice.status ?? "").toLowerCase();
-  if (!status || status === "draft" || status === "paid") {
+
+  // Skip anything that is clearly not actionable
+  if (!status || status === "draft" || status === "void" || status === "paid") {
     return false;
   }
-  const dueDateString = invoice.due_at ?? null;
-  if (!dueDateString) {
+
+  if (!UNPAID_LIKE_STATUSES.has(status)) {
+    // Unknown status: be conservative and treat it as not overdue for now
     return false;
   }
-  const dueDate = parseDate(dueDateString);
+
+  const dueDate = getInvoiceDueDate(invoice);
   if (dueDate === null) {
     return false;
   }
-  return dueDate.getTime() < reference.getTime();
+
+  // Overdue means strictly before “today” (using date-only semantics)
+  const dueYmd = dueDate.toISOString().slice(0, 10);
+  const todayYmd = today.toISOString().slice(0, 10);
+  return dueYmd < todayYmd;
 }
 
 export function isInvoiceAgingUnpaidForAttention(
   invoice: AttentionInvoiceRow,
-  reference: Date = new Date()
-) {
-  if (invoice.status !== "unpaid") {
+  today: Date
+): boolean {
+  if (!isInvoiceOverdueForAttention(invoice, today)) {
     return false;
   }
-  const createdDate = parseDate(invoice.created_at);
-  if (createdDate === null) {
+
+  const dueDate = getInvoiceDueDate(invoice);
+  if (dueDate === null) {
     return false;
   }
-  return reference.getTime() - createdDate.getTime() > 14 * ONE_DAY_MS;
+
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const daysOverdue = Math.floor(
+    (today.getTime() - dueDate.getTime()) / msPerDay
+  );
+
+  // Aging = meaningfully late (e.g., 30+ days)
+  return daysOverdue >= 30;
+}
+
+export function isJobStalledForAttention(job: AttentionJobRow, today: Date): boolean {
+  const status = (job.status ?? "").toLowerCase();
+  if (!STALLED_JOB_STATUSES.has(status)) {
+    return false;
+  }
+  const lastActivity = parseDate(job.updated_at ?? job.created_at);
+  if (lastActivity === null) {
+    return false;
+  }
+  const daysSinceLastActivity = Math.floor((today.getTime() - lastActivity.getTime()) / ONE_DAY_MS);
+  return daysSinceLastActivity >= 7;
+}
+
+export function isAppointmentMissedForAttention(
+  appointment: AttentionAppointmentRow,
+  today: Date
+): boolean {
+  const status = (appointment.status ?? "").toLowerCase();
+  if (status !== "scheduled") {
+    return false;
+  }
+  const referenceTime = parseDate(appointment.end_time ?? appointment.start_time);
+  if (referenceTime === null) {
+    return false;
+  }
+  return referenceTime.getTime() < today.getTime();
+}
+
+export function isCallMissingOutcomeForAttention(
+  call: AttentionCallRow,
+  today: Date
+): boolean {
+  const normalized = normalizeOutcome(call.outcome);
+  if (normalized) {
+    return false;
+  }
+  const createdAt = parseDate(call.created_at);
+  if (createdAt === null) {
+    return false;
+  }
+  return today.getTime() - createdAt.getTime() >= ONE_DAY_MS;
 }
 
 export function buildAttentionSummary(input: AttentionInput): AttentionSummary {
   const { today, invoices, jobs, appointments, calls, messages } = input;
-  const todayStart = getStartOfDay(today);
   const overdueInvoices = invoices.filter((invoice) =>
     isInvoiceOverdueForAttention(invoice, today)
   );
   const agingUnpaidInvoices = invoices.filter((invoice) =>
     isInvoiceAgingUnpaidForAttention(invoice, today)
   );
-  const stalledJobs = jobs.filter((job) => {
-    if (job.status !== "quoted") {
-      return false;
-    }
-    const activityDate = parseDate(job.updated_at ?? job.created_at ?? null);
-    return (
-      activityDate !== null &&
-      today.getTime() - activityDate.getTime() > 7 * ONE_DAY_MS
-    );
-  });
-  const missedAppointments = appointments.filter((appointment) => {
-    if (appointment.status !== "scheduled") {
-      return false;
-    }
-    const endTime = parseDate(appointment.end_time);
-    return endTime !== null && endTime.getTime() < today.getTime();
-  });
-  const callsMissingOutcome = calls.filter((call) => {
-    const normalized = normalizeOutcome(call.outcome);
-    if (normalized) {
-      return false;
-    }
-    const createdAt = parseDate(call.created_at);
-    return createdAt !== null && createdAt.getTime() < todayStart.getTime();
-  });
+  const stalledJobs = jobs.filter((job) => isJobStalledForAttention(job, today));
+  const missedAppointments = appointments.filter((appointment) =>
+    isAppointmentMissedForAttention(appointment, today)
+  );
+  const callsMissingOutcome = calls.filter((call) =>
+    isCallMissingOutcomeForAttention(call, today)
+  );
 
   return {
     overdueInvoices,
@@ -203,7 +256,7 @@ export function buildAttentionCounts(summary: AttentionSummary): AttentionCounts
 export function hasAnyAttention(
   summaryOrCounts: AttentionSummary | AttentionCounts,
   options?: { messagesNeedingAttentionCount?: number }
-) {
+): boolean {
   const counts =
     "stalledJobsCount" in summaryOrCounts
       ? buildAttentionCounts(summaryOrCounts)

@@ -113,8 +113,10 @@ type InvoiceFollowupRow = {
   id: string;
   status: string | null;
   due_at: string | null;
+  due_date?: string | null;
   issued_at: string | null;
   created_at: string | null;
+  updated_at?: string | null;
 };
 export async function updateAutomationPreferences(formData: FormData) {
   "use server";
@@ -833,8 +835,9 @@ export default async function DashboardPage() {
     id: invoice.id,
     status: invoice.status,
     created_at: invoice.created_at,
-    due_at: invoice.due_at,
-    updated_at: invoice.updated_at,
+    due_date: invoice.due_date ?? invoice.due_at ?? null,
+    due_at: invoice.due_at ?? invoice.due_date ?? null,
+    updated_at: invoice.updated_at ?? null,
   }));
   const attentionAppointmentRows: AttentionAppointmentRow[] = allDashboardAppointments.map(
     (appointment) => ({
@@ -860,6 +863,17 @@ export default async function DashboardPage() {
     calls: attentionCallRows,
     messages: attentionMessageRows,
     today: todayNow,
+  });
+  console.log("[dashboard-attention-invoices-debug]", {
+    workspaceId: workspace.id,
+    attentionInvoiceRowsCount: attentionInvoiceRows.length,
+    overdueInvoicesCount: attentionSummary.overdueInvoicesCount,
+    agingUnpaidInvoicesCount: attentionSummary.agingUnpaidInvoicesCount,
+    invoiceSample: attentionInvoiceRows.slice(0, 5).map((row) => ({
+      id: row.id,
+      status: row.status,
+      due_date: row.due_date ?? row.due_at ?? null,
+    })),
   });
   const attentionCounts = buildAttentionCounts(attentionSummary);
   const messagesNeedingAttentionCount = attentionSummary.messagesNeedingAttentionCount;
