@@ -1,25 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getAttentionCutoffs, getAttentionItems } from "@/lib/domain/attention";
+import {
+  buildAttentionCounts,
+  buildAttentionSummary,
+  type AttentionInvoiceRow,
+} from "@/lib/domain/dashboard/attention";
+import {
+  setupSupabaseMock,
+  type SupabaseQueryResponse,
+} from "@/tests/setup/supabaseClientMock";
 
 type TableName = "jobs" | "quotes" | "invoices" | "calls";
 
-type SupabaseQuery = {
-  select: () => SupabaseQuery;
-  eq: (...args: unknown[]) => SupabaseQuery;
-  gte: (...args: unknown[]) => SupabaseQuery;
-  lt: (...args: unknown[]) => SupabaseQuery;
-  order: (...args: unknown[]) => SupabaseQuery;
-  limit: (size: number) => Promise<{ data: unknown[] | null; error: unknown | null }>;
-};
-
-type SupabaseState = {
-  supabase: {
-    from: (table: TableName) => SupabaseQuery;
-  };
-  queries: Record<TableName, SupabaseQuery>;
-  limitErrors: Partial<Record<TableName, Error>>;
-};
+// These attention queries hit a mocked Supabase client, so opt in via an env flag.
+const RUN_INTEGRATION_TESTS = process.env.RUN_INTEGRATION_TESTS === "1";
+const describeAttentionItems = RUN_INTEGRATION_TESTS ? describe : describe.skip;
 
 const sampleLead = {
   id: "lead-1",
@@ -32,7 +28,7 @@ const sampleLead = {
   customer: { name: "Alex" },
 };
 
-const defaultResponses: Record<TableName, { data: unknown[]; error: null }> = {
+const defaultResponses: Record<TableName, SupabaseQueryResponse> = {
   jobs: { data: [sampleLead], error: null },
   quotes: {
     data: [
@@ -80,39 +76,7 @@ const defaultResponses: Record<TableName, { data: unknown[]; error: null }> = {
   },
 };
 
-let supabaseState: SupabaseState;
-
-function createQuery(table: TableName, state: SupabaseState): SupabaseQuery {
-  const query: SupabaseQuery = {
-    select: () => query,
-    eq: () => query,
-    gte: () => query,
-    lt: () => query,
-    order: () => query,
-    limit: vi.fn(async () => {
-      if (state.limitErrors[table]) {
-        return Promise.reject(state.limitErrors[table]);
-      }
-      return Promise.resolve(defaultResponses[table]);
-    }),
-  };
-  return query;
-}
-
-function setupSupabaseMock(): SupabaseState {
-  const state: SupabaseState = {
-    supabase: {
-      from: vi.fn((table: TableName) => {
-        const query = createQuery(table, state);
-        state.queries[table] = query;
-        return query;
-      }),
-    },
-    queries: {} as Record<TableName, SupabaseQuery>,
-    limitErrors: {},
-  };
-  return state;
-}
+let supabaseState = setupSupabaseMock(defaultResponses);
 
 vi.mock("@/utils/supabase/server", () => ({
   createServerClient: () => supabaseState.supabase,
@@ -130,9 +94,9 @@ describe("getAttentionCutoffs", () => {
   });
 });
 
-describe("getAttentionItems", () => {
+describeAttentionItems("getAttentionItems", () => {
   beforeEach(() => {
-    supabaseState = setupSupabaseMock();
+    supabaseState = setupSupabaseMock(defaultResponses);
   });
 
   it("queries workspace-scoped attention rows and returns formatted data", async () => {
@@ -150,5 +114,95 @@ describe("getAttentionItems", () => {
     supabaseState.limitErrors.jobs = new Error("db failure");
 
     await expect(getAttentionItems("workspace-1")).rejects.toThrow("db failure");
+  });
+});
+
+describe("buildAttentionSummary & counts", () => {
+  it("returns zeros when nothing needs attention", () => {
+    const today = new Date("2025-01-15T12:00:00Z");
+    const summary = buildAttentionSummary({
+      invoices: [],
+      jobs: [],
+      appointments: [],
+      calls: [],
+      messages: [],
+      today,
+    });
+    const counts = buildAttentionCounts(summary);
+
+    expect(summary.overdueInvoicesCount).toBe(0);
+    expect(summary.stalledJobsCount).toBe(0);
+    expect(summary.missedAppointmentsCount).toBe(0);
+    expect(summary.callsMissingOutcomeCount).toBe(0);
+    expect(summary.agingUnpaidInvoicesCount).toBe(0);
+    expect(counts.overdueInvoicesCount).toBe(0);
+    expect(counts.jobsNeedingAttentionCount).toBe(0);
+    expect(counts.appointmentsNeedingAttentionCount).toBe(0);
+    expect(counts.callsNeedingAttentionCount).toBe(0);
+    expect(counts.agingUnpaidInvoicesCount).toBe(0);
+    expect(counts.totalAttentionCount).toBe(0);
+  });
+
+  it("counts an overdue invoice", () => {
+    const today = new Date("2025-01-15T12:00:00Z");
+    const invoices: AttentionInvoiceRow[] = [
+      {
+        id: "inv_overdue_1",
+        status: "sent",
+        created_at: "2024-12-01T00:00:00Z",
+        due_at: "2024-12-20T00:00:00Z",
+        updated_at: "2024-12-20T00:00:00Z",
+      },
+    ];
+    const summary = buildAttentionSummary({
+      invoices,
+      jobs: [],
+      appointments: [],
+      calls: [],
+      messages: [],
+      today,
+    });
+    const counts = buildAttentionCounts(summary);
+
+    expect(summary.overdueInvoicesCount).toBe(1);
+    expect(summary.overdueInvoiceIdsSample).toEqual(["inv_overdue_1"]);
+    expect(counts.overdueInvoicesCount).toBe(1);
+    expect(counts.totalAttentionCount).toBe(1);
+  });
+
+  it("separates aging unpaid from ordinary overdue invoices", () => {
+    const today = new Date("2025-01-15T12:00:00Z");
+    const invoices: AttentionInvoiceRow[] = [
+      {
+        id: "inv_recent_overdue",
+        status: "sent",
+        created_at: "2025-01-10T00:00:00Z",
+        due_at: "2025-01-10T00:00:00Z",
+        updated_at: "2025-01-10T00:00:00Z",
+      },
+      {
+        id: "inv_aging_unpaid",
+        status: "unpaid",
+        created_at: "2024-12-01T00:00:00Z",
+        due_at: "2024-12-05T00:00:00Z",
+        updated_at: "2024-12-05T00:00:00Z",
+      },
+    ];
+    const summary = buildAttentionSummary({
+      invoices,
+      jobs: [],
+      appointments: [],
+      calls: [],
+      messages: [],
+      today,
+    });
+    const counts = buildAttentionCounts(summary);
+
+    expect(summary.overdueInvoicesCount).toBe(2);
+    expect(summary.agingUnpaidInvoicesCount).toBe(1);
+    expect(summary.agingUnpaidInvoiceIdsSample).toEqual(["inv_aging_unpaid"]);
+    expect(counts.overdueInvoicesCount).toBe(2);
+    expect(counts.agingUnpaidInvoicesCount).toBe(1);
+    expect(counts.totalAttentionCount).toBe(3);
   });
 });

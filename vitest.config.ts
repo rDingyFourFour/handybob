@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    setupFiles: ["tests/setup/supabaseEnv.ts"],
     globals: true,
     environment: "node",
     alias: {

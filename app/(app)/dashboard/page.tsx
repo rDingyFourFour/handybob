@@ -42,10 +42,14 @@ import { ActivitySkeleton } from "@/components/dashboard/ActivitySkeleton";
 import { RecentActivityWidget } from "@/components/dashboard/RecentActivityWidget";
 import { getAttentionCutoffs } from "@/lib/domain/attention";
 import {
+  AttentionAppointmentRow,
+  AttentionCallRow,
+  AttentionInvoiceRow,
+  AttentionJobRow,
+  AttentionMessageRow,
   buildAttentionSummary,
   buildAttentionCounts,
-  buildAttentionDebugSnapshot,
-  isInvoiceOverdueForAttention,
+  hasAnyAttention as hasAnyAttentionHelper,
 } from "@/lib/domain/dashboard/attention";
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
@@ -819,48 +823,56 @@ export default async function DashboardPage() {
     created_at: string | null;
     updated_at: string | null;
   }[];
-  const attentionJobRows = quotedJobs.map((job) => ({
+  const attentionJobRows: AttentionJobRow[] = quotedJobs.map((job) => ({
     id: job.id,
     status: job.status,
     created_at: job.created_at,
-    last_activity_at: job.updated_at,
+    updated_at: job.updated_at,
   }));
-  const attentionInvoiceRows = invoiceFollowupRows.map((invoice) => ({
+  const attentionInvoiceRows: AttentionInvoiceRow[] = invoiceFollowupRows.map((invoice) => ({
     id: invoice.id,
     status: invoice.status,
     created_at: invoice.created_at,
-    due_date: invoice.due_at,
+    due_at: invoice.due_at,
+    updated_at: invoice.updated_at,
   }));
-  const attentionAppointmentRows = allDashboardAppointments.map((appointment) => ({
-    id: appointment.id,
-    status: appointment.status,
-    start_time: appointment.start_time,
-    end_time: appointment.end_time,
-  }));
-  const attentionCallRows = followupCallRows.map((call) => ({
+  const attentionAppointmentRows: AttentionAppointmentRow[] = allDashboardAppointments.map(
+    (appointment) => ({
+      id: appointment.id,
+      status: appointment.status,
+      start_time: appointment.start_time,
+      end_time: appointment.end_time,
+    })
+  );
+  const attentionCallRows: AttentionCallRow[] = followupCallRows.map((call) => ({
     id: call.id,
     created_at: call.created_at,
     outcome: call.outcome ?? null,
   }));
-  const attentionMessageRows = followupMessageRows.map((message) => ({
+  const attentionMessageRows: AttentionMessageRow[] = followupMessageRows.map((message) => ({
     id: message.id,
     created_at: message.created_at,
   }));
-  const overdueInvoicesSource = attentionInvoiceRows.filter((invoice) =>
-    isInvoiceOverdueForAttention(invoice, todayNow)
-  );
-  const overdueInvoiceIdsSample = sampleIds(overdueInvoicesSource);
-  console.log("[dashboard-attention-overdue-predicate]", {
-    workspaceId: workspace.id,
-    sourceCount: attentionInvoiceRows.length,
-    overdueCount: overdueInvoicesSource.length,
-    overdueIdsSample: overdueInvoiceIdsSample,
+  const attentionSummary = buildAttentionSummary({
+    jobs: attentionJobRows,
+    invoices: attentionInvoiceRows,
+    appointments: attentionAppointmentRows,
+    calls: attentionCallRows,
+    messages: attentionMessageRows,
+    today: todayNow,
   });
+  const attentionCounts = buildAttentionCounts(attentionSummary);
+  const messagesNeedingAttentionCount = attentionSummary.messagesNeedingAttentionCount;
+  const totalAttentionCount = attentionCounts.totalAttentionCount + messagesNeedingAttentionCount;
+  const hasAnyAttentionItems = hasAnyAttentionHelper(attentionSummary, {
+    messagesNeedingAttentionCount,
+  });
+  const overdueInvoiceIdsSample = attentionSummary.overdueInvoiceIdsSample;
   console.log("[dashboard-attention-source]", {
     workspaceId: workspace.id,
     quotedJobsCount: quotedJobs.length,
     quotedJobIdsSample: sampleIds(quotedJobs),
-    overdueInvoicesSourceCount: overdueInvoicesSource.length,
+    overdueInvoicesSourceCount: attentionInvoiceRows.length,
     overdueInvoiceIdsSample,
     appointmentsSourceCount: allDashboardAppointments.length,
     appointmentIdsSample: sampleIds(allDashboardAppointments),
@@ -882,38 +894,16 @@ export default async function DashboardPage() {
     attentionMessageRowsCount: attentionMessageRows.length,
     messageIdsSample: sampleIds(attentionMessageRows),
   });
-  const attentionSummary = buildAttentionSummary({
-    jobs: attentionJobRows,
-    invoices: attentionInvoiceRows,
-    appointments: attentionAppointmentRows,
-    calls: attentionCallRows,
-    messages: attentionMessageRows,
-  });
-  const baseAttentionCounts = buildAttentionCounts(attentionSummary);
-  const attentionCounts = {
-    ...baseAttentionCounts,
-    overdueInvoicesCount: overdueInvoicesSource.length,
-  };
-  const attentionDebug = buildAttentionDebugSnapshot(attentionSummary);
   console.log("[dashboard-attention-summary]", {
     workspaceId: workspace.id,
     ...attentionCounts,
-    ...attentionDebug,
-    overdueInvoiceIdsSample,
+    ...attentionSummary,
   });
   const overdueInvoicesCount = attentionCounts.overdueInvoicesCount;
-  const jobsNeedingAttentionCount = attentionCounts.stalledJobsCount;
-  const appointmentsNeedingAttentionCount = attentionCounts.missedAppointmentsCount;
-  const callsNeedingAttentionCount = attentionCounts.callsMissingOutcomeCount;
+  const jobsNeedingAttentionCount = attentionCounts.jobsNeedingAttentionCount;
+  const appointmentsNeedingAttentionCount = attentionCounts.appointmentsNeedingAttentionCount;
+  const callsNeedingAttentionCount = attentionCounts.callsNeedingAttentionCount;
   const agingUnpaidInvoicesCount = attentionCounts.agingUnpaidInvoicesCount;
-  const messagesNeedingAttentionCount = attentionMessageRows.length;
-  const totalAttentionCount =
-    overdueInvoicesCount +
-    jobsNeedingAttentionCount +
-    appointmentsNeedingAttentionCount +
-    callsNeedingAttentionCount +
-    messagesNeedingAttentionCount +
-    agingUnpaidInvoicesCount;
   console.log("[dashboard-attention-counts]", {
     workspaceId: workspace.id,
     overdueInvoicesCount,
@@ -930,36 +920,36 @@ export default async function DashboardPage() {
   const attentionRows = [
     {
       key: "overdueInvoices",
-      count: attentionCounts.overdueInvoicesCount,
-      label: `Overdue invoices (${attentionCounts.overdueInvoicesCount.toLocaleString()})`,
+      count: attentionSummary.overdueInvoicesCount,
+      label: `Overdue invoices (${attentionSummary.overdueInvoicesCount.toLocaleString()})`,
       description: "Invoices past their due date.",
       href: overdueInvoicesHref,
     },
     {
       key: "stalledJobs",
-      count: attentionCounts.stalledJobsCount,
-      label: `Stalled quotes (${attentionCounts.stalledJobsCount.toLocaleString()})`,
+      count: attentionSummary.stalledJobsCount,
+      label: `Stalled quotes (${attentionSummary.stalledJobsCount.toLocaleString()})`,
       description: "Quoted jobs with no movement for more than a week.",
       href: "/jobs?status=quoted",
     },
     {
       key: "missedAppointments",
-      count: attentionCounts.missedAppointmentsCount,
-      label: `Missed appointments (${attentionCounts.missedAppointmentsCount.toLocaleString()})`,
+      count: attentionSummary.missedAppointmentsCount,
+      label: `Missed appointments (${attentionSummary.missedAppointmentsCount.toLocaleString()})`,
       description: "Visits that were scheduled in the past but never marked complete.",
       href: "/appointments?history=attention",
     },
     {
       key: "callsMissingOutcome",
-      count: attentionCounts.callsMissingOutcomeCount,
-      label: `Calls missing outcome (${attentionCounts.callsMissingOutcomeCount.toLocaleString()})`,
+      count: attentionSummary.callsMissingOutcomeCount,
+      label: `Calls missing outcome (${attentionSummary.callsMissingOutcomeCount.toLocaleString()})`,
       description: "Calls that still need an outcome logged.",
       href: "/calls?needsOutcome=true",
     },
     {
       key: "agingUnpaidInvoices",
-      count: attentionCounts.agingUnpaidInvoicesCount,
-      label: `Aging unpaid invoices (${attentionCounts.agingUnpaidInvoicesCount.toLocaleString()})`,
+      count: attentionSummary.agingUnpaidInvoicesCount,
+      label: `Aging unpaid invoices (${attentionSummary.agingUnpaidInvoicesCount.toLocaleString()})`,
       description: "Unpaid invoices older than two weeks.",
       href: agingUnpaidInvoicesHref,
     },
@@ -972,7 +962,7 @@ export default async function DashboardPage() {
     overdueInvoiceIdsSample,
     agingUnpaidInvoicesHref,
     agingUnpaidInvoicesCount,
-    agingUnpaidInvoiceIdsSample: attentionDebug.agingUnpaidInvoiceIdsSample,
+    agingUnpaidInvoiceIdsSample: attentionSummary.agingUnpaidInvoiceIdsSample,
   });
   console.log("[dashboard-attention-items]", {
     workspaceId: workspace.id,
@@ -985,25 +975,17 @@ export default async function DashboardPage() {
   });
   const invoiceLoadFailed =
     Boolean(overdueInvoicesRes.error) || Boolean(paidInvoicesThisMonthRes.error);
-  const hasAnyAttention =
-    (
-      overdueInvoicesCount > 0 ||
-      jobsNeedingAttentionCount > 0 ||
-      appointmentsNeedingAttentionCount > 0 ||
-      callsNeedingAttentionCount > 0 ||
-      agingUnpaidInvoicesCount > 0 ||
-      messagesNeedingAttentionCount > 0
-    ) && !invoiceLoadFailed;
+  const hasAnyAttention = hasAnyAttentionItems && !invoiceLoadFailed;
   console.log("[dashboard-attention-visibility]", {
     workspaceId: workspace.id,
     hasAnyAttention,
     totalAttentionCount,
     countsSnapshot: {
-      overdueInvoicesCount: attentionCounts.overdueInvoicesCount,
-      stalledJobsCount: attentionCounts.stalledJobsCount,
-      missedAppointmentsCount: attentionCounts.missedAppointmentsCount,
-      callsMissingOutcomeCount: attentionCounts.callsMissingOutcomeCount,
-      agingUnpaidInvoicesCount: attentionCounts.agingUnpaidInvoicesCount,
+      overdueInvoicesCount: attentionSummary.overdueInvoicesCount,
+      stalledJobsCount: attentionSummary.stalledJobsCount,
+      missedAppointmentsCount: attentionSummary.missedAppointmentsCount,
+      callsMissingOutcomeCount: attentionSummary.callsMissingOutcomeCount,
+      agingUnpaidInvoicesCount: attentionSummary.agingUnpaidInvoicesCount,
       messagesNeedingAttentionCount,
     },
     itemsRenderedCount: attentionItems.length,

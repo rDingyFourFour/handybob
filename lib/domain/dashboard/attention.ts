@@ -1,70 +1,5 @@
 const ONE_DAY_MS = 1000 * 60 * 60 * 24;
 
-type JobRow = {
-  id: string;
-  status: string | null;
-  created_at: string | null;
-  last_activity_at?: string | null;
-};
-
-export type AttentionInvoiceRow = {
-  id: string;
-  status: string | null;
-  created_at: string | null;
-  due_date: string | null;
-};
-
-type AppointmentRow = {
-  id: string;
-  status: string | null;
-  start_time: string | null;
-  end_time: string | null;
-};
-
-type CallRow = {
-  id: string;
-  created_at: string | null;
-  outcome: string | null;
-};
-
-type MessageRow = {
-  id: string;
-  created_at: string | null;
-};
-
-type AttentionInput = {
-  jobs: JobRow[];
-  invoices: AttentionInvoiceRow[];
-  appointments: AppointmentRow[];
-  calls: CallRow[];
-  messages: MessageRow[];
-  now?: Date;
-};
-
-type AttentionSummary = {
-  overdueInvoices: AttentionInvoiceRow[];
-  stalledJobs: JobRow[];
-  missedAppointments: AppointmentRow[];
-  callsMissingOutcome: CallRow[];
-  agingUnpaidInvoices: AttentionInvoiceRow[];
-};
-
-type AttentionCounts = {
-  overdueInvoicesCount: number;
-  stalledJobsCount: number;
-  missedAppointmentsCount: number;
-  callsMissingOutcomeCount: number;
-  agingUnpaidInvoicesCount: number;
-};
-
-type AttentionDebugSnapshot = AttentionCounts & {
-  overdueInvoiceIdsSample: string[];
-  stalledJobIdsSample: string[];
-  missedAppointmentIdsSample: string[];
-  callsMissingOutcomeIdsSample: string[];
-  agingUnpaidInvoiceIdsSample: string[];
-};
-
 function parseDate(value?: string | null): Date | null {
   if (!value) {
     return null;
@@ -85,6 +20,80 @@ function normalizeOutcome(outcome: string | null | undefined): string | null {
   return normalized ? normalized : null;
 }
 
+function sampleIds(rows: Array<{ id: string }>, limit = 5) {
+  return rows.slice(0, limit).map((row) => row.id);
+}
+
+export type AttentionInvoiceRow = {
+  id: string;
+  status: string | null;
+  created_at: string | null;
+  due_at: string | null;
+  updated_at: string | null;
+};
+
+export type AttentionJobRow = {
+  id: string;
+  status: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type AttentionAppointmentRow = {
+  id: string;
+  status: string | null;
+  start_time: string | null;
+  end_time: string | null;
+};
+
+export type AttentionCallRow = {
+  id: string;
+  created_at: string | null;
+  outcome: string | null;
+};
+
+export type AttentionMessageRow = {
+  id: string;
+  created_at: string | null;
+};
+
+export type AttentionInput = {
+  invoices: AttentionInvoiceRow[];
+  jobs: AttentionJobRow[];
+  appointments: AttentionAppointmentRow[];
+  calls: AttentionCallRow[];
+  messages: AttentionMessageRow[];
+  today: Date;
+};
+
+export type AttentionSummary = {
+  overdueInvoices: AttentionInvoiceRow[];
+  stalledJobs: AttentionJobRow[];
+  missedAppointments: AttentionAppointmentRow[];
+  callsMissingOutcome: AttentionCallRow[];
+  agingUnpaidInvoices: AttentionInvoiceRow[];
+  overdueInvoicesCount: number;
+  stalledJobsCount: number;
+  missedAppointmentsCount: number;
+  callsMissingOutcomeCount: number;
+  agingUnpaidInvoicesCount: number;
+  messagesNeedingAttentionCount: number;
+  overdueInvoiceIdsSample: string[];
+  stalledJobIdsSample: string[];
+  missedAppointmentIdsSample: string[];
+  callsMissingOutcomeIdsSample: string[];
+  agingUnpaidInvoiceIdsSample: string[];
+};
+
+export type AttentionCounts = {
+  overdueInvoicesCount: number;
+  jobsNeedingAttentionCount: number;
+  appointmentsNeedingAttentionCount: number;
+  callsNeedingAttentionCount: number;
+  agingUnpaidInvoicesCount: number;
+  totalAttentionCount: number;
+};
+
 export function isInvoiceOverdueForAttention(
   invoice: AttentionInvoiceRow,
   reference: Date = new Date()
@@ -93,7 +102,7 @@ export function isInvoiceOverdueForAttention(
   if (!status || status === "draft" || status === "paid") {
     return false;
   }
-  const dueDateString = invoice.due_date ?? null;
+  const dueDateString = invoice.due_at ?? null;
   if (!dueDateString) {
     return false;
   }
@@ -119,37 +128,32 @@ export function isInvoiceAgingUnpaidForAttention(
 }
 
 export function buildAttentionSummary(input: AttentionInput): AttentionSummary {
-  const now = input.now ?? new Date();
-  const todayStart = getStartOfDay(now);
-  const overdueInvoices = input.invoices.filter((invoice) =>
-    isInvoiceOverdueForAttention(invoice, now)
+  const { today, invoices, jobs, appointments, calls, messages } = input;
+  const todayStart = getStartOfDay(today);
+  const overdueInvoices = invoices.filter((invoice) =>
+    isInvoiceOverdueForAttention(invoice, today)
   );
-
-  const agingUnpaidInvoices = input.invoices.filter((invoice) =>
-    isInvoiceAgingUnpaidForAttention(invoice, now)
+  const agingUnpaidInvoices = invoices.filter((invoice) =>
+    isInvoiceAgingUnpaidForAttention(invoice, today)
   );
-
-  const stalledJobs = input.jobs.filter((job) => {
+  const stalledJobs = jobs.filter((job) => {
     if (job.status !== "quoted") {
       return false;
     }
-    const activitySource = job.last_activity_at ?? job.created_at;
-    const activityDate = parseDate(activitySource);
+    const activityDate = parseDate(job.updated_at ?? job.created_at ?? null);
     return (
       activityDate !== null &&
-      now.getTime() - activityDate.getTime() > 7 * ONE_DAY_MS
+      today.getTime() - activityDate.getTime() > 7 * ONE_DAY_MS
     );
   });
-
-  const missedAppointments = input.appointments.filter((appointment) => {
+  const missedAppointments = appointments.filter((appointment) => {
     if (appointment.status !== "scheduled") {
       return false;
     }
     const endTime = parseDate(appointment.end_time);
-    return endTime !== null && endTime.getTime() < now.getTime();
+    return endTime !== null && endTime.getTime() < today.getTime();
   });
-
-  const callsMissingOutcome = input.calls.filter((call) => {
+  const callsMissingOutcome = calls.filter((call) => {
     const normalized = normalizeOutcome(call.outcome);
     if (normalized) {
       return false;
@@ -164,33 +168,53 @@ export function buildAttentionSummary(input: AttentionInput): AttentionSummary {
     missedAppointments,
     callsMissingOutcome,
     agingUnpaidInvoices,
+    overdueInvoicesCount: overdueInvoices.length,
+    stalledJobsCount: stalledJobs.length,
+    missedAppointmentsCount: missedAppointments.length,
+    callsMissingOutcomeCount: callsMissingOutcome.length,
+    agingUnpaidInvoicesCount: agingUnpaidInvoices.length,
+    messagesNeedingAttentionCount: messages.length,
+    overdueInvoiceIdsSample: sampleIds(overdueInvoices),
+    stalledJobIdsSample: sampleIds(stalledJobs),
+    missedAppointmentIdsSample: sampleIds(missedAppointments),
+    callsMissingOutcomeIdsSample: sampleIds(callsMissingOutcome),
+    agingUnpaidInvoiceIdsSample: sampleIds(agingUnpaidInvoices),
   };
 }
 
 export function buildAttentionCounts(summary: AttentionSummary): AttentionCounts {
+  const jobsNeedingAttentionCount = summary.stalledJobsCount;
+  const totalAttentionCount =
+    summary.overdueInvoicesCount +
+    jobsNeedingAttentionCount +
+    summary.missedAppointmentsCount +
+    summary.callsMissingOutcomeCount +
+    summary.agingUnpaidInvoicesCount;
   return {
-    overdueInvoicesCount: summary.overdueInvoices.length,
-    stalledJobsCount: summary.stalledJobs.length,
-    missedAppointmentsCount: summary.missedAppointments.length,
-    callsMissingOutcomeCount: summary.callsMissingOutcome.length,
-    agingUnpaidInvoicesCount: summary.agingUnpaidInvoices.length,
+    overdueInvoicesCount: summary.overdueInvoicesCount,
+    jobsNeedingAttentionCount,
+    appointmentsNeedingAttentionCount: summary.missedAppointmentsCount,
+    callsNeedingAttentionCount: summary.callsMissingOutcomeCount,
+    agingUnpaidInvoicesCount: summary.agingUnpaidInvoicesCount,
+    totalAttentionCount,
   };
 }
 
-function sampleIds(rows: { id: string }[], limit = 3) {
-  return rows.slice(0, limit).map((row) => row.id);
-}
-
-export function buildAttentionDebugSnapshot(
-  summary: AttentionSummary
-): AttentionDebugSnapshot {
-  const counts = buildAttentionCounts(summary);
-  return {
-    ...counts,
-    overdueInvoiceIdsSample: sampleIds(summary.overdueInvoices),
-    stalledJobIdsSample: sampleIds(summary.stalledJobs),
-    missedAppointmentIdsSample: sampleIds(summary.missedAppointments),
-    callsMissingOutcomeIdsSample: sampleIds(summary.callsMissingOutcome),
-    agingUnpaidInvoiceIdsSample: sampleIds(summary.agingUnpaidInvoices),
-  };
+export function hasAnyAttention(
+  summaryOrCounts: AttentionSummary | AttentionCounts,
+  options?: { messagesNeedingAttentionCount?: number }
+) {
+  const counts =
+    "stalledJobsCount" in summaryOrCounts
+      ? buildAttentionCounts(summaryOrCounts)
+      : summaryOrCounts;
+  const missingMessagesCount = options?.messagesNeedingAttentionCount ?? 0;
+  return (
+    counts.overdueInvoicesCount > 0 ||
+    counts.jobsNeedingAttentionCount > 0 ||
+    counts.appointmentsNeedingAttentionCount > 0 ||
+    counts.callsNeedingAttentionCount > 0 ||
+    counts.agingUnpaidInvoicesCount > 0 ||
+    missingMessagesCount > 0
+  );
 }

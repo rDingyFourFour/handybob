@@ -13,6 +13,7 @@ import {
   buildClearFilterHref,
   buildFilterHref,
   formatRelativeTimeLabel,
+  getJobsEmptyStateVariant,
   getStatusBadgeMeta,
   isJobCompletedLast30Days,
   isCompletedJobStatus,
@@ -281,13 +282,12 @@ export default async function JobsPage({
   ];
 
   const clearFilterHref = buildClearFilterHref(searchParams);
-
-  let emptyStateVariant: "none" | "brand-new" | "filters" = "none";
-  if (!hasAnyJobsInWorkspace && !isSearching && !hasActiveFilters) {
-    emptyStateVariant = "brand-new";
-  } else if (hasAnyJobsInWorkspace && visibleJobs.length === 0) {
-    emptyStateVariant = "filters";
-  }
+  const emptyStateVariant = getJobsEmptyStateVariant({
+    hasAnyJobsInWorkspace,
+    visibleJobsCount: visibleJobs.length,
+    hasActiveFilters,
+    isSearching,
+  });
 
   console.log("[jobs-index-empty-state]", {
     workspaceId: workspace.id,

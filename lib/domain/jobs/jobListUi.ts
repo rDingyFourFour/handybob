@@ -261,3 +261,25 @@ export function getFirstCustomerName(customers: JobCustomerRelation) {
   }
   return customers.name;
 }
+
+export type JobsEmptyStateVariant = "none" | "brand-new" | "filters";
+
+export function getJobsEmptyStateVariant({
+  hasAnyJobsInWorkspace,
+  visibleJobsCount,
+  hasActiveFilters,
+  isSearching,
+}: {
+  hasAnyJobsInWorkspace: boolean;
+  visibleJobsCount: number;
+  hasActiveFilters: boolean;
+  isSearching: boolean;
+}): JobsEmptyStateVariant {
+  if (!hasAnyJobsInWorkspace && !isSearching && !hasActiveFilters) {
+    return "brand-new";
+  }
+  if (hasAnyJobsInWorkspace && visibleJobsCount === 0) {
+    return "filters";
+  }
+  return "none";
+}
