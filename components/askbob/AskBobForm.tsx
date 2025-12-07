@@ -6,7 +6,7 @@ import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import AskBobResponseCard from "./AskBobResponseCard";
 import type { AskBobResponseDTO } from "@/lib/domain/askbob/types";
-import { submitAskBobQueryAction } from "@/app/(dashboard)/askbob/actions";
+import { submitAskBobQueryAction } from "@/app/(app)/askbob/actions";
 
 type AskBobFormProps = {
   workspaceId: string;

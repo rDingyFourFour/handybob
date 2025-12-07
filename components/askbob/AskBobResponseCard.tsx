@@ -7,7 +7,7 @@ import HbCard from "@/components/ui/hb-card";
 import {
   createAskBobJobNoteAction,
   createAskBobMessageDraftAction,
-} from "@/app/(dashboard)/askbob/integrations-actions";
+} from "@/app/(app)/askbob/integrations-actions";
 import type { AskBobResponseDTO } from "@/lib/domain/askbob/types";
 
 const TIMESTAMP_FORMATTER = new Intl.DateTimeFormat("en-US", {

@@ -17,6 +17,7 @@ import {
   type FollowupDueStatus,
   type FollowupDueInfo,
 } from "@/lib/domain/communications/followupRecommendations";
+import JobAskBobPanel from "@/components/askbob/JobAskBobPanel";
 
 type JobRecord = {
   id: string;
@@ -491,6 +492,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           <p className="text-sm text-slate-300">{job.description_raw ?? "No description provided."}</p>
         </div>
       </HbCard>
+      <JobAskBobPanel workspaceId={workspace.id} jobId={job.id} customerId={customerId ?? undefined} />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
