@@ -7,7 +7,7 @@ type JobRow = {
   last_activity_at?: string | null;
 };
 
-type InvoiceRow = {
+export type AttentionInvoiceRow = {
   id: string;
   status: string | null;
   created_at: string | null;
@@ -34,7 +34,7 @@ type MessageRow = {
 
 type AttentionInput = {
   jobs: JobRow[];
-  invoices: InvoiceRow[];
+  invoices: AttentionInvoiceRow[];
   appointments: AppointmentRow[];
   calls: CallRow[];
   messages: MessageRow[];
@@ -42,11 +42,11 @@ type AttentionInput = {
 };
 
 type AttentionSummary = {
-  overdueInvoices: InvoiceRow[];
+  overdueInvoices: AttentionInvoiceRow[];
   stalledJobs: JobRow[];
   missedAppointments: AppointmentRow[];
   callsMissingOutcome: CallRow[];
-  agingUnpaidInvoices: InvoiceRow[];
+  agingUnpaidInvoices: AttentionInvoiceRow[];
 };
 
 type AttentionCounts = {
@@ -85,27 +85,41 @@ function normalizeOutcome(outcome: string | null | undefined): string | null {
   return normalized ? normalized : null;
 }
 
+export function isInvoiceOverdueForAttention(
+  invoice: AttentionInvoiceRow,
+  reference: Date = new Date()
+) {
+  if (invoice.status !== "unpaid") {
+    return false;
+  }
+  const dueDate = parseDate(invoice.due_date);
+  return dueDate !== null && dueDate.getTime() < reference.getTime();
+}
+
+export function isInvoiceAgingUnpaidForAttention(
+  invoice: AttentionInvoiceRow,
+  reference: Date = new Date()
+) {
+  if (invoice.status !== "unpaid") {
+    return false;
+  }
+  const createdDate = parseDate(invoice.created_at);
+  if (createdDate === null) {
+    return false;
+  }
+  return reference.getTime() - createdDate.getTime() > 14 * ONE_DAY_MS;
+}
+
 export function buildAttentionSummary(input: AttentionInput): AttentionSummary {
   const now = input.now ?? new Date();
   const todayStart = getStartOfDay(now);
-  const overdueInvoices = input.invoices.filter((invoice) => {
-    if (invoice.status !== "unpaid") {
-      return false;
-    }
-    const dueDate = parseDate(invoice.due_date);
-    return dueDate !== null && dueDate.getTime() < now.getTime();
-  });
+  const overdueInvoices = input.invoices.filter((invoice) =>
+    isInvoiceOverdueForAttention(invoice, now)
+  );
 
-  const agingUnpaidInvoices = input.invoices.filter((invoice) => {
-    if (invoice.status !== "unpaid") {
-      return false;
-    }
-    const createdDate = parseDate(invoice.created_at);
-    return (
-      createdDate !== null &&
-      now.getTime() - createdDate.getTime() > 14 * ONE_DAY_MS
-    );
-  });
+  const agingUnpaidInvoices = input.invoices.filter((invoice) =>
+    isInvoiceAgingUnpaidForAttention(invoice, now)
+  );
 
   const stalledJobs = input.jobs.filter((job) => {
     if (job.status !== "quoted") {

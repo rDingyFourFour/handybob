@@ -62,6 +62,8 @@ export type FollowupQueueLoaderResult = {
   todayFollowupMessages: FollowupMessageRef[];
   allEnrichedCalls: FollowupEnrichedCallRow[];
   queueCalls: FollowupEnrichedCallRow[];
+  queueCount: number;
+  queueIds: string[];
 };
 
 export async function loadFollowupQueueData({
@@ -113,6 +115,8 @@ export async function loadFollowupQueueData({
       todayFollowupMessages: [],
       allEnrichedCalls: [],
       queueCalls: [],
+      queueCount: 0,
+      queueIds: [],
     };
   }
   const callRows = data;
@@ -240,11 +244,13 @@ export async function loadFollowupQueueData({
     }),
   );
 
+  const queueCount = queueCalls.length;
+  const queueIds = queueCalls.map((call) => call.id);
   console.log("[followup-queue-loader]", {
     workspaceId,
     totalCallsLoaded: callRows.length,
-    queueCount: queueCalls.length,
-    queueIds: queueCalls.slice(0, 10).map((call) => call.id),
+    queueCount,
+    queueIds: queueIds.slice(0, 10),
     queueSample: queueCalls
       .slice(0, 3)
       .map((call) =>
@@ -258,5 +264,7 @@ export async function loadFollowupQueueData({
     todayFollowupMessages,
     allEnrichedCalls,
     queueCalls,
+    queueCount,
+    queueIds,
   };
 }

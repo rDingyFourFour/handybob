@@ -16,6 +16,12 @@ import {
   type FollowupDueInfo,
   type InvoiceFollowupRecommendation,
 } from "@/lib/domain/communications/followupRecommendations";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import {
+  AttentionInvoiceRow,
+  isInvoiceAgingUnpaidForAttention,
+  isInvoiceOverdueForAttention,
+} from "@/lib/domain/dashboard/attention";
 
 type InvoiceRow = {
   id: string;
@@ -60,7 +66,6 @@ const STATUS_FILTERS: Array<{ key: StatusFilterKey; label: string }> = [
   { key: "overdue", label: "Overdue" },
 ];
 
-const ONE_DAY_MS = 1000 * 60 * 60 * 24;
 const BOOLEAN_TRUE_VALUES = new Set(["1", "true"]);
 function parseBooleanFlag(raw?: string | string[] | undefined) {
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -128,24 +133,30 @@ export default async function InvoicesPage({
   }
 
   let user;
+  let workspace;
   try {
-    const {
-      data: { user: fetchedUser },
-    } = await supabase.auth.getUser();
-    user = fetchedUser;
+    const workspaceContext = await getCurrentWorkspace({ supabase });
+    user = workspaceContext.user;
+    workspace = workspaceContext.workspace;
   } catch (error) {
-    console.error("[invoices] Failed to resolve user:", error);
+    console.error("[invoices] Failed to resolve workspace:", error);
     redirect("/");
   }
 
   if (!user) {
     redirect("/");
   }
+  if (!workspace) {
+    redirect("/");
+  }
 
   const statusFilterKey = resolveStatusFilter(searchParams?.status);
   const followupsFilter = getSearchParamValue(searchParams?.followups);
+  const overdueParam = getSearchParamValue(searchParams?.overdue);
+  const isOverdueAttentionView = parseBooleanFlag(overdueParam);
   const agingParam = getSearchParamValue(searchParams?.aging);
-  const agingFilterEnabled = parseBooleanFlag(agingParam);
+  const isAgingAttentionView = parseBooleanFlag(agingParam);
+  const agingFilterEnabled = isAgingAttentionView;
   const followupsQueueActive = followupsFilter === "queue";
   const followupsQueueHref = buildFollowupsHref("queue", statusFilterKey);
   const followupsAllHref = buildFollowupsHref("all", statusFilterKey);
@@ -321,22 +332,31 @@ export default async function InvoicesPage({
     return !isPaidOrVoidedStatus(row.statusKey) && overdueStatus;
   });
 
-  const agingCutoffMs = 14 * ONE_DAY_MS;
-  const isUnpaidInvoiceRow = (row: EnrichedInvoiceRow) =>
-    !isPaidOrVoidedStatus(row.statusKey);
+  const toAttentionInvoiceRow = (row: EnrichedInvoiceRow): AttentionInvoiceRow => ({
+    id: row.invoice.id,
+    status: row.invoice.status,
+    created_at: row.invoice.created_at,
+    due_date: row.invoice.due_at,
+  });
+  const shouldApplyAgingAttentionView = isAgingAttentionView && !isOverdueAttentionView;
   let invoicesToDisplay = followupsQueueActive ? collectionsQueueInvoices : enrichedInvoices;
-  if (agingFilterEnabled) {
-    invoicesToDisplay = invoicesToDisplay.filter((row) => {
-      if (!isUnpaidInvoiceRow(row)) {
-        return false;
-      }
-      const createdAt = row.invoice.created_at ? new Date(row.invoice.created_at) : null;
-      if (!createdAt || Number.isNaN(createdAt.getTime())) {
-        return false;
-      }
-      return now.getTime() - createdAt.getTime() > agingCutoffMs;
-    });
+  if (isOverdueAttentionView) {
+    invoicesToDisplay = invoicesToDisplay.filter((row) =>
+      isInvoiceOverdueForAttention(toAttentionInvoiceRow(row), now)
+    );
+  } else if (shouldApplyAgingAttentionView) {
+    invoicesToDisplay = invoicesToDisplay.filter((row) =>
+      isInvoiceAgingUnpaidForAttention(toAttentionInvoiceRow(row), now)
+    );
   }
+  console.log("[invoices-attention-view]", {
+    workspaceId: workspace.id,
+    statusFilterKey,
+    isOverdueAttentionView,
+    isAgingAttentionView,
+    visibleCount: invoicesToDisplay.length,
+    visibleIdsSample: invoicesToDisplay.slice(0, 5).map((row) => row.invoice.id),
+  });
   const visibleCountLabel =
     invoicesToDisplay.length === 1 ? "invoice" : "invoices";
   const totalCount = enrichedInvoices.length;
@@ -344,9 +364,13 @@ export default async function InvoicesPage({
   const unpaidCount = unpaidInvoiceRows.length;
   const overdueCount = enrichedInvoices.filter((row) => row.statusKey === "overdue").length;
   const hasInvoices = totalCount > 0;
-  const agingFilterEmptyState =
-    agingFilterEnabled && invoicesToDisplay.length === 0 && unpaidCount > 0;
   const resetFiltersHref = buildFollowupsHref("all", "all");
+  const attentionViewActive = isOverdueAttentionView || isAgingAttentionView;
+  const attentionViewEmpty = attentionViewActive && invoicesToDisplay.length === 0;
+  const attentionViewHelperText = isOverdueAttentionView
+    ? "Showing overdue unpaid invoices that need attention."
+    : "Showing older unpaid invoices that may need a nudge.";
+  const clearAttentionFilterHref = buildStatusHref("unpaid");
   if (statusFilterKey === "unpaid") {
     console.log("[invoices-dashboard-source]", {
       statusFilter: statusFilterKey,
@@ -375,6 +399,9 @@ export default async function InvoicesPage({
                 Overdue: {overdueCount}
               </span>
             </div>
+          )}
+          {attentionViewActive && (
+            <p className="mt-2 text-sm text-slate-400">{attentionViewHelperText}</p>
           )}
         </div>
         <HbButton as={Link} href="/invoices/new" size="sm" variant="secondary">
@@ -436,20 +463,24 @@ export default async function InvoicesPage({
           <h2 className="hb-card-heading text-lg font-semibold">Something went wrong</h2>
           <p className="hb-muted text-sm">We couldn’t load this page. Try again or go back.</p>
         </HbCard>
+      ) : attentionViewEmpty ? (
+        <HbCard className="space-y-3">
+          <h2 className="hb-card-heading text-lg font-semibold">
+            {isOverdueAttentionView ? "No overdue invoices right now" : "No aging unpaid invoices"}
+          </h2>
+          <p className="hb-muted text-sm">
+            {isOverdueAttentionView
+              ? "No overdue invoices right now. You can clear the attention filter to see all unpaid invoices."
+              : "No aging unpaid invoices right now. You can clear the attention filter to see all unpaid invoices."}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <HbButton as={Link} href={clearAttentionFilterHref}>
+              Clear filter
+            </HbButton>
+          </div>
+        </HbCard>
       ) : invoicesToDisplay.length === 0 ? (
-        agingFilterEmptyState ? (
-          <HbCard className="space-y-3">
-            <h2 className="hb-card-heading text-lg font-semibold">No aging unpaid invoices</h2>
-            <p className="hb-muted text-sm">
-              No unpaid invoices are older than 14 days. Try clearing the “Aging” filter to see all unpaid invoices.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <HbButton as={Link} href={buildStatusHref("unpaid")}>
-                Show unpaid invoices
-              </HbButton>
-            </div>
-          </HbCard>
-        ) : followupsQueueActive ? (
+        followupsQueueActive ? (
           <HbCard className="space-y-3">
             <h2 className="hb-card-heading text-lg font-semibold">Collections queue is empty</h2>
             <p className="hb-muted text-sm">
