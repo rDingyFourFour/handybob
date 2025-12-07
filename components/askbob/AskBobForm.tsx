@@ -43,6 +43,14 @@ export default function AskBobForm({
       return;
     }
 
+    console.log("[askbob-form-submit]", {
+      workspaceId,
+      hasJobId: Boolean(jobId),
+      hasCustomerId: Boolean(customerId),
+      hasQuoteId: Boolean(quoteId),
+      promptLength: trimmedPrompt.length,
+    });
+
     startTransition(() => {
       setResponse(null);
       void submitAskBobQueryAction({
@@ -101,7 +109,14 @@ export default function AskBobForm({
         </form>
       </HbCard>
 
-      {response && <AskBobResponseCard response={response} />}
+      {response && (
+        <AskBobResponseCard
+          response={response}
+          workspaceId={workspaceId}
+          jobId={jobId ?? undefined}
+          customerId={customerId ?? undefined}
+        />
+      )}
     </div>
   );
 }

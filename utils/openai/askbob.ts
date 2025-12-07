@@ -14,12 +14,18 @@ type CallAskBobModelOptions = {
   context: AskBobContext;
 };
 
+type CallAskBobModelResult = {
+  data: AskBobResponseData;
+  latencyMs: number;
+  modelName: string;
+};
+
 type ModelPayload = Record<string, unknown>;
 
 export async function callAskBobModel({
   prompt,
   context,
-}: CallAskBobModelOptions): Promise<AskBobResponseData> {
+}: CallAskBobModelOptions): Promise<CallAskBobModelResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not configured for AskBob.");
@@ -40,35 +46,77 @@ export async function callAskBobModel({
   const userMessage = `Technician prompt:\n${prompt}\n\nContext: ${contextParts}`;
 
   const openai = new OpenAI({ apiKey });
-  const completion = await openai.chat.completions.create({
-    model: DEFAULT_MODEL,
-    messages: [
-      { role: "system", content: instructions },
-      { role: "user", content: userMessage },
-    ],
-    response_format: { type: "json_object" },
-  });
+  const modelRequestStart = Date.now();
+  let modelName = DEFAULT_MODEL;
 
-  const messageContent = completion.choices?.[0]?.message?.content;
-  const payload = extractModelPayload(messageContent);
+  try {
+    const completion = await openai.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: "system", content: instructions },
+        { role: "user", content: userMessage },
+      ],
+      response_format: { type: "json_object" },
+    });
 
-  const steps = ensureStringArray(payload.steps);
-  const materials = normalizeMaterials(payload.materials);
-  const safetyCautions = ensureStringArray(payload.safetyCautions);
-  const costTimeConsiderations = ensureStringArray(payload.costTimeConsiderations);
-  const escalationGuidance = ensureStringArray(payload.escalationGuidance);
+    modelName = completion.model ?? DEFAULT_MODEL;
+    const messageContent = completion.choices?.[0]?.message?.content;
+    const payload = extractModelPayload(messageContent, {
+      workspaceId: context.workspaceId,
+      model: modelName,
+    });
 
-  return {
-    steps,
-    materials,
-    safetyCautions: safetyCautions.length ? safetyCautions : undefined,
-    costTimeConsiderations: costTimeConsiderations.length ? costTimeConsiderations : undefined,
-    escalationGuidance: escalationGuidance.length ? escalationGuidance : undefined,
-    rawModelOutput: payload,
-  };
+    const steps = ensureStringArray(payload.steps);
+    const materials = normalizeMaterials(payload.materials);
+    const safetyCautions = ensureStringArray(payload.safetyCautions);
+    const costTimeConsiderations = ensureStringArray(payload.costTimeConsiderations);
+    const escalationGuidance = ensureStringArray(payload.escalationGuidance);
+
+    const latencyMs = Date.now() - modelRequestStart;
+    console.log("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: prompt.length,
+      latencyMs,
+      success: true,
+    });
+
+    return {
+      data: {
+        steps,
+        materials,
+        safetyCautions: safetyCautions.length ? safetyCautions : undefined,
+        costTimeConsiderations: costTimeConsiderations.length ? costTimeConsiderations : undefined,
+        escalationGuidance: escalationGuidance.length ? escalationGuidance : undefined,
+        rawModelOutput: payload,
+      },
+      latencyMs,
+      modelName,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - modelRequestStart;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError = errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: prompt.length,
+      latencyMs,
+      success: false,
+      errorMessage: truncatedError,
+    });
+
+    throw error;
+  }
 }
 
-function extractModelPayload(rawContent: unknown): ModelPayload {
+function extractModelPayload(
+  rawContent: unknown,
+  meta: { workspaceId: string; model: string }
+): ModelPayload {
   const candidates = Array.isArray(rawContent) ? rawContent : [rawContent];
 
   for (const candidate of candidates) {
@@ -79,9 +127,7 @@ function extractModelPayload(rawContent: unknown): ModelPayload {
     }
   }
 
-  console.warn(
-    `[AskBob] Invalid JSON from model: ${describeCandidate(candidates[0])}`
-  );
+  logJsonParseError(candidates[0], meta);
   throw new Error("AskBob model returned invalid JSON");
 }
 
@@ -115,7 +161,16 @@ function cleanJsonString(value: string): string {
   return trimmed;
 }
 
-function describeCandidate(candidate: unknown): string {
+function logJsonParseError(candidate: unknown, meta: { workspaceId: string; model: string }) {
+  console.warn("[askbob-json-parse-error]", {
+    workspaceId: meta.workspaceId,
+    model: meta.model,
+    rawSnippet: getCandidateSnippet(candidate),
+    candidateType: describeCandidateType(candidate),
+  });
+}
+
+function getCandidateSnippet(candidate: unknown): string {
   if (candidate === undefined) {
     return "undefined";
   }
@@ -123,13 +178,23 @@ function describeCandidate(candidate: unknown): string {
     return "null";
   }
   if (typeof candidate === "string") {
-    return candidate.replace(/\s+/g, " ").slice(0, 400);
+    return cleanJsonString(candidate).slice(0, 200);
   }
   try {
-    return JSON.stringify(candidate).slice(0, 400);
+    return JSON.stringify(candidate).replace(/\s+/g, " ").slice(0, 200);
   } catch {
-    return String(candidate);
+    return String(candidate).slice(0, 200);
   }
+}
+
+function describeCandidateType(candidate: unknown): string {
+  if (candidate === null) {
+    return "null";
+  }
+  if (Array.isArray(candidate)) {
+    return "array";
+  }
+  return typeof candidate;
 }
 
 function ensureStringArray(value: unknown): string[] {

@@ -4,6 +4,7 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import AskBobForm from "@/components/askbob/AskBobForm";
+import AskBobPageEntryLogger from "@/components/askbob/AskBobPageEntryLogger";
 
 export const dynamic = "force-dynamic";
 
@@ -53,16 +54,19 @@ export default async function AskBobPage() {
   }
 
   return (
-    <div className="hb-shell pt-20 pb-8 space-y-6">
-      <div className="space-y-3">
-        <h1 className="hb-heading-1 text-3xl font-semibold">AskBob</h1>
-        <p className="hb-muted text-sm">
-          Describe a technical problem and AskBob will suggest steps, materials, safety cautions, and
-          escalation guidance.
-        </p>
+    <>
+      <AskBobPageEntryLogger workspaceId={workspace.id} />
+      <div className="hb-shell pt-20 pb-8 space-y-6">
+        <div className="space-y-3">
+          <h1 className="hb-heading-1 text-3xl font-semibold">AskBob</h1>
+          <p className="hb-muted text-sm">
+            Describe a technical problem and AskBob will suggest steps, materials, safety cautions, and
+            escalation guidance.
+          </p>
+        </div>
+        <AskBobForm workspaceId={workspace.id} />
       </div>
-      <AskBobForm workspaceId={workspace.id} />
-    </div>
+    </>
   );
 }
 
