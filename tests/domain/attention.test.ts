@@ -10,6 +10,7 @@ import {
   isInvoiceAgingUnpaidForAttention,
   isInvoiceOverdueForAttention,
   isJobStalledForAttention,
+  JOB_STALLED_MIN_DAYS,
   type AttentionAppointmentRow,
   type AttentionCallRow,
   type AttentionInvoiceRow,
@@ -101,6 +102,7 @@ describe("getAttentionCutoffs", () => {
     expect(staleQuoteCutoff.toISOString().slice(0, 10)).toBe("2024-01-05");
     expect(overdueInvoiceCutoff.toISOString().slice(0, 10)).toBe("2024-01-08");
   });
+
 });
 
 describeAttentionItems("getAttentionItems", () => {
@@ -181,6 +183,134 @@ describe("buildAttentionSummary & counts", () => {
     expect(counts.totalAttentionCount).toBe(2);
   });
 
+  it("marks jobs stalled when the reference date is at least the configured threshold in the past", () => {
+    const referenceDate = new Date(today);
+    referenceDate.setDate(referenceDate.getDate() - JOB_STALLED_MIN_DAYS);
+    const isoReference = referenceDate.toISOString();
+    const job: AttentionJobRow = {
+      id: "job_stalled_test",
+      status: "quoted",
+      created_at: isoReference,
+      updated_at: isoReference,
+      last_activity_at: isoReference,
+    };
+
+    expect(isJobStalledForAttention(job, today)).toBe(true);
+  });
+
+  it("does not treat recent jobs as stalled", () => {
+    const referenceDate = new Date(today);
+    referenceDate.setDate(referenceDate.getDate() - (JOB_STALLED_MIN_DAYS - 1));
+    const isoReference = referenceDate.toISOString();
+    const job: AttentionJobRow = {
+      id: "job_recent",
+      status: "quoted",
+      created_at: isoReference,
+      updated_at: isoReference,
+      last_activity_at: isoReference,
+    };
+
+    expect(isJobStalledForAttention(job, today)).toBe(false);
+  });
+
+  it("ignores completed jobs even if they are older than the threshold", () => {
+    const referenceDate = new Date(today);
+    referenceDate.setDate(referenceDate.getDate() - (JOB_STALLED_MIN_DAYS + 5));
+    const isoReference = referenceDate.toISOString();
+    const job: AttentionJobRow = {
+      id: "job_completed",
+      status: "completed",
+      created_at: isoReference,
+      updated_at: isoReference,
+      last_activity_at: isoReference,
+    };
+
+    expect(isJobStalledForAttention(job, today)).toBe(false);
+  });
+
+  it("requires a reference date to consider a job stalled", () => {
+    const job: AttentionJobRow = {
+      id: "job_no_dates",
+      status: "quoted",
+      created_at: null,
+      updated_at: null,
+      last_activity_at: null,
+    };
+
+    expect(isJobStalledForAttention(job, today)).toBe(false);
+  });
+
+  it("includes exactly the stalled jobs in the summary counts", () => {
+    const referenceDate = new Date(today);
+    referenceDate.setDate(referenceDate.getDate() - (JOB_STALLED_MIN_DAYS + 2));
+    const isoReference = referenceDate.toISOString();
+    const jobStalled: AttentionJobRow = {
+      id: "job_stalled_summary",
+      status: "quoted",
+      created_at: isoReference,
+      updated_at: isoReference,
+      last_activity_at: isoReference,
+    };
+    const jobRecent: AttentionJobRow = {
+      id: "job_recent_summary",
+      status: "quoted",
+      created_at: "2025-01-10T00:00:00Z",
+      updated_at: "2025-01-10T00:00:00Z",
+      last_activity_at: "2025-01-10T00:00:00Z",
+    };
+    const jobCompleted: AttentionJobRow = {
+      id: "job_completed_summary",
+      status: "completed",
+      created_at: "2024-12-01T00:00:00Z",
+      updated_at: "2024-12-01T00:00:00Z",
+      last_activity_at: "2024-12-01T00:00:00Z",
+    };
+
+    const summary = buildAttentionSummary({
+      invoices: [],
+      jobs: [jobStalled, jobRecent, jobCompleted],
+      appointments: [],
+      calls: [],
+      messages: [],
+      today,
+    });
+    const counts = buildAttentionCounts(summary);
+
+    expect(summary.stalledJobsCount).toBe(1);
+    expect(summary.stalledJobs.map((job) => job.id)).toEqual([jobStalled.id]);
+    expect(counts.jobsNeedingAttentionCount).toBe(1);
+    expect(counts.totalAttentionCount).toBe(1);
+    expect(hasAnyAttention(summary)).toBe(true);
+  });
+
+  it("uses created_at when due_date is missing to mark an invoice overdue but not aging", () => {
+    const invoice: AttentionInvoiceRow = {
+      id: "inv_created_overdue",
+      status: "sent",
+      created_at: "2025-01-05T00:00:00Z",
+      due_date: null,
+      due_at: null,
+      updated_at: "2025-01-05T00:00:00Z",
+    };
+
+    expect(isInvoiceOverdueForAttention(invoice, today)).toBe(true);
+    expect(isInvoiceAgingUnpaidForAttention(invoice, today)).toBe(false);
+  });
+
+  it("uses created_at when due_date is missing to mark an invoice aging unpaid after 30 days", () => {
+    const invoice: AttentionInvoiceRow = {
+      id: "inv_created_aging",
+      status: "sent",
+      created_at: "2024-12-01T00:00:00Z",
+      due_date: null,
+      due_at: null,
+      updated_at: "2024-12-01T00:00:00Z",
+    };
+
+    expect(isInvoiceOverdueForAttention(invoice, today)).toBe(true);
+    expect(isInvoiceAgingUnpaidForAttention(invoice, today)).toBe(true);
+  });
+
   it("returns zero counts when nothing needs attention", () => {
     const invoices: AttentionInvoiceRow[] = [
       {
@@ -251,19 +381,25 @@ describe("buildAttentionSummary & counts", () => {
     expect(hasAnyAttention(summary)).toBe(false);
   });
 
-  it("identifies stalled jobs after a week but not before", () => {
+  it("identifies stalled jobs after the configured threshold but not before", () => {
     const attentionToday = new Date("2025-12-05T12:00:00Z");
+    const stalledReference = new Date(attentionToday);
+    stalledReference.setDate(stalledReference.getDate() - (JOB_STALLED_MIN_DAYS + 1));
+    const recentReference = new Date(attentionToday);
+    recentReference.setDate(recentReference.getDate() - (JOB_STALLED_MIN_DAYS - 1));
     const jobStalled: AttentionJobRow = {
       id: "job_stalled",
       status: "quoted",
-      created_at: "2025-11-10T00:00:00Z",
-      updated_at: "2025-11-27T00:00:00Z",
+      created_at: stalledReference.toISOString(),
+      updated_at: stalledReference.toISOString(),
+      last_activity_at: stalledReference.toISOString(),
     };
     const jobFresh: AttentionJobRow = {
       id: "job_fresh",
       status: "quoted",
-      created_at: "2025-11-25T00:00:00Z",
-      updated_at: "2025-12-02T00:00:00Z",
+      created_at: recentReference.toISOString(),
+      updated_at: recentReference.toISOString(),
+      last_activity_at: recentReference.toISOString(),
     };
     expect(isJobStalledForAttention(jobStalled, attentionToday)).toBe(true);
     expect(isJobStalledForAttention(jobFresh, attentionToday)).toBe(false);

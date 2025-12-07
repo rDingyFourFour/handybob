@@ -1,4 +1,10 @@
+import { isCompletedJobStatus } from "@/lib/domain/jobs/jobListUi";
+
 const ONE_DAY_MS = 1000 * 60 * 60 * 24;
+
+const INVOICE_OVERDUE_MIN_DAYS = 1;
+const INVOICE_AGING_MIN_DAYS = 30;
+export const JOB_STALLED_MIN_DAYS = 14;
 
 function parseDate(value?: string | null): Date | null {
   if (!value) {
@@ -24,7 +30,6 @@ const UNPAID_LIKE_STATUSES = new Set([
   "partial",
   "overdue",
 ]);
-const STALLED_JOB_STATUSES = new Set(["quoted", "scheduled"]);
 
 export type AttentionInvoiceRow = {
   id: string;
@@ -36,13 +41,18 @@ export type AttentionInvoiceRow = {
   total_cents?: number | null;
 };
 
-function getInvoiceDueDate(invoice: AttentionInvoiceRow): Date | null {
-  const dueIso = invoice.due_date ?? invoice.due_at ?? null;
-  if (!dueIso) {
+function getInvoiceReferenceDateForAttention(invoice: AttentionInvoiceRow): Date | null {
+  const raw = invoice.due_date ?? invoice.due_at ?? invoice.created_at;
+  if (!raw) {
     return null;
   }
-  const parsed = new Date(dueIso);
+  const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getJobReferenceDateForAttention(job: AttentionJobRow): Date | null {
+  const referenceValue = job.last_activity_at ?? job.updated_at ?? job.created_at;
+  return parseDate(referenceValue);
 }
 
 export type AttentionJobRow = {
@@ -50,6 +60,7 @@ export type AttentionJobRow = {
   status: string | null;
   created_at: string | null;
   updated_at: string | null;
+  last_activity_at?: string | null;
 };
 
 export type AttentionAppointmentRow = {
@@ -123,15 +134,16 @@ export function isInvoiceOverdueForAttention(
     return false;
   }
 
-  const dueDate = getInvoiceDueDate(invoice);
-  if (dueDate === null) {
+  const referenceDate = getInvoiceReferenceDateForAttention(invoice);
+  if (referenceDate === null) {
     return false;
   }
 
-  // Overdue means strictly before “today” (using date-only semantics)
-  const dueYmd = dueDate.toISOString().slice(0, 10);
-  const todayYmd = today.toISOString().slice(0, 10);
-  return dueYmd < todayYmd;
+  const daysSinceReference = Math.floor(
+    (today.getTime() - referenceDate.getTime()) / ONE_DAY_MS
+  );
+
+  return daysSinceReference >= INVOICE_OVERDUE_MIN_DAYS;
 }
 
 export function isInvoiceAgingUnpaidForAttention(
@@ -142,31 +154,34 @@ export function isInvoiceAgingUnpaidForAttention(
     return false;
   }
 
-  const dueDate = getInvoiceDueDate(invoice);
-  if (dueDate === null) {
+  const referenceDate = getInvoiceReferenceDateForAttention(invoice);
+  if (referenceDate === null) {
     return false;
   }
 
-  const msPerDay = 1000 * 60 * 60 * 24;
-  const daysOverdue = Math.floor(
-    (today.getTime() - dueDate.getTime()) / msPerDay
+  const daysSinceReference = Math.floor(
+    (today.getTime() - referenceDate.getTime()) / ONE_DAY_MS
   );
 
-  // Aging = meaningfully late (e.g., 30+ days)
-  return daysOverdue >= 30;
+  return daysSinceReference >= INVOICE_AGING_MIN_DAYS;
 }
 
 export function isJobStalledForAttention(job: AttentionJobRow, today: Date): boolean {
-  const status = (job.status ?? "").toLowerCase();
-  if (!STALLED_JOB_STATUSES.has(status)) {
+  const status = job.status ?? "";
+  if (!status) {
     return false;
   }
-  const lastActivity = parseDate(job.updated_at ?? job.created_at);
-  if (lastActivity === null) {
+  if (isCompletedJobStatus(status)) {
     return false;
   }
-  const daysSinceLastActivity = Math.floor((today.getTime() - lastActivity.getTime()) / ONE_DAY_MS);
-  return daysSinceLastActivity >= 7;
+  const referenceDate = getJobReferenceDateForAttention(job);
+  if (referenceDate === null) {
+    return false;
+  }
+  const daysSinceReference = Math.floor(
+    (today.getTime() - referenceDate.getTime()) / ONE_DAY_MS
+  );
+  return daysSinceReference >= JOB_STALLED_MIN_DAYS;
 }
 
 export function isAppointmentMissedForAttention(

@@ -52,6 +52,7 @@ import {
   hasAnyAttention as hasAnyAttentionHelper,
   isInvoiceOverdueForAttention,
   isInvoiceAgingUnpaidForAttention,
+  isJobStalledForAttention,
 } from "@/lib/domain/dashboard/attention";
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
@@ -338,7 +339,9 @@ export default async function DashboardPage() {
 
       supabase
         .from("jobs")
-        .select("id, title, urgency, source, ai_urgency, priority, attention_score, attention_reason, created_at, customer:customers(name)")
+        .select(
+          "id, title, urgency, source, ai_urgency, priority, attention_score, attention_reason, status, created_at, updated_at, customer:customers(name)"
+        )
         .eq("workspace_id", workspace.id)
         .eq("status", "lead")
         .gte("created_at", newLeadWindowStart.toISOString())
@@ -836,13 +839,38 @@ export default async function DashboardPage() {
     status: string | null;
     created_at: string | null;
     updated_at: string | null;
+    last_activity_at?: string | null;
   }[];
   const attentionJobRows: AttentionJobRow[] = quotedJobs.map((job) => ({
     id: job.id,
     status: job.status,
     created_at: job.created_at,
     updated_at: job.updated_at,
+    last_activity_at: job.last_activity_at ?? job.updated_at ?? job.created_at,
   }));
+  const firstAttentionJob = attentionJobRows[0];
+  const firstJobDebug = firstAttentionJob
+    ? {
+        id: firstAttentionJob.id,
+        status: firstAttentionJob.status,
+        created_at: firstAttentionJob.created_at,
+        updated_at: firstAttentionJob.updated_at,
+        last_activity_at: firstAttentionJob.last_activity_at ?? null,
+        isStalled: isJobStalledForAttention(firstAttentionJob, todayNow),
+      }
+    : null;
+  console.log("[dashboard-attention-jobs-debug]", {
+    workspaceId: workspace.id,
+    attentionJobRowsCount: attentionJobRows.length,
+    sample: attentionJobRows.slice(0, 5).map((job) => ({
+      id: job.id,
+      status: job.status,
+      created_at: job.created_at,
+      updated_at: job.updated_at,
+      last_activity_at: job.last_activity_at ?? null,
+    })),
+    firstJobDebug,
+  });
   const attentionInvoiceRows: AttentionInvoiceRow[] = unpaidInvoiceRows.map((invoice) => {
     const dueValue = invoice.due_at ?? invoice.due_date ?? null;
     return {
