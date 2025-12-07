@@ -339,13 +339,15 @@ export default async function InvoicesPage({
     due_date: row.invoice.due_at,
   });
   const shouldApplyAgingAttentionView = isAgingAttentionView && !isOverdueAttentionView;
-  let invoicesToDisplay = followupsQueueActive ? collectionsQueueInvoices : enrichedInvoices;
+  const statusFilteredRows = followupsQueueActive ? collectionsQueueInvoices : enrichedInvoices;
+  let invoicesToDisplay = statusFilteredRows;
+  const statusFilteredRawCount = statusFilteredRows.length;
   if (isOverdueAttentionView) {
-    invoicesToDisplay = invoicesToDisplay.filter((row) =>
+    invoicesToDisplay = statusFilteredRows.filter((row) =>
       isInvoiceOverdueForAttention(toAttentionInvoiceRow(row), now)
     );
   } else if (shouldApplyAgingAttentionView) {
-    invoicesToDisplay = invoicesToDisplay.filter((row) =>
+    invoicesToDisplay = statusFilteredRows.filter((row) =>
       isInvoiceAgingUnpaidForAttention(toAttentionInvoiceRow(row), now)
     );
   }
@@ -354,6 +356,7 @@ export default async function InvoicesPage({
     statusFilterKey,
     isOverdueAttentionView,
     isAgingAttentionView,
+    rawCount: statusFilteredRawCount,
     visibleCount: invoicesToDisplay.length,
     visibleIdsSample: invoicesToDisplay.slice(0, 5).map((row) => row.invoice.id),
   });

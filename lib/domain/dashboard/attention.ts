@@ -89,11 +89,19 @@ export function isInvoiceOverdueForAttention(
   invoice: AttentionInvoiceRow,
   reference: Date = new Date()
 ) {
-  if (invoice.status !== "unpaid") {
+  const status = (invoice.status ?? "").toLowerCase();
+  if (!status || status === "draft" || status === "paid") {
     return false;
   }
-  const dueDate = parseDate(invoice.due_date);
-  return dueDate !== null && dueDate.getTime() < reference.getTime();
+  const dueDateString = invoice.due_date ?? null;
+  if (!dueDateString) {
+    return false;
+  }
+  const dueDate = parseDate(dueDateString);
+  if (dueDate === null) {
+    return false;
+  }
+  return dueDate.getTime() < reference.getTime();
 }
 
 export function isInvoiceAgingUnpaidForAttention(

@@ -45,6 +45,7 @@ import {
   buildAttentionSummary,
   buildAttentionCounts,
   buildAttentionDebugSnapshot,
+  isInvoiceOverdueForAttention,
 } from "@/lib/domain/dashboard/attention";
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
@@ -818,23 +819,6 @@ export default async function DashboardPage() {
     created_at: string | null;
     updated_at: string | null;
   }[];
-  const overdueInvoicesSource = (overdueInvoicesRes.data ?? []) as {
-    id: string;
-  }[];
-  const overdueInvoiceIdsSample = sampleIds(overdueInvoicesSource);
-  console.log("[dashboard-attention-source]", {
-    workspaceId: workspace.id,
-    quotedJobsCount: quotedJobs.length,
-    quotedJobIdsSample: sampleIds(quotedJobs),
-    overdueInvoicesSourceCount: overdueInvoicesSource.length,
-    overdueInvoiceIdsSample,
-    appointmentsSourceCount: allDashboardAppointments.length,
-    appointmentIdsSample: sampleIds(allDashboardAppointments),
-    followupCallSourceCount: followupCallRows.length,
-    followupCallIdsSample: sampleIds(followupCallRows),
-    followupMessageSourceCount: followupMessageRows.length,
-    followupMessageIdsSample: sampleIds(followupMessageRows),
-  });
   const attentionJobRows = quotedJobs.map((job) => ({
     id: job.id,
     status: job.status,
@@ -862,6 +846,29 @@ export default async function DashboardPage() {
     id: message.id,
     created_at: message.created_at,
   }));
+  const overdueInvoicesSource = attentionInvoiceRows.filter((invoice) =>
+    isInvoiceOverdueForAttention(invoice, todayNow)
+  );
+  const overdueInvoiceIdsSample = sampleIds(overdueInvoicesSource);
+  console.log("[dashboard-attention-overdue-predicate]", {
+    workspaceId: workspace.id,
+    sourceCount: attentionInvoiceRows.length,
+    overdueCount: overdueInvoicesSource.length,
+    overdueIdsSample: overdueInvoiceIdsSample,
+  });
+  console.log("[dashboard-attention-source]", {
+    workspaceId: workspace.id,
+    quotedJobsCount: quotedJobs.length,
+    quotedJobIdsSample: sampleIds(quotedJobs),
+    overdueInvoicesSourceCount: overdueInvoicesSource.length,
+    overdueInvoiceIdsSample,
+    appointmentsSourceCount: allDashboardAppointments.length,
+    appointmentIdsSample: sampleIds(allDashboardAppointments),
+    followupCallSourceCount: followupCallRows.length,
+    followupCallIdsSample: sampleIds(followupCallRows),
+    followupMessageSourceCount: followupMessageRows.length,
+    followupMessageIdsSample: sampleIds(followupMessageRows),
+  });
   console.log("[dashboard-attention-rows]", {
     workspaceId: workspace.id,
     attentionJobRowsCount: attentionJobRows.length,
