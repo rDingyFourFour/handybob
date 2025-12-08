@@ -6,7 +6,8 @@ export type AskBobTask =
   | "job.diagnose"
   | "message.draft"
   | "quote.generate"
-  | "materials.generate";
+  | "materials.generate"
+  | "quote.explain";
 
 export type AskBobSection = "steps" | "materials" | "safety" | "costTime" | "escalation";
 
@@ -143,6 +144,92 @@ export interface AskBobQuoteGenerateResult {
   rawModelOutput?: unknown;
 }
 
+export interface AskBobQuoteExplainLineSummary {
+  description: string;
+  quantity?: number | null;
+  unit?: string | null;
+  unitPrice?: number | null;
+  lineTotal?: number | null;
+}
+
+export interface AskBobQuoteExplainMaterialSummary {
+  name: string;
+  quantity?: number | null;
+  estimatedUnitCost?: number | null;
+  estimatedTotalCost?: number | null;
+}
+
+export interface AskBobLineExplanation {
+  lineIndex: number;
+  explanation: string;
+  inclusions?: string[] | null;
+  exclusions?: string[] | null;
+}
+
+export interface AskBobQuoteExplainResult {
+  overallExplanation: string;
+  lineExplanations?: AskBobLineExplanation[];
+  notes?: string | null;
+  modelLatencyMs: number;
+  rawModelOutput?: string | null;
+}
+
+export interface AskBobQuoteExplainInput {
+  task: "quote.explain";
+  context: AskBobTaskContext;
+  quoteSummary: {
+    id: string;
+    jobId?: string | null;
+    customerId?: string | null;
+    subtotal?: number | null;
+    tax?: number | null;
+    total?: number | null;
+    currency?: string | null;
+    lines: AskBobQuoteExplainLineSummary[];
+    materials?: AskBobQuoteExplainMaterialSummary[] | null;
+  };
+  extraDetails?: string | null;
+}
+
+export interface AskBobMaterialsExplainItemSummary {
+  name: string;
+  quantity?: number | null;
+  unit?: string | null;
+  estimatedUnitCost?: number | null;
+  estimatedTotalCost?: number | null;
+}
+
+export interface AskBobMaterialExplanation {
+  itemIndex: number;
+  explanation: string;
+  inclusions?: string[] | null;
+  exclusions?: string[] | null;
+}
+
+export interface AskBobMaterialsExplainResult {
+  overallExplanation: string;
+  itemExplanations?: AskBobMaterialExplanation[];
+  notes?: string | null;
+  modelLatencyMs: number;
+  rawModelOutput?: string | null;
+}
+
+export interface AskBobMaterialsExplainInput {
+  task: "materials.explain";
+  context: AskBobTaskContext;
+  materialsSummary: {
+    id: string;
+    jobId?: string | null;
+    customerId?: string | null;
+    subtotal?: number | null;
+    tax?: number | null;
+    total?: number | null;
+    currency?: string | null;
+    items: AskBobMaterialsExplainItemSummary[];
+  };
+  extraDetails?: string | null;
+}
+
 export interface AskBobMaterialsGenerateInput {
   task: "materials.generate";
   context: AskBobTaskContext;
@@ -172,12 +259,16 @@ export type AskBobTaskInput =
   | AskBobJobDiagnoseInput
   | AskBobMessageDraftInput
   | AskBobQuoteGenerateInput
-  | AskBobMaterialsGenerateInput;
+  | AskBobMaterialsGenerateInput
+  | AskBobQuoteExplainInput
+  | AskBobMaterialsExplainInput;
 export type AskBobTaskResult =
   | AskBobJobDiagnoseResult
   | AskBobMessageDraftResult
   | AskBobQuoteGenerateResult
-  | AskBobMaterialsGenerateResult;
+  | AskBobMaterialsGenerateResult
+  | AskBobQuoteExplainResult
+  | AskBobMaterialsExplainResult;
 
 // Zod schemas for validation
 

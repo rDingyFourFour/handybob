@@ -8,6 +8,7 @@ import FollowupDraftPanel from "./FollowupDraftPanel";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import QuoteMaterialsPanel from "./QuoteMaterialsPanel";
+import QuoteExplainPanel from "@/components/askbob/QuoteExplainPanel";
 import { createFollowupMessageAction } from "./followupMessageActions";
 // CHANGE: import call script action at top of quote detail page
 import CallScriptPanel from "./CallScriptPanel";
@@ -267,6 +268,7 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
             )}
           </div>
         )}
+        <QuoteExplainPanel quoteId={quote.id} />
         <QuoteMaterialsPanel
           quoteId={quote.id}
           workspaceId={workspace.id}

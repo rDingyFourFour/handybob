@@ -3,10 +3,16 @@
 import OpenAI from "openai";
 import type {
   AskBobContext,
+  AskBobLineExplanation,
+  AskBobMaterialExplanation,
   AskBobMaterialItem,
   AskBobMaterialItemResult,
+  AskBobMaterialsExplainInput,
+  AskBobMaterialsExplainResult,
   AskBobMaterialsGenerateInput,
   AskBobMaterialsGenerateResult,
+  AskBobQuoteExplainInput,
+  AskBobQuoteExplainResult,
   AskBobQuoteGenerateInput,
   AskBobQuoteGenerateResult,
   AskBobQuoteLineResult,
@@ -14,6 +20,61 @@ import type {
   AskBobResponseData,
   SuggestedMessageChannel,
 } from "@/lib/domain/askbob/types";
+
+const SAFETY_GUARDRAILS =
+  "Always mention critical safety hazards before any tooling or wiring steps, remind technicians to follow local building codes and manufacturer instructions, and when in doubt, consult a licensed professional rather than improvising.";
+
+const COST_GUARDRAILS =
+  "State pricing as rough approximations (e.g., “about $X–Y”), note that rates vary by region and supplier, and do not guarantee any specific price.";
+
+const SCOPE_LIMIT_GUARDRAILS =
+  "Favor fewer, clearer actions over long lists, focus on the most critical 5–10 steps, and do not invent extra scope that cannot be backed by the prompt.";
+
+const MAX_DIAGNOSE_STEPS = 12;
+const MAX_QUOTE_LINES = 20;
+const MAX_MATERIAL_ITEMS = 25;
+const MAX_MATERIAL_EXPLANATION_ITEMS = 25;
+
+const JOB_DIAGNOSE_INSTRUCTIONS = [
+  "You are AskBob, a technician-focused assistant for HandyBob. Respond with a strict JSON object only (no surrounding prose) containing the keys: steps (array of strings describing the step-by-step solution), materials (array of { name, quantity?, notes? }), safetyCautions (array of short precautions), costTimeConsiderations (array of considerations about cost or time), and escalationGuidance (array of reasons to escalate).",
+  "Always list safety cautions first, then the step-by-step solution, followed by cost/time considerations, and finally escalation guidance.",
+  SAFETY_GUARDRAILS,
+  SCOPE_LIMIT_GUARDRAILS,
+  "Express cost and time notes as rough estimates and remind technicians that conditions vary locally.",
+].join(" ");
+
+const QUOTE_GENERATE_INSTRUCTIONS = [
+  "You are AskBob, a technician assistant focused on creating structured job quotes for HandyBob. Respond with JSON only (no prose) matching the keys: lines (array of { description, quantity, unit?, unitPrice?, lineTotal? }), materials (optional array of { name, quantity, unit?, estimatedUnitCost?, estimatedTotalCost? }), and notes (optional string). Keep the scope practical and concise.",
+  COST_GUARDRAILS,
+  SCOPE_LIMIT_GUARDRAILS,
+  "Do not guarantee prices and always label any estimate as approximate.",
+].join(" ");
+
+const MATERIALS_GENERATE_INSTRUCTIONS = [
+  "You are AskBob, the HandyBob materials expert. Generate a structured materials checklist that matches the technician prompt.",
+  SAFETY_GUARDRAILS,
+  COST_GUARDRAILS,
+  SCOPE_LIMIT_GUARDRAILS,
+  "Return JSON only (no prose) that includes: items (array of { name, sku?, category?, quantity, unit?, estimatedUnitCost?, estimatedTotalCost?, notes? }) and notes (optional overall assumptions or constraints).",
+  "Do not guarantee pricing and label all costs as estimates.",
+  "Include modelLatencyMs in milliseconds so we can track how long the call took.",
+].join(" ");
+
+const MATERIALS_EXPLAIN_INSTRUCTIONS = [
+  "You are AskBob, the HandyBob materials explainer. Help a homeowner understand what this materials quote covers, what’s included, and what may vary.",
+  SAFETY_GUARDRAILS,
+  COST_GUARDRAILS,
+  SCOPE_LIMIT_GUARDRAILS,
+  "Respond with strict JSON (no prose) matching the keys: overallExplanation (required string), itemExplanations (optional array of { itemIndex, explanation, inclusions?, exclusions? }), notes (optional), and modelLatencyMs (number).",
+].join(" ");
+
+const QUOTE_EXPLAIN_INSTRUCTIONS = [
+  "You are AskBob, a technician assistant that explains existing quotes to cautious homeowners. Use plain, reassuring language, mention safety, and remind them that pricing is approximate.",
+  SAFETY_GUARDRAILS,
+  COST_GUARDRAILS,
+  SCOPE_LIMIT_GUARDRAILS,
+  "Respond with strict JSON matching the keys: overallExplanation (required string), lineExplanations (optional array of { lineIndex, explanation, inclusions?, exclusions? }), notes (optional), and modelLatencyMs (number).",
+].join(" ");
 
 const DEFAULT_MODEL = process.env.OPENAI_ASKBOB_MODEL ?? "gpt-4.1";
 
@@ -56,7 +117,40 @@ type CallAskBobMaterialsGenerateResult = {
   modelName: string;
 };
 
+type CallAskBobQuoteExplainResult = {
+  result: AskBobQuoteExplainResult;
+  latencyMs: number;
+  modelName: string;
+};
+
+type CallAskBobMaterialsExplainResult = {
+  result: AskBobMaterialsExplainResult;
+  latencyMs: number;
+  modelName: string;
+};
+
+type CallAskBobQuoteExplainResult = {
+  result: AskBobQuoteExplainResult;
+  latencyMs: number;
+  modelName: string;
+};
+
 type ModelPayload = Record<string, unknown>;
+
+type LimitResult<T> = {
+  items: T[];
+  truncatedCount: number;
+};
+
+function limitArray<T>(items: T[], maxLength: number): LimitResult<T> {
+  if (items.length <= maxLength) {
+    return { items, truncatedCount: 0 };
+  }
+  return {
+    items: items.slice(0, maxLength),
+    truncatedCount: items.length - maxLength,
+  };
+}
 
 export async function callAskBobModel({
   prompt,
@@ -77,8 +171,7 @@ export async function callAskBobModel({
     .filter(Boolean)
     .join(", ");
 
-  const instructions =
-    "You are AskBob, a technician-focused assistant for HandyBob. Respond with a JSON object only (no surrounding prose) containing the keys: steps (array of strings describing the step-by-step solution), materials (array of { name, quantity?, notes? }), safetyCautions (array of short precautions), costTimeConsiderations (array of considerations about cost or time), and escalationGuidance (array of reasons to escalate). Keep the tone practical, concise, and meant for field technicians.";
+  const instructions = JOB_DIAGNOSE_INSTRUCTIONS;
   const userMessage = `Technician prompt:\n${prompt}\n\nContext: ${contextParts}`;
 
   const openai = new OpenAI({ apiKey });
@@ -102,9 +195,32 @@ export async function callAskBobModel({
       model: modelName,
     });
 
-    const steps = ensureStringArray(payload.steps);
+    const stepsRaw = ensureStringArray(payload.steps);
+    const { items: steps, truncatedCount: stepsTruncated } = limitArray(
+      stepsRaw,
+      MAX_DIAGNOSE_STEPS,
+    );
+    if (stepsTruncated > 0) {
+      console.log("[askbob-diagnose-truncated]", {
+        workspaceId: context.workspaceId,
+        userId: context.userId,
+        jobId: context.jobId ?? null,
+        stepsBefore: stepsRaw.length,
+        stepsAfter: steps.length,
+      });
+    }
     const materials = normalizeMaterials(payload.materials);
-    const safetyCautions = ensureStringArray(payload.safetyCautions);
+    const rawSafetyCautions = Array.isArray(payload.safetyCautions)
+      ? payload.safetyCautions
+      : [];
+    const safetyCautions = ensureStringArray(rawSafetyCautions);
+    if (!Array.isArray(payload.safetyCautions)) {
+      console.log("[askbob-diagnose-missing-safety]", {
+        workspaceId: context.workspaceId,
+        userId: context.userId,
+        jobId: context.jobId ?? null,
+      });
+    }
     const costTimeConsiderations = ensureStringArray(payload.costTimeConsiderations);
     const escalationGuidance = ensureStringArray(payload.escalationGuidance);
 
@@ -122,7 +238,7 @@ export async function callAskBobModel({
       data: {
         steps,
         materials,
-        safetyCautions: safetyCautions.length ? safetyCautions : undefined,
+        safetyCautions,
         costTimeConsiderations: costTimeConsiderations.length ? costTimeConsiderations : undefined,
         escalationGuidance: escalationGuidance.length ? escalationGuidance : undefined,
         rawModelOutput: payload,
@@ -256,6 +372,225 @@ export async function callAskBobMessageDraft({
   }
 }
 
+export async function callAskBobQuoteExplain({
+  context,
+  quoteSummary,
+  extraDetails,
+}: AskBobQuoteExplainInput): Promise<CallAskBobQuoteExplainResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured for AskBob.");
+  }
+
+  const contextParts = [
+    `workspaceId=${context.workspaceId}`,
+    `userId=${context.userId}`,
+    context.jobId ? `jobId=${context.jobId}` : null,
+    context.customerId ? `customerId=${context.customerId}` : null,
+    context.quoteId ? `quoteId=${context.quoteId}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const instructions = QUOTE_EXPLAIN_INSTRUCTIONS;
+  const messageParts = [
+    `Context: ${contextParts}`,
+    `Quote summary:\n${JSON.stringify(quoteSummary, null, 2)}`,
+    extraDetails ? `Guidance: ${extraDetails.trim()}` : null,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join("\n\n");
+
+  const openai = new OpenAI({ apiKey });
+  const modelRequestStart = Date.now();
+  let modelName = DEFAULT_MODEL;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: "system", content: instructions },
+        { role: "user", content: messageParts },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    modelName = completion.model ?? DEFAULT_MODEL;
+    const messageContent = completion.choices?.[0]?.message?.content;
+    const payload = extractModelPayload(messageContent, {
+      workspaceId: context.workspaceId,
+      model: modelName,
+    });
+
+    const overallExplanationRaw = payload.overallExplanation;
+    const overallExplanation = normalizeNullableString(overallExplanationRaw);
+    if (!overallExplanation) {
+      throw new Error("AskBob quote explanation is missing an overall explanation.");
+    }
+
+    const lineExplanations = normalizeLineExplanations(
+      payload.lineExplanations,
+      quoteSummary.lines.length,
+    );
+    const notes = normalizeNullableString(payload.notes);
+
+    const latencyMs = Date.now() - modelRequestStart;
+    console.log("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: true,
+      task: "quote.explain",
+    });
+
+    const result: AskBobQuoteExplainResult = {
+      overallExplanation,
+      lineExplanations: lineExplanations.length ? lineExplanations : undefined,
+      notes,
+      modelLatencyMs: latencyMs,
+      rawModelOutput:
+        typeof messageContent === "string" ? messageContent.trim() : null,
+    };
+
+    return {
+      result,
+      latencyMs,
+      modelName,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - modelRequestStart;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: false,
+      task: "quote.explain",
+      errorMessage: truncatedError,
+    });
+
+    throw error;
+  }
+}
+
+export async function callAskBobMaterialsExplain({
+  context,
+  materialsSummary,
+  extraDetails,
+}: AskBobMaterialsExplainInput): Promise<CallAskBobMaterialsExplainResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured for AskBob.");
+  }
+
+  const contextParts = [
+    `workspaceId=${context.workspaceId}`,
+    `userId=${context.userId}`,
+    context.jobId ? `jobId=${context.jobId}` : null,
+    context.customerId ? `customerId=${context.customerId}` : null,
+    context.quoteId ? `quoteId=${context.quoteId}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const instructions = MATERIALS_EXPLAIN_INSTRUCTIONS;
+  const messageParts = [
+    `Context: ${contextParts}`,
+    `Materials summary:\n${JSON.stringify(materialsSummary, null, 2)}`,
+    extraDetails ? `Guidance: ${extraDetails.trim()}` : null,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join("\n\n");
+
+  const openai = new OpenAI({ apiKey });
+  const modelRequestStart = Date.now();
+  let modelName = DEFAULT_MODEL;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: "system", content: instructions },
+        { role: "user", content: messageParts },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    modelName = completion.model ?? DEFAULT_MODEL;
+    const messageContent = completion.choices?.[0]?.message?.content;
+    const payload = extractModelPayload(messageContent, {
+      workspaceId: context.workspaceId,
+      model: modelName,
+    });
+
+    const overallExplanation = normalizeNullableString(payload.overallExplanation);
+    if (!overallExplanation) {
+      throw new Error("AskBob materials explanation is missing an overall explanation.");
+    }
+
+    const maxExplanations = Math.min(
+      materialsSummary.items.length,
+      MAX_MATERIAL_EXPLANATION_ITEMS,
+    );
+    const itemExplanations = normalizeMaterialExplanations(
+      payload.itemExplanations,
+      maxExplanations,
+    );
+    const notes = normalizeNullableString(payload.notes);
+
+    const latencyMs = Date.now() - modelRequestStart;
+    console.log("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: true,
+      task: "materials.explain",
+    });
+
+    const result: AskBobMaterialsExplainResult = {
+      overallExplanation,
+      itemExplanations: itemExplanations.length ? itemExplanations : undefined,
+      notes,
+      modelLatencyMs: latencyMs,
+      rawModelOutput:
+        typeof messageContent === "string" ? messageContent.trim() : null,
+    };
+
+    return {
+      result,
+      latencyMs,
+      modelName,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - modelRequestStart;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: false,
+      task: "materials.explain",
+      errorMessage: truncatedError,
+    });
+
+    throw error;
+  }
+}
+
 export async function callAskBobQuoteGenerate({
   prompt,
   context,
@@ -276,8 +611,7 @@ export async function callAskBobQuoteGenerate({
     .filter(Boolean)
     .join(", ");
 
-  const instructions =
-    "You are AskBob, a technician assistant for HandyBob focused on creating structured job quotes. Respond with JSON only (no prose) matching the keys: lines (array of { description, quantity, unit?, unitPrice?, lineTotal? }), materials (optional array of { name, quantity, unit?, estimatedUnitCost?, estimatedTotalCost? }), and notes (optional string). Keep the scope practical and concise.";
+  const instructions = QUOTE_GENERATE_INSTRUCTIONS;
 
   const messageParts = [
     `Technician prompt:\n${prompt}`,
@@ -311,6 +645,19 @@ export async function callAskBobQuoteGenerate({
     const lines = normalizeQuoteLines(payload.lines);
     const materials = normalizeQuoteMaterials(payload.materials);
     const notes = normalizeNullableString(payload.notes);
+    const { items: cappedLines, truncatedCount: truncatedLines } = limitArray(
+      lines,
+      MAX_QUOTE_LINES,
+    );
+    if (truncatedLines > 0) {
+      console.log("[askbob-quote-truncated]", {
+        workspaceId: context.workspaceId,
+        userId: context.userId,
+        jobId: context.jobId ?? null,
+        linesBefore: lines.length,
+        linesAfter: cappedLines.length,
+      });
+    }
 
     const latencyMs = Date.now() - modelRequestStart;
     console.log("[askbob-model-call]", {
@@ -325,7 +672,7 @@ export async function callAskBobQuoteGenerate({
 
     return {
       result: {
-        lines,
+        lines: cappedLines,
         materials: materials.length ? materials : undefined,
         notes,
         modelLatencyMs: latencyMs,
@@ -374,14 +721,7 @@ export async function callAskBobMaterialsGenerate({
     .filter(Boolean)
     .join(", ");
 
-  const instructions = [
-    "You are AskBob, the HandyBob materials expert. Generate a structured list of materials matching the provided technician prompt.",
-    "Respond with a strict JSON object only (no prose) that includes:",
-    '- "items": an array of { name, sku?, category?, quantity, unit?, estimatedUnitCost?, estimatedTotalCost?, notes? } with reasonable units and costs where possible.',
-    '- "notes": optional overall assumptions or constraints.',
-    '- "modelLatencyMs": the latency in milliseconds.',
-    "Keep the tone practical, concise, and focused on getting the technician the right parts for the job.",
-  ].join(" ");
+  const instructions = MATERIALS_GENERATE_INSTRUCTIONS;
 
   const messageParts = [
     `Technician prompt:\n${prompt}`,
@@ -414,6 +754,19 @@ export async function callAskBobMaterialsGenerate({
 
     const items = normalizeMaterialsGenerateItems(payload.items);
     const notes = normalizeNullableString(payload.notes);
+    const { items: cappedItems, truncatedCount: truncatedItems } = limitArray(
+      items,
+      MAX_MATERIAL_ITEMS,
+    );
+    if (truncatedItems > 0) {
+      console.log("[askbob-materials-truncated]", {
+        workspaceId: context.workspaceId,
+        userId: context.userId,
+        jobId: context.jobId ?? null,
+        itemsBefore: items.length,
+        itemsAfter: cappedItems.length,
+      });
+    }
 
     const latencyMs = Date.now() - modelRequestStart;
     console.log("[askbob-model-call]", {
@@ -427,7 +780,7 @@ export async function callAskBobMaterialsGenerate({
     });
 
     const result: AskBobMaterialsGenerateResult = {
-      items,
+      items: cappedItems,
       notes,
       modelLatencyMs: latencyMs,
       rawModelOutput:
@@ -546,6 +899,95 @@ function ensureStringArray(value: unknown): string[] {
     .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function normalizeLineExplanations(
+  value: unknown,
+  maxLines: number,
+): AskBobLineExplanation[] {
+  if (!Array.isArray(value)) return [];
+
+  const normalized = value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const record = entry as Record<string, unknown>;
+      const lineIndexRaw = record.lineIndex;
+      if (typeof lineIndexRaw !== "number" || Number.isNaN(lineIndexRaw)) {
+        return null;
+      }
+      const explanationRaw = record.explanation;
+      const explanation = normalizeNullableString(explanationRaw);
+      if (!explanation) return null;
+
+      const clampedMax = maxLines > 0 ? maxLines - 1 : Number(lineIndexRaw);
+      const lineIndex = Math.max(
+        0,
+        Math.min(clampedMax, Math.floor(lineIndexRaw)),
+      );
+      const inclusions = ensureStringArray(record.inclusions);
+      const exclusions = ensureStringArray(record.exclusions);
+
+      const item: AskBobLineExplanation = {
+        lineIndex,
+        explanation,
+      };
+      if (inclusions.length) {
+        item.inclusions = inclusions;
+      }
+      if (exclusions.length) {
+        item.exclusions = exclusions;
+      }
+
+      return item;
+    })
+    .filter((entry): entry is AskBobLineExplanation => Boolean(entry));
+
+  const limit = maxLines > 0 ? maxLines : normalized.length;
+  return limitArray(normalized, limit).items;
+}
+
+function normalizeMaterialExplanations(
+  value: unknown,
+  maxItems: number,
+): AskBobMaterialExplanation[] {
+  if (!Array.isArray(value)) return [];
+
+  const normalized = value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const record = entry as Record<string, unknown>;
+      const itemIndexRaw = record.itemIndex;
+      if (typeof itemIndexRaw !== "number" || Number.isNaN(itemIndexRaw)) {
+        return null;
+      }
+      const explanation = normalizeNullableString(record.explanation);
+      if (!explanation) return null;
+
+      const boundedMax = maxItems > 0 ? maxItems - 1 : Math.floor(itemIndexRaw);
+      const itemIndex = Math.max(
+        0,
+        Math.min(boundedMax, Math.floor(itemIndexRaw)),
+      );
+      const inclusions = ensureStringArray(record.inclusions);
+      const exclusions = ensureStringArray(record.exclusions);
+
+      const item: AskBobMaterialExplanation = {
+        itemIndex,
+        explanation,
+      };
+      if (inclusions.length) {
+        item.inclusions = inclusions;
+      }
+      if (exclusions.length) {
+        item.exclusions = exclusions;
+      }
+
+      return item;
+    })
+    .filter((entry): entry is AskBobMaterialExplanation => Boolean(entry));
+
+  const limit = maxItems > 0 ? maxItems : normalized.length;
+  return limitArray(normalized, limit).items;
 }
 
 function normalizeMaterials(value: unknown): AskBobMaterialItem[] | undefined {

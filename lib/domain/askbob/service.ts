@@ -2,10 +2,14 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { Database } from "@/lib/supabase/types";
 import {
   AskBobContext,
+  AskBobMaterialsExplainInput,
+  AskBobMaterialsExplainResult,
   AskBobMaterialsGenerateInput,
   AskBobMaterialsGenerateResult,
   AskBobMessageDraftInput,
   AskBobMessageDraftResult,
+  AskBobQuoteExplainInput,
+  AskBobQuoteExplainResult,
   AskBobQuoteGenerateInput,
   AskBobQuoteGenerateResult,
   AskBobResponseData,
@@ -19,6 +23,8 @@ import { createAskBobSession, createAskBobResponse } from "./repository";
 import {
   callAskBobMessageDraft,
   callAskBobModel,
+  callAskBobQuoteExplain,
+  callAskBobMaterialsExplain,
   callAskBobQuoteGenerate,
   callAskBobMaterialsGenerate,
 } from "@/utils/openai/askbob";
@@ -78,6 +84,14 @@ export async function runAskBobTask(
 
   if (input.task === "materials.generate") {
     return runAskBobMaterialsGenerateTask(input);
+  }
+
+  if (input.task === "quote.explain") {
+    return runAskBobQuoteExplainTask(input);
+  }
+
+  if (input.task === "materials.explain") {
+    return runAskBobMaterialsExplainTask(input);
   }
 
   const prompt = input.prompt?.trim();
@@ -201,6 +215,91 @@ async function runAskBobQuoteGenerateTask(
       errorMessage: truncatedError,
     });
 
+    throw error;
+  }
+}
+
+export async function runAskBobQuoteExplainTask(
+  input: AskBobQuoteExplainInput
+): Promise<AskBobQuoteExplainResult> {
+  const { context } = input;
+  const workspaceId = context.workspaceId;
+  const userId = context.userId;
+  const lineCount = input.quoteSummary.lines.length;
+  const hasMaterials = Boolean(input.quoteSummary.materials?.length);
+  console.log("[askbob-quote-explain-request]", {
+    workspaceId,
+    userId,
+    jobId: context.jobId ?? null,
+    quoteId: context.quoteId ?? null,
+    lineCount,
+    hasMaterials,
+    hasExtraDetails: Boolean(input.extraDetails?.trim()),
+  });
+
+  try {
+    const modelResult = await callAskBobQuoteExplain(input);
+    console.log("[askbob-quote-explain-success]", {
+      workspaceId,
+      userId,
+      quoteId: context.quoteId ?? null,
+      modelLatencyMs: modelResult.result.modelLatencyMs,
+      explanationLength: modelResult.result.overallExplanation.length,
+    });
+    return modelResult.result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+    console.error("[askbob-quote-explain-failure]", {
+      workspaceId,
+      userId,
+      quoteId: context.quoteId ?? null,
+      errorMessage: truncatedError,
+    });
+    throw error;
+  }
+}
+
+export async function runAskBobMaterialsExplainTask(
+  input: AskBobMaterialsExplainInput
+): Promise<AskBobMaterialsExplainResult> {
+  const { context } = input;
+  const workspaceId = context.workspaceId;
+  const userId = context.userId;
+  const itemsCount = input.materialsSummary.items.length;
+  console.log("[askbob-materials-explain-request]", {
+    workspaceId,
+    userId,
+    jobId: context.jobId ?? null,
+    quoteId: context.quoteId ?? null,
+    materialsQuoteId: input.materialsSummary.id,
+    itemsCount,
+    hasExtraDetails: Boolean(input.extraDetails?.trim()),
+  });
+
+  try {
+    const modelResult = await callAskBobMaterialsExplain(input);
+    console.log("[askbob-materials-explain-success]", {
+      workspaceId,
+      userId,
+      quoteId: context.quoteId ?? null,
+      materialsQuoteId: input.materialsSummary.id,
+      modelLatencyMs: modelResult.result.modelLatencyMs,
+      explanationLength: modelResult.result.overallExplanation.length,
+    });
+    return modelResult.result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+    console.error("[askbob-materials-explain-failure]", {
+      workspaceId,
+      userId,
+      quoteId: context.quoteId ?? null,
+      materialsQuoteId: input.materialsSummary.id,
+      errorMessage: truncatedError,
+    });
     throw error;
   }
 }

@@ -20,6 +20,7 @@ import {
 import JobAskBobPanel from "@/components/askbob/JobAskBobPanel";
 import AskBobQuotePanel from "@/components/askbob/AskBobQuotePanel";
 import AskBobMaterialsPanel from "@/components/askbob/AskBobMaterialsPanel";
+import JobAskBobContainer from "@/components/askbob/JobAskBobContainer";
 
 type JobRecord = {
   id: string;
@@ -494,7 +495,34 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           <p className="text-sm text-slate-300">{job.description_raw ?? "No description provided."}</p>
         </div>
       </HbCard>
-      <JobAskBobPanel workspaceId={workspace.id} jobId={job.id} customerId={customerId ?? undefined} />
+      <JobAskBobContainer workspaceId={workspace.id} jobId={job.id} customerId={customerId ?? undefined}>
+        <section className="space-y-3">
+          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+            1. Diagnose and document the job
+          </p>
+          <JobAskBobPanel workspaceId={workspace.id} jobId={job.id} customerId={customerId ?? undefined} />
+        </section>
+        <section className="space-y-3">
+          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+            2. Suggest a quote scope
+          </p>
+          <AskBobQuotePanel
+            workspaceId={workspace.id}
+            jobId={job.id}
+            customerId={job.customer_id ?? null}
+          />
+        </section>
+        <section className="space-y-3">
+          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+            3. Suggest materials
+          </p>
+          <AskBobMaterialsPanel
+            workspaceId={workspace.id}
+            jobId={job.id}
+            customerId={job.customer_id ?? null}
+          />
+        </section>
+      </JobAskBobContainer>
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
@@ -598,11 +626,6 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           </div>
         )}
       </HbCard>
-      <AskBobQuotePanel
-        workspaceId={workspace.id}
-        jobId={job.id}
-        customerId={job.customer_id ?? null}
-      />
       {callScriptQuoteId ? (
         <JobCallScriptPanel
           quoteId={callScriptQuoteId}
@@ -629,11 +652,6 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
         jobDescription={job.description_raw ?? null}
         materialsQuoteId={materialsQuoteId}
         materialsQuoteDescription={materialsQuoteDescription}
-      />
-      <AskBobMaterialsPanel
-        workspaceId={workspace.id}
-        jobId={job.id}
-        customerId={job.customer_id ?? null}
       />
     </div>
   );
