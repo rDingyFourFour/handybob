@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 // AskBob tasks are processed through a shared routing surface; future tasks might include
-// "quote.generate", "materials.estimate", "message.draft", "followup.plan", etc.
-export type AskBobTask = "job.diagnose" | "message.draft";
+// "message.draft", "quote.generate", "materials.estimate", "followup.plan", etc.
+export type AskBobTask = "job.diagnose" | "message.draft" | "quote.generate";
 
 export type AskBobSection = "steps" | "materials" | "safety" | "costTime" | "escalation";
 
@@ -108,8 +108,45 @@ export interface AskBobMessageDraftResult {
   modelLatencyMs: number;
 }
 
-export type AskBobTaskInput = AskBobJobDiagnoseInput | AskBobMessageDraftInput;
-export type AskBobTaskResult = AskBobJobDiagnoseResult | AskBobMessageDraftResult;
+export interface AskBobQuoteGenerateInput {
+  task: "quote.generate";
+  context: AskBobTaskContext;
+  prompt: string;
+  extraDetails?: string | null;
+}
+
+export interface AskBobQuoteLineResult {
+  description: string;
+  quantity: number;
+  unit?: string | null;
+  unitPrice?: number | null;
+  lineTotal?: number | null;
+}
+
+export interface AskBobQuoteMaterialLineResult {
+  name: string;
+  quantity: number;
+  unit?: string | null;
+  estimatedUnitCost?: number | null;
+  estimatedTotalCost?: number | null;
+}
+
+export interface AskBobQuoteGenerateResult {
+  lines: AskBobQuoteLineResult[];
+  materials?: AskBobQuoteMaterialLineResult[] | null;
+  notes?: string | null;
+  modelLatencyMs: number;
+  rawModelOutput?: unknown;
+}
+
+export type AskBobTaskInput =
+  | AskBobJobDiagnoseInput
+  | AskBobMessageDraftInput
+  | AskBobQuoteGenerateInput;
+export type AskBobTaskResult =
+  | AskBobJobDiagnoseResult
+  | AskBobMessageDraftResult
+  | AskBobQuoteGenerateResult;
 
 // Zod schemas for validation
 

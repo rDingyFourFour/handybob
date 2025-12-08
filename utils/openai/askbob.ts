@@ -4,6 +4,10 @@ import OpenAI from "openai";
 import type {
   AskBobContext,
   AskBobMaterialItem,
+  AskBobQuoteGenerateInput,
+  AskBobQuoteGenerateResult,
+  AskBobQuoteLineResult,
+  AskBobQuoteMaterialLineResult,
   AskBobResponseData,
   SuggestedMessageChannel,
 } from "@/lib/domain/askbob/types";
@@ -33,6 +37,12 @@ type CallAskBobMessageDraftResult = {
   body: string;
   suggestedChannel?: SuggestedMessageChannel | null;
   summary?: string | null;
+  latencyMs: number;
+  modelName: string;
+};
+
+type CallAskBobQuoteGenerateResult = {
+  result: AskBobQuoteGenerateResult;
   latencyMs: number;
   modelName: string;
 };
@@ -237,6 +247,104 @@ export async function callAskBobMessageDraft({
   }
 }
 
+export async function callAskBobQuoteGenerate({
+  prompt,
+  context,
+  extraDetails,
+}: AskBobQuoteGenerateInput): Promise<CallAskBobQuoteGenerateResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured for AskBob.");
+  }
+
+  const contextParts = [
+    `workspaceId=${context.workspaceId}`,
+    `userId=${context.userId}`,
+    context.jobId ? `jobId=${context.jobId}` : null,
+    context.customerId ? `customerId=${context.customerId}` : null,
+    context.quoteId ? `quoteId=${context.quoteId}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const instructions =
+    "You are AskBob, a technician assistant for HandyBob focused on creating structured job quotes. Respond with JSON only (no prose) matching the keys: lines (array of { description, quantity, unit?, unitPrice?, lineTotal? }), materials (optional array of { name, quantity, unit?, estimatedUnitCost?, estimatedTotalCost? }), and notes (optional string). Keep the scope practical and concise.";
+
+  const messageParts = [
+    `Technician prompt:\n${prompt}`,
+    extraDetails ? `Additional details: ${extraDetails}` : null,
+    `Context: ${contextParts}`,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join("\n\n");
+
+  const openai = new OpenAI({ apiKey });
+  const modelRequestStart = Date.now();
+  let modelName = DEFAULT_MODEL;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: "system", content: instructions },
+        { role: "user", content: messageParts },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    modelName = completion.model ?? DEFAULT_MODEL;
+    const messageContent = completion.choices?.[0]?.message?.content;
+    const payload = extractModelPayload(messageContent, {
+      workspaceId: context.workspaceId,
+      model: modelName,
+    });
+
+    const lines = normalizeQuoteLines(payload.lines);
+    const materials = normalizeQuoteMaterials(payload.materials);
+    const notes = normalizeNullableString(payload.notes);
+
+    const latencyMs = Date.now() - modelRequestStart;
+    console.log("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: prompt.length,
+      latencyMs,
+      success: true,
+      task: "quote.generate",
+    });
+
+    return {
+      result: {
+        lines,
+        materials: materials.length ? materials : undefined,
+        notes,
+        modelLatencyMs: latencyMs,
+        rawModelOutput: payload,
+      },
+      latencyMs,
+      modelName,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - modelRequestStart;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError = errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: prompt.length,
+      latencyMs,
+      success: false,
+      task: "quote.generate",
+      errorMessage: truncatedError,
+    });
+
+    throw error;
+  }
+}
+
 function extractModelPayload(
   rawContent: unknown,
   meta: { workspaceId: string; model: string }
@@ -356,4 +464,94 @@ function normalizeMaterials(value: unknown): AskBobMaterialItem[] | undefined {
     .filter((material): material is AskBobMaterialItem => Boolean(material));
 
   return normalized.length ? normalized : undefined;
+}
+
+function normalizeQuoteLines(value: unknown): AskBobQuoteLineResult[] {
+  if (!Array.isArray(value)) return [];
+
+  const normalized = value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const description =
+        normalizeNullableString(record.description ?? record.label ?? record.scope);
+      if (!description) {
+        return null;
+      }
+      const quantity =
+        normalizeNumber(record.quantity ?? record.qty ?? record.amount) ?? 1;
+      const unit = normalizeNullableString(record.unit ?? record.units);
+      const unitPrice = normalizeNumber(
+        record.unitPrice ?? record.price ?? record.rate ?? record.unit_cost ?? record.cost
+      );
+      const lineTotal = normalizeNumber(record.lineTotal ?? record.total ?? record.amount);
+
+      return {
+        description,
+        quantity,
+        unit,
+        unitPrice,
+        lineTotal,
+      };
+    })
+    .filter((line): line is AskBobQuoteLineResult => Boolean(line));
+
+  return normalized;
+}
+
+function normalizeQuoteMaterials(value: unknown): AskBobQuoteMaterialLineResult[] {
+  if (!Array.isArray(value)) return [];
+
+  const normalized = value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const name =
+        normalizeNullableString(record.name ?? record.label ?? record.item) ?? null;
+      if (!name) {
+        return null;
+      }
+      const quantity = normalizeNumber(record.quantity ?? record.qty ?? record.amount) ?? 1;
+      const unit = normalizeNullableString(record.unit ?? record.units);
+      const estimatedUnitCost = normalizeNumber(
+        record.estimatedUnitCost ?? record.unit_cost ?? record.unitCost
+      );
+      const estimatedTotalCost = normalizeNumber(
+        record.estimatedTotalCost ?? record.total ?? record.estimated_total
+      );
+
+      return {
+        name,
+        quantity,
+        unit,
+        estimatedUnitCost,
+        estimatedTotalCost,
+      };
+    })
+    .filter(
+      (material): material is AskBobQuoteMaterialLineResult => Boolean(material)
+    );
+
+  return normalized;
+}
+
+function normalizeNullableString(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  return null;
+}
+
+function normalizeNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }

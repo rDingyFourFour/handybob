@@ -18,6 +18,7 @@ import {
   type FollowupDueInfo,
 } from "@/lib/domain/communications/followupRecommendations";
 import JobAskBobPanel from "@/components/askbob/JobAskBobPanel";
+import AskBobQuotePanel from "@/components/askbob/AskBobQuotePanel";
 
 type JobRecord = {
   id: string;
@@ -548,8 +549,8 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job quotes</p>
           <h2 className="hb-heading-3 text-xl font-semibold">Quotes for this job</h2>
         </div>
-        {quotesError ? (
-          <div className="space-y-2 text-sm text-slate-400">
+      {quotesError ? (
+        <div className="space-y-2 text-sm text-slate-400">
             <p>Something went wrong. We couldn’t load quotes for this job.</p>
             <HbButton as={Link} href={quoteHref} size="sm" variant="secondary">
               New quote for this job
@@ -596,6 +597,11 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           </div>
         )}
       </HbCard>
+      <AskBobQuotePanel
+        workspaceId={workspace.id}
+        jobId={job.id}
+        customerId={job.customer_id ?? null}
+      />
       {callScriptQuoteId ? (
         <JobCallScriptPanel
           quoteId={callScriptQuoteId}

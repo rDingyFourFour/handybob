@@ -57,7 +57,9 @@ export async function logMessage({
     return { ok: false, messageId: null, error: "Missing workspace or user context" };
   }
 
-  const resolvedVia = via ?? undefined;
+  const normalizedChannel = channel.toLowerCase();
+  // Supabase only recognizes message_via members like 'email' and 'sms', so treat note channels as email entries.
+  const resolvedVia = via ?? (normalizedChannel === "note" ? "email" : undefined);
 
   const { data, error } = await supabase
     .from("messages")

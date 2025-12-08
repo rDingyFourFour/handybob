@@ -4,6 +4,8 @@ import {
   AskBobContext,
   AskBobMessageDraftInput,
   AskBobMessageDraftResult,
+  AskBobQuoteGenerateInput,
+  AskBobQuoteGenerateResult,
   AskBobResponseData,
   AskBobResponseDTO,
   AskBobResponseDTOSection,
@@ -12,7 +14,11 @@ import {
   askBobResponseDataSchema,
 } from "./types";
 import { createAskBobSession, createAskBobResponse } from "./repository";
-import { callAskBobMessageDraft, callAskBobModel } from "@/utils/openai/askbob";
+import {
+  callAskBobMessageDraft,
+  callAskBobModel,
+  callAskBobQuoteGenerate,
+} from "@/utils/openai/askbob";
 
 type DbClient = SupabaseClient<Database>;
 
@@ -62,6 +68,11 @@ export async function runAskBobTask(
   if (input.task === "message.draft") {
     return runAskBobMessageDraftTask(input);
   }
+
+  if (input.task === "quote.generate") {
+    return runAskBobQuoteGenerateTask(input);
+  }
+
   const prompt = input.prompt?.trim();
 
   if (!prompt || prompt.length < MIN_PROMPT_LENGTH) {
@@ -129,6 +140,62 @@ async function runAskBobMessageDraftTask(
     summary: modelResult.summary,
     modelLatencyMs: modelResult.latencyMs,
   };
+}
+
+async function runAskBobQuoteGenerateTask(
+  input: AskBobQuoteGenerateInput
+): Promise<AskBobQuoteGenerateResult> {
+  const prompt = input.prompt?.trim();
+  if (!prompt || prompt.length < MIN_PROMPT_LENGTH) {
+    throw new Error("Please provide a bit more detail about the problem.");
+  }
+
+  const { context } = input;
+  const workspaceId = context.workspaceId;
+  const userId = context.userId;
+  const hasExtraDetails = Boolean(input.extraDetails?.trim());
+
+  console.log("[askbob-quote-generate-request]", {
+    workspaceId,
+    userId,
+    hasJobId: Boolean(context.jobId),
+    hasCustomerId: Boolean(context.customerId),
+    hasQuoteId: Boolean(context.quoteId),
+    promptLength: prompt.length,
+    hasExtraDetails,
+  });
+
+  try {
+    const normalizedInput: AskBobQuoteGenerateInput = {
+      ...input,
+      prompt,
+      extraDetails: input.extraDetails?.trim() ?? null,
+    };
+
+    const modelResult = await callAskBobQuoteGenerate(normalizedInput);
+
+    console.log("[askbob-quote-generate-success]", {
+      workspaceId,
+      userId,
+      modelLatencyMs: modelResult.result.modelLatencyMs,
+      linesCount: modelResult.result.lines.length,
+      materialsCount: modelResult.result.materials?.length ?? 0,
+    });
+
+    return modelResult.result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-quote-generate-failure]", {
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      errorMessage: truncatedError,
+    });
+
+    throw error;
+  }
 }
 
 export function toAskBobResponseDTO(input: {
