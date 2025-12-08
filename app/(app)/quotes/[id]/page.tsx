@@ -9,6 +9,7 @@ import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import QuoteMaterialsPanel from "./QuoteMaterialsPanel";
 import QuoteExplainPanel from "@/components/askbob/QuoteExplainPanel";
+import MaterialsQuoteExplainPanel from "@/components/askbob/MaterialsQuoteExplainPanel";
 import { createFollowupMessageAction } from "./followupMessageActions";
 // CHANGE: import call script action at top of quote detail page
 import CallScriptPanel from "./CallScriptPanel";
@@ -269,16 +270,19 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
           </div>
         )}
         <QuoteExplainPanel quoteId={quote.id} />
-        <QuoteMaterialsPanel
-          quoteId={quote.id}
-          workspaceId={workspace.id}
-          description={
-            quote.client_message_template ??
-            (quote.job_id ? `Quote for job ${quote.job_id}` : "Materials for this quote")
-          }
-          lineItems={lineItems}
-          jobId={quote.job_id}
-        />
+        <div className="space-y-3">
+          <QuoteMaterialsPanel
+            quoteId={quote.id}
+            workspaceId={workspace.id}
+            description={
+              quote.client_message_template ??
+              (quote.job_id ? `Quote for job ${quote.job_id}` : "Materials for this quote")
+            }
+            lineItems={lineItems}
+            jobId={quote.job_id}
+          />
+          <MaterialsQuoteExplainPanel quoteId={quote.id} />
+        </div>
         <FollowupDraftPanel
           quoteId={quote.id}
           description={

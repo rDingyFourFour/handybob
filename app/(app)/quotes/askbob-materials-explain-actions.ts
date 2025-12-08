@@ -10,7 +10,8 @@ import {
 import { runAskBobMaterialsExplainTask } from "@/lib/domain/askbob/service";
 
 type ExplainMaterialsQuotePayload = {
-  materialsQuoteId: string;
+  // The UI passes the same quoteId used on /quotes/[id]; this is the materials quote we want to explain.
+  quoteId: string;
   extraDetails?: string | null;
 };
 
@@ -23,7 +24,11 @@ export type ExplainMaterialsQuoteWithAskBobResult =
       notes?: string | null;
       modelLatencyMs: number;
     }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      code?: "no_materials_for_quote";
+    };
 
 export async function explainMaterialsQuoteWithAskBobAction(
   payload: ExplainMaterialsQuotePayload
@@ -35,9 +40,9 @@ export async function explainMaterialsQuoteWithAskBobAction(
     return { ok: false, error: "Workspace or user context is unavailable." };
   }
 
-  const trimmedId = payload.materialsQuoteId?.trim();
-  if (!trimmedId) {
-    return { ok: false, error: "Materials quote ID is required." };
+  const trimmedQuoteId = payload.quoteId?.trim();
+  if (!trimmedQuoteId) {
+    return { ok: false, error: "Quote ID is required." };
   }
 
   const selectCols = `
@@ -64,24 +69,43 @@ export async function explainMaterialsQuoteWithAskBobAction(
     .from("quotes")
     .select(selectCols)
     .eq("workspace_id", workspace.id)
-    .eq("id", trimmedId)
+    .eq("id", trimmedQuoteId)
     .maybeSingle();
 
   if (!quote) {
-    const { data: otherQuote } = await supabase
+    const { data: crossWorkspaceQuote } = await supabase
       .from("quotes")
-      .select("id")
-      .eq("id", trimmedId)
+      .select("id, workspace_id")
+      .eq("id", trimmedQuoteId)
       .maybeSingle();
-    const reason = otherQuote ? "wrong_workspace" : "not_found";
+    if (crossWorkspaceQuote?.workspace_id === workspace.id) {
+      console.error("[askbob-materials-explain-ui-failure] materials quote lookup returned no rows", {
+        workspaceId: workspace.id,
+        userId: user.id,
+        quoteId: trimmedQuoteId,
+        materialsQuoteId: trimmedQuoteId,
+        reason: "no_materials_for_quote",
+      });
+      return {
+        ok: false,
+        error:
+          "There’s no materials list for this quote yet. Generate materials first, then AskBob can explain it.",
+        code: "no_materials_for_quote",
+      };
+    }
+    const isWrongWorkspace =
+      Boolean(crossWorkspaceQuote) && crossWorkspaceQuote.workspace_id !== workspace.id;
+    const reason = isWrongWorkspace ? "wrong_workspace" : "not_found";
     console.error("[askbob-materials-explain-ui-failure] materials quote lookup returned no rows", {
       workspaceId: workspace.id,
       userId: user.id,
-      materialsQuoteId: trimmedId,
+      quoteId: trimmedQuoteId,
+      materialsQuoteId: trimmedQuoteId,
       reason,
+      existingWorkspaceId: crossWorkspaceQuote?.workspace_id ?? null,
     });
     const message =
-      reason === "wrong_workspace"
+      isWrongWorkspace
         ? "Materials quote exists but isn’t part of this workspace."
         : "Materials quote not found.";
     return { ok: false, error: message };
@@ -91,6 +115,23 @@ export async function explainMaterialsQuoteWithAskBobAction(
   const items = lineItems
     .map((entry) => mapMaterialsLineForExplain(entry as Record<string, unknown>))
     .filter((item): item is AskBobMaterialsExplainItemSummary => Boolean(item));
+
+  if (items.length === 0) {
+    console.error("[askbob-materials-explain-ui-failure] materials quote has no items", {
+      workspaceId: workspace.id,
+      userId: user.id,
+      quoteId: trimmedQuoteId,
+      materialsQuoteId: trimmedQuoteId,
+      reason: "no_materials_for_quote",
+      lineItemsCount: lineItems.length,
+    });
+    return {
+      ok: false,
+      error:
+        "There’s no materials list for this quote yet. Generate materials first, then AskBob can explain it.",
+      code: "no_materials_for_quote",
+    };
+  }
 
   const explainInput: AskBobMaterialsExplainInput = {
     task: "materials.explain",
