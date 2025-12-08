@@ -4,16 +4,12 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { Database } from "@/lib/supabase/types";
 import {
   AskBobContext,
+  AskBobJobDiagnoseInput,
   AskBobRequestInput,
   AskBobResponseDTO,
   askBobRequestInputSchema,
 } from "@/lib/domain/askbob/types";
-import {
-  createAskBobSessionWithContext,
-  saveAskBobResponse,
-  toAskBobResponseDTO,
-} from "@/lib/domain/askbob/service";
-import { callAskBobModel } from "@/utils/openai/askbob";
+import { runAskBobTask } from "@/lib/domain/askbob/service";
 import { createServerClient } from "@/utils/supabase/server";
 import { ZodError } from "zod";
 
@@ -64,48 +60,36 @@ export async function submitAskBobQueryAction(
       promptLength: parsedInput.prompt.length,
     });
 
-    const session = await createAskBobSessionWithContext(supabaseClient, {
+    const taskInput: AskBobJobDiagnoseInput = {
+      task: "job.diagnose",
       context,
       prompt: parsedInput.prompt,
-    });
+    };
 
-    const modelResult = await callAskBobModel({
-      prompt: parsedInput.prompt,
-      context,
-    });
+    const taskResult = await runAskBobTask(supabaseClient, taskInput);
 
-    const response = await saveAskBobResponse(supabaseClient, {
-      sessionId: session.id,
-      data: modelResult.data,
-    });
-
-    const dto = toAskBobResponseDTO({
-      sessionId: session.id,
-      responseId: response.id,
-      createdAt: response.createdAt,
-      data: modelResult.data,
-    });
-
-    const stepsCount = modelResult.data.steps.length;
-    const safetyCautionsCount = modelResult.data.safetyCautions?.length ?? 0;
-    const costTimeConsiderationsCount = modelResult.data.costTimeConsiderations?.length ?? 0;
-    const escalationGuidanceCount = modelResult.data.escalationGuidance?.length ?? 0;
-    const hasMaterials = (modelResult.data.materials?.length ?? 0) > 0;
+    const getSectionCount = (type: "steps" | "safety" | "costTime" | "escalation") =>
+      taskResult.sections.find((section) => section.type === type)?.items.length ?? 0;
+    const stepsCount = getSectionCount("steps");
+    const safetyCautionsCount = getSectionCount("safety");
+    const costTimeConsiderationsCount = getSectionCount("costTime");
+    const escalationGuidanceCount = getSectionCount("escalation");
+    const hasMaterials = (taskResult.materials?.length ?? 0) > 0;
 
     console.log("[askbob-success]", {
       workspaceId: context.workspaceId,
       userId,
-      sessionId: session.id,
-      responseId: response.id,
+      sessionId: taskResult.sessionId,
+      responseId: taskResult.responseId,
       hasMaterials,
       stepsCount,
       safetyCautionsCount,
       costTimeConsiderationsCount,
       escalationGuidanceCount,
-      modelLatencyMs: modelResult.latencyMs,
+      modelLatencyMs: taskResult.modelLatencyMs,
     });
 
-    return dto;
+    return taskResult;
   } catch (error) {
     logAskBobFailure({
       error,

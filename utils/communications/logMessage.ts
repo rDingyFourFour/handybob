@@ -27,6 +27,12 @@ type LogMessageArgs = {
   via?: string | null;
 };
 
+export type LogMessageResult = {
+  ok: boolean;
+  messageId: string | null;
+  error?: string | null;
+};
+
 export async function logMessage({
   supabase,
   workspaceId,
@@ -45,32 +51,43 @@ export async function logMessage({
   fromAddress,
   sentAt,
   via,
-}: LogMessageArgs) {
+}: LogMessageArgs): Promise<LogMessageResult> {
   if (!workspaceId || !userId) {
     console.warn("[logMessage] Missing workspaceId or userId; skipping log.");
-    return;
+    return { ok: false, messageId: null, error: "Missing workspace or user context" };
   }
 
-  const { error } = await supabase.from("messages").insert({
-    workspace_id: workspaceId,
-    user_id: userId,
-    customer_id: customerId ?? null,
-    job_id: jobId ?? null,
-    quote_id: quoteId ?? null,
-    invoice_id: invoiceId ?? null,
-    channel,
-    direction,
-    subject,
-    body,
-    to_address: toAddress ?? null,
-    from_address: fromAddress ?? null,
-    sent_at: sentAt ?? null,
-    via: via ?? null,
-    status: status ?? "sent",
-    external_id: externalId ?? null,
-  });
+  const normalizedChannel = channel.toLowerCase();
+  const resolvedVia = via ?? (normalizedChannel === "note" ? "system" : null);
 
-  if (error) {
-    console.warn("[logMessage] Failed to insert message record:", error.message);
+  const { data, error } = await supabase
+    .from("messages")
+    .insert({
+      workspace_id: workspaceId,
+      user_id: userId,
+      customer_id: customerId ?? null,
+      job_id: jobId ?? null,
+      quote_id: quoteId ?? null,
+      invoice_id: invoiceId ?? null,
+      channel,
+      direction,
+      subject,
+      body,
+      to_address: toAddress ?? null,
+      from_address: fromAddress ?? null,
+      sent_at: sentAt ?? null,
+      via: resolvedVia,
+      status: status ?? "sent",
+      external_id: externalId ?? null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data?.id) {
+    const errorMessage = error?.message ?? "Failed to insert message record";
+    console.warn("[logMessage] Failed to insert message record:", errorMessage);
+    return { ok: false, messageId: data?.id ?? null, error: errorMessage };
   }
+
+  return { ok: true, messageId: data.id };
 }

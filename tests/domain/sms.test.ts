@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { sendCustomerSms } from "@/lib/domain/sms";
 
 vi.mock("@/utils/communications/logMessage", () => ({
-  logMessage: vi.fn(),
+  logMessage: vi.fn(async () => ({ ok: true, messageId: "mock-id" })),
 }));
 
 describe("sendCustomerSms", () => {

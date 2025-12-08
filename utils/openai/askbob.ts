@@ -5,6 +5,7 @@ import type {
   AskBobContext,
   AskBobMaterialItem,
   AskBobResponseData,
+  SuggestedMessageChannel,
 } from "@/lib/domain/askbob/types";
 
 const DEFAULT_MODEL = process.env.OPENAI_ASKBOB_MODEL ?? "gpt-4.1";
@@ -16,6 +17,22 @@ type CallAskBobModelOptions = {
 
 type CallAskBobModelResult = {
   data: AskBobResponseData;
+  latencyMs: number;
+  modelName: string;
+};
+
+type CallAskBobMessageDraftOptions = {
+  prompt: string;
+  context: AskBobContext;
+  purpose: string;
+  tone?: string | null;
+  extraDetails?: string | null;
+};
+
+type CallAskBobMessageDraftResult = {
+  body: string;
+  suggestedChannel?: SuggestedMessageChannel | null;
+  summary?: string | null;
   latencyMs: number;
   modelName: string;
 };
@@ -106,6 +123,113 @@ export async function callAskBobModel({
       promptLength: prompt.length,
       latencyMs,
       success: false,
+      errorMessage: truncatedError,
+    });
+
+    throw error;
+  }
+}
+
+export async function callAskBobMessageDraft({
+  prompt,
+  context,
+  purpose,
+  tone,
+  extraDetails,
+}: CallAskBobMessageDraftOptions): Promise<CallAskBobMessageDraftResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured for AskBob.");
+  }
+
+  const contextParts = [
+    `workspaceId=${context.workspaceId}`,
+    `userId=${context.userId}`,
+    context.jobId ? `jobId=${context.jobId}` : null,
+    context.customerId ? `customerId=${context.customerId}` : null,
+    context.quoteId ? `quoteId=${context.quoteId}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const instructions =
+    "You are AskBob, a technician assistant for HandyBob. Respond with a JSON object only (no surrounding prose) containing the keys: body (required, a brief customer-facing message), suggestedChannel (optional, 'sms' or 'email'), and summary (optional, a short explanation of the messaging goal). Keep the tone appropriate given the provided tone hint, mention any critical context, and keep the message concise.";
+  const userMessage = [
+    `Purpose: ${purpose}`,
+    tone ? `Tone: ${tone}` : null,
+    extraDetails ? `Details: ${extraDetails}` : null,
+    `Prompt: ${prompt}`,
+    `Context: ${contextParts}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const openai = new OpenAI({ apiKey });
+  const modelRequestStart = Date.now();
+  let modelName = DEFAULT_MODEL;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: "system", content: instructions },
+        { role: "user", content: userMessage },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    modelName = completion.model ?? DEFAULT_MODEL;
+    const messageContent = completion.choices?.[0]?.message?.content;
+    const payload = extractModelPayload(messageContent, {
+      workspaceId: context.workspaceId,
+      model: modelName,
+    });
+
+    const latencyMs = Date.now() - modelRequestStart;
+    console.log("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: prompt.length,
+      latencyMs,
+      success: true,
+      task: "message.draft",
+    });
+
+    const bodyRaw = payload.body;
+    if (typeof bodyRaw !== "string" || !bodyRaw.trim()) {
+      throw new Error("AskBob message draft is missing a body.");
+    }
+
+    const suggestedChannelRaw = payload.suggestedChannel;
+    const suggestedChannel =
+      suggestedChannelRaw === "sms" || suggestedChannelRaw === "email"
+        ? (suggestedChannelRaw as SuggestedMessageChannel)
+        : null;
+
+    const summaryRaw = payload.summary;
+    const summary = typeof summaryRaw === "string" && summaryRaw.trim() ? summaryRaw.trim() : null;
+
+    return {
+      body: bodyRaw.trim(),
+      suggestedChannel,
+      summary,
+      latencyMs,
+      modelName,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - modelRequestStart;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError = errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: prompt.length,
+      latencyMs,
+      success: false,
+      task: "message.draft",
       errorMessage: truncatedError,
     });
 

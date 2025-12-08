@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+// AskBob tasks are processed through a shared routing surface; future tasks might include
+// "quote.generate", "materials.estimate", "message.draft", "followup.plan", etc.
+export type AskBobTask = "job.diagnose" | "message.draft";
+
 export type AskBobSection = "steps" | "materials" | "safety" | "costTime" | "escalation";
 
 export type AskBobMaterialItem = {
@@ -45,13 +49,15 @@ export interface AskBobLink {
   createdAt: string;
 }
 
-export interface AskBobContext {
+export interface AskBobTaskContext {
   workspaceId: string;
   userId: string;
   jobId?: string | null;
   customerId?: string | null;
   quoteId?: string | null;
 }
+
+export type AskBobContext = AskBobTaskContext;
 
 export interface AskBobRequestInput {
   prompt: string;
@@ -74,6 +80,36 @@ export interface AskBobResponseDTO {
   sections: AskBobResponseDTOSection[];
   materials?: AskBobMaterialItem[];
 }
+
+export interface AskBobJobDiagnoseInput {
+  task: "job.diagnose";
+  context: AskBobTaskContext;
+  prompt: string;
+}
+
+export interface AskBobJobDiagnoseResult extends AskBobResponseDTO {
+  modelLatencyMs: number;
+}
+
+export interface AskBobMessageDraftInput {
+  task: "message.draft";
+  context: AskBobTaskContext;
+  purpose: string;
+  tone?: string | null;
+  extraDetails?: string | null;
+}
+
+export type SuggestedMessageChannel = "sms" | "email";
+
+export interface AskBobMessageDraftResult {
+  body: string;
+  suggestedChannel?: SuggestedMessageChannel | null;
+  summary?: string | null;
+  modelLatencyMs: number;
+}
+
+export type AskBobTaskInput = AskBobJobDiagnoseInput | AskBobMessageDraftInput;
+export type AskBobTaskResult = AskBobJobDiagnoseResult | AskBobMessageDraftResult;
 
 // Zod schemas for validation
 

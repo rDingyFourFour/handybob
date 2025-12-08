@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
-import {
-  createAskBobJobNoteAction,
-  createAskBobMessageDraftAction,
-} from "@/app/(app)/askbob/integrations-actions";
+import { createAskBobJobNoteAction } from "@/app/(app)/askbob/integrations-actions";
+import { draftAskBobCustomerMessageAction } from "@/app/(app)/askbob/message-draft-actions";
 import type { AskBobResponseDTO } from "@/lib/domain/askbob/types";
 
 const TIMESTAMP_FORMATTER = new Intl.DateTimeFormat("en-US", {
@@ -37,11 +36,14 @@ export default function AskBobResponseCard({
   const hasSections = response.sections.length > 0;
   const [jobNoteStatus, setJobNoteStatus] = useState<string | null>(null);
   const [jobNoteError, setJobNoteError] = useState<string | null>(null);
-  const [messageDraft, setMessageDraft] = useState<string | null>(null);
-  const [messageDraftError, setMessageDraftError] = useState<string | null>(null);
+  const [jobNoteInfo, setJobNoteInfo] = useState<string | null>(null);
+  const [draftBody, setDraftBody] = useState<string | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
   const [isJobNotePending, setIsJobNotePending] = useState(false);
   const [isDraftPending, setIsDraftPending] = useState(false);
   const [, startTransition] = useTransition();
+  const router = useRouter();
+  const canDraftMessage = Boolean(workspaceId);
 
   return (
     <HbCard className="space-y-4">
@@ -50,7 +52,7 @@ export default function AskBobResponseCard({
         <p className="text-xs text-slate-400">Generated at {formattedDate}</p>
       </div>
 
-      {(jobId || customerId) && (
+      {(jobId || canDraftMessage) && (
         <div className="flex flex-wrap items-center gap-2">
           {jobId && (
             <HbButton
@@ -59,6 +61,7 @@ export default function AskBobResponseCard({
               disabled={isJobNotePending}
               onClick={() => {
                 setJobNoteStatus(null);
+                setJobNoteInfo(null);
                 setJobNoteError(null);
                 startTransition(() => {
                   setIsJobNotePending(true);
@@ -72,7 +75,11 @@ export default function AskBobResponseCard({
                     jobId,
                     askbobResponseId: response.responseId,
                   })
-                    .then(() => {
+                    .then((result) => {
+                      if (result?.disabled && result.reason === "job_note_saving_disabled") {
+                        setJobNoteInfo("Saving AskBob notes to this job isn’t available in this environment yet.");
+                        return;
+                      }
                       setJobNoteStatus("Saved to job notes.");
                     })
                     .catch((error) => {
@@ -89,14 +96,14 @@ export default function AskBobResponseCard({
             </HbButton>
           )}
 
-          {customerId && (
+          {canDraftMessage && (
             <HbButton
               variant="ghost"
               size="sm"
               disabled={isDraftPending}
               onClick={() => {
-                setMessageDraft(null);
-                setMessageDraftError(null);
+                setDraftBody(null);
+                setDraftError(null);
                 startTransition(() => {
                   setIsDraftPending(true);
                   console.log("[askbob-ui-message-draft-click]", {
@@ -105,18 +112,20 @@ export default function AskBobResponseCard({
                     jobId: jobId ?? null,
                     askbobResponseId: response.responseId,
                   });
-                  void createAskBobMessageDraftAction({
+                  void draftAskBobCustomerMessageAction({
                     workspaceId,
-                    askbobResponseId: response.responseId,
+                    jobId: jobId ?? null,
                     customerId,
-                    jobId: jobId ?? undefined,
+                    purpose: "Follow up about the work discussed in this AskBob suggestion.",
+                    tone: "friendly",
+                    extraDetails: "Keep the response concise and homeowner-facing.",
                   })
                     .then((draft) => {
-                      setMessageDraft(draft.body);
+                      setDraftBody(draft.body);
                     })
                     .catch((error) => {
                       console.error("[askbob-ui-message-draft] Failed to prepare draft", error);
-                      setMessageDraftError("Unable to prepare the draft right now.");
+                      setDraftError("Couldn’t create a customer draft. Please try again.");
                     })
                     .finally(() => {
                       setIsDraftPending(false);
@@ -131,14 +140,48 @@ export default function AskBobResponseCard({
       )}
 
       {jobNoteStatus && <p className="text-xs text-emerald-400">{jobNoteStatus}</p>}
+      {jobNoteInfo && <p className="text-xs text-slate-300">{jobNoteInfo}</p>}
       {jobNoteError && <p className="text-xs text-rose-400">{jobNoteError}</p>}
-      {messageDraftError && <p className="text-xs text-rose-400">{messageDraftError}</p>}
-      {messageDraft && (
+      {draftError && <p className="text-xs text-rose-400">{draftError}</p>}
+      {draftBody && (
         <div className="rounded-xl border border-slate-800/60 bg-slate-950/40 px-4 py-3 text-xs text-slate-200">
           <p className="text-[0.65rem] font-semibold uppercase tracking-[0.3em] text-slate-400">
-            Customer message draft
+            Customer-ready message draft
           </p>
-          <p className="mt-2 whitespace-pre-wrap">{messageDraft}</p>
+          <p className="mt-2 whitespace-pre-wrap">{draftBody}</p>
+          {workspaceId && customerId && (
+            <div className="mt-3 text-right">
+              <HbButton
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  const bodyForQuery = draftBody.trim();
+                  if (!bodyForQuery) {
+                    return;
+                  }
+                  console.log("[askbob-ui-message-draft-use]", {
+                    workspaceId,
+                    jobId: jobId ?? null,
+                    customerId,
+                    hasDraftBody: Boolean(bodyForQuery),
+                    origin: "askbob",
+                  });
+                  const params = new URLSearchParams();
+                  params.set("compose", "1");
+                  params.set("customerId", customerId);
+                  if (jobId) {
+                    params.set("jobId", jobId);
+                  }
+                  params.set("origin", "askbob");
+                  params.set("draftBody", bodyForQuery);
+                  router.push(`/messages?${params.toString()}`);
+                }}
+              >
+                Use in message
+              </HbButton>
+            </div>
+          )}
         </div>
       )}
 

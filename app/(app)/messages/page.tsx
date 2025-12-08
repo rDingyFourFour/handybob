@@ -161,6 +161,14 @@ export default async function MessagesPage({
   const rawOriginParam = resolvedSearchParams?.origin;
   const origin =
     Array.isArray(rawOriginParam) ? rawOriginParam[0] ?? null : rawOriginParam ?? null;
+  const rawDraftBodyParam = resolvedSearchParams?.draftBody;
+  const normalizedDraftBody = Array.isArray(rawDraftBodyParam)
+    ? rawDraftBodyParam[0] ?? null
+    : rawDraftBodyParam ?? null;
+  const initialDraftBody =
+    typeof normalizedDraftBody === "string" && normalizedDraftBody.trim()
+      ? normalizedDraftBody.trim()
+      : null;
   const messageFilterSubtitle =
     filterMode === "followups"
       ? "Showing follow-up messages across your workspace."
@@ -528,6 +536,14 @@ export default async function MessagesPage({
       hasJobId: Boolean(initialJobId),
       origin,
     });
+    if (origin === "askbob") {
+      console.log("[messages-compose-from-askbob-entry]", {
+        workspaceId: workspace.id,
+        hasCustomerId: Boolean(initialCustomerId),
+        hasJobId: Boolean(initialJobId),
+        hasDraftBody: Boolean(initialDraftBody),
+      });
+    }
   }
 
   console.log("[messages-index-summary]", {
@@ -577,6 +593,7 @@ export default async function MessagesPage({
               initialJobId={initialJobId}
               initialComposerOpen={composeOpen}
               initialComposerOrigin={origin}
+              initialComposerBody={initialDraftBody}
             />
             <HbButton as="a" href="/messages" variant="ghost" size="sm">
               Back to messages

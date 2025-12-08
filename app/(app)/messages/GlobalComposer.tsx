@@ -64,8 +64,8 @@ export default function GlobalComposer({
   const jobSelectId = useId();
   const bodyTextareaId = useId();
 
-  const prefillUsed = Boolean(initialCustomerForState || initialJobForState);
   const hasInitialBody = initialBodyValue.length > 0;
+  const prefillUsed = Boolean(initialCustomerForState || initialJobForState || hasInitialBody);
   const prefillLoggedRef = useRef(false);
 
   useEffect(() => {

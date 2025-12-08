@@ -67,33 +67,19 @@ export async function createAskBobJobNoteAction({
     jobId,
     quoteId: session.quoteId ?? undefined,
   });
-
-  const { error, data } = await supabase
-    .from("messages")
-    .insert({
-      user_id: user.id,
-      job_id: jobId,
-      channel: "note",
-      direction: "outbound",
-      body: noteBody,
-      status: "saved",
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    throw new Error(`Failed to save job note: ${error.message}`);
-  }
-
-  console.log("[askbob-job-note-created]", {
+  console.log("[askbob-job-note-disabled]", {
     workspaceId,
+    userId: user.id,
     jobId,
     askbobResponseId,
     noteLength: noteBody.length,
-    messageId: data?.id ?? null,
   });
 
-  return { ok: true, noteId: data?.id ?? null };
+  return {
+    ok: false,
+    disabled: true,
+    reason: "job_note_saving_disabled",
+  };
 }
 
 export async function createAskBobMessageDraftAction({
