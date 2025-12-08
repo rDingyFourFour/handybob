@@ -2,6 +2,8 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { Database } from "@/lib/supabase/types";
 import {
   AskBobContext,
+  AskBobMaterialsGenerateInput,
+  AskBobMaterialsGenerateResult,
   AskBobMessageDraftInput,
   AskBobMessageDraftResult,
   AskBobQuoteGenerateInput,
@@ -18,6 +20,7 @@ import {
   callAskBobMessageDraft,
   callAskBobModel,
   callAskBobQuoteGenerate,
+  callAskBobMaterialsGenerate,
 } from "@/utils/openai/askbob";
 
 type DbClient = SupabaseClient<Database>;
@@ -71,6 +74,10 @@ export async function runAskBobTask(
 
   if (input.task === "quote.generate") {
     return runAskBobQuoteGenerateTask(input);
+  }
+
+  if (input.task === "materials.generate") {
+    return runAskBobMaterialsGenerateTask(input);
   }
 
   const prompt = input.prompt?.trim();
@@ -191,6 +198,62 @@ async function runAskBobQuoteGenerateTask(
     console.error("[askbob-quote-generate-failure]", {
       workspaceId: context.workspaceId,
       userId: context.userId,
+      errorMessage: truncatedError,
+    });
+
+    throw error;
+  }
+}
+
+async function runAskBobMaterialsGenerateTask(
+  input: AskBobMaterialsGenerateInput
+): Promise<AskBobMaterialsGenerateResult> {
+  const prompt = input.prompt?.trim();
+  if (!prompt || prompt.length < MIN_PROMPT_LENGTH) {
+    throw new Error("Please provide a bit more detail about the problem.");
+  }
+
+  const { context } = input;
+  const workspaceId = context.workspaceId;
+  const userId = context.userId;
+  const hasExtraDetails = Boolean(input.extraDetails?.trim());
+
+  console.log("[askbob-materials-request]", {
+    workspaceId,
+    userId,
+    hasJobId: Boolean(context.jobId),
+    hasCustomerId: Boolean(context.customerId),
+    hasQuoteId: Boolean(context.quoteId),
+    promptLength: prompt.length,
+    hasExtraDetails,
+  });
+
+  try {
+    const normalizedInput: AskBobMaterialsGenerateInput = {
+      ...input,
+      prompt,
+      extraDetails: input.extraDetails?.trim() ?? null,
+    };
+
+    const modelResult = await callAskBobMaterialsGenerate(normalizedInput);
+
+    console.log("[askbob-materials-success]", {
+      workspaceId,
+      userId,
+      modelLatencyMs: modelResult.result.modelLatencyMs,
+      itemsCount: modelResult.result.items.length,
+    });
+
+    return modelResult.result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-materials-failure]", {
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      jobId: context.jobId ?? null,
       errorMessage: truncatedError,
     });
 

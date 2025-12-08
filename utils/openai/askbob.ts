@@ -4,6 +4,9 @@ import OpenAI from "openai";
 import type {
   AskBobContext,
   AskBobMaterialItem,
+  AskBobMaterialItemResult,
+  AskBobMaterialsGenerateInput,
+  AskBobMaterialsGenerateResult,
   AskBobQuoteGenerateInput,
   AskBobQuoteGenerateResult,
   AskBobQuoteLineResult,
@@ -43,6 +46,12 @@ type CallAskBobMessageDraftResult = {
 
 type CallAskBobQuoteGenerateResult = {
   result: AskBobQuoteGenerateResult;
+  latencyMs: number;
+  modelName: string;
+};
+
+type CallAskBobMaterialsGenerateResult = {
+  result: AskBobMaterialsGenerateResult;
   latencyMs: number;
   modelName: string;
 };
@@ -345,6 +354,108 @@ export async function callAskBobQuoteGenerate({
   }
 }
 
+export async function callAskBobMaterialsGenerate({
+  prompt,
+  context,
+  extraDetails,
+}: AskBobMaterialsGenerateInput): Promise<CallAskBobMaterialsGenerateResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured for AskBob.");
+  }
+
+  const contextParts = [
+    `workspaceId=${context.workspaceId}`,
+    `userId=${context.userId}`,
+    context.jobId ? `jobId=${context.jobId}` : null,
+    context.customerId ? `customerId=${context.customerId}` : null,
+    context.quoteId ? `quoteId=${context.quoteId}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const instructions = [
+    "You are AskBob, the HandyBob materials expert. Generate a structured list of materials matching the provided technician prompt.",
+    "Respond with a strict JSON object only (no prose) that includes:",
+    '- "items": an array of { name, sku?, category?, quantity, unit?, estimatedUnitCost?, estimatedTotalCost?, notes? } with reasonable units and costs where possible.',
+    '- "notes": optional overall assumptions or constraints.',
+    '- "modelLatencyMs": the latency in milliseconds.',
+    "Keep the tone practical, concise, and focused on getting the technician the right parts for the job.",
+  ].join(" ");
+
+  const messageParts = [
+    `Technician prompt:\n${prompt}`,
+    extraDetails ? `Constraints: ${extraDetails}` : null,
+    `Context: ${contextParts}`,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join("\n\n");
+
+  const openai = new OpenAI({ apiKey });
+  const modelRequestStart = Date.now();
+  let modelName = DEFAULT_MODEL;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: "system", content: instructions },
+        { role: "user", content: messageParts },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    modelName = completion.model ?? DEFAULT_MODEL;
+    const messageContent = completion.choices?.[0]?.message?.content;
+    const payload = extractModelPayload(messageContent, {
+      workspaceId: context.workspaceId,
+      model: modelName,
+    });
+
+    const items = normalizeMaterialsGenerateItems(payload.items);
+    const notes = normalizeNullableString(payload.notes);
+
+    const latencyMs = Date.now() - modelRequestStart;
+    console.log("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: prompt.length,
+      latencyMs,
+      success: true,
+      task: "materials.generate",
+    });
+
+    const result: AskBobMaterialsGenerateResult = {
+      items,
+      notes,
+      modelLatencyMs: latencyMs,
+      rawModelOutput:
+        typeof messageContent === "string" ? messageContent.trim() : null,
+    };
+
+    return { result, latencyMs, modelName };
+  } catch (error) {
+    const latencyMs = Date.now() - modelRequestStart;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: prompt.length,
+      latencyMs,
+      success: false,
+      task: "materials.generate",
+      errorMessage: truncatedError,
+    });
+
+    throw error;
+  }
+}
+
 function extractModelPayload(
   rawContent: unknown,
   meta: { workspaceId: string; model: string }
@@ -531,6 +642,64 @@ function normalizeQuoteMaterials(value: unknown): AskBobQuoteMaterialLineResult[
     .filter(
       (material): material is AskBobQuoteMaterialLineResult => Boolean(material)
     );
+
+  return normalized;
+}
+
+function normalizeMaterialsGenerateItems(value: unknown): AskBobMaterialItemResult[] {
+  if (!Array.isArray(value)) return [];
+
+  const normalized = value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const name =
+        normalizeNullableString(
+          record.name ?? record.label ?? record.item ?? record.description
+        ) ?? null;
+      if (!name) {
+        return null;
+      }
+
+      const quantity =
+        normalizeNumber(record.quantity ?? record.qty ?? record.amount) ?? 1;
+      const sku = normalizeNullableString(
+        record.sku ?? record.partNumber ?? record.part_number
+      );
+      const category = normalizeNullableString(
+        record.category ?? record.group ?? record.type ?? record.segment
+      );
+      const unit = normalizeNullableString(record.unit ?? record.units);
+      const estimatedUnitCost = normalizeNumber(
+        record.estimatedUnitCost ??
+          record.unit_cost ??
+          record.unitCost ??
+          record.cost ??
+          record.price
+      );
+      const estimatedTotalCost = normalizeNumber(
+        record.estimatedTotalCost ??
+          record.total ??
+          record.lineTotal ??
+          record.amount ??
+          record.estimated_total
+      );
+      const notes = normalizeNullableString(
+        record.notes ?? record.note ?? record.details ?? record.description
+      );
+
+      return {
+        name,
+        sku,
+        category,
+        quantity,
+        unit,
+        estimatedUnitCost,
+        estimatedTotalCost,
+        notes,
+      };
+    })
+    .filter((material): material is AskBobMaterialItemResult => Boolean(material));
 
   return normalized;
 }

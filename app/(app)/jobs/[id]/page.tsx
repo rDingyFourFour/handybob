@@ -19,6 +19,7 @@ import {
 } from "@/lib/domain/communications/followupRecommendations";
 import JobAskBobPanel from "@/components/askbob/JobAskBobPanel";
 import AskBobQuotePanel from "@/components/askbob/AskBobQuotePanel";
+import AskBobMaterialsPanel from "@/components/askbob/AskBobMaterialsPanel";
 
 type JobRecord = {
   id: string;
@@ -628,6 +629,11 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
         jobDescription={job.description_raw ?? null}
         materialsQuoteId={materialsQuoteId}
         materialsQuoteDescription={materialsQuoteDescription}
+      />
+      <AskBobMaterialsPanel
+        workspaceId={workspace.id}
+        jobId={job.id}
+        customerId={job.customer_id ?? null}
       />
     </div>
   );
