@@ -36,7 +36,6 @@ export default function AskBobResponseCard({
   const hasSections = response.sections.length > 0;
   const [jobNoteStatus, setJobNoteStatus] = useState<string | null>(null);
   const [jobNoteError, setJobNoteError] = useState<string | null>(null);
-  const [jobNoteInfo, setJobNoteInfo] = useState<string | null>(null);
   const [draftBody, setDraftBody] = useState<string | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [isJobNotePending, setIsJobNotePending] = useState(false);
@@ -61,7 +60,6 @@ export default function AskBobResponseCard({
               disabled={isJobNotePending}
               onClick={() => {
                 setJobNoteStatus(null);
-                setJobNoteInfo(null);
                 setJobNoteError(null);
                 startTransition(() => {
                   setIsJobNotePending(true);
@@ -75,11 +73,7 @@ export default function AskBobResponseCard({
                     jobId,
                     askbobResponseId: response.responseId,
                   })
-                    .then((result) => {
-                      if (result?.disabled && result.reason === "job_note_saving_disabled") {
-                        setJobNoteInfo("Saving AskBob notes to this job isn’t available in this environment yet.");
-                        return;
-                      }
+                    .then(() => {
                       setJobNoteStatus("Saved to job notes.");
                     })
                     .catch((error) => {
@@ -140,7 +134,6 @@ export default function AskBobResponseCard({
       )}
 
       {jobNoteStatus && <p className="text-xs text-emerald-400">{jobNoteStatus}</p>}
-      {jobNoteInfo && <p className="text-xs text-slate-300">{jobNoteInfo}</p>}
       {jobNoteError && <p className="text-xs text-rose-400">{jobNoteError}</p>}
       {draftError && <p className="text-xs text-rose-400">{draftError}</p>}
       {draftBody && (

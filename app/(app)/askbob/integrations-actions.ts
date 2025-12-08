@@ -6,6 +6,7 @@ import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { formatAskBobCustomerDraft, formatAskBobJobNote } from "@/lib/domain/askbob/formatters";
 import { toAskBobResponseDTO } from "@/lib/domain/askbob/service";
 import type { AskBobResponseDTO, AskBobResponseData } from "@/lib/domain/askbob/types";
+import { logMessage } from "@/utils/communications/logMessage";
 
 type AskBobIntegrationDbClient = SupabaseClient;
 
@@ -67,19 +68,40 @@ export async function createAskBobJobNoteAction({
     jobId,
     quoteId: session.quoteId ?? undefined,
   });
-  console.log("[askbob-job-note-disabled]", {
+
+  const logResult = await logMessage({
+    supabase,
+    workspaceId: workspace.id,
+    userId: user.id,
+    jobId,
+    channel: "note",
+    direction: "outbound",
+    body: noteBody,
+    status: "saved",
+  });
+
+  if (!logResult.ok) {
+    const message = logResult.error ?? "Unknown error";
+    console.error("[askbob-job-note-failure]", {
+      workspaceId,
+      userId: user.id,
+      jobId,
+      askbobResponseId,
+      error: message,
+    });
+    throw new Error(`Failed to save job note: ${message}`);
+  }
+
+  console.log("[askbob-job-note-created]", {
     workspaceId,
     userId: user.id,
     jobId,
     askbobResponseId,
     noteLength: noteBody.length,
+    messageId: logResult.messageId ?? null,
   });
 
-  return {
-    ok: false,
-    disabled: true,
-    reason: "job_note_saving_disabled",
-  };
+  return { ok: true, noteId: logResult.messageId ?? null };
 }
 
 export async function createAskBobMessageDraftAction({

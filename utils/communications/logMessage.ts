@@ -57,8 +57,7 @@ export async function logMessage({
     return { ok: false, messageId: null, error: "Missing workspace or user context" };
   }
 
-  const normalizedChannel = channel.toLowerCase();
-  const resolvedVia = via ?? (normalizedChannel === "note" ? "system" : null);
+  const resolvedVia = via ?? undefined;
 
   const { data, error } = await supabase
     .from("messages")
@@ -76,7 +75,7 @@ export async function logMessage({
       to_address: toAddress ?? null,
       from_address: fromAddress ?? null,
       sent_at: sentAt ?? null,
-      via: resolvedVia,
+      ...(resolvedVia ? { via: resolvedVia } : {}),
       status: status ?? "sent",
       external_id: externalId ?? null,
     })
