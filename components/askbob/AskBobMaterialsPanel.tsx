@@ -98,6 +98,21 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
   const normalizedJobTitle = jobTitle?.trim() ?? "";
+  const normalizedJobDescription = jobDescription?.trim() ?? "";
+  const hasDiagnosisLabel = Boolean(diagnosisSummary?.trim());
+  const contextLabels: string[] = [];
+  if (normalizedJobTitle) {
+    contextLabels.push("Job title");
+  }
+  if (normalizedJobDescription) {
+    contextLabels.push("Job description");
+  }
+  if (hasDiagnosisLabel) {
+    contextLabels.push("Latest diagnosis summary");
+  }
+  const materials = suggestion?.materials ?? [];
+  const materialsCount = materials.length;
+  const hasMaterials = materialsCount > 0;
 
   const handleGenerate = async () => {
     const trimmedPrompt = prompt.trim();
@@ -158,6 +173,9 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
           AskBob suggests a materials checklist using the job title, description, and your notes from Step 1. Use this as a
           planning list—verify quantities and brands before buying anything.
         </p>
+        {contextLabels.length > 0 && (
+          <p className="text-xs text-muted-foreground">Context used: {contextLabels.join(" · ")}</p>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -206,24 +224,35 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
               AskBob materials suggestion (not yet saved)
             </p>
           </div>
-          {suggestion.materials && suggestion.materials.length > 0 ? (
-            <div className="space-y-2">
-              {suggestion.materials.map((item, index) => (
-                <div key={`${item.name}-${index}`} className="flex items-center justify-between text-sm">
-                  <div>
-                    <p className="font-semibold text-slate-100">{item.name}</p>
-                    <p className="text-xs text-slate-500">
-                      Qty: {item.quantity}
-                      {item.unit ? ` ${item.unit}` : ""}
-                    </p>
-                  </div>
-                  <p className="text-sm text-slate-100">{renderCost(item)}</p>
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-slate-100">Suggested materials from AskBob</p>
+            {hasMaterials ? (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  AskBob suggested {materialsCount} material{materialsCount === 1 ? "" : "s"} for this job.
+                </p>
+                <div className="space-y-2">
+                  {materials.map((item, index) => (
+                    <div key={`${item.name}-${index}`} className="flex items-center justify-between text-sm">
+                      <div>
+                        <p className="font-semibold text-slate-100">{item.name}</p>
+                        <p className="text-xs text-slate-500">
+                          Qty: {item.quantity}
+                          {item.unit ? ` ${item.unit}` : ""}
+                        </p>
+                      </div>
+                      <p className="text-sm text-slate-100">{renderCost(item)}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400">AskBob returned no materials for this prompt.</p>
-          )}
+              </>
+            ) : (
+              <div className="space-y-1 pt-1 text-sm text-muted-foreground">
+                <p>AskBob didn’t find any specific materials to list from this description.</p>
+                <p>You can update the notes above to be more specific, then ask again, or add your own checklist below.</p>
+              </div>
+            )}
+          </div>
           {suggestion.notes && (
             <div>
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Notes</p>

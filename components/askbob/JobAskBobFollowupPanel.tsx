@@ -31,6 +31,22 @@ export default function JobAskBobFollowupPanel({
   const [isDrafting, setIsDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
   const normalizedJobTitle = jobTitle?.trim() ?? "";
+  const hasCommunicationSignals = Boolean(result?.shouldSendMessage || result?.shouldCall);
+  const hasVisitSignals = Boolean(result?.shouldScheduleVisit);
+  const hasQuoteSignals = Boolean(result?.shouldWait);
+  const contextLabels: string[] = [];
+  if (normalizedJobTitle) {
+    contextLabels.push("Job title");
+  }
+  if (hasCommunicationSignals) {
+    contextLabels.push("Recent messages/calls");
+  }
+  if (hasQuoteSignals) {
+    contextLabels.push("Quotes/invoices");
+  }
+  if (hasVisitSignals) {
+    contextLabels.push("Visits/appointments");
+  }
 
   const handleRequest = async () => {
     setErrorMessage(null);
@@ -159,6 +175,9 @@ export default function JobAskBobFollowupPanel({
           AskBob looks at this job’s status, quotes, calls, messages, and appointments to suggest a next step. Use this to guide
           your follow-up, not replace your judgment.
         </p>
+        {contextLabels.length > 0 && (
+          <p className="text-xs text-muted-foreground">Context used: {contextLabels.join(" · ")}</p>
+        )}
       </div>
       <div className="flex flex-col gap-2">
         <HbButton

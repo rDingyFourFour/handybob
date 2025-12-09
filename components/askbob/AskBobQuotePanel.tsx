@@ -114,6 +114,22 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
 
   const normalizedJobTitle = jobTitle?.trim() ?? "";
+  const normalizedJobDescription = jobDescription?.trim() ?? "";
+  const hasDiagnosisContextLabel = Boolean(diagnosisSummary?.trim());
+  const hasMaterialsContextLabel = Boolean(materialsSummary?.trim());
+  const contextLabels: string[] = [];
+  if (normalizedJobTitle) {
+    contextLabels.push("Job title");
+  }
+  if (normalizedJobDescription) {
+    contextLabels.push("Job description");
+  }
+  if (hasDiagnosisContextLabel) {
+    contextLabels.push("Diagnosis summary");
+  }
+  if (hasMaterialsContextLabel) {
+    contextLabels.push("Materials summary");
+  }
 
   const handleGenerate = async () => {
     const trimmedPrompt = prompt.trim();
@@ -191,6 +207,9 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
         </p>
         {normalizedJobTitle && (
           <p className="text-xs text-slate-500">Quote for {normalizedJobTitle}.</p>
+        )}
+        {contextLabels.length > 0 && (
+          <p className="text-xs text-muted-foreground">Context used: {contextLabels.join(" · ")}</p>
         )}
       </div>
       <div className="space-y-2">

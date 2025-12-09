@@ -37,6 +37,16 @@ export default function JobAskBobPanel({
     });
   }, [workspaceId, jobId, customerId, jobTitle]);
 
+  const normalizedJobTitle = jobTitle?.trim() ?? "";
+  const normalizedJobDescription = jobDescription?.trim() ?? "";
+  const contextLabels: string[] = [];
+  if (normalizedJobTitle) {
+    contextLabels.push("Job title");
+  }
+  if (normalizedJobDescription) {
+    contextLabels.push("Job description");
+  }
+
   return (
     <HbCard className="space-y-4">
       <div>
@@ -47,6 +57,9 @@ export default function JobAskBobPanel({
           Review and adjust these steps based on what you see on site.
         </p>
         <p className="text-xs text-slate-500">These steps are suggestions, not a script—edit them freely.</p>
+        {contextLabels.length > 0 && (
+          <p className="text-xs text-muted-foreground">Context used: {contextLabels.join(" · ")}</p>
+        )}
       </div>
       <AskBobForm
         workspaceId={workspaceId}
