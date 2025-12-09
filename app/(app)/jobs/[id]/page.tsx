@@ -18,11 +18,7 @@ import {
   type FollowupDueStatus,
   type FollowupDueInfo,
 } from "@/lib/domain/communications/followupRecommendations";
-import JobAskBobPanel from "@/components/askbob/JobAskBobPanel";
-import AskBobQuotePanel from "@/components/askbob/AskBobQuotePanel";
-import AskBobMaterialsPanel from "@/components/askbob/AskBobMaterialsPanel";
 import JobAskBobContainer from "@/components/askbob/JobAskBobContainer";
-import JobAskBobFollowupPanel from "@/components/askbob/JobAskBobFollowupPanel";
 
 type JobRecord = {
   id: string;
@@ -539,48 +535,12 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           workspaceId={workspace.id}
           jobId={job.id}
           customerId={customerId ?? undefined}
+          jobDescription={job.description_raw ?? ""}
           askBobLastTaskLabel={askBobLastTaskLabel}
           askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
           askBobLastUsedAtIso={askBobLastUsedAtIso}
           askBobRunsSummary={askBobRunsSummary}
-        >
-        <section className="space-y-3">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-            1. Diagnose and document the job
-          </p>
-          <JobAskBobPanel workspaceId={workspace.id} jobId={job.id} customerId={customerId ?? undefined} />
-        </section>
-        <section className="space-y-3">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-            2. Suggest a quote scope
-          </p>
-          <AskBobQuotePanel
-            workspaceId={workspace.id}
-            jobId={job.id}
-            customerId={job.customer_id ?? null}
-          />
-        </section>
-        <section className="space-y-3">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-            3. Suggest materials
-          </p>
-          <AskBobMaterialsPanel
-            workspaceId={workspace.id}
-            jobId={job.id}
-            customerId={job.customer_id ?? null}
-          />
-        </section>
-        <section className="space-y-3">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-            4. AskBob follow-up recommendation
-          </p>
-          <JobAskBobFollowupPanel
-            workspaceId={workspace.id}
-            jobId={job.id}
-            customerId={job.customer_id ?? null}
-          />
-        </section>
-      </JobAskBobContainer>
+        />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">
           <div>

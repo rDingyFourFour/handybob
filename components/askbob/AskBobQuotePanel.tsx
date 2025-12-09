@@ -14,12 +14,13 @@ type AskBobQuotePanelProps = {
   workspaceId: string;
   jobId: string;
   customerId?: string | null;
+  onQuoteSuccess?: () => void;
 };
 
 const DEFAULT_PROMPT = "Generate a standard quote for this job.";
 
 export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
-  const { jobId } = props;
+  const { jobId, onQuoteSuccess } = props;
   const router = useRouter();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,15 +38,16 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
 
     setError(null);
     setIsLoading(true);
-    try {
-      const result = await runAskBobQuoteGenerateAction({
-        jobId,
-        prompt: trimmedPrompt,
-        extraDetails: "Use homeowner-friendly language with realistic mid-range pricing.",
-      });
+  try {
+    const result = await runAskBobQuoteGenerateAction({
+      jobId,
+      prompt: trimmedPrompt,
+      extraDetails: "Use homeowner-friendly language with realistic mid-range pricing.",
+    });
 
-      setSuggestion(result.suggestion);
-    } catch (error) {
+    setSuggestion(result.suggestion);
+    onQuoteSuccess?.();
+  } catch (error) {
       console.error("[askbob-quote-ui] action failure", error);
       setError("AskBob couldn’t generate a quote. Please try again.");
     } finally {
@@ -85,7 +87,7 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob quote</p>
         <h2 className="hb-heading-3 text-xl font-semibold">Generate quote with AskBob</h2>
         <p className="text-sm text-slate-400">
-          AskBob can suggest a scoped quote for this job based on what you need it to cover.
+          Use this once you have a basic diagnosis so AskBob can turn the scope into a scoped quote.
         </p>
       </div>
       <div className="space-y-2">

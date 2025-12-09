@@ -10,6 +10,8 @@ type JobAskBobPanelProps = {
   jobId: string;
   customerId?: string | null;
   quoteId?: string | null;
+  onDiagnoseSuccess?: () => void;
+  jobDescription?: string | null;
 };
 
 export default function JobAskBobPanel({
@@ -17,6 +19,8 @@ export default function JobAskBobPanel({
   jobId,
   customerId,
   quoteId,
+  onDiagnoseSuccess,
+  jobDescription,
 }: JobAskBobPanelProps) {
   useEffect(() => {
     console.log("[askbob-ui-entry]", {
@@ -33,7 +37,7 @@ export default function JobAskBobPanel({
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
         <h2 className="hb-heading-3 text-xl font-semibold">Job assistant</h2>
         <p className="text-sm text-slate-400">
-          Ask job-specific questions and turn the results into notes on this job.
+          Start here to understand the problem before quoting, ordering materials, or following up with the customer.
         </p>
       </div>
       <AskBobForm
@@ -41,6 +45,8 @@ export default function JobAskBobPanel({
         jobId={jobId}
         customerId={customerId ?? undefined}
         quoteId={quoteId ?? undefined}
+        jobDescription={jobDescription}
+        onSuccess={onDiagnoseSuccess}
       />
     </HbCard>
   );

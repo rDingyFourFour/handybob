@@ -14,12 +14,13 @@ type AskBobMaterialsPanelProps = {
   workspaceId: string;
   jobId: string;
   customerId?: string | null;
+  onMaterialsSuccess?: () => void;
 };
 
 const DEFAULT_PROMPT = "List the materials needed for this job.";
 
 export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
-  const { jobId } = props;
+  const { jobId, onMaterialsSuccess } = props;
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [extraDetails, setExtraDetails] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -47,6 +48,7 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
       });
 
       setSuggestion(result.suggestion);
+      onMaterialsSuccess?.();
     } catch (err) {
       console.error("[askbob-materials-ui] action failure", err);
       setError("AskBob couldn’t generate materials. Please try again.");
@@ -97,7 +99,7 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob materials</p>
         <h2 className="hb-heading-3 text-xl font-semibold">AskBob materials helper</h2>
         <p className="text-sm text-slate-400">
-          Have AskBob propose a materials list for this job so you can review it before saving anything.
+          Use this after you’ve outlined the scope so AskBob can recommend materials before you save anything.
         </p>
       </div>
 

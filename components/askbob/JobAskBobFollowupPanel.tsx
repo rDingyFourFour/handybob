@@ -152,7 +152,7 @@ export default function JobAskBobFollowupPanel({
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
         <h2 className="hb-heading-3 text-xl font-semibold">AskBob: What should I do next?</h2>
         <p className="text-sm text-slate-300">
-          AskBob analyzes this job’s status and follow-up signals to suggest a next best step.
+          AskBob analyzes this job’s status and follow-up signals to suggest a next best step after quotes or materials are in place.
         </p>
       </div>
       <div className="flex flex-col gap-2">
