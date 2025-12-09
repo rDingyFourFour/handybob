@@ -11,7 +11,6 @@ import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import { formatCurrency, formatFriendlyDateTime } from "@/utils/timeline/formatters";
 import { getJobAskBobHudSummary } from "@/lib/domain/askbob/service";
-import JobMaterialsPanel from "./JobMaterialsPanel";
 import JobCallScriptPanel, { type PhoneMessageSummary } from "./JobCallScriptPanel";
 import {
   computeFollowupDueInfo,
@@ -317,13 +316,6 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
 
   const materialsQuoteCandidate = quotes[0] ?? null;
   const materialsQuoteId = materialsQuoteCandidate?.id ?? null;
-  const materialsQuoteDescription = materialsQuoteCandidate
-    ? `Quote ${materialsQuoteCandidate.id.slice(0, 8)}${
-        materialsQuoteCandidate.total != null
-          ? ` · total ${formatCurrency(materialsQuoteCandidate.total)}`
-          : ""
-      }`
-    : null;
   console.log("[materials-ui-job] job materials quote candidate", {
     jobId: job.id,
     materialsQuoteId,
@@ -365,7 +357,8 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
   const customerFirstName = customerName ? customerName.split(" ")[0] : null;
   const customerId = customer?.id ?? job.customer_id ?? null;
 
-  const jobTitle = job.title ?? "Untitled job";
+  const displayJobTitle = job.title ?? "Untitled job";
+  const askBobJobTitle = job.title?.trim() ?? "";
   const createdLabel = formatDate(job.created_at);
   const quoteParams = new URLSearchParams();
   quoteParams.set("jobId", job.id);
@@ -441,7 +434,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
         <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job details</p>
-            <h1 className="hb-heading-2 text-2xl font-semibold">{jobTitle}</h1>
+            <h1 className="hb-heading-2 text-2xl font-semibold">{displayJobTitle}</h1>
             <p className="text-sm text-slate-400">Status: {job.status ?? "—"}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {customerId && customerName ? (
@@ -536,6 +529,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           jobId={job.id}
           customerId={customerId ?? undefined}
           jobDescription={job.description_raw ?? ""}
+          jobTitle={askBobJobTitle}
           askBobLastTaskLabel={askBobLastTaskLabel}
           askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
           askBobLastUsedAtIso={askBobLastUsedAtIso}
@@ -664,13 +658,6 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           </p>
         </HbCard>
       )}
-      <JobMaterialsPanel
-        jobId={job.id}
-        jobTitle={jobTitle}
-        jobDescription={job.description_raw ?? null}
-        materialsQuoteId={materialsQuoteId}
-        materialsQuoteDescription={materialsQuoteDescription}
-      />
     </div>
   );
 }

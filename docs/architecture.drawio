@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2025-06-12T18:00:00.000Z" agent="5.0 (Macintosh)" etag="0" version="20.1.7" type="device">
+  <diagram id="b5kKbNR93QOjI19z0Y5k" name="HandyBob Architecture">
+    <mxGraphModel dx="1250" dy="750" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="Browser / Customer" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=13;fontColor=#0B0B0B;strokeColor=#1A1A1A;fillColor=#DAE8FC;" vertex="1" parent="1">
+          <mxGeometry x="260" y="30" width="220" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="Next.js App Router\n(app/layout.tsx, routing groups)" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=13;fontColor=#0B0B0B;strokeColor=#42526E;fillColor=#B3C6E3;" vertex="1" parent="1">
+          <mxGeometry x="220" y="150" width="260" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="4" value="Public marketing + tokenized views\n(app/(marketing), app/public/*)" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=12;fontColor=#0B0B0B;strokeColor=#906F46;fillColor=#FFE6CC;" vertex="1" parent="1">
+          <mxGeometry x="60" y="320" width="220" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="5" value="Authenticated workspace UI\n(app/(app), feature routes)" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=12;fontColor=#0B0B0B;strokeColor=#5D3F6A;fillColor=#E1D5E7;" vertex="1" parent="1">
+          <mxGeometry x="320" y="320" width="240" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="6" value="Supabase\n(createServerClient, workspace RLS)" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=12;fontColor=#0B0B0B;strokeColor=#38761D;fillColor=#D5E8D4;" vertex="1" parent="1">
+          <mxGeometry x="40" y="460" width="240" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="7" value="Domain services\n(lib/domain/*, shared SQL/business logic)" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=12;fontColor=#0B0B0B;strokeColor=#984807;fillColor=#F8CECC;" vertex="1" parent="1">
+          <mxGeometry x="320" y="460" width="260" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="8" value="API & webhook routes\n(app/api/stripe, app/api/webhooks/voice, etc.)" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=12;fontColor=#0B0B0B;strokeColor=#8A6E4B;fillColor=#FFF2CC;" vertex="1" parent="1">
+          <mxGeometry x="620" y="460" width="270" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="9" value="Stripe webhook & payment links" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=12;fontColor=#0B0B0B;strokeColor=#1A1A1A;fillColor=#F5F5F5;" vertex="1" parent="1">
+          <mxGeometry x="660" y="610" width="220" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="10" value="Twilio voice / webhook processing" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=12;fontColor=#0B0B0B;strokeColor=#1A1A1A;fillColor=#F5F5F5;" vertex="1" parent="1">
+          <mxGeometry x="920" y="610" width="220" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="11" value="Resend / OpenAI helpers" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=12;fontColor=#0B0B0B;strokeColor=#1A1A1A;fillColor=#F5F5F5;" vertex="1" parent="1">
+          <mxGeometry x="380" y="610" width="240" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="2" target="3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="3" target="4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="3" target="5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="5" target="6">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="5" target="7">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="5" target="8">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="8" target="9">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="19" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="8" target="10">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="7" target="11">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

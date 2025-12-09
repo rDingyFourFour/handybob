@@ -72,6 +72,8 @@ export interface AskBobRequestInput {
   jobId?: string | null;
   customerId?: string | null;
   quoteId?: string | null;
+  extraDetails?: string | null;
+  jobTitle?: string | null;
 }
 
 export interface AskBobResponseDTOSection {
@@ -92,6 +94,8 @@ export interface AskBobJobDiagnoseInput {
   task: "job.diagnose";
   context: AskBobTaskContext;
   prompt: string;
+  extraDetails?: string | null;
+  jobTitle?: string | null;
 }
 
 export interface AskBobJobDiagnoseResult extends AskBobResponseDTO {
@@ -120,6 +124,7 @@ export interface AskBobQuoteGenerateInput {
   context: AskBobTaskContext;
   prompt: string;
   extraDetails?: string | null;
+  jobTitle?: string | null;
 }
 
 export interface AskBobQuoteLineResult {
@@ -237,11 +242,13 @@ export interface AskBobMaterialsGenerateInput {
   context: AskBobTaskContext;
   prompt: string;
   extraDetails?: string | null;
+  jobTitle?: string | null;
 }
 
 export interface AskBobJobFollowupInput {
   task: "job.followup";
   context: AskBobTaskContext;
+  jobTitle?: string | null;
   jobStatus: string;
   hasScheduledVisit: boolean;
   lastMessageAt?: string | null;
@@ -314,6 +321,28 @@ export const askBobRequestInputSchema = z.object({
   jobId: z.string().min(1).optional().nullable(),
   customerId: z.string().min(1).optional().nullable(),
   quoteId: z.string().min(1).optional().nullable(),
+  jobTitle: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((value) => {
+      if (!value) {
+        return null;
+      }
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }),
+  extraDetails: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((value) => {
+      if (!value) {
+        return null;
+      }
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }),
 });
 
 export const askBobMaterialItemSchema = z.object({

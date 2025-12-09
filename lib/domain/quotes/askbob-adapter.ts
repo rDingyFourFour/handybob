@@ -40,10 +40,18 @@ export function adaptAskBobQuoteToSmartQuote(
       ? proposal.materials.map(mapMaterialLine)
       : undefined;
 
+  const materialNames = materials?.map((material) => material.name).filter(Boolean) ?? [];
+  const materialsNote =
+    materialNames.length > 0
+      ? `Materials included: ${materialNames.slice(0, 4).join(", ")}${materialNames.length > 4 ? ", …" : ""}.`
+      : null;
+  const normalizedNotes = normalizeNullableString(proposal.notes);
+  const combinedNotes = [normalizedNotes, materialsNote].filter(Boolean).join(" ");
+
   return {
     scopeLines,
     materials,
-    notes: normalizeNullableString(proposal.notes) ?? undefined,
+    notes: combinedNotes.length ? combinedNotes : undefined,
     subtotal,
     tax: null,
     total: subtotal ?? null,

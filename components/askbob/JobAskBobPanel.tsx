@@ -14,6 +14,7 @@ type JobAskBobPanelProps = {
   onDiagnoseSuccess?: () => void;
   onDiagnoseComplete?: (response: AskBobResponseDTO) => void;
   jobDescription?: string | null;
+  jobTitle?: string | null;
 };
 
 export default function JobAskBobPanel({
@@ -24,15 +25,17 @@ export default function JobAskBobPanel({
   onDiagnoseSuccess,
   onDiagnoseComplete,
   jobDescription,
+  jobTitle,
 }: JobAskBobPanelProps) {
   useEffect(() => {
     console.log("[askbob-ui-entry]", {
       workspaceId,
       jobId,
       hasCustomerId: Boolean(customerId),
+      hasJobTitle: Boolean(jobTitle?.trim()),
       origin: "job-detail",
     });
-  }, [workspaceId, jobId, customerId]);
+  }, [workspaceId, jobId, customerId, jobTitle]);
 
   return (
     <HbCard className="space-y-4">
@@ -49,6 +52,7 @@ export default function JobAskBobPanel({
         customerId={customerId ?? undefined}
         quoteId={quoteId ?? undefined}
         jobDescription={jobDescription}
+        jobTitle={jobTitle}
         onSuccess={onDiagnoseSuccess}
         onResponse={onDiagnoseComplete}
       />

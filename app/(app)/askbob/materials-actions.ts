@@ -38,6 +38,17 @@ const materialsGeneratePayloadSchema = z.object({
       const trimmed = value.trim();
       return trimmed.length ? trimmed : null;
   }),
+  jobTitle: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((value) => {
+      if (!value) {
+        return null;
+      }
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }),
   hasDiagnosisContextForMaterials: z.boolean().optional(),
 });
 
@@ -73,7 +84,8 @@ export async function runAskBobMaterialsGenerateAction(
     throw new Error("Job not found.");
   }
 
-  const { prompt: trimmedPrompt, extraDetails: trimmedExtraDetails } = parsedPayload;
+  const { prompt: trimmedPrompt, extraDetails: trimmedExtraDetails, jobTitle } = parsedPayload;
+  const normalizedJobTitle = jobTitle ?? null;
 
   console.log("[askbob-materials-ui-request]", {
     workspaceId: workspace.id,
@@ -81,6 +93,7 @@ export async function runAskBobMaterialsGenerateAction(
     jobId: job.id,
     promptLength: trimmedPrompt.length,
     hasExtraDetails: Boolean(trimmedExtraDetails),
+    hasJobTitle: Boolean(normalizedJobTitle),
     hasDiagnosisContextForMaterials: Boolean(parsedPayload.hasDiagnosisContextForMaterials),
     hasJobDescriptionContextForMaterials: Boolean(parsedPayload.hasJobDescriptionContextForMaterials),
   });
@@ -96,6 +109,7 @@ export async function runAskBobMaterialsGenerateAction(
     },
     prompt: trimmedPrompt,
     extraDetails: trimmedExtraDetails ?? null,
+    jobTitle: normalizedJobTitle,
   };
 
   try {

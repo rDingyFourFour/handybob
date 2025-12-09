@@ -15,12 +15,14 @@ type JobAskBobFollowupPanelProps = {
   workspaceId: string;
   jobId: string;
   customerId?: string | null;
+  jobTitle?: string | null;
 };
 
 export default function JobAskBobFollowupPanel({
   workspaceId,
   jobId,
   customerId,
+  jobTitle,
 }: JobAskBobFollowupPanelProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -28,6 +30,7 @@ export default function JobAskBobFollowupPanel({
   const [result, setResult] = useState<AskBobJobFollowupResult | null>(null);
   const [isDrafting, setIsDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
+  const normalizedJobTitle = jobTitle?.trim() ?? "";
 
   const handleRequest = async () => {
     setErrorMessage(null);
@@ -37,6 +40,7 @@ export default function JobAskBobFollowupPanel({
         workspaceId,
         jobId,
         extraDetails: null,
+        jobTitle: normalizedJobTitle || undefined,
       });
       if (!response.ok) {
         setErrorMessage("AskBob couldn’t generate a follow-up suggestion right now. Please try again.");
@@ -56,9 +60,10 @@ export default function JobAskBobFollowupPanel({
       workspaceId,
       jobId,
       hasCustomerId: Boolean(customerId),
+      hasJobTitle: Boolean(normalizedJobTitle),
     });
     setDraftError(null);
-  }, [workspaceId, jobId, customerId]);
+  }, [workspaceId, jobId, customerId, normalizedJobTitle]);
 
   useEffect(() => {
     setDraftError(null);
@@ -89,6 +94,7 @@ export default function JobAskBobFollowupPanel({
       customerId,
       shouldSendMessage: followup?.shouldSendMessage,
       suggestedChannel: followup?.suggestedChannel,
+      hasJobTitle: Boolean(normalizedJobTitle),
     });
   };
 
@@ -103,6 +109,7 @@ export default function JobAskBobFollowupPanel({
       customerId,
       shouldSendMessage: followup.shouldSendMessage,
       suggestedChannel: followup.suggestedChannel,
+      hasJobTitle: Boolean(normalizedJobTitle),
     });
 
     setDraftError(null);
@@ -113,6 +120,7 @@ export default function JobAskBobFollowupPanel({
         workspaceId,
         jobId,
         extraDetails: null,
+        jobTitle: normalizedJobTitle || undefined,
       });
 
       if (!response.ok || !response.body?.trim()) {
@@ -150,7 +158,9 @@ export default function JobAskBobFollowupPanel({
     <HbCard className="space-y-4">
       <div className="space-y-1">
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
-        <h2 className="hb-heading-3 text-xl font-semibold">AskBob: What should I do next?</h2>
+        <h2 className="hb-heading-3 text-xl font-semibold">
+          {normalizedJobTitle ? `AskBob: Follow-up guidance for ${normalizedJobTitle}` : "AskBob: What should I do next?"}
+        </h2>
         <p className="text-sm text-slate-300">
           AskBob analyzes this job’s status and follow-up signals to suggest a next best step after quotes or materials are in place.
         </p>

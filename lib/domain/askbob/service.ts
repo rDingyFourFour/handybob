@@ -106,6 +106,8 @@ export async function runAskBobTask(
   }
 
   const prompt = input.prompt?.trim();
+  const extraDetails = input.extraDetails?.trim() ?? null;
+  const jobTitle = input.jobTitle?.trim() ?? null;
 
   if (!prompt || prompt.length < MIN_PROMPT_LENGTH) {
     throw new Error("Please provide a bit more detail about the problem.");
@@ -120,6 +122,8 @@ export async function runAskBobTask(
     const modelResult = await callAskBobModel({
       prompt,
       context: input.context,
+      extraDetails,
+      jobTitle,
     });
 
     const response = await saveAskBobResponse(supabase, {
@@ -186,6 +190,8 @@ async function runAskBobQuoteGenerateTask(
   const workspaceId = context.workspaceId;
   const userId = context.userId;
   const hasExtraDetails = Boolean(input.extraDetails?.trim());
+  const jobTitle = input.jobTitle?.trim() ?? null;
+  const hasJobTitle = Boolean(jobTitle);
 
   console.log("[askbob-quote-generate-request]", {
     workspaceId,
@@ -195,6 +201,7 @@ async function runAskBobQuoteGenerateTask(
     hasQuoteId: Boolean(context.quoteId),
     promptLength: prompt.length,
     hasExtraDetails,
+    hasJobTitle,
   });
 
   try {
@@ -202,6 +209,7 @@ async function runAskBobQuoteGenerateTask(
       ...input,
       prompt,
       extraDetails: input.extraDetails?.trim() ?? null,
+      jobTitle,
     };
 
     const modelResult = await callAskBobQuoteGenerate(normalizedInput);
@@ -279,6 +287,7 @@ export async function runAskBobJobFollowupTask(
   const workspaceId = context.workspaceId;
   const userId = context.userId;
   const jobId = context.jobId ?? null;
+  const jobTitle = input.jobTitle?.trim() ?? null;
   console.log("[askbob-job-followup-service-request]", {
     workspaceId,
     userId,
@@ -287,11 +296,13 @@ export async function runAskBobJobFollowupTask(
     followupDueStatus: input.followupDueStatus,
     hasOpenQuote: input.hasOpenQuote,
     hasUnpaidInvoice: input.hasUnpaidInvoice,
+    hasJobTitle: Boolean(jobTitle),
   });
 
   const trimmedFollowupLabel = input.followupDueLabel?.trim();
   const normalizedInput: AskBobJobFollowupInput = {
     ...input,
+    jobTitle,
     followupDueLabel:
       trimmedFollowupLabel && trimmedFollowupLabel.length
         ? trimmedFollowupLabel
@@ -385,6 +396,8 @@ async function runAskBobMaterialsGenerateTask(
   const workspaceId = context.workspaceId;
   const userId = context.userId;
   const hasExtraDetails = Boolean(input.extraDetails?.trim());
+  const jobTitle = input.jobTitle?.trim() ?? null;
+  const hasJobTitle = Boolean(jobTitle);
 
   console.log("[askbob-materials-request]", {
     workspaceId,
@@ -394,6 +407,7 @@ async function runAskBobMaterialsGenerateTask(
     hasQuoteId: Boolean(context.quoteId),
     promptLength: prompt.length,
     hasExtraDetails,
+    hasJobTitle,
   });
 
   try {
@@ -401,6 +415,7 @@ async function runAskBobMaterialsGenerateTask(
       ...input,
       prompt,
       extraDetails: input.extraDetails?.trim() ?? null,
+      jobTitle,
     };
 
     const modelResult = await callAskBobMaterialsGenerate(normalizedInput);

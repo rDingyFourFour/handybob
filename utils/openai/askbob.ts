@@ -48,6 +48,8 @@ const JOB_DIAGNOSE_INSTRUCTIONS = [
 
 const QUOTE_GENERATE_INSTRUCTIONS = [
   "You are AskBob, a technician assistant focused on creating structured job quotes for HandyBob. Respond with JSON only (no prose) matching the keys: lines (array of { description, quantity, unit?, unitPrice?, lineTotal? }), materials (optional array of { name, quantity, unit?, estimatedUnitCost?, estimatedTotalCost? }), and notes (optional string). Keep the scope practical and concise.",
+  "Base your quote on the job description and let the materials summary (when provided) guide the scope lines; treat diagnosis summaries as supporting context only.",
+  "When a materials summary is available, align the line items with those materials and mention the referenced materials in the notes if possible.",
   COST_GUARDRAILS,
   SCOPE_LIMIT_GUARDRAILS,
   "Do not guarantee prices and always label any estimate as approximate.",
@@ -94,6 +96,8 @@ const DEFAULT_MODEL = process.env.OPENAI_ASKBOB_MODEL ?? "gpt-4.1";
 type CallAskBobModelOptions = {
   prompt: string;
   context: AskBobContext;
+  extraDetails?: string | null;
+  jobTitle?: string | null;
 };
 
 type CallAskBobModelResult = {
@@ -165,9 +169,18 @@ function limitArray<T>(items: T[], maxLength: number): LimitResult<T> {
   };
 }
 
+function startsWithJobTitleLine(value?: string | null): boolean {
+  if (!value) {
+    return false;
+  }
+  return value.trim().toLowerCase().startsWith("job title:");
+}
+
 export async function callAskBobModel({
   prompt,
   context,
+  extraDetails,
+  jobTitle,
 }: CallAskBobModelOptions): Promise<CallAskBobModelResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -184,8 +197,19 @@ export async function callAskBobModel({
     .filter(Boolean)
     .join(", ");
 
+  const extraDetailsContent = extraDetails?.trim() ?? null;
+  const jobTitleLine = jobTitle && !startsWithJobTitleLine(extraDetailsContent) ? `Job title: ${jobTitle}` : null;
+  const metadataParts = [jobTitleLine, extraDetailsContent].filter((part): part is string => Boolean(part));
+  const metadataBlock = metadataParts.length ? metadataParts.join("\n\n") : null;
+
   const instructions = JOB_DIAGNOSE_INSTRUCTIONS;
-  const userMessage = `Technician prompt:\n${prompt}\n\nContext: ${contextParts}`;
+  const userMessage = [
+    `Technician prompt:\n${prompt}`,
+    metadataBlock,
+    `Context: ${contextParts}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   const openai = new OpenAI({ apiKey });
   const modelRequestStart = Date.now();
@@ -623,6 +647,7 @@ export async function callAskBobJobFollowup(
     .filter(Boolean)
     .join(", ");
 
+  const jobTitleLine = input.jobTitle?.trim() ? `Job title: ${input.jobTitle?.trim()}` : null;
   const followupContext = {
     jobStatus: input.jobStatus,
     hasScheduledVisit: input.hasScheduledVisit,
@@ -640,6 +665,7 @@ export async function callAskBobJobFollowup(
 
   const messageParts = [
     `Context: ${contextParts}`,
+    jobTitleLine,
     `Follow-up context:\n${JSON.stringify(followupContext, null, 2)}`,
     input.notesSummary ? `Notes: ${input.notesSummary}` : null,
   ]
@@ -788,6 +814,7 @@ export async function callAskBobQuoteGenerate({
   prompt,
   context,
   extraDetails,
+  jobTitle,
 }: AskBobQuoteGenerateInput): Promise<CallAskBobQuoteGenerateResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -805,10 +832,14 @@ export async function callAskBobQuoteGenerate({
     .join(", ");
 
   const instructions = QUOTE_GENERATE_INSTRUCTIONS;
+  const extraDetailsContent = extraDetails?.trim() ?? null;
+  const jobTitleLine =
+    jobTitle && !startsWithJobTitleLine(extraDetailsContent) ? `Job title: ${jobTitle}` : null;
 
   const messageParts = [
     `Technician prompt:\n${prompt}`,
-    extraDetails ? `Additional details: ${extraDetails}` : null,
+    jobTitleLine,
+    extraDetailsContent ? `Additional details: ${extraDetailsContent}` : null,
     `Context: ${contextParts}`,
   ]
     .filter((part): part is string => Boolean(part))
@@ -898,6 +929,7 @@ export async function callAskBobMaterialsGenerate({
   prompt,
   context,
   extraDetails,
+  jobTitle,
 }: AskBobMaterialsGenerateInput): Promise<CallAskBobMaterialsGenerateResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -915,10 +947,14 @@ export async function callAskBobMaterialsGenerate({
     .join(", ");
 
   const instructions = MATERIALS_GENERATE_INSTRUCTIONS;
+  const extraDetailsContent = extraDetails?.trim() ?? null;
+  const jobTitleLine =
+    jobTitle && !startsWithJobTitleLine(extraDetailsContent) ? `Job title: ${jobTitle}` : null;
 
   const messageParts = [
     `Technician prompt:\n${prompt}`,
-    extraDetails ? `Constraints: ${extraDetails}` : null,
+    jobTitleLine,
+    extraDetailsContent ? `Constraints: ${extraDetailsContent}` : null,
     `Context: ${contextParts}`,
   ]
     .filter((part): part is string => Boolean(part))

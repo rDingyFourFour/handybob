@@ -16,6 +16,10 @@ type QuoteGeneratePayload = {
   extraDetails?: string | null;
   hasDiagnosisContext?: boolean;
   hasMaterialsContext?: boolean;
+  hasJobDescriptionContext?: boolean;
+  hasMaterialsSummary?: boolean;
+  hasDiagnosisSummary?: boolean;
+  jobTitle?: string | null;
 };
 
 export type QuoteGenerateActionResult = {
@@ -31,6 +35,8 @@ export async function runAskBobQuoteGenerateAction(
   const trimmedJobId = payload.jobId?.trim() ?? "";
   const trimmedPrompt = payload.prompt?.trim() ?? "";
   const trimmedExtraDetails = payload.extraDetails?.trim() ?? "";
+  const trimmedJobTitle = payload.jobTitle?.trim() ?? "";
+  const normalizedJobTitle = trimmedJobTitle || null;
 
   if (!trimmedJobId) {
     throw new Error("Job ID is required to generate a quote.");
@@ -71,8 +77,12 @@ export async function runAskBobQuoteGenerateAction(
     jobId: job.id,
     promptLength: trimmedPrompt.length,
     hasExtraDetails: Boolean(trimmedExtraDetails),
+    hasJobTitle: Boolean(normalizedJobTitle),
     hasDiagnosisContext: Boolean(payload.hasDiagnosisContext),
     hasMaterialsContext: Boolean(payload.hasMaterialsContext),
+    hasJobDescriptionForQuote: Boolean(payload.hasJobDescriptionContext),
+    hasMaterialsSummaryForQuote: Boolean(payload.hasMaterialsSummary),
+    hasDiagnosisSummaryForQuote: Boolean(payload.hasDiagnosisSummary),
   });
 
   const taskInput: AskBobQuoteGenerateInput = {
@@ -80,6 +90,7 @@ export async function runAskBobQuoteGenerateAction(
     context,
     prompt: trimmedPrompt,
     extraDetails: trimmedExtraDetails || null,
+    jobTitle: normalizedJobTitle,
   };
 
   try {
@@ -94,6 +105,10 @@ export async function runAskBobQuoteGenerateAction(
       modelLatencyMs: taskResult.modelLatencyMs,
       linesCount: suggestion.scopeLines.length,
       materialsCount: suggestion.materials?.length ?? 0,
+      hasJobDescriptionForQuote: Boolean(payload.hasJobDescriptionContext),
+      hasMaterialsSummaryForQuote: Boolean(payload.hasMaterialsSummary),
+      hasDiagnosisSummaryForQuote: Boolean(payload.hasDiagnosisSummary),
+      hasJobTitle: Boolean(normalizedJobTitle),
     });
 
     return {

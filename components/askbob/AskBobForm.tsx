@@ -15,10 +15,56 @@ type AskBobFormProps = {
   quoteId?: string | null;
   onSuccess?: () => void;
   jobDescription?: string | null;
+  jobTitle?: string | null;
   onResponse?: (response: AskBobResponseDTO) => void;
 };
 
 const MIN_PROMPT_LENGTH = 10;
+
+function buildJobDescriptionSnippet(description?: string | null, limit = 320): string | null {
+  if (!description) {
+    return null;
+  }
+  const trimmed = description.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const singleLine = trimmed.replace(/\s+/g, " ");
+  return singleLine.length > limit ? `${singleLine.slice(0, limit)}...` : singleLine;
+}
+
+type DiagnoseExtraDetailsArgs = {
+  jobTitle?: string;
+  jobDescription?: string | null;
+  technicianNotes?: string;
+};
+
+function buildDiagnoseExtraDetails({
+  jobTitle,
+  jobDescription,
+  technicianNotes,
+}: DiagnoseExtraDetailsArgs): string | null {
+  const parts: string[] = [];
+
+  if (jobTitle) {
+    parts.push(`Job title: ${jobTitle}`);
+  }
+
+  const jobContext = buildJobDescriptionSnippet(jobDescription);
+  if (jobContext) {
+    parts.push(`Job description: ${jobContext}`);
+  }
+
+  if (technicianNotes) {
+    parts.push(`Technician notes: ${technicianNotes}`);
+  }
+
+  if (!parts.length) {
+    return null;
+  }
+
+  return parts.join("\n\n");
+}
 
 export default function AskBobForm({
   workspaceId,
@@ -27,6 +73,7 @@ export default function AskBobForm({
   quoteId,
   onSuccess,
   jobDescription,
+  jobTitle,
   onResponse,
 }: AskBobFormProps) {
   const trimmedJobDescription = jobDescription?.trim() ?? "";
@@ -35,6 +82,7 @@ export default function AskBobForm({
   const [response, setResponse] = useState<AskBobResponseDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const effectiveJobTitle = jobTitle?.trim() ?? "";
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -51,11 +99,18 @@ export default function AskBobForm({
       return;
     }
 
+    const extraDetailsPayload = buildDiagnoseExtraDetails({
+      jobTitle: effectiveJobTitle || undefined,
+      jobDescription,
+      technicianNotes: trimmedPrompt,
+    });
+
     console.log("[askbob-form-submit]", {
       workspaceId,
       hasJobId: Boolean(jobId),
       hasCustomerId: Boolean(customerId),
       hasQuoteId: Boolean(quoteId),
+      hasJobTitle: Boolean(effectiveJobTitle),
       promptLength: trimmedPrompt.length,
     });
 
@@ -67,6 +122,8 @@ export default function AskBobForm({
         jobId: jobId ?? undefined,
         customerId: customerId ?? undefined,
         quoteId: quoteId ?? undefined,
+        jobTitle: effectiveJobTitle || undefined,
+        extraDetails: extraDetailsPayload ?? undefined,
       })
         .then((dto) => {
           setResponse(dto);
@@ -83,7 +140,11 @@ export default function AskBobForm({
   };
 
   const hasJobContext = Boolean(jobId || trimmedJobDescription);
-  const buttonLabel = isPending ? "Thinking..." : hasJobContext ? "Get diagnostic plan" : "Get AskBob answer";
+  const buttonLabel = isPending
+    ? "Thinking..."
+    : hasJobContext
+    ? "Diagnose this job with AskBob"
+    : "Ask Bob for help";
 
   return (
     <div className="space-y-6">

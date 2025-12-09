@@ -49,6 +49,7 @@ type JobAskBobContainerProps = {
   jobId: string;
   customerId?: string | null;
   jobDescription?: string | null | undefined;
+  jobTitle?: string | null | undefined;
   askBobLastTaskLabel?: string | null;
   askBobLastUsedAtDisplay?: string | null;
   askBobLastUsedAtIso?: string | null;
@@ -60,16 +61,18 @@ export default function JobAskBobContainer({
   jobId,
   customerId,
   jobDescription,
+  jobTitle,
   askBobLastTaskLabel,
   askBobLastUsedAtDisplay,
   askBobLastUsedAtIso,
   askBobRunsSummary,
 }: JobAskBobContainerProps) {
   const promptSeed = jobDescription ?? "";
+  const effectiveJobTitle = jobTitle?.trim() || "";
   const hasJobDescription = Boolean(jobDescription?.trim());
   const diagnoseDescription = hasJobDescription
-    ? "Start with the job description below. Add what you’re seeing on-site (symptoms, constraints, notes from the customer), then AskBob will suggest a step-by-step plan you can adjust."
-    : "Describe what you’re seeing on-site (symptoms, constraints, notes from the customer), then AskBob will suggest a step-by-step plan you can adjust.";
+    ? "AskBob starts with the job description below. Add what you’re seeing on-site (symptoms, constraints, notes from the customer) so it can deliver a diagnostic plan before you move to materials or quoting."
+    : "Describe what you’re seeing on-site (symptoms, constraints, notes from the customer). AskBob will suggest a diagnostic plan you can adjust before tackling materials or a quote.";
   const [diagnosisSummary, setDiagnosisSummary] = useState<string | null>(null);
   const [materialsSummary, setMaterialsSummary] = useState<string | null>(null);
 
@@ -97,7 +100,7 @@ export default function JobAskBobContainer({
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob Job Assistant</p>
         <h2 className="hb-heading-3 text-xl font-semibold">AskBob Job Assistant</h2>
         <p className="text-sm text-slate-300">
-          Use AskBob to think through this job, draft quotes and materials, and prepare customer-ready messages.
+          AskBob is your AI job assistant for diagnosing this job, planning materials, and drafting a quote. Start here to run AI on the job before you move downstream.
         </p>
         <p className="text-xs text-slate-500">
           Suggestions are AI-generated, editable, and only saved when you choose to persist them.
@@ -120,6 +123,7 @@ export default function JobAskBobContainer({
             jobId={jobId}
             customerId={customerId ?? undefined}
             jobDescription={promptSeed}
+            jobTitle={effectiveJobTitle}
             onDiagnoseSuccess={() => scrollToSection("askbob-materials")}
             onDiagnoseComplete={handleDiagnoseComplete}
           />
@@ -137,6 +141,7 @@ export default function JobAskBobContainer({
             diagnosisSummary={diagnosisSummary}
             onMaterialsSummaryChange={handleMaterialsSummaryChange}
             jobDescription={jobDescription ?? null}
+            jobTitle={effectiveJobTitle}
           />
         </AskBobSection>
         <AskBobSection
@@ -151,6 +156,8 @@ export default function JobAskBobContainer({
             onQuoteSuccess={() => scrollToSection("askbob-followup")}
             diagnosisSummary={diagnosisSummary}
             materialsSummary={materialsSummary}
+            jobDescription={jobDescription ?? null}
+            jobTitle={effectiveJobTitle}
           />
         </AskBobSection>
         <AskBobSection
@@ -162,6 +169,7 @@ export default function JobAskBobContainer({
             workspaceId={workspaceId}
             jobId={jobId}
             customerId={customerId ?? null}
+            jobTitle={effectiveJobTitle}
           />
         </AskBobSection>
       </div>

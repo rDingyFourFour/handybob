@@ -17,38 +17,65 @@ type AskBobQuotePanelProps = {
   onQuoteSuccess?: () => void;
   diagnosisSummary?: string | null;
   materialsSummary?: string | null;
+  jobDescription?: string | null;
+  jobTitle?: string | null;
 };
 
 const DEFAULT_PROMPT = "Generate a standard quote for this job.";
 
-function buildQuoteExtraDetails(
-  quoteNotes: string,
-  diagnosisSummary?: string | null,
-  materialsSummary?: string | null,
-): string | null {
+type QuoteExtraDetailsInput = {
+  jobTitle?: string | null;
+  populatedJobDescription?: string | null;
+  materialsSummary?: string | null;
+  diagnosisSummary?: string | null;
+  quoteNotes: string;
+};
+
+function buildJobDescriptionSnippet(description?: string | null): string | null {
+  if (!description) {
+    return null;
+  }
+  const trimmed = description.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const singleLine = trimmed.replace(/\s+/g, " ");
+  return singleLine.length > 320 ? `${singleLine.slice(0, 320)}...` : singleLine;
+}
+
+function buildQuoteExtraDetails({
+  jobTitle,
+  populatedJobDescription,
+  materialsSummary,
+  diagnosisSummary,
+  quoteNotes,
+}: QuoteExtraDetailsInput): string | null {
   const parts: string[] = [];
-
-  if (quoteNotes.trim()) {
-    parts.push(`Quote notes: ${quoteNotes.trim()}`);
+  const normalizedJobTitle = jobTitle?.trim();
+  if (normalizedJobTitle) {
+    parts.push(`Job title: ${normalizedJobTitle}`);
   }
-
-  if (diagnosisSummary?.trim()) {
-    parts.push(`Diagnosis summary: ${diagnosisSummary.trim()}`);
+  const jobContext = buildJobDescriptionSnippet(populatedJobDescription);
+  if (jobContext) {
+    parts.push(`Job description: ${jobContext}`);
   }
-
   if (materialsSummary?.trim()) {
-    parts.push(`Materials summary: ${materialsSummary.trim()}`);
+    parts.push(`Materials summary from Step 2: ${materialsSummary.trim()}`);
   }
-
+  if (diagnosisSummary?.trim()) {
+    parts.push(`Diagnosis summary from Step 1: ${diagnosisSummary.trim()}`);
+  }
+  if (quoteNotes.trim()) {
+    parts.push(`Technician quote notes: ${quoteNotes.trim()}`);
+  }
   if (!parts.length) {
     return null;
   }
-
   return parts.join("\n\n");
 }
 
 export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
-  const { jobId, onQuoteSuccess, diagnosisSummary, materialsSummary } = props;
+  const { jobId, onQuoteSuccess, diagnosisSummary, materialsSummary, jobDescription, jobTitle } = props;
   const router = useRouter();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [isLoading, setIsLoading] = useState(false);
@@ -57,7 +84,28 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
   const [applyError, setApplyError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
 
-  const hasContext = Boolean(diagnosisSummary?.trim() || materialsSummary?.trim());
+  const normalizedJobTitle = jobTitle?.trim() ?? "";
+  const hasJobDescription = Boolean(jobDescription?.trim());
+  const hasMaterials = Boolean(materialsSummary?.trim());
+  const hasDiagnosis = Boolean(diagnosisSummary?.trim());
+  const contextText = (() => {
+    if (hasJobDescription) {
+      const extras = [hasMaterials ? "the Step 2 materials checklist" : null, hasDiagnosis ? "the Step 1 diagnosis" : null]
+        .filter(Boolean)
+        .join(hasMaterials && hasDiagnosis ? " and " : "");
+      if (extras) {
+        return `AskBob will base the quote on the job description and use ${extras} as supporting context.`;
+      }
+      return "AskBob will base the quote on the job description.";
+    }
+    if (hasMaterials || hasDiagnosis) {
+      const descriptors = [hasMaterials ? "the materials checklist from Step 2" : null, hasDiagnosis ? "the diagnosis from Step 1" : null]
+        .filter(Boolean)
+        .join(hasMaterials && hasDiagnosis ? " and " : "");
+      return `AskBob will use ${descriptors} as context for this quote.`;
+    }
+    return "AskBob will use the information you provide here as the primary context.";
+  })();
 
   const handleGenerate = async () => {
     const trimmedPrompt = prompt.trim();
@@ -69,13 +117,23 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     setError(null);
     setIsLoading(true);
   try {
-    const extraDetails = buildQuoteExtraDetails(trimmedPrompt, diagnosisSummary, materialsSummary);
+    const extraDetails = buildQuoteExtraDetails({
+      populatedJobDescription: jobDescription,
+      materialsSummary,
+      diagnosisSummary,
+      quoteNotes: trimmedPrompt,
+      jobTitle: normalizedJobTitle,
+    });
     const result = await runAskBobQuoteGenerateAction({
       jobId,
       prompt: trimmedPrompt,
       extraDetails,
+      jobTitle: normalizedJobTitle || undefined,
       hasDiagnosisContext: Boolean(diagnosisSummary?.trim()),
       hasMaterialsContext: Boolean(materialsSummary?.trim()),
+      hasJobDescriptionContext: Boolean(jobDescription?.trim()),
+      hasMaterialsSummary: Boolean(materialsSummary?.trim()),
+      hasDiagnosisSummary: Boolean(diagnosisSummary?.trim()),
     });
 
     setSuggestion(result.suggestion);
@@ -123,11 +181,10 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
           After you’ve confirmed the diagnosis and reviewed the Step 2 materials list, let AskBob turn that scope
           into a customer-ready quote.
         </p>
-        {hasContext && (
-          <p className="text-xs text-slate-400">
-            AskBob will also factor your diagnosis and materials summaries from Steps 1 and 2 when drafting this quote.
-          </p>
+        {normalizedJobTitle && (
+          <p className="text-xs text-slate-500">Quote for {normalizedJobTitle}.</p>
         )}
+        <p className="text-xs text-slate-400">{contextText}</p>
       </div>
       <div className="space-y-2">
         <label htmlFor="askbob-quote-prompt" className="text-xs uppercase tracking-[0.3em] text-slate-500">
@@ -143,7 +200,7 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
           aria-label="Prompt for AskBob quote generation"
         />
         <p className="text-xs text-slate-400">
-          Mention the materials list from Step 2 and any adjustments you expect, so AskBob keeps the quote grounded.
+          Call out any updates to the job description, materials checklist, or customer expectations so AskBob keeps the quote aligned.
         </p>
         <div className="flex items-center gap-3">
           <HbButton onClick={handleGenerate} disabled={isLoading || isApplying} variant="secondary" size="sm">

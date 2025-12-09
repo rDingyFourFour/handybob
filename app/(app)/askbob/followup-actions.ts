@@ -11,6 +11,17 @@ const jobFollowupPayloadSchema = z.object({
   workspaceId: z.string().min(1),
   jobId: z.string().min(1),
   extraDetails: z.string().optional().nullable(),
+  jobTitle: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((value) => {
+      if (!value) {
+        return null;
+      }
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }),
 });
 
 export type JobFollowupPayload = z.infer<typeof jobFollowupPayloadSchema>;
@@ -30,6 +41,7 @@ function mapFollowupDueStatus(status: FollowupDueStatus): AskBobJobFollowupInput
 
 export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
   const parsed = jobFollowupPayloadSchema.parse(payload);
+  const normalizedJobTitle = parsed.jobTitle ?? null;
 
   const supabase = await createServerClient();
   const { workspace, user } = await getCurrentWorkspace({ supabase });
@@ -147,6 +159,7 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
     followupDueStatus: followupDueInfo.dueStatus,
     hasOpenQuote,
     hasUnpaidInvoice,
+    hasJobTitle: Boolean(normalizedJobTitle || job.title?.trim()),
   });
 
   const notesSummary =
@@ -154,6 +167,7 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
       ? job.description_raw.trim().slice(0, 400)
       : null;
 
+  const jobTitleForInput = normalizedJobTitle ?? job.title?.trim() ?? null;
   const followupInput: AskBobJobFollowupInput = {
     task: "job.followup",
     context: {
@@ -162,6 +176,7 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
       jobId: job.id,
       customerId: job.customer_id ?? null,
     },
+    jobTitle: jobTitleForInput,
     jobStatus: job.status ?? "open",
     hasScheduledVisit,
     lastMessageAt,

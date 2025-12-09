@@ -16,6 +16,7 @@ type AskBobMaterialsPanelProps = {
   jobDescription?: string | null;
   onMaterialsSummaryChange?: (summary: string | null) => void;
   onMaterialsSuccess?: () => void;
+  jobTitle?: string | null;
 };
 
 function summarizeMaterialsSuggestion(suggestion: SmartQuoteSuggestion | null): string | null {
@@ -41,6 +42,7 @@ function summarizeMaterialsSuggestion(suggestion: SmartQuoteSuggestion | null): 
 }
 
 type MaterialsExtraDetailsInput = {
+  jobTitle?: string | null;
   technicianNotes?: string | null;
   diagnosisSummary?: string | null;
   jobDescription?: string | null;
@@ -59,11 +61,16 @@ function buildJobDescriptionSnippet(description?: string | null): string | null 
 }
 
 function buildMaterialsExtraDetails({
+  jobTitle,
   technicianNotes,
   diagnosisSummary,
   jobDescription,
 }: MaterialsExtraDetailsInput): string | null {
   const parts: string[] = [];
+  const normalizedJobTitle = jobTitle?.trim();
+  if (normalizedJobTitle) {
+    parts.push(`Job title: ${normalizedJobTitle}`);
+  }
   const jobContext = buildJobDescriptionSnippet(jobDescription);
   if (jobContext) {
     parts.push(`Job description: ${jobContext}`);
@@ -83,12 +90,15 @@ function buildMaterialsExtraDetails({
 const DEFAULT_PROMPT = "List the materials needed for this job.";
 
 export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
-  const { jobId, onMaterialsSuccess, diagnosisSummary, jobDescription, onMaterialsSummaryChange } = props;
+  const { jobId, onMaterialsSuccess, diagnosisSummary, jobDescription, onMaterialsSummaryChange, jobTitle } =
+    props;
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [extraDetails, setExtraDetails] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
+  const normalizedJobTitle = jobTitle?.trim() ?? "";
+  const hasJobTitle = Boolean(normalizedJobTitle);
 
   const handleGenerate = async () => {
     const trimmedPrompt = prompt.trim();
@@ -112,6 +122,7 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
         jobId,
         prompt: trimmedPrompt,
         extraDetails: extraDetailsPayload,
+        jobTitle: normalizedJobTitle || undefined,
         hasDiagnosisContextForMaterials: Boolean(diagnosisSummary?.trim()),
         hasJobDescriptionContextForMaterials: Boolean(jobDescription?.trim()),
       });
@@ -150,6 +161,9 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
         <p className="text-xs text-slate-400">
           AskBob bases the materials list on the job description first; add notes if anything unusual comes up, and the diagnosis summary stays in play too.
         </p>
+        {hasJobTitle && (
+          <p className="text-xs text-slate-500">Using job {normalizedJobTitle} as context.</p>
+        )}
       </div>
 
       <div className="space-y-2">

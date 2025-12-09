@@ -15,6 +15,17 @@ const followupMessageDraftPayloadSchema = z.object({
   workspaceId: z.string().min(1),
   jobId: z.string().min(1),
   extraDetails: z.string().optional().nullable(),
+  jobTitle: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((value) => {
+      if (!value) {
+        return null;
+      }
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }),
 });
 
 export type DraftAskBobJobFollowupMessageResult =
@@ -158,6 +169,7 @@ export async function draftAskBobJobFollowupMessageAction(
   });
 
   const trimmedExtraDetails = payload.extraDetails?.trim();
+  const normalizedJobTitle = payload.jobTitle ?? null;
   console.log("[askbob-job-followup-message-draft-request]", {
     workspaceId: workspace.id,
     userId: user.id,
@@ -168,11 +180,14 @@ export async function draftAskBobJobFollowupMessageAction(
     hasUnpaidInvoice,
     hasScheduledVisit,
     hasExtraDetails: Boolean(trimmedExtraDetails),
+    hasJobTitle: Boolean(normalizedJobTitle ?? job.title?.trim()),
   });
 
   const summaryFragments: string[] = [];
-  const jobTitle = job.title?.trim() || "Untitled job";
-  summaryFragments.push(`Job: ${jobTitle}`);
+  const jobTitleText = normalizedJobTitle ?? job.title?.trim() ?? null;
+  if (jobTitleText) {
+    summaryFragments.push(`Job title: ${jobTitleText}`);
+  }
   if (job.status) {
     summaryFragments.push(`Status: ${job.status}`);
   }
@@ -234,6 +249,7 @@ export async function draftAskBobJobFollowupMessageAction(
       modelLatencyMs: taskResult.modelLatencyMs,
       bodyLength: taskResult.body.length,
       suggestedChannel: taskResult.suggestedChannel ?? null,
+      hasJobTitle: Boolean(jobTitleText),
     });
 
     return {
@@ -262,6 +278,7 @@ export async function draftAskBobJobFollowupMessageAction(
       jobId: job.id,
       customerId: job.customer_id,
       errorMessage: truncated,
+      hasJobTitle: Boolean(jobTitleText),
     });
     return { ok: false, code: "askbob_job_followup_message_draft_failed" };
   }

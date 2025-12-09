@@ -51,12 +51,14 @@ export async function submitAskBobQueryAction(
       quoteId: parsedInput.quoteId ?? null,
     };
 
+    const hasJobTitle = Boolean(parsedInput.jobTitle);
     console.log("[askbob-query]", {
       workspaceId: context.workspaceId,
       userId,
       hasJobId: Boolean(context.jobId),
       hasCustomerId: Boolean(context.customerId),
       hasQuoteId: Boolean(context.quoteId),
+      hasJobTitle,
       promptLength: parsedInput.prompt.length,
     });
 
@@ -64,6 +66,8 @@ export async function submitAskBobQueryAction(
       task: "job.diagnose",
       context,
       prompt: parsedInput.prompt,
+      jobTitle: parsedInput.jobTitle ?? null,
+      extraDetails: parsedInput.extraDetails ?? null,
     };
 
     const taskResult = await runAskBobTask(supabaseClient, taskInput);
