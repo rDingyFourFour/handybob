@@ -8,41 +8,8 @@ import AskBobMaterialsPanel from "@/components/askbob/AskBobMaterialsPanel";
 import AskBobQuotePanel from "@/components/askbob/AskBobQuotePanel";
 import JobAskBobFollowupPanel from "@/components/askbob/JobAskBobFollowupPanel";
 import JobAskBobHud from "@/components/askbob/JobAskBobHud";
-import JobAskBobPanel from "@/components/askbob/JobAskBobPanel";
-import type { AskBobResponseDTO } from "@/lib/domain/askbob/types";
-
-function buildDiagnosisSummary(response: AskBobResponseDTO): string | null {
-  const normalizeItems = (sectionItems: string[]) =>
-    sectionItems
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .slice(0, 2);
-
-  const stepsSection =
-    response.sections.find((section) => section.type === "steps" && section.items.some(Boolean)) ??
-    response.sections.find((section) => section.items.some(Boolean));
-  const stepItems = stepsSection ? normalizeItems(stepsSection.items) : [];
-  const majorScope = stepItems.length ? `${stepsSection?.title ?? "Diagnosis"}: ${stepItems.join("; ")}` : null;
-
-  const safetySection = response.sections.find(
-    (section) => section.type === "safety" && section.items.some(Boolean)
-  );
-  const safetyItem = safetySection?.items.map((item) => item.trim()).find(Boolean) ?? null;
-
-  const summaryParts = [];
-  if (majorScope) {
-    summaryParts.push(majorScope);
-  }
-  if (safetyItem) {
-    summaryParts.push(`Safety note: ${safetyItem}`);
-  }
-
-  if (!summaryParts.length) {
-    return null;
-  }
-
-  return summaryParts.join(" ");
-}
+import JobAskBobPanel, { type JobDiagnosisContext } from "@/components/askbob/JobAskBobPanel";
+import type { MaterialsSummaryContext } from "@/components/askbob/AskBobMaterialsPanel";
 
 type JobAskBobContainerProps = {
   workspaceId: string;
@@ -54,6 +21,7 @@ type JobAskBobContainerProps = {
   askBobLastUsedAtDisplay?: string | null;
   askBobLastUsedAtIso?: string | null;
   askBobRunsSummary?: string | null;
+  hasQuoteContextForFollowup?: boolean;
 };
 
 export default function JobAskBobContainer({
@@ -66,47 +34,22 @@ export default function JobAskBobContainer({
   askBobLastUsedAtDisplay,
   askBobLastUsedAtIso,
   askBobRunsSummary,
+  hasQuoteContextForFollowup,
 }: JobAskBobContainerProps) {
   const promptSeed = jobDescription ?? "";
   const effectiveJobTitle = jobTitle?.trim() || "";
-  const effectiveJobDescription = jobDescription?.trim() || "";
   const flowReminder = "Work through these steps in order, editing anything that doesn’t match what you see on site.";
   const [diagnosisSummary, setDiagnosisSummary] = useState<string | null>(null);
   const [materialsSummary, setMaterialsSummary] = useState<string | null>(null);
+  const effectiveHasQuoteContextForFollowup = Boolean(hasQuoteContextForFollowup);
 
-  const handleDiagnoseComplete = (response: AskBobResponseDTO) => {
-    setDiagnosisSummary(buildDiagnosisSummary(response));
+  const handleDiagnoseComplete = (context: JobDiagnosisContext) => {
+    setDiagnosisSummary(context.diagnosisSummary);
+    setMaterialsSummary(null);
   };
-  const handleMaterialsSummaryChange = (summary: string | null) => {
-    setMaterialsSummary(summary);
+  const handleMaterialsSummaryChange = (context: MaterialsSummaryContext) => {
+    setMaterialsSummary(context.materialsSummary);
   };
-
-  const trimmedDiagnosisSummary = diagnosisSummary?.trim() ?? "";
-  const trimmedMaterialsSummary = materialsSummary?.trim() ?? "";
-  const hasQuoteContextForFollowup = Boolean(askBobLastTaskLabel?.toLowerCase().includes("quote"));
-
-  const contextLabelsStep1: string[] = [];
-  if (effectiveJobTitle) {
-    contextLabelsStep1.push("job title");
-  }
-  if (effectiveJobDescription) {
-    contextLabelsStep1.push("job description");
-  }
-
-  const contextLabelsStep2: string[] = [...contextLabelsStep1];
-  if (trimmedDiagnosisSummary) {
-    contextLabelsStep2.push("AskBob diagnosis");
-  }
-
-  const contextLabelsStep3: string[] = [...contextLabelsStep2];
-  if (trimmedMaterialsSummary) {
-    contextLabelsStep3.push("AskBob materials checklist");
-  }
-
-  const contextLabelsStep4: string[] = [...contextLabelsStep3];
-  if (hasQuoteContextForFollowup) {
-    contextLabelsStep4.push("AskBob quote");
-  }
 
   const scrollToSection = (sectionId: string) => {
     if (typeof document === "undefined") {
@@ -145,7 +88,6 @@ export default function JobAskBobContainer({
             jobTitle={effectiveJobTitle}
             onDiagnoseSuccess={() => scrollToSection("askbob-materials")}
             onDiagnoseComplete={handleDiagnoseComplete}
-            contextLabels={contextLabelsStep1}
           />
         </AskBobSection>
         <AskBobSection id="askbob-materials">
@@ -158,7 +100,6 @@ export default function JobAskBobContainer({
             onMaterialsSummaryChange={handleMaterialsSummaryChange}
             jobDescription={jobDescription ?? null}
             jobTitle={effectiveJobTitle}
-            contextLabels={contextLabelsStep2}
           />
         </AskBobSection>
         <AskBobSection id="askbob-quote">
@@ -171,7 +112,6 @@ export default function JobAskBobContainer({
             materialsSummaryForQuote={materialsSummary}
             jobDescription={jobDescription ?? null}
             jobTitle={effectiveJobTitle}
-            contextLabels={contextLabelsStep3}
           />
         </AskBobSection>
         <AskBobSection id="askbob-followup">
@@ -180,7 +120,10 @@ export default function JobAskBobContainer({
             jobId={jobId}
             customerId={customerId ?? null}
             jobTitle={effectiveJobTitle}
-            contextLabels={contextLabelsStep4}
+            jobDescription={jobDescription ?? null}
+            diagnosisSummaryForFollowup={diagnosisSummary}
+            materialsSummaryForFollowup={materialsSummary}
+            hasQuoteContextForFollowup={effectiveHasQuoteContextForFollowup}
           />
         </AskBobSection>
       </div>

@@ -314,6 +314,8 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     });
   }
 
+  const hasQuoteContextForFollowup = quotes.length > 0;
+
   const materialsQuoteCandidate = quotes[0] ?? null;
   const materialsQuoteId = materialsQuoteCandidate?.id ?? null;
   console.log("[materials-ui-job] job materials quote candidate", {
@@ -534,6 +536,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
           askBobLastUsedAtIso={askBobLastUsedAtIso}
           askBobRunsSummary={askBobRunsSummary}
+          hasQuoteContextForFollowup={hasQuoteContextForFollowup}
         />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">

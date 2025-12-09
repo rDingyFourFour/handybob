@@ -20,7 +20,6 @@ type AskBobQuotePanelProps = {
   materialsSummaryForQuote?: string | null;
   jobDescription?: string | null;
   jobTitle?: string | null;
-  contextLabels?: string[];
 };
 
 const DEFAULT_PROMPT = "Generate a standard quote for this job.";
@@ -61,11 +60,11 @@ function buildQuoteExtraDetails({
   if (jobContext) {
     parts.push(`Job description: ${jobContext}`);
   }
-  if (materialsSummary?.trim()) {
-    parts.push(`Materials summary from Step 2: ${materialsSummary.trim()}`);
-  }
   if (diagnosisSummary?.trim()) {
     parts.push(`Diagnosis summary from Step 1: ${diagnosisSummary.trim()}`);
+  }
+  if (materialsSummary?.trim()) {
+    parts.push(`Materials summary from Step 2: ${materialsSummary.trim()}`);
   }
   if (quoteNotes.trim()) {
     parts.push(`Technician quote notes: ${quoteNotes.trim()}`);
@@ -112,7 +111,6 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     materialsSummaryForQuote,
     jobDescription,
     jobTitle,
-    contextLabels,
   } = props;
   const router = useRouter();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
@@ -123,7 +121,24 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
 
   const normalizedJobTitle = jobTitle?.trim() ?? "";
-  const contextLabelsToShow = contextLabels ?? [];
+  const normalizedJobDescription = jobDescription?.trim() ?? "";
+  const normalizedDiagnosisSummary = diagnosisSummaryForQuote?.trim() ?? "";
+  const normalizedMaterialsSummary = materialsSummaryForQuote?.trim() ?? "";
+  const hasDiagnosisContextForQuote = Boolean(normalizedDiagnosisSummary);
+  const hasMaterialsContextForQuote = Boolean(normalizedMaterialsSummary);
+  const contextParts: string[] = [];
+  if (normalizedJobTitle) {
+    contextParts.push("job title");
+  }
+  if (normalizedJobDescription) {
+    contextParts.push("job description");
+  }
+  if (hasDiagnosisContextForQuote) {
+    contextParts.push("AskBob diagnosis");
+  }
+  if (hasMaterialsContextForQuote) {
+    contextParts.push("AskBob materials checklist");
+  }
   const scopeLines = suggestion?.scopeLines ?? [];
   const materials = suggestion?.materials ?? [];
   const notesText = suggestion?.notes?.trim() ?? "";
@@ -160,29 +175,31 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
 
     setError(null);
     setIsLoading(true);
-  try {
-    const extraDetails = buildQuoteExtraDetails({
-      populatedJobDescription: jobDescription,
-      materialsSummary: materialsSummaryForQuote,
-      diagnosisSummary: diagnosisSummaryForQuote,
-      quoteNotes: trimmedPrompt,
-      jobTitle: normalizedJobTitle,
-    });
-    const result = await runAskBobQuoteGenerateAction({
-      jobId,
-      prompt: trimmedPrompt,
-      extraDetails,
-      jobTitle: normalizedJobTitle || undefined,
-      hasDiagnosisContext: Boolean(diagnosisSummaryForQuote?.trim()),
-      hasMaterialsContext: Boolean(materialsSummaryForQuote?.trim()),
-      hasJobDescriptionContext: Boolean(jobDescription?.trim()),
-      hasMaterialsSummary: Boolean(materialsSummaryForQuote?.trim()),
-      hasDiagnosisSummary: Boolean(diagnosisSummaryForQuote?.trim()),
-    });
+    try {
+      const extraDetails = buildQuoteExtraDetails({
+        populatedJobDescription: jobDescription,
+        diagnosisSummary: normalizedDiagnosisSummary || null,
+        materialsSummary: normalizedMaterialsSummary || null,
+        quoteNotes: trimmedPrompt,
+        jobTitle: normalizedJobTitle,
+      });
+      const result = await runAskBobQuoteGenerateAction({
+        jobId,
+        prompt: trimmedPrompt,
+        extraDetails,
+        jobTitle: normalizedJobTitle || undefined,
+        diagnosisSummary: normalizedDiagnosisSummary || undefined,
+        materialsSummary: normalizedMaterialsSummary || undefined,
+        hasDiagnosisContext: hasDiagnosisContextForQuote,
+        hasMaterialsContext: hasMaterialsContextForQuote,
+        hasJobDescriptionContext: Boolean(normalizedJobDescription),
+        hasMaterialsSummary: hasMaterialsContextForQuote,
+        hasDiagnosisSummary: hasDiagnosisContextForQuote,
+      });
 
-    setSuggestion(result.suggestion);
-    onQuoteSuccess?.();
-  } catch (error) {
+      setSuggestion(result.suggestion);
+      onQuoteSuccess?.();
+    } catch (error) {
       console.error("[askbob-quote-ui] action failure", error);
       setError("AskBob couldn’t generate a quote. Please try again.");
     } finally {
@@ -228,9 +245,9 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
         {normalizedJobTitle && (
           <p className="text-xs text-slate-500">Quote for {normalizedJobTitle}.</p>
         )}
-        {contextLabelsToShow.length > 0 ? (
+        {contextParts.length > 0 ? (
           <p className="text-xs text-muted-foreground">
-            Context used: {contextLabelsToShow.join(", ")}
+            Context used: {contextParts.join(", ")}
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">

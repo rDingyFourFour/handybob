@@ -288,6 +288,7 @@ export async function runAskBobJobFollowupTask(
   const userId = context.userId;
   const jobId = context.jobId ?? null;
   const jobTitle = input.jobTitle?.trim() ?? null;
+  const hasQuoteContextForFollowup = Boolean(input.hasQuoteContextForFollowup);
   console.log("[askbob-job-followup-service-request]", {
     workspaceId,
     userId,
@@ -297,6 +298,7 @@ export async function runAskBobJobFollowupTask(
     hasOpenQuote: input.hasOpenQuote,
     hasUnpaidInvoice: input.hasUnpaidInvoice,
     hasJobTitle: Boolean(jobTitle),
+    hasQuoteContextForFollowup,
   });
 
   const trimmedFollowupLabel = input.followupDueLabel?.trim();
@@ -311,6 +313,7 @@ export async function runAskBobJobFollowupTask(
       input.notesSummary && input.notesSummary.trim().length
         ? input.notesSummary.trim()
         : null,
+    hasQuoteContextForFollowup: input.hasQuoteContextForFollowup,
   };
 
   try {
@@ -325,6 +328,7 @@ export async function runAskBobJobFollowupTask(
       shouldScheduleVisit: modelResult.result.shouldScheduleVisit,
       shouldCall: modelResult.result.shouldCall,
       shouldWait: modelResult.result.shouldWait,
+      hasQuoteContextForFollowup,
     });
     return modelResult.result;
   } catch (error) {

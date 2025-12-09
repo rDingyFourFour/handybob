@@ -16,7 +16,10 @@ type JobAskBobFollowupPanelProps = {
   jobId: string;
   customerId?: string | null;
   jobTitle?: string | null;
-  contextLabels?: string[];
+  jobDescription?: string | null;
+  diagnosisSummaryForFollowup?: string | null;
+  materialsSummaryForFollowup?: string | null;
+  hasQuoteContextForFollowup?: boolean;
 };
 
 export default function JobAskBobFollowupPanel({
@@ -24,7 +27,10 @@ export default function JobAskBobFollowupPanel({
   jobId,
   customerId,
   jobTitle,
-  contextLabels,
+  jobDescription,
+  diagnosisSummaryForFollowup,
+  materialsSummaryForFollowup,
+  hasQuoteContextForFollowup,
 }: JobAskBobFollowupPanelProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -33,10 +39,31 @@ export default function JobAskBobFollowupPanel({
   const [isDrafting, setIsDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
   const normalizedJobTitle = jobTitle?.trim() ?? "";
-  const contextLabelsToShow = contextLabels ?? [];
+  const normalizedJobDescription = jobDescription?.trim() ?? "";
+  const normalizedDiagnosisSummary = diagnosisSummaryForFollowup?.trim() ?? "";
+  const normalizedMaterialsSummary = materialsSummaryForFollowup?.trim() ?? "";
+  const hasDiagnosisContext = Boolean(normalizedDiagnosisSummary);
+  const hasMaterialsContext = Boolean(normalizedMaterialsSummary);
+  const hasQuoteContext = Boolean(hasQuoteContextForFollowup);
+  const contextParts: string[] = [];
+  if (normalizedJobTitle) {
+    contextParts.push("job title");
+  }
+  if (normalizedJobDescription) {
+    contextParts.push("job description");
+  }
+  if (hasDiagnosisContext) {
+    contextParts.push("AskBob diagnosis");
+  }
+  if (hasMaterialsContext) {
+    contextParts.push("AskBob materials checklist");
+  }
+  if (hasQuoteContext) {
+    contextParts.push("AskBob quote");
+  }
   const contextUsedText =
-    contextLabelsToShow.length > 0
-      ? `Context used: ${contextLabelsToShow.join(", ")}`
+    contextParts.length > 0
+      ? `Context used: ${contextParts.join(", ")}`
       : "Context used: none yet. AskBob will use job and follow-up details from this page.";
 
   const handleRequest = async () => {
@@ -48,6 +75,10 @@ export default function JobAskBobFollowupPanel({
         jobId,
         extraDetails: null,
         jobTitle: normalizedJobTitle || undefined,
+        jobDescription: normalizedJobDescription || undefined,
+        diagnosisSummary: normalizedDiagnosisSummary || undefined,
+        materialsSummary: normalizedMaterialsSummary || undefined,
+        hasQuoteContextForFollowup: hasQuoteContext,
       });
       if (!response.ok) {
         setErrorMessage("AskBob couldn’t generate a follow-up suggestion right now. Please try again.");

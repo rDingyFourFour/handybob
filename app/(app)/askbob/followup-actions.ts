@@ -7,21 +7,23 @@ import { AskBobJobFollowupInput } from "@/lib/domain/askbob/types";
 import { computeFollowupDueInfo, FollowupDueStatus } from "@/lib/domain/communications/followupRecommendations";
 import { z } from "zod";
 
+const normalizeOptionalString = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+};
+
 const jobFollowupPayloadSchema = z.object({
   workspaceId: z.string().min(1),
   jobId: z.string().min(1),
   extraDetails: z.string().optional().nullable(),
-  jobTitle: z
-    .string()
-    .optional()
-    .nullable()
-    .transform((value) => {
-      if (!value) {
-        return null;
-      }
-      const trimmed = value.trim();
-      return trimmed.length ? trimmed : null;
-    }),
+  jobTitle: z.string().optional().nullable().transform(normalizeOptionalString),
+  jobDescription: z.string().optional().nullable().transform(normalizeOptionalString),
+  diagnosisSummary: z.string().optional().nullable().transform(normalizeOptionalString),
+  materialsSummary: z.string().optional().nullable().transform(normalizeOptionalString),
+  hasQuoteContextForFollowup: z.boolean().optional(),
 });
 
 export type JobFollowupPayload = z.infer<typeof jobFollowupPayloadSchema>;
@@ -42,6 +44,11 @@ function mapFollowupDueStatus(status: FollowupDueStatus): AskBobJobFollowupInput
 export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
   const parsed = jobFollowupPayloadSchema.parse(payload);
   const normalizedJobTitle = parsed.jobTitle ?? null;
+  const diagnosisSummaryForLog = parsed.diagnosisSummary ?? null;
+  const materialsSummaryForLog = parsed.materialsSummary ?? null;
+  const hasQuoteContextForFollowup = Boolean(parsed.hasQuoteContextForFollowup);
+  const hasDiagnosisContextForFollowup = Boolean(diagnosisSummaryForLog);
+  const hasMaterialsContextForFollowup = Boolean(materialsSummaryForLog);
 
   const supabase = await createServerClient();
   const { workspace, user } = await getCurrentWorkspace({ supabase });
@@ -160,6 +167,9 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
     hasOpenQuote,
     hasUnpaidInvoice,
     hasJobTitle: Boolean(normalizedJobTitle || job.title?.trim()),
+    hasDiagnosisContextForFollowup,
+    hasMaterialsContextForFollowup,
+    hasQuoteContextForFollowup,
   });
 
   const notesSummary =
@@ -189,6 +199,7 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
     hasOpenQuote,
     hasUnpaidInvoice,
     notesSummary,
+    hasQuoteContextForFollowup: hasQuoteContext,
   };
 
   try {
@@ -204,6 +215,9 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
       shouldScheduleVisit: result.shouldScheduleVisit,
       shouldCall: result.shouldCall,
       shouldWait: result.shouldWait,
+      hasDiagnosisContextForFollowup,
+      hasMaterialsContextForFollowup,
+      hasQuoteContextForFollowup,
     });
     return { ok: true, jobId: job.id, followup: result };
   } catch (error) {

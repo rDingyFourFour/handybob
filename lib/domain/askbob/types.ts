@@ -261,6 +261,7 @@ export interface AskBobJobFollowupInput {
   hasOpenQuote: boolean;
   hasUnpaidInvoice: boolean;
   notesSummary?: string | null;
+  hasQuoteContextForFollowup?: boolean;
 }
 
 export interface AskBobJobFollowupResult {

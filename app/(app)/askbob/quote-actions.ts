@@ -20,6 +20,8 @@ type QuoteGeneratePayload = {
   hasMaterialsSummary?: boolean;
   hasDiagnosisSummary?: boolean;
   jobTitle?: string | null;
+  diagnosisSummary?: string | null;
+  materialsSummary?: string | null;
 };
 
 export type QuoteGenerateActionResult = {
@@ -37,6 +39,8 @@ export async function runAskBobQuoteGenerateAction(
   const trimmedExtraDetails = payload.extraDetails?.trim() ?? "";
   const trimmedJobTitle = payload.jobTitle?.trim() ?? "";
   const normalizedJobTitle = trimmedJobTitle || null;
+  const hasDiagnosisSummaryForQuote = Boolean(payload.diagnosisSummary?.trim());
+  const hasMaterialsSummaryForQuote = Boolean(payload.materialsSummary?.trim());
 
   if (!trimmedJobId) {
     throw new Error("Job ID is required to generate a quote.");
@@ -81,8 +85,8 @@ export async function runAskBobQuoteGenerateAction(
     hasDiagnosisContext: Boolean(payload.hasDiagnosisContext),
     hasMaterialsContext: Boolean(payload.hasMaterialsContext),
     hasJobDescriptionForQuote: Boolean(payload.hasJobDescriptionContext),
-    hasMaterialsSummaryForQuote: Boolean(payload.hasMaterialsSummary),
-    hasDiagnosisSummaryForQuote: Boolean(payload.hasDiagnosisSummary),
+    hasMaterialsSummaryForQuote,
+    hasDiagnosisSummaryForQuote,
   });
 
   const taskInput: AskBobQuoteGenerateInput = {
@@ -106,8 +110,8 @@ export async function runAskBobQuoteGenerateAction(
       linesCount: suggestion.scopeLines.length,
       materialsCount: suggestion.materials?.length ?? 0,
       hasJobDescriptionForQuote: Boolean(payload.hasJobDescriptionContext),
-      hasMaterialsSummaryForQuote: Boolean(payload.hasMaterialsSummary),
-      hasDiagnosisSummaryForQuote: Boolean(payload.hasDiagnosisSummary),
+      hasMaterialsSummaryForQuote,
+      hasDiagnosisSummaryForQuote,
       hasJobTitle: Boolean(normalizedJobTitle),
     });
 

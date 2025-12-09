@@ -14,6 +14,14 @@ import {
   SmartQuoteSuggestion,
 } from "@/lib/domain/quotes/materials-askbob-adapter";
 
+const normalizeOptionalString = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+};
+
 const materialsGeneratePayloadSchema = z.object({
   jobId: z
     .string()
@@ -50,6 +58,12 @@ const materialsGeneratePayloadSchema = z.object({
       return trimmed.length ? trimmed : null;
     }),
   hasDiagnosisContextForMaterials: z.boolean().optional(),
+  hasJobDescriptionContextForMaterials: z.boolean().optional(),
+  diagnosisSummary: z
+    .string()
+    .optional()
+    .nullable()
+    .transform(normalizeOptionalString),
 });
 
 export type MaterialsGeneratePayload = z.infer<typeof materialsGeneratePayloadSchema>;
@@ -86,6 +100,8 @@ export async function runAskBobMaterialsGenerateAction(
 
   const { prompt: trimmedPrompt, extraDetails: trimmedExtraDetails, jobTitle } = parsedPayload;
   const normalizedJobTitle = jobTitle ?? null;
+  const hasDiagnosisContextForMaterials = Boolean(parsedPayload.diagnosisSummary);
+  const hasJobDescriptionContextForMaterials = Boolean(parsedPayload.hasJobDescriptionContextForMaterials);
 
   console.log("[askbob-materials-ui-request]", {
     workspaceId: workspace.id,
@@ -94,8 +110,8 @@ export async function runAskBobMaterialsGenerateAction(
     promptLength: trimmedPrompt.length,
     hasExtraDetails: Boolean(trimmedExtraDetails),
     hasJobTitle: Boolean(normalizedJobTitle),
-    hasDiagnosisContextForMaterials: Boolean(parsedPayload.hasDiagnosisContextForMaterials),
-    hasJobDescriptionContextForMaterials: Boolean(parsedPayload.hasJobDescriptionContextForMaterials),
+    hasDiagnosisContextForMaterials,
+    hasJobDescriptionContextForMaterials,
   });
 
   const taskInput: AskBobMaterialsGenerateInput = {

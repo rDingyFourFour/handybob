@@ -8,16 +8,20 @@ import { formatCurrency } from "@/utils/timeline/formatters";
 import { SmartQuoteSuggestion } from "@/lib/domain/quotes/askbob-adapter";
 import { runAskBobMaterialsGenerateAction } from "@/app/(app)/askbob/materials-actions";
 
+export type MaterialsSummaryContext = {
+  materialsSummary: string | null;
+  materialsCount?: number | null;
+};
+
 type AskBobMaterialsPanelProps = {
   workspaceId: string;
   jobId: string;
   customerId?: string | null;
   diagnosisSummaryForMaterials?: string | null;
   jobDescription?: string | null;
-  onMaterialsSummaryChange?: (summary: string | null) => void;
+  onMaterialsSummaryChange?: (context: MaterialsSummaryContext) => void;
   onMaterialsSuccess?: () => void;
   jobTitle?: string | null;
-  contextLabels?: string[];
 };
 
 function summarizeMaterialsSuggestion(suggestion: SmartQuoteSuggestion | null): string | null {
@@ -91,7 +95,7 @@ function buildMaterialsExtraDetails({
 const DEFAULT_PROMPT = "List the materials needed for this job.";
 
 export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
-  const { jobId, onMaterialsSuccess, diagnosisSummaryForMaterials, jobDescription, onMaterialsSummaryChange, jobTitle, contextLabels } =
+  const { jobId, onMaterialsSuccess, diagnosisSummaryForMaterials, jobDescription, onMaterialsSummaryChange, jobTitle } =
     props;
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [extraDetails, setExtraDetails] = useState("");
@@ -99,7 +103,19 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
   const normalizedJobTitle = jobTitle?.trim() ?? "";
-  const contextLabelsToShow = contextLabels ?? [];
+  const normalizedJobDescription = jobDescription?.trim() ?? "";
+  const normalizedDiagnosisSummary = diagnosisSummaryForMaterials?.trim() ?? "";
+  const hasDiagnosisContextForMaterials = Boolean(normalizedDiagnosisSummary);
+  const contextParts: string[] = [];
+  if (normalizedJobTitle) {
+    contextParts.push("job title");
+  }
+  if (normalizedJobDescription) {
+    contextParts.push("job description");
+  }
+  if (hasDiagnosisContextForMaterials) {
+    contextParts.push("AskBob diagnosis");
+  }
   const materials = suggestion?.materials ?? [];
   const materialsCount = materials.length;
   const hasMaterials = materialsCount > 0;
@@ -111,7 +127,7 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
       return;
     }
 
-    onMaterialsSummaryChange?.(null);
+    onMaterialsSummaryChange?.({ materialsSummary: null });
 
     setIsLoading(true);
     setError(null);
@@ -119,7 +135,7 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
       const trimmedExtraDetails = extraDetails.trim();
       const extraDetailsPayload = buildMaterialsExtraDetails({
         technicianNotes: trimmedExtraDetails || null,
-        diagnosisSummary: diagnosisSummaryForMaterials,
+        diagnosisSummary: normalizedDiagnosisSummary || null,
         jobDescription,
       });
       const result = await runAskBobMaterialsGenerateAction({
@@ -127,13 +143,17 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
         prompt: trimmedPrompt,
         extraDetails: extraDetailsPayload,
         jobTitle: normalizedJobTitle || undefined,
-        hasDiagnosisContextForMaterials: Boolean(diagnosisSummaryForMaterials?.trim()),
-        hasJobDescriptionContextForMaterials: Boolean(jobDescription?.trim()),
+        diagnosisSummary: normalizedDiagnosisSummary || undefined,
+        hasDiagnosisContextForMaterials,
+        hasJobDescriptionContextForMaterials: Boolean(normalizedJobDescription),
       });
 
       setSuggestion(result.suggestion);
       const summary = summarizeMaterialsSuggestion(result.suggestion);
-      onMaterialsSummaryChange?.(summary);
+      const trimmedSummary = summary?.trim();
+      const materialsSummary = trimmedSummary && trimmedSummary.length ? trimmedSummary : null;
+      const materialsCount = result.suggestion.materials?.length ?? null;
+      onMaterialsSummaryChange?.({ materialsSummary, materialsCount });
       onMaterialsSuccess?.();
     } catch (err) {
       console.error("[askbob-materials-ui] action failure", err);
@@ -163,9 +183,9 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
           AskBob suggests a materials checklist using the job title, description, and your notes from Step 1. Use this as a
           planning list—verify quantities and brands before buying anything.
         </p>
-        {contextLabelsToShow.length > 0 ? (
+        {contextParts.length > 0 ? (
           <p className="text-xs text-muted-foreground">
-            Context used: {contextLabelsToShow.join(", ")}
+            Context used: {contextParts.join(", ")}
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">

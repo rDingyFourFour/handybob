@@ -661,6 +661,7 @@ export async function callAskBobJobFollowup(
     hasOpenQuote: input.hasOpenQuote,
     hasUnpaidInvoice: input.hasUnpaidInvoice,
     notesSummary: input.notesSummary ?? null,
+    hasQuoteContextForFollowup: input.hasQuoteContextForFollowup ?? false,
   };
 
   const messageParts = [
@@ -681,6 +682,7 @@ export async function callAskBobJobFollowup(
     hasOpenQuote: input.hasOpenQuote,
     hasUnpaidInvoice: input.hasUnpaidInvoice,
     promptLength: messageParts.length,
+    hasQuoteContextForFollowup: Boolean(input.hasQuoteContextForFollowup),
   });
 
   const openai = new OpenAI({ apiKey });

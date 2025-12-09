@@ -6,16 +6,54 @@ import HbCard from "@/components/ui/hb-card";
 import AskBobForm from "./AskBobForm";
 import type { AskBobResponseDTO } from "@/lib/domain/askbob/types";
 
+export type JobDiagnosisContext = {
+  diagnosisSummary: string | null;
+  askBobResponseId?: string | null;
+};
+
+function buildDiagnosisSummary(response: AskBobResponseDTO): string | null {
+  const normalizeItems = (sectionItems: string[]) =>
+    sectionItems
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 2);
+
+  const stepsSection =
+    response.sections.find((section) => section.type === "steps" && section.items.some(Boolean)) ??
+    response.sections.find((section) => section.items.some(Boolean));
+  const stepItems = stepsSection ? normalizeItems(stepsSection.items) : [];
+  const majorScope = stepItems.length ? `${stepsSection?.title ?? "Diagnosis"}: ${stepItems.join("; ")}` : null;
+
+  const safetySection = response.sections.find(
+    (section) => section.type === "safety" && section.items.some(Boolean),
+  );
+  const safetyItem = safetySection?.items.map((item) => item.trim()).find(Boolean) ?? null;
+
+  const summaryParts = [];
+  if (majorScope) {
+    summaryParts.push(majorScope);
+  }
+  if (safetyItem) {
+    summaryParts.push(`Safety note: ${safetyItem}`);
+  }
+
+  if (!summaryParts.length) {
+    return null;
+  }
+
+  const summary = summaryParts.join(" ").trim();
+  return summary.length ? summary : null;
+}
+
 type JobAskBobPanelProps = {
   workspaceId: string;
   jobId: string;
   customerId?: string | null;
   quoteId?: string | null;
   onDiagnoseSuccess?: () => void;
-  onDiagnoseComplete?: (response: AskBobResponseDTO) => void;
+  onDiagnoseComplete?: (context: JobDiagnosisContext) => void;
   jobDescription?: string | null;
   jobTitle?: string | null;
-  contextLabels?: string[];
 };
 
 export default function JobAskBobPanel({
@@ -27,7 +65,6 @@ export default function JobAskBobPanel({
   onDiagnoseComplete,
   jobDescription,
   jobTitle,
-  contextLabels,
 }: JobAskBobPanelProps) {
   useEffect(() => {
     console.log("[askbob-ui-entry]", {
@@ -39,7 +76,23 @@ export default function JobAskBobPanel({
     });
   }, [workspaceId, jobId, customerId, jobTitle]);
 
-  const labelsToShow = contextLabels ?? [];
+  const normalizedJobTitle = jobTitle?.trim() ?? "";
+  const normalizedJobDescription = jobDescription?.trim() ?? "";
+  const labelsToShow: string[] = [];
+  if (normalizedJobTitle) {
+    labelsToShow.push("job title");
+  }
+  if (normalizedJobDescription) {
+    labelsToShow.push("job description");
+  }
+
+  const handleResponse = (response: AskBobResponseDTO) => {
+    const summary = buildDiagnosisSummary(response);
+    onDiagnoseComplete?.({
+      diagnosisSummary: summary,
+      askBobResponseId: response.responseId,
+    });
+  };
 
   return (
     <HbCard className="space-y-4">
@@ -67,7 +120,7 @@ export default function JobAskBobPanel({
         jobDescription={jobDescription}
         jobTitle={jobTitle}
         onSuccess={onDiagnoseSuccess}
-        onResponse={onDiagnoseComplete}
+        onResponse={handleResponse}
       />
     </HbCard>
   );
