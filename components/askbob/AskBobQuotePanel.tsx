@@ -9,6 +9,7 @@ import { formatCurrency } from "@/utils/timeline/formatters";
 import { runAskBobQuoteGenerateAction } from "@/app/(app)/askbob/quote-actions";
 import { createQuoteFromAskBobAction } from "@/app/(app)/quotes/askbob-actions";
 import { SmartQuoteSuggestion } from "@/lib/domain/quotes/askbob-adapter";
+import { estimateSmartQuoteTotals } from "@/lib/domain/quotes/askbob-adapter";
 
 type AskBobQuotePanelProps = {
   workspaceId: string;
@@ -74,6 +75,34 @@ function buildQuoteExtraDetails({
   return parts.join("\n\n");
 }
 
+type TotalsBlockProps = {
+  suggestion: SmartQuoteSuggestion;
+};
+
+function TotalsBlock({ suggestion }: TotalsBlockProps) {
+  const totals = estimateSmartQuoteTotals(suggestion);
+  const formatMaybe = (value?: number | null) =>
+    typeof value === "number" ? formatCurrency(value) : "—";
+
+  return (
+    <div className="space-y-1 rounded-2xl bg-slate-900/60 p-3 text-sm text-slate-200">
+      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Estimate summary</p>
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-slate-400">Estimated total (editable)</span>
+        <span className="text-sm font-semibold text-slate-100">{formatMaybe(totals.total)}</span>
+      </div>
+      <div className="flex items-center justify-between text-xs text-slate-500">
+        <span>Subtotal</span>
+        <span>{formatMaybe(totals.subtotal)}</span>
+      </div>
+      <div className="flex items-center justify-between text-xs text-slate-500">
+        <span>Tax</span>
+        <span>{formatMaybe(totals.tax)}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
   const { jobId, onQuoteSuccess, diagnosisSummary, materialsSummary, jobDescription, jobTitle } = props;
   const router = useRouter();
@@ -85,7 +114,6 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
 
   const normalizedJobTitle = jobTitle?.trim() ?? "";
-  const contextText = "Use this as a starting point and fine-tune it to match your actual visit.";
 
   const handleGenerate = async () => {
     const trimmedPrompt = prompt.trim();
@@ -158,13 +186,12 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob quote</p>
         <h2 className="hb-heading-3 text-xl font-semibold">Step 3 · Draft a quote</h2>
         <p className="text-sm text-slate-400">
-          AskBob drafts a quote using the job title, description, materials checklist, and diagnosis summary. All pricing
-          is approximate—adjust scope, hours, and rates before you send this to a customer.
+          AskBob drafts a quote using the job title, description, materials checklist, and diagnosis summary. All pricing is
+          approximate—adjust scope, hours, and rates before you send this to a customer.
         </p>
         {normalizedJobTitle && (
           <p className="text-xs text-slate-500">Quote for {normalizedJobTitle}.</p>
         )}
-        <p className="text-xs text-slate-400">{contextText}</p>
       </div>
       <div className="space-y-2">
         <label htmlFor="askbob-quote-prompt" className="text-xs uppercase tracking-[0.3em] text-slate-500">
@@ -179,9 +206,9 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
           placeholder="Describe the scope and expectations for the quote."
           aria-label="Prompt for AskBob quote generation"
         />
-        <p className="text-xs text-slate-400">
-          Call out any updates to the job description, materials checklist, or customer expectations so AskBob keeps the quote aligned.
-        </p>
+          <p className="text-xs text-slate-400">
+            Call out any updates to the job description, materials checklist, or customer expectations so AskBob keeps the quote aligned.
+          </p>
         <div className="flex items-center gap-3">
           <HbButton onClick={handleGenerate} disabled={isLoading || isApplying} variant="secondary" size="sm">
             {isLoading ? "Generating AskBob quote…" : "Generate quote with AskBob"}
@@ -193,36 +220,36 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
         {error && <p className="text-sm text-rose-300">{error}</p>}
       </div>
       {suggestion && (
-        <div className="space-y-3 border-t border-slate-800 pt-3">
+        <div className="space-y-4 border-t border-slate-800 pt-3">
           <div>
             <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-              AskBob quote suggestion (not yet saved)
+              Scope
             </p>
-          </div>
-          <div className="space-y-2">
-            {suggestion.scopeLines.map((line, index) => (
-              <div key={`${line.description}-${index}`} className="flex justify-between text-sm">
-                <div className="space-y-1">
-                  <p className="font-semibold text-slate-100">{line.description}</p>
-                  <p className="text-xs text-slate-500">
-                    Qty: {line.quantity}
-                    {line.unit ? ` ${line.unit}` : ""}
-                    {line.unitPrice != null ? ` · ${formatCurrency(line.unitPrice)} per unit` : ""}
+            <div className="space-y-2">
+              {suggestion.scopeLines.map((line, index) => (
+                <div key={`${line.description}-${index}`} className="flex justify-between text-sm">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-slate-100">{line.description}</p>
+                    <p className="text-xs text-slate-500">
+                      Qty: {line.quantity}
+                      {line.unit ? ` ${line.unit}` : ""}
+                      {line.unitPrice != null ? ` · ${formatCurrency(line.unitPrice)} per unit` : ""}
+                    </p>
+                  </div>
+                  <p className="text-sm font-semibold text-slate-100">
+                    {line.lineTotal != null
+                      ? formatCurrency(line.lineTotal)
+                      : line.unitPrice != null
+                      ? formatCurrency(line.unitPrice * line.quantity)
+                      : "—"}
                   </p>
                 </div>
-                <p className="text-sm font-semibold text-slate-100">
-                  {line.lineTotal != null
-                    ? formatCurrency(line.lineTotal)
-                    : line.unitPrice != null
-                    ? formatCurrency(line.unitPrice * line.quantity)
-                    : "—"}
-                </p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
           {suggestion.materials && suggestion.materials.length > 0 && (
-            <div className="space-y-1">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Materials estimate</p>
+            <div className="space-y-2">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Suggested materials</p>
               <div className="space-y-1">
                 {suggestion.materials.map((material, index) => (
                   <div key={`${material.name}-${index}`} className="flex items-center justify-between text-sm">
@@ -247,11 +274,12 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
           )}
           {suggestion.notes && (
             <div>
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Notes</p>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Notes and caveats</p>
               <p className="text-sm text-slate-300">{suggestion.notes}</p>
             </div>
           )}
-          <div className="flex flex-col gap-2">
+          <TotalsBlock suggestion={suggestion} />
+          <div className="space-y-2">
             <HbButton
               onClick={handleApplySuggestion}
               disabled={isApplying || isLoading}

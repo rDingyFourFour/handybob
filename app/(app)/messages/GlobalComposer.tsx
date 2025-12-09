@@ -250,7 +250,7 @@ export default function GlobalComposer({
               />
               {showAskBobFollowupHint && (
                 <p className="text-xs text-slate-400">
-                  This draft came from AskBob’s follow-up recommendation for this job.
+                  This draft came from AskBob’s follow-up guidance for this job.
                 </p>
               )}
             </div>

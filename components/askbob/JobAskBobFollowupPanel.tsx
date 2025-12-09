@@ -70,13 +70,12 @@ export default function JobAskBobFollowupPanel({
   }, [result]);
 
   const followup = result;
-  const showComposeCTA = Boolean(followup?.shouldSendMessage && customerId);
-  const showDraftCTA = showComposeCTA;
+  const showMessageCTAs = Boolean(followup?.shouldSendMessage && customerId);
   const followupDraftHint =
-    showDraftCTA && followup
-      ? "AskBob will prefill an editable follow-up message based on this recommendation."
+    showMessageCTAs && followup
+      ? "AskBob will prefill an editable follow-up message based on this guidance."
       : null;
-  const followupComposerHref = showComposeCTA
+  const followupComposerHref = showMessageCTAs
     ? `/messages?${new URLSearchParams({
         compose: "1",
         customerId: customerId ?? "",
@@ -177,10 +176,8 @@ export default function JobAskBobFollowupPanel({
           <div className="space-y-1">
             <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Suggested action</p>
             <p className="text-sm font-semibold text-slate-100">{result.recommendedAction}</p>
-            <p className="text-xs text-slate-500">
-              Treat this as a recommendation—adjust it to fit the customer and what you know.
-            </p>
           </div>
+          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Why AskBob suggests this</p>
           <p className="text-sm text-slate-300">{result.rationale}</p>
           {result.steps.length > 0 && (
             <ol className="space-y-2 text-sm text-slate-300">
@@ -200,23 +197,21 @@ export default function JobAskBobFollowupPanel({
           {result.riskNotes && (
             <p className="text-xs text-slate-500">Note: {result.riskNotes}</p>
           )}
-          {(showDraftCTA || (showComposeCTA && followupComposerHref)) && (
+          {showMessageCTAs && (
             <div className="space-y-2 pt-2">
-              {showDraftCTA && (
-                <div className="space-y-2">
-                  <HbButton
-                    size="sm"
-                    variant="secondary"
-                    className="w-full"
-                    disabled={isDrafting}
-                    onClick={handleDraftClick}
-                  >
-                    {isDrafting ? "Drafting…" : "Draft follow-up message with AskBob"}
-                  </HbButton>
-                  {draftError && <p className="text-sm text-rose-400">{draftError}</p>}
-                </div>
-              )}
-              {showComposeCTA && followupComposerHref && (
+              <div className="space-y-2">
+                <HbButton
+                  size="sm"
+                  variant="secondary"
+                  className="w-full"
+                  disabled={isDrafting}
+                  onClick={handleDraftClick}
+                >
+                  {isDrafting ? "Drafting…" : "Draft follow-up message with AskBob"}
+                </HbButton>
+                {draftError && <p className="text-sm text-rose-400">{draftError}</p>}
+              </div>
+              {followupComposerHref && (
                 <HbButton
                   as={Link}
                   href={followupComposerHref}

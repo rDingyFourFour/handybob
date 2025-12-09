@@ -43,7 +43,8 @@ export default function JobAskBobPanel({
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
         <h2 className="hb-heading-3 text-xl font-semibold">Step 1 · Diagnose the job</h2>
         <p className="text-sm text-slate-400">
-          AskBob uses the job title, description, and your notes to outline how a technician might approach this job safely. Review and adjust these steps based on what you see on site.
+          AskBob uses the job title, description, and your notes to outline how a technician might approach this job safely.
+          Review and adjust these steps based on what you see on site.
         </p>
         <p className="text-xs text-slate-500">These steps are suggestions, not a script—edit them freely.</p>
       </div>

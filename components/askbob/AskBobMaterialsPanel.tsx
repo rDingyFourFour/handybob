@@ -155,7 +155,8 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob materials</p>
         <h2 className="hb-heading-3 text-xl font-semibold">Step 2 · Build a materials checklist</h2>
         <p className="text-sm text-slate-400">
-          AskBob suggests a materials checklist using the job title, description, and your notes from Step 1. Use this as a planning list—verify quantities and brands before buying anything.
+          AskBob suggests a materials checklist using the job title, description, and your notes from Step 1. Use this as a
+          planning list—verify quantities and brands before buying anything.
         </p>
       </div>
 
