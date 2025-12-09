@@ -164,3 +164,38 @@ export async function generateUniqueWorkspaceSlug({
 
   return `${base}-${crypto.randomUUID().slice(0, 6)}`;
 }
+
+export type WorkspaceAskBobRow = {
+  askbob_enabled?: boolean | null;
+};
+
+export function isAskBobEnabledForWorkspaceRow(workspace: WorkspaceAskBobRow): boolean {
+  return workspace.askbob_enabled !== false;
+}
+
+export async function getAskBobWorkspaceStatus(
+  supabase: SupabaseClient,
+  workspaceId: string
+): Promise<{ enabled: boolean }> {
+  const { data: workspaceRow, error } = await supabase
+    .from<WorkspaceAskBobRow>("workspaces")
+    .select("askbob_enabled")
+    .eq("id", workspaceId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[askbob-status] Failed to query workspace status", {
+      workspaceId,
+      message: error.message,
+    });
+    return { enabled: false };
+  }
+
+  if (!workspaceRow) {
+    return { enabled: false };
+  }
+
+  return {
+    enabled: isAskBobEnabledForWorkspaceRow(workspaceRow),
+  };
+}

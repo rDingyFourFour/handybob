@@ -10,6 +10,7 @@ export type Workspace = {
   business_email: string | null;
   business_phone: string | null;
   business_address: string | null;
+  askbob_enabled?: boolean | null;
   public_lead_form_enabled?: boolean | null;
   auto_confirmation_email_enabled?: boolean | null;
 };

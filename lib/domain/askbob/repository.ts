@@ -117,10 +117,9 @@ export async function getLastAskBobActivityForJob(
 
   const { error: countError, count } = await supabase
     .from("askbob_sessions")
-    .select("id", { count: "exact" })
+    .select("*", { head: true, count: "exact" })
     .eq("workspace_id", params.workspaceId)
-    .eq("job_id", params.jobId)
-    .maybeSingle<{ id: string }>();
+    .eq("job_id", params.jobId);
 
   const totalRunsCount = count ?? 0;
 
