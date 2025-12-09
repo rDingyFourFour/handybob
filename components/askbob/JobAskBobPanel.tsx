@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 import HbCard from "@/components/ui/hb-card";
 import AskBobForm from "./AskBobForm";
+import type { AskBobResponseDTO } from "@/lib/domain/askbob/types";
 
 type JobAskBobPanelProps = {
   workspaceId: string;
@@ -11,6 +12,7 @@ type JobAskBobPanelProps = {
   customerId?: string | null;
   quoteId?: string | null;
   onDiagnoseSuccess?: () => void;
+  onDiagnoseComplete?: (response: AskBobResponseDTO) => void;
   jobDescription?: string | null;
 };
 
@@ -20,6 +22,7 @@ export default function JobAskBobPanel({
   customerId,
   quoteId,
   onDiagnoseSuccess,
+  onDiagnoseComplete,
   jobDescription,
 }: JobAskBobPanelProps) {
   useEffect(() => {
@@ -47,6 +50,7 @@ export default function JobAskBobPanel({
         quoteId={quoteId ?? undefined}
         jobDescription={jobDescription}
         onSuccess={onDiagnoseSuccess}
+        onResponse={onDiagnoseComplete}
       />
     </HbCard>
   );

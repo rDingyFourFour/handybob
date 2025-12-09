@@ -14,13 +14,31 @@ type AskBobMaterialsPanelProps = {
   workspaceId: string;
   jobId: string;
   customerId?: string | null;
+  diagnosisSummary?: string | null;
   onMaterialsSuccess?: () => void;
 };
+
+function buildMaterialsExtraDetails(
+  diagnosisSummary?: string | null,
+  extraDetails?: string,
+): string | null {
+  const parts: string[] = [];
+  if (diagnosisSummary?.trim()) {
+    parts.push(`Technician diagnosis summary (from Step 1): ${diagnosisSummary.trim()}`);
+  }
+  if (extraDetails?.trim()) {
+    parts.push(extraDetails.trim());
+  }
+  if (!parts.length) {
+    return null;
+  }
+  return parts.join("\n\n");
+}
 
 const DEFAULT_PROMPT = "List the materials needed for this job.";
 
 export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
-  const { jobId, onMaterialsSuccess } = props;
+  const { jobId, onMaterialsSuccess, diagnosisSummary } = props;
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [extraDetails, setExtraDetails] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -44,7 +62,7 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
       const result = await runAskBobMaterialsGenerateAction({
         jobId,
         prompt: trimmedPrompt,
-        extraDetails: extraDetails.trim() || null,
+        extraDetails: buildMaterialsExtraDetails(diagnosisSummary, extraDetails.trim()),
       });
 
       setSuggestion(result.suggestion);
@@ -100,6 +118,9 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
         <h2 className="hb-heading-3 text-xl font-semibold">AskBob materials helper</h2>
         <p className="text-sm text-slate-400">
           Use this after you’ve outlined the scope so AskBob can recommend materials before you save anything.
+        </p>
+        <p className="text-xs text-slate-400">
+          AskBob also sees the Step 1 diagnosis summary (when available) alongside your notes to shape the list.
         </p>
       </div>
 

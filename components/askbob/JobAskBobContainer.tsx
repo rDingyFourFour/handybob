@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import HbCard from "@/components/ui/hb-card";
 import AskBobSection from "@/components/askbob/AskBobSection";
 import AskBobMaterialsPanel from "@/components/askbob/AskBobMaterialsPanel";
@@ -7,6 +9,28 @@ import AskBobQuotePanel from "@/components/askbob/AskBobQuotePanel";
 import JobAskBobFollowupPanel from "@/components/askbob/JobAskBobFollowupPanel";
 import JobAskBobHud from "@/components/askbob/JobAskBobHud";
 import JobAskBobPanel from "@/components/askbob/JobAskBobPanel";
+import type { AskBobResponseDTO } from "@/lib/domain/askbob/types";
+
+function buildDiagnosisSummary(response: AskBobResponseDTO): string | null {
+  const sections = response.sections
+    .map((section) => {
+      const items = section.items
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 2);
+      if (!items.length) {
+        return null;
+      }
+      return `${section.title}: ${items.join("; ")}`;
+    })
+    .filter(Boolean);
+
+  if (!sections.length) {
+    return null;
+  }
+
+  return sections.slice(0, 2).join(" · ");
+}
 
 type JobAskBobContainerProps = {
   workspaceId: string;
@@ -30,6 +54,15 @@ export default function JobAskBobContainer({
   askBobRunsSummary,
 }: JobAskBobContainerProps) {
   const promptSeed = jobDescription ?? "";
+  const hasJobDescription = Boolean(jobDescription?.trim());
+  const diagnoseDescription = hasJobDescription
+    ? "Start with the job description below. Add what you’re seeing on-site (symptoms, constraints, notes from the customer), then AskBob will suggest a step-by-step plan you can adjust."
+    : "Describe what you’re seeing on-site (symptoms, constraints, notes from the customer), then AskBob will suggest a step-by-step plan you can adjust.";
+  const [diagnosisSummary, setDiagnosisSummary] = useState<string | null>(null);
+
+  const handleDiagnoseComplete = (response: AskBobResponseDTO) => {
+    setDiagnosisSummary(buildDiagnosisSummary(response));
+  };
 
   const scrollToSection = (sectionId: string) => {
     if (typeof document === "undefined") {
@@ -63,44 +96,46 @@ export default function JobAskBobContainer({
       <div className="space-y-8">
         <AskBobSection
           id="askbob-diagnose"
-          title="1. Diagnose the issue"
-          description="Describe what’s going wrong so AskBob can suggest a safe, step-by-step plan."
+          title="Step 1 – Diagnose this job"
+          description={diagnoseDescription}
         >
           <JobAskBobPanel
             workspaceId={workspaceId}
             jobId={jobId}
             customerId={customerId ?? undefined}
             jobDescription={promptSeed}
-            onDiagnoseSuccess={() => scrollToSection("askbob-quote")}
-          />
-        </AskBobSection>
-        <AskBobSection
-          id="askbob-quote"
-          title="2. Generate a quote"
-          description="Turn your diagnosis into a customer-ready quote you can review and edit."
-        >
-          <AskBobQuotePanel
-            workspaceId={workspaceId}
-            jobId={jobId}
-            customerId={customerId ?? null}
-            onQuoteSuccess={() => scrollToSection("askbob-materials")}
+            onDiagnoseSuccess={() => scrollToSection("askbob-materials")}
+            onDiagnoseComplete={handleDiagnoseComplete}
           />
         </AskBobSection>
         <AskBobSection
           id="askbob-materials"
-          title="3. Recommend materials"
-          description="Get a materials list that matches the scope of work."
+          title="Step 2 – List materials for this job"
+          description="Use the diagnosis to ask AskBob for the materials you’ll need before you finalize anything."
         >
           <AskBobMaterialsPanel
             workspaceId={workspaceId}
             jobId={jobId}
             customerId={customerId ?? null}
-            onMaterialsSuccess={() => scrollToSection("askbob-followup")}
+            onMaterialsSuccess={() => scrollToSection("askbob-quote")}
+            diagnosisSummary={diagnosisSummary}
+          />
+        </AskBobSection>
+        <AskBobSection
+          id="askbob-quote"
+          title="Step 3 – Generate a quote"
+          description="Combine your diagnosis with the materials list from Step 2 so AskBob can build a customer-ready quote."
+        >
+          <AskBobQuotePanel
+            workspaceId={workspaceId}
+            jobId={jobId}
+            customerId={customerId ?? null}
+            onQuoteSuccess={() => scrollToSection("askbob-followup")}
           />
         </AskBobSection>
         <AskBobSection
           id="askbob-followup"
-          title="4. Follow up with the customer"
+          title="Step 4 – Follow up with the customer"
           description="AskBob can help you decide when and how to follow up."
         >
           <JobAskBobFollowupPanel

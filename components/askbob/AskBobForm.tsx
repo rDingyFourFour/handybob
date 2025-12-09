@@ -15,6 +15,7 @@ type AskBobFormProps = {
   quoteId?: string | null;
   onSuccess?: () => void;
   jobDescription?: string | null;
+  onResponse?: (response: AskBobResponseDTO) => void;
 };
 
 const MIN_PROMPT_LENGTH = 10;
@@ -26,8 +27,10 @@ export default function AskBobForm({
   quoteId,
   onSuccess,
   jobDescription,
+  onResponse,
 }: AskBobFormProps) {
   const trimmedJobDescription = jobDescription?.trim() ?? "";
+  const hasPromptSeed = Boolean(trimmedJobDescription);
   const [prompt, setPrompt] = useState(() => trimmedJobDescription);
   const [response, setResponse] = useState<AskBobResponseDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +71,7 @@ export default function AskBobForm({
         .then((dto) => {
           setResponse(dto);
           setError(null);
+          onResponse?.(dto);
           onSuccess?.();
         })
         .catch((submitError) => {
@@ -78,7 +82,8 @@ export default function AskBobForm({
     });
   };
 
-  const buttonLabel = isPending ? "Thinking..." : "Ask Bob";
+  const hasJobContext = Boolean(jobId || trimmedJobDescription);
+  const buttonLabel = isPending ? "Thinking..." : hasJobContext ? "Get diagnostic plan" : "Get AskBob answer";
 
   return (
     <div className="space-y-6">
@@ -88,19 +93,23 @@ export default function AskBobForm({
             <label htmlFor="askbob-prompt" className="text-sm font-semibold text-slate-100">
               Describe the problem
             </label>
-        <textarea
-          id="askbob-prompt"
-          name="prompt"
-          className="w-full min-h-[140px] rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-400 focus:outline-none"
-          placeholder="Include symptoms, location, materials (copper, PEX, PVC), and any constraints around time, budget, or access."
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-        />
-        {trimmedJobDescription && (
-          <p className="text-xs text-slate-400">
-            Using the job description as a starting point. You can edit it before running AskBob.
-          </p>
-        )}
+            <textarea
+              id="askbob-prompt"
+              name="prompt"
+              className="w-full min-h-[140px] rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-400 focus:outline-none"
+              placeholder="Include symptoms, location, materials (copper, PEX, PVC), and any constraints around time, budget, or access."
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+            />
+            {hasPromptSeed ? (
+              <p className="text-xs text-slate-400">
+                This field starts with the job description. Edit or expand it with what you’re seeing on-site before AskBob suggests a step-by-step plan.
+              </p>
+            ) : (
+              <p className="text-xs text-slate-400">
+                Describe the problem in your own words—symptoms, constraints, notes from the customer—so AskBob can build a step-by-step plan.
+              </p>
+            )}
             <p className="text-xs text-slate-400">
               The more detail you provide, the better AskBob can suggest steps, materials, and cautions.
             </p>

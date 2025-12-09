@@ -87,7 +87,8 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob quote</p>
         <h2 className="hb-heading-3 text-xl font-semibold">Generate quote with AskBob</h2>
         <p className="text-sm text-slate-400">
-          Use this once you have a basic diagnosis so AskBob can turn the scope into a scoped quote.
+          After you’ve confirmed the diagnosis and reviewed the Step 2 materials list, let AskBob turn that scope
+          into a customer-ready quote.
         </p>
       </div>
       <div className="space-y-2">
@@ -103,6 +104,9 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
           placeholder="Describe the scope and expectations for the quote."
           aria-label="Prompt for AskBob quote generation"
         />
+        <p className="text-xs text-slate-400">
+          Mention the materials list from Step 2 and any adjustments you expect, so AskBob keeps the quote grounded.
+        </p>
         <div className="flex items-center gap-3">
           <HbButton onClick={handleGenerate} disabled={isLoading || isApplying} variant="secondary" size="sm">
             {isLoading ? "Generating AskBob quote…" : "Generate quote with AskBob"}
