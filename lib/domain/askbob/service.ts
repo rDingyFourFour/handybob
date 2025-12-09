@@ -2,6 +2,8 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { Database } from "@/lib/supabase/types";
 import {
   AskBobContext,
+  AskBobJobFollowupInput,
+  AskBobJobFollowupResult,
   AskBobMaterialsExplainInput,
   AskBobMaterialsExplainResult,
   AskBobMaterialsGenerateInput,
@@ -11,15 +13,19 @@ import {
   AskBobQuoteExplainInput,
   AskBobQuoteExplainResult,
   AskBobQuoteGenerateInput,
-  AskBobQuoteGenerateResult,
   AskBobResponseData,
   AskBobResponseDTO,
   AskBobResponseDTOSection,
+  AskBobTask,
   AskBobTaskInput,
   AskBobTaskResult,
   askBobResponseDataSchema,
 } from "./types";
-import { createAskBobSession, createAskBobResponse } from "./repository";
+import {
+  createAskBobSession,
+  createAskBobResponse,
+  getLastAskBobActivityForJob,
+} from "./repository";
 import {
   callAskBobMessageDraft,
   callAskBobModel,
@@ -27,6 +33,7 @@ import {
   callAskBobMaterialsExplain,
   callAskBobQuoteGenerate,
   callAskBobMaterialsGenerate,
+  callAskBobJobFollowup,
 } from "@/utils/openai/askbob";
 
 type DbClient = SupabaseClient<Database>;
@@ -88,6 +95,10 @@ export async function runAskBobTask(
 
   if (input.task === "quote.explain") {
     return runAskBobQuoteExplainTask(input);
+  }
+
+  if (input.task === "job.followup") {
+    return runAskBobJobFollowupTask(input);
   }
 
   if (input.task === "materials.explain") {
@@ -261,6 +272,64 @@ export async function runAskBobQuoteExplainTask(
   }
 }
 
+export async function runAskBobJobFollowupTask(
+  input: AskBobJobFollowupInput
+): Promise<AskBobJobFollowupResult> {
+  const { context } = input;
+  const workspaceId = context.workspaceId;
+  const userId = context.userId;
+  const jobId = context.jobId ?? null;
+  console.log("[askbob-job-followup-service-request]", {
+    workspaceId,
+    userId,
+    jobId,
+    jobStatus: input.jobStatus,
+    followupDueStatus: input.followupDueStatus,
+    hasOpenQuote: input.hasOpenQuote,
+    hasUnpaidInvoice: input.hasUnpaidInvoice,
+  });
+
+  const trimmedFollowupLabel = input.followupDueLabel?.trim();
+  const normalizedInput: AskBobJobFollowupInput = {
+    ...input,
+    followupDueLabel:
+      trimmedFollowupLabel && trimmedFollowupLabel.length
+        ? trimmedFollowupLabel
+        : input.followupDueLabel,
+    notesSummary:
+      input.notesSummary && input.notesSummary.trim().length
+        ? input.notesSummary.trim()
+        : null,
+  };
+
+  try {
+    const modelResult = await callAskBobJobFollowup(normalizedInput);
+    console.log("[askbob-job-followup-service-success]", {
+      workspaceId,
+      userId,
+      jobId,
+      modelLatencyMs: modelResult.result.modelLatencyMs,
+      stepsCount: modelResult.result.steps.length,
+      shouldSendMessage: modelResult.result.shouldSendMessage,
+      shouldScheduleVisit: modelResult.result.shouldScheduleVisit,
+      shouldCall: modelResult.result.shouldCall,
+      shouldWait: modelResult.result.shouldWait,
+    });
+    return modelResult.result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+    console.error("[askbob-job-followup-service-failure]", {
+      workspaceId,
+      userId,
+      jobId,
+      errorMessage: truncatedError,
+    });
+    throw error;
+  }
+}
+
 export async function runAskBobMaterialsExplainTask(
   input: AskBobMaterialsExplainInput
 ): Promise<AskBobMaterialsExplainResult> {
@@ -358,6 +427,58 @@ async function runAskBobMaterialsGenerateTask(
 
     throw error;
   }
+}
+
+const TASK_LABELS: Record<AskBobTask, string> = {
+  "job.diagnose": "Diagnosed issue",
+  "message.draft": "Drafted customer message",
+  "quote.generate": "Generated quote suggestion",
+  "materials.generate": "Generated materials list",
+  "quote.explain": "Explained quote",
+  "materials.explain": "Explained materials quote",
+  "job.followup": "Suggested follow-up action",
+};
+
+const TASK_SHORT_LABELS: Record<AskBobTask, string> = {
+  "job.diagnose": "diagnose",
+  "message.draft": "message",
+  "quote.generate": "quote",
+  "materials.generate": "materials",
+  "quote.explain": "quote explain",
+  "materials.explain": "materials explain",
+  "job.followup": "follow-up",
+};
+
+export async function getJobAskBobHudSummary(
+  supabase: DbClient,
+  params: { workspaceId: string; jobId: string }
+): Promise<{
+  lastTaskLabel: string | null;
+  lastUsedAt: string | null;
+  totalRunsCount: number;
+  tasksSeen: string[];
+}> {
+  const activity = await getLastAskBobActivityForJob(supabase, params);
+  if (!activity) {
+    return {
+      lastTaskLabel: null,
+      lastUsedAt: null,
+      totalRunsCount: 0,
+      tasksSeen: [],
+    };
+  }
+
+  const label = TASK_LABELS[activity.task] ?? "Used AskBob";
+  const seen = activity.tasksSeen ?? [];
+  const normalized = [
+    ...new Set(seen.map((task) => TASK_SHORT_LABELS[task] ?? "askbob")),
+  ].slice(0, 3);
+  return {
+    lastTaskLabel: label,
+    lastUsedAt: activity.createdAt,
+    totalRunsCount: activity.totalRunsCount ?? 0,
+    tasksSeen: normalized,
+  };
 }
 
 export function toAskBobResponseDTO(input: {

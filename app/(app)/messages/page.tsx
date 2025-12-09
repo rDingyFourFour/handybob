@@ -169,6 +169,8 @@ export default async function MessagesPage({
     typeof normalizedDraftBody === "string" && normalizedDraftBody.trim()
       ? normalizedDraftBody.trim()
       : null;
+  const isAskBobFollowupDraft =
+    composeOpen && origin === "askbob-followup" && Boolean(initialDraftBody);
   const messageFilterSubtitle =
     filterMode === "followups"
       ? "Showing follow-up messages across your workspace."
@@ -542,6 +544,16 @@ export default async function MessagesPage({
         hasCustomerId: Boolean(initialCustomerId),
         hasJobId: Boolean(initialJobId),
         hasDraftBody: Boolean(initialDraftBody),
+      });
+    }
+    if (isAskBobFollowupDraft) {
+      console.log("[messages-compose-from-askbob-followup]", {
+        workspaceId: workspace.id,
+        filterMode,
+        hasCustomerId: Boolean(initialCustomerId),
+        hasJobId: Boolean(initialJobId),
+        hasDraftBody: Boolean(initialDraftBody),
+        origin: "askbob-followup",
       });
     }
   }

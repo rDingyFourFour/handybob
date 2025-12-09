@@ -3,6 +3,8 @@
 import OpenAI from "openai";
 import type {
   AskBobContext,
+  AskBobJobFollowupInput,
+  AskBobJobFollowupResult,
   AskBobLineExplanation,
   AskBobMaterialExplanation,
   AskBobMaterialItem,
@@ -34,6 +36,7 @@ const MAX_DIAGNOSE_STEPS = 12;
 const MAX_QUOTE_LINES = 20;
 const MAX_MATERIAL_ITEMS = 25;
 const MAX_MATERIAL_EXPLANATION_ITEMS = 25;
+const MAX_FOLLOWUP_STEPS = 10;
 
 const JOB_DIAGNOSE_INSTRUCTIONS = [
   "You are AskBob, a technician-focused assistant for HandyBob. Respond with a strict JSON object only (no surrounding prose) containing the keys: steps (array of strings describing the step-by-step solution), materials (array of { name, quantity?, notes? }), safetyCautions (array of short precautions), costTimeConsiderations (array of considerations about cost or time), and escalationGuidance (array of reasons to escalate).",
@@ -74,6 +77,14 @@ const QUOTE_EXPLAIN_INSTRUCTIONS = [
   COST_GUARDRAILS,
   SCOPE_LIMIT_GUARDRAILS,
   "Respond with strict JSON matching the keys: overallExplanation (required string), lineExplanations (optional array of { lineIndex, explanation, inclusions?, exclusions? }), notes (optional), and modelLatencyMs (number).",
+].join(" ");
+
+const FOLLOWUP_INSTRUCTIONS = [
+  "You are AskBob, the HandyBob follow-up advisor. Recommend practical next steps for the job while keeping the customer experience calm and non-pushy.",
+  SAFETY_GUARDRAILS,
+  COST_GUARDRAILS,
+  SCOPE_LIMIT_GUARDRAILS,
+  "Review the follow-up context and respond with strict JSON matching the keys: recommendedAction (short required string), rationale (short paragraph), steps (array of { label, detail? }), shouldSendMessage (boolean), shouldScheduleVisit (boolean), shouldCall (boolean), shouldWait (boolean), suggestedChannel (optional 'sms' | 'email' | 'phone'), suggestedDelayDays (optional number), riskNotes (optional string), and modelLatencyMs (number).",
 ].join(" ");
 
 const DEFAULT_MODEL = process.env.OPENAI_ASKBOB_MODEL ?? "gpt-4.1";
@@ -129,8 +140,8 @@ type CallAskBobMaterialsExplainResult = {
   modelName: string;
 };
 
-type CallAskBobQuoteExplainResult = {
-  result: AskBobQuoteExplainResult;
+type CallAskBobJobFollowupResult = {
+  result: AskBobJobFollowupResult;
   latencyMs: number;
   modelName: string;
 };
@@ -584,6 +595,186 @@ export async function callAskBobMaterialsExplain({
       latencyMs,
       success: false,
       task: "materials.explain",
+      errorMessage: truncatedError,
+    });
+
+    throw error;
+  }
+}
+
+export async function callAskBobJobFollowup(
+  input: AskBobJobFollowupInput,
+): Promise<CallAskBobJobFollowupResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured for AskBob.");
+  }
+
+  const { context } = input;
+  const contextParts = [
+    `workspaceId=${context.workspaceId}`,
+    `userId=${context.userId}`,
+    context.jobId ? `jobId=${context.jobId}` : null,
+    context.customerId ? `customerId=${context.customerId}` : null,
+    context.quoteId ? `quoteId=${context.quoteId}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const followupContext = {
+    jobStatus: input.jobStatus,
+    hasScheduledVisit: input.hasScheduledVisit,
+    lastMessageAt: input.lastMessageAt ?? null,
+    lastCallAt: input.lastCallAt ?? null,
+    lastQuoteAt: input.lastQuoteAt ?? null,
+    lastInvoiceDueAt: input.lastInvoiceDueAt ?? null,
+    followupDueStatus: input.followupDueStatus,
+    followupDueLabel: input.followupDueLabel,
+    recommendedDelayDays: input.recommendedDelayDays ?? null,
+    hasOpenQuote: input.hasOpenQuote,
+    hasUnpaidInvoice: input.hasUnpaidInvoice,
+    notesSummary: input.notesSummary ?? null,
+  };
+
+  const messageParts = [
+    `Context: ${contextParts}`,
+    `Follow-up context:\n${JSON.stringify(followupContext, null, 2)}`,
+    input.notesSummary ? `Notes: ${input.notesSummary}` : null,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join("\n\n");
+
+  console.log("[askbob-job-followup-request]", {
+    workspaceId: context.workspaceId,
+    userId: context.userId,
+    jobId: context.jobId ?? null,
+    jobStatus: input.jobStatus,
+    followupDueStatus: input.followupDueStatus,
+    hasOpenQuote: input.hasOpenQuote,
+    hasUnpaidInvoice: input.hasUnpaidInvoice,
+    promptLength: messageParts.length,
+  });
+
+  const openai = new OpenAI({ apiKey });
+  const modelRequestStart = Date.now();
+  let modelName = DEFAULT_MODEL;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: "system", content: FOLLOWUP_INSTRUCTIONS },
+        { role: "user", content: messageParts },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    modelName = completion.model ?? DEFAULT_MODEL;
+    const messageContent = completion.choices?.[0]?.message?.content;
+    const payload = extractModelPayload(messageContent, {
+      workspaceId: context.workspaceId,
+      model: modelName,
+    });
+
+    const recommendedAction = normalizeNullableString(payload.recommendedAction);
+    if (!recommendedAction) {
+      throw new Error("AskBob job follow-up is missing a recommended action.");
+    }
+    const rationale = normalizeNullableString(payload.rationale);
+    if (!rationale) {
+      throw new Error("AskBob job follow-up is missing a rationale.");
+    }
+
+    const rawSteps = normalizeFollowupSteps(payload.steps);
+    const { items: steps, truncatedCount } = limitArray(rawSteps, MAX_FOLLOWUP_STEPS);
+    if (truncatedCount > 0) {
+      console.log("[askbob-job-followup-truncated]", {
+        workspaceId: context.workspaceId,
+        userId: context.userId,
+        jobId: context.jobId ?? null,
+        stepsBefore: rawSteps.length,
+        stepsAfter: steps.length,
+      });
+    }
+
+    const shouldSendMessage = parseBooleanFlag(payload.shouldSendMessage);
+    const shouldScheduleVisit = parseBooleanFlag(payload.shouldScheduleVisit);
+    const shouldCall = parseBooleanFlag(payload.shouldCall);
+    const shouldWait = parseBooleanFlag(payload.shouldWait);
+    const suggestedChannelRaw = normalizeNullableString(payload.suggestedChannel);
+    const suggestedChannel =
+      suggestedChannelRaw === "sms" ||
+      suggestedChannelRaw === "email" ||
+      suggestedChannelRaw === "phone"
+        ? suggestedChannelRaw
+        : undefined;
+    const suggestedDelayDays = normalizeNumber(payload.suggestedDelayDays);
+    const riskNotes = normalizeNullableString(payload.riskNotes);
+
+    const latencyMs = Date.now() - modelRequestStart;
+    console.log("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: true,
+      task: "job.followup",
+    });
+
+    const result: AskBobJobFollowupResult = {
+      recommendedAction,
+      rationale,
+      steps,
+      shouldSendMessage,
+      shouldScheduleVisit,
+      shouldCall,
+      shouldWait,
+      suggestedChannel,
+      suggestedDelayDays,
+      riskNotes,
+      modelLatencyMs: latencyMs,
+      rawModelOutput: typeof messageContent === "string" ? messageContent.trim() : null,
+    };
+
+    console.log("[askbob-job-followup-success]", {
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      jobId: context.jobId ?? null,
+      modelLatencyMs: latencyMs,
+      stepsCount: steps.length,
+      shouldSendMessage,
+      shouldScheduleVisit,
+      shouldCall,
+      shouldWait,
+    });
+
+    return {
+      result,
+      latencyMs,
+      modelName,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - modelRequestStart;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: false,
+      task: "job.followup",
+      errorMessage: truncatedError,
+    });
+
+    console.error("[askbob-job-followup-failure]", {
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      jobId: context.jobId ?? null,
       errorMessage: truncatedError,
     });
 
@@ -1165,4 +1356,41 @@ function normalizeNumber(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function normalizeFollowupSteps(value: unknown): { label: string; detail?: string | null }[] {
+  if (!Array.isArray(value)) return [];
+
+  const normalized = value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const record = entry as Record<string, unknown>;
+      const label =
+        normalizeNullableString(record.label ?? record.action ?? record.recommendedAction) ??
+        null;
+      if (!label) return null;
+      const detail = normalizeNullableString(
+        record.detail ?? record.description ?? record.notes,
+      );
+      const step: { label: string; detail?: string | null } = { label };
+      if (detail) {
+        step.detail = detail;
+      }
+      return step;
+    })
+    .filter(
+      (entry): entry is { label: string; detail?: string | null } => Boolean(entry),
+    );
+
+  return normalized;
+}
+
+function parseBooleanFlag(value: unknown): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    return value.toLowerCase() === "true";
+  }
+  return false;
 }

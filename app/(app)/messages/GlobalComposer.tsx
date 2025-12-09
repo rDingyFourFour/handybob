@@ -67,6 +67,8 @@ export default function GlobalComposer({
   const hasInitialBody = initialBodyValue.length > 0;
   const prefillUsed = Boolean(initialCustomerForState || initialJobForState || hasInitialBody);
   const prefillLoggedRef = useRef(false);
+  const showAskBobFollowupHint =
+    initialOrigin === "askbob-followup" && initialBodyValue.length > 0;
 
   useEffect(() => {
     if (!prefillUsed || prefillLoggedRef.current) {
@@ -246,6 +248,11 @@ export default function GlobalComposer({
                 className="w-full rounded-2xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-slate-600"
                 rows={4}
               />
+              {showAskBobFollowupHint && (
+                <p className="text-xs text-slate-400">
+                  This draft came from AskBob’s follow-up recommendation for this job.
+                </p>
+              )}
             </div>
             {errorMessage && <p className="text-xs text-rose-400">{errorMessage}</p>}
             <div className="flex items-center justify-between gap-3">

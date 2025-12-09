@@ -3,15 +3,24 @@
 import { ReactNode } from "react";
 
 import HbCard from "@/components/ui/hb-card";
+import JobAskBobHud from "@/components/askbob/JobAskBobHud";
 
 type JobAskBobContainerProps = {
   workspaceId: string;
   jobId: string;
   customerId?: string | null;
+  askBobLastTaskLabel?: string | null;
+  askBobLastUsedAtDisplay?: string | null;
+  askBobLastUsedAtIso?: string | null;
+  askBobRunsSummary?: string | null;
   children?: ReactNode;
 };
 
 export default function JobAskBobContainer({
+  askBobLastTaskLabel,
+  askBobLastUsedAtDisplay,
+  askBobLastUsedAtIso,
+  askBobRunsSummary,
   children,
 }: JobAskBobContainerProps) {
   return (
@@ -25,6 +34,12 @@ export default function JobAskBobContainer({
         <p className="text-xs text-slate-500">
           Suggestions are AI-generated, editable, and only saved when you choose to persist them.
         </p>
+        <JobAskBobHud
+          lastTaskLabel={askBobLastTaskLabel}
+          lastUsedAtDisplay={askBobLastUsedAtDisplay}
+          lastUsedAtIso={askBobLastUsedAtIso}
+          runsSummary={askBobRunsSummary}
+        />
       </div>
       <div className="space-y-5">{children}</div>
     </HbCard>

@@ -9,7 +9,8 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
-import { formatCurrency } from "@/utils/timeline/formatters";
+import { formatCurrency, formatFriendlyDateTime } from "@/utils/timeline/formatters";
+import { getJobAskBobHudSummary } from "@/lib/domain/askbob/service";
 import JobMaterialsPanel from "./JobMaterialsPanel";
 import JobCallScriptPanel, { type PhoneMessageSummary } from "./JobCallScriptPanel";
 import {
@@ -21,6 +22,7 @@ import JobAskBobPanel from "@/components/askbob/JobAskBobPanel";
 import AskBobQuotePanel from "@/components/askbob/AskBobQuotePanel";
 import AskBobMaterialsPanel from "@/components/askbob/AskBobMaterialsPanel";
 import JobAskBobContainer from "@/components/askbob/JobAskBobContainer";
+import JobAskBobFollowupPanel from "@/components/askbob/JobAskBobFollowupPanel";
 
 type JobRecord = {
   id: string;
@@ -218,6 +220,44 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
 
   if (!job) {
     return fallbackCard("Job not found", "We couldn’t find that job. It may have been deleted.");
+  }
+
+  let askBobHudSummary: {
+    lastTaskLabel: string | null;
+    lastUsedAt: string | null;
+    totalRunsCount: number;
+    tasksSeen: string[];
+  } = {
+    lastTaskLabel: null,
+    lastUsedAt: null,
+    totalRunsCount: 0,
+    tasksSeen: [],
+  };
+  try {
+    askBobHudSummary = await getJobAskBobHudSummary(supabase, {
+      workspaceId: workspace.id,
+      jobId: job.id,
+    });
+  } catch (error) {
+    console.error("[job-detail] Failed to load AskBob HUD summary", error);
+  }
+  const askBobLastTaskLabel = askBobHudSummary.lastTaskLabel;
+  const askBobLastUsedAtIso = askBobHudSummary.lastUsedAt;
+  const friendlyDate =
+    askBobLastUsedAtIso ? formatFriendlyDateTime(askBobLastUsedAtIso, "") : null;
+  const askBobLastUsedAtDisplay = friendlyDate?.trim() ? friendlyDate : null;
+  let askBobRunsSummary: string | null = null;
+  if (askBobHudSummary.totalRunsCount > 1) {
+    const baseText = `${askBobHudSummary.totalRunsCount} AskBob runs`;
+    const tasks = askBobHudSummary.tasksSeen;
+    if (tasks.length > 0) {
+      const visible = tasks.slice(0, 3);
+      const remainder = tasks.length - visible.length;
+      const suffix = remainder > 0 ? `, +${remainder} more` : "";
+      askBobRunsSummary = `${baseText} (${visible.join(", ")}${suffix})`;
+    } else {
+      askBobRunsSummary = baseText;
+    }
   }
 
   let upcomingAppointments: JobAppointmentRow[] = [];
@@ -495,7 +535,15 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           <p className="text-sm text-slate-300">{job.description_raw ?? "No description provided."}</p>
         </div>
       </HbCard>
-      <JobAskBobContainer workspaceId={workspace.id} jobId={job.id} customerId={customerId ?? undefined}>
+        <JobAskBobContainer
+          workspaceId={workspace.id}
+          jobId={job.id}
+          customerId={customerId ?? undefined}
+          askBobLastTaskLabel={askBobLastTaskLabel}
+          askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
+          askBobLastUsedAtIso={askBobLastUsedAtIso}
+          askBobRunsSummary={askBobRunsSummary}
+        >
         <section className="space-y-3">
           <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
             1. Diagnose and document the job
@@ -517,6 +565,16 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
             3. Suggest materials
           </p>
           <AskBobMaterialsPanel
+            workspaceId={workspace.id}
+            jobId={job.id}
+            customerId={job.customer_id ?? null}
+          />
+        </section>
+        <section className="space-y-3">
+          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+            4. AskBob follow-up recommendation
+          </p>
+          <JobAskBobFollowupPanel
             workspaceId={workspace.id}
             jobId={job.id}
             customerId={job.customer_id ?? null}

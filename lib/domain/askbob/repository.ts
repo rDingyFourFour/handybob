@@ -4,6 +4,7 @@ import {
   AskBobSession,
   AskBobResponse,
   AskBobResponseData,
+  AskBobTask,
 } from "./types";
 
 type DbClient = SupabaseClient<Database>;
@@ -88,4 +89,67 @@ export async function createAskBobResponse(
   };
 
   return response;
+}
+
+type AskBobJobActivityRow = {
+  created_at: string;
+};
+
+export interface AskBobJobActivitySummary {
+  task: AskBobTask;
+  createdAt: string;
+  totalRunsCount: number;
+  tasksSeen: AskBobTask[];
+}
+
+export async function getLastAskBobActivityForJob(
+  supabase: DbClient,
+  params: { workspaceId: string; jobId: string }
+): Promise<AskBobJobActivitySummary | null> {
+  const { data: latest, error: latestError } = await supabase
+    .from<AskBobJobActivityRow>("askbob_sessions")
+    .select("created_at")
+    .eq("workspace_id", params.workspaceId)
+    .eq("job_id", params.jobId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { error: countError, count } = await supabase
+    .from("askbob_sessions")
+    .select("id", { count: "exact" })
+    .eq("workspace_id", params.workspaceId)
+    .eq("job_id", params.jobId)
+    .maybeSingle<{ id: string }>();
+
+  const totalRunsCount = count ?? 0;
+
+  if (latestError && !latest) {
+    console.error("[askbob-repository] Failed to load last activity", {
+      workspaceId: params.workspaceId,
+      jobId: params.jobId,
+      errorMessage: latestError.message,
+    });
+    return null;
+  }
+
+  if (countError) {
+    console.error("[askbob-repository] Failed to count AskBob sessions", {
+      workspaceId: params.workspaceId,
+      jobId: params.jobId,
+      errorMessage: countError.message,
+    });
+  }
+
+  const createdAt = latest?.created_at ?? null;
+  if (!createdAt) {
+    return null;
+  }
+
+  return {
+    task: "job.diagnose",
+    createdAt,
+    totalRunsCount,
+    tasksSeen: totalRunsCount > 0 ? ["job.diagnose"] : [],
+  };
 }

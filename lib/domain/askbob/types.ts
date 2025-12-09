@@ -7,7 +7,9 @@ export type AskBobTask =
   | "message.draft"
   | "quote.generate"
   | "materials.generate"
-  | "quote.explain";
+  | "quote.explain"
+  | "materials.explain"
+  | "job.followup";
 
 export type AskBobSection = "steps" | "materials" | "safety" | "costTime" | "escalation";
 
@@ -237,6 +239,38 @@ export interface AskBobMaterialsGenerateInput {
   extraDetails?: string | null;
 }
 
+export interface AskBobJobFollowupInput {
+  task: "job.followup";
+  context: AskBobTaskContext;
+  jobStatus: string;
+  hasScheduledVisit: boolean;
+  lastMessageAt?: string | null;
+  lastCallAt?: string | null;
+  lastQuoteAt?: string | null;
+  lastInvoiceDueAt?: string | null;
+  followupDueStatus: "none" | "due" | "overdue" | "upcoming";
+  followupDueLabel: string;
+  recommendedDelayDays?: number | null;
+  hasOpenQuote: boolean;
+  hasUnpaidInvoice: boolean;
+  notesSummary?: string | null;
+}
+
+export interface AskBobJobFollowupResult {
+  recommendedAction: string;
+  rationale: string;
+  steps: { label: string; detail?: string | null }[];
+  shouldSendMessage: boolean;
+  shouldScheduleVisit: boolean;
+  shouldCall: boolean;
+  shouldWait: boolean;
+  suggestedChannel?: "sms" | "email" | "phone" | null;
+  suggestedDelayDays?: number | null;
+  riskNotes?: string | null;
+  modelLatencyMs: number;
+  rawModelOutput?: unknown;
+}
+
 export interface AskBobMaterialItemResult {
   name: string;
   sku?: string | null;
@@ -261,14 +295,16 @@ export type AskBobTaskInput =
   | AskBobQuoteGenerateInput
   | AskBobMaterialsGenerateInput
   | AskBobQuoteExplainInput
-  | AskBobMaterialsExplainInput;
+  | AskBobMaterialsExplainInput
+  | AskBobJobFollowupInput;
 export type AskBobTaskResult =
   | AskBobJobDiagnoseResult
   | AskBobMessageDraftResult
   | AskBobQuoteGenerateResult
   | AskBobMaterialsGenerateResult
   | AskBobQuoteExplainResult
-  | AskBobMaterialsExplainResult;
+  | AskBobMaterialsExplainResult
+  | AskBobJobFollowupResult;
 
 // Zod schemas for validation
 

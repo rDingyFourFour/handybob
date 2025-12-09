@@ -44,3 +44,41 @@ export function sortTimelineEntries<T extends { timestamp?: string | null }>(ent
     return bTime - aTime;
   });
 }
+
+export function formatFriendlyDateTime(date: string | null | undefined, fallback = "") {
+  if (!date) {
+    return fallback;
+  }
+
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) {
+    return fallback;
+  }
+
+  const now = new Date();
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const normalizeDay = (input: Date) => {
+    const clone = new Date(input);
+    clone.setHours(0, 0, 0, 0);
+    return clone.getTime();
+  };
+
+  const dayDiff = Math.floor((normalizeDay(now) - normalizeDay(parsed)) / msPerDay);
+  const timeLabel = parsed.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  if (dayDiff === 0) {
+    return `Today, ${timeLabel}`;
+  }
+  if (dayDiff === 1) {
+    return `Yesterday, ${timeLabel}`;
+  }
+
+  const dateLabel = parsed.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  return `${dateLabel}, ${timeLabel}`;
+}
