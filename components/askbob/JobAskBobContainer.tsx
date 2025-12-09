@@ -12,24 +12,36 @@ import JobAskBobPanel from "@/components/askbob/JobAskBobPanel";
 import type { AskBobResponseDTO } from "@/lib/domain/askbob/types";
 
 function buildDiagnosisSummary(response: AskBobResponseDTO): string | null {
-  const sections = response.sections
-    .map((section) => {
-      const items = section.items
-        .map((item) => item.trim())
-        .filter(Boolean)
-        .slice(0, 2);
-      if (!items.length) {
-        return null;
-      }
-      return `${section.title}: ${items.join("; ")}`;
-    })
-    .filter(Boolean);
+  const normalizeItems = (sectionItems: string[]) =>
+    sectionItems
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 2);
 
-  if (!sections.length) {
+  const stepsSection =
+    response.sections.find((section) => section.type === "steps" && section.items.some(Boolean)) ??
+    response.sections.find((section) => section.items.some(Boolean));
+  const stepItems = stepsSection ? normalizeItems(stepsSection.items) : [];
+  const majorScope = stepItems.length ? `${stepsSection?.title ?? "Diagnosis"}: ${stepItems.join("; ")}` : null;
+
+  const safetySection = response.sections.find(
+    (section) => section.type === "safety" && section.items.some(Boolean)
+  );
+  const safetyItem = safetySection?.items.map((item) => item.trim()).find(Boolean) ?? null;
+
+  const summaryParts = [];
+  if (majorScope) {
+    summaryParts.push(majorScope);
+  }
+  if (safetyItem) {
+    summaryParts.push(`Safety note: ${safetyItem}`);
+  }
+
+  if (!summaryParts.length) {
     return null;
   }
 
-  return sections.slice(0, 2).join(" · ");
+  return summaryParts.join(" ");
 }
 
 type JobAskBobContainerProps = {
@@ -59,9 +71,13 @@ export default function JobAskBobContainer({
     ? "Start with the job description below. Add what you’re seeing on-site (symptoms, constraints, notes from the customer), then AskBob will suggest a step-by-step plan you can adjust."
     : "Describe what you’re seeing on-site (symptoms, constraints, notes from the customer), then AskBob will suggest a step-by-step plan you can adjust.";
   const [diagnosisSummary, setDiagnosisSummary] = useState<string | null>(null);
+  const [materialsSummary, setMaterialsSummary] = useState<string | null>(null);
 
   const handleDiagnoseComplete = (response: AskBobResponseDTO) => {
     setDiagnosisSummary(buildDiagnosisSummary(response));
+  };
+  const handleMaterialsSummaryChange = (summary: string | null) => {
+    setMaterialsSummary(summary);
   };
 
   const scrollToSection = (sectionId: string) => {
@@ -119,6 +135,8 @@ export default function JobAskBobContainer({
             customerId={customerId ?? null}
             onMaterialsSuccess={() => scrollToSection("askbob-quote")}
             diagnosisSummary={diagnosisSummary}
+            onMaterialsSummaryChange={handleMaterialsSummaryChange}
+            jobDescription={jobDescription ?? null}
           />
         </AskBobSection>
         <AskBobSection
@@ -131,6 +149,8 @@ export default function JobAskBobContainer({
             jobId={jobId}
             customerId={customerId ?? null}
             onQuoteSuccess={() => scrollToSection("askbob-followup")}
+            diagnosisSummary={diagnosisSummary}
+            materialsSummary={materialsSummary}
           />
         </AskBobSection>
         <AskBobSection

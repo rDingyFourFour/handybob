@@ -55,6 +55,8 @@ const QUOTE_GENERATE_INSTRUCTIONS = [
 
 const MATERIALS_GENERATE_INSTRUCTIONS = [
   "You are AskBob, the HandyBob materials expert. Generate a structured materials checklist that matches the technician prompt.",
+  "Base the materials list primarily on the job description when it is provided; treat technician notes and diagnosis summaries as supporting context and avoid inventing materials unrelated to the described work.",
+  "When the job description is missing, rely on the technician notes and diagnosis context you do have.",
   SAFETY_GUARDRAILS,
   COST_GUARDRAILS,
   SCOPE_LIMIT_GUARDRAILS,

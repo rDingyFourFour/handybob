@@ -37,7 +37,8 @@ const materialsGeneratePayloadSchema = z.object({
       }
       const trimmed = value.trim();
       return trimmed.length ? trimmed : null;
-    }),
+  }),
+  hasDiagnosisContextForMaterials: z.boolean().optional(),
 });
 
 export type MaterialsGeneratePayload = z.infer<typeof materialsGeneratePayloadSchema>;
@@ -80,6 +81,8 @@ export async function runAskBobMaterialsGenerateAction(
     jobId: job.id,
     promptLength: trimmedPrompt.length,
     hasExtraDetails: Boolean(trimmedExtraDetails),
+    hasDiagnosisContextForMaterials: Boolean(parsedPayload.hasDiagnosisContextForMaterials),
+    hasJobDescriptionContextForMaterials: Boolean(parsedPayload.hasJobDescriptionContextForMaterials),
   });
 
   const taskInput: AskBobMaterialsGenerateInput = {

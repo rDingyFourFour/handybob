@@ -15,12 +15,40 @@ type AskBobQuotePanelProps = {
   jobId: string;
   customerId?: string | null;
   onQuoteSuccess?: () => void;
+  diagnosisSummary?: string | null;
+  materialsSummary?: string | null;
 };
 
 const DEFAULT_PROMPT = "Generate a standard quote for this job.";
 
+function buildQuoteExtraDetails(
+  quoteNotes: string,
+  diagnosisSummary?: string | null,
+  materialsSummary?: string | null,
+): string | null {
+  const parts: string[] = [];
+
+  if (quoteNotes.trim()) {
+    parts.push(`Quote notes: ${quoteNotes.trim()}`);
+  }
+
+  if (diagnosisSummary?.trim()) {
+    parts.push(`Diagnosis summary: ${diagnosisSummary.trim()}`);
+  }
+
+  if (materialsSummary?.trim()) {
+    parts.push(`Materials summary: ${materialsSummary.trim()}`);
+  }
+
+  if (!parts.length) {
+    return null;
+  }
+
+  return parts.join("\n\n");
+}
+
 export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
-  const { jobId, onQuoteSuccess } = props;
+  const { jobId, onQuoteSuccess, diagnosisSummary, materialsSummary } = props;
   const router = useRouter();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,6 +56,8 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
+
+  const hasContext = Boolean(diagnosisSummary?.trim() || materialsSummary?.trim());
 
   const handleGenerate = async () => {
     const trimmedPrompt = prompt.trim();
@@ -39,10 +69,13 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     setError(null);
     setIsLoading(true);
   try {
+    const extraDetails = buildQuoteExtraDetails(trimmedPrompt, diagnosisSummary, materialsSummary);
     const result = await runAskBobQuoteGenerateAction({
       jobId,
       prompt: trimmedPrompt,
-      extraDetails: "Use homeowner-friendly language with realistic mid-range pricing.",
+      extraDetails,
+      hasDiagnosisContext: Boolean(diagnosisSummary?.trim()),
+      hasMaterialsContext: Boolean(materialsSummary?.trim()),
     });
 
     setSuggestion(result.suggestion);
@@ -90,6 +123,11 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
           After you’ve confirmed the diagnosis and reviewed the Step 2 materials list, let AskBob turn that scope
           into a customer-ready quote.
         </p>
+        {hasContext && (
+          <p className="text-xs text-slate-400">
+            AskBob will also factor your diagnosis and materials summaries from Steps 1 and 2 when drafting this quote.
+          </p>
+        )}
       </div>
       <div className="space-y-2">
         <label htmlFor="askbob-quote-prompt" className="text-xs uppercase tracking-[0.3em] text-slate-500">

@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import { SmartQuoteSuggestion } from "@/lib/domain/quotes/askbob-adapter";
-import { applyAskBobMaterialsQuoteAction } from "@/app/(app)/quotes/askbob-materials-actions";
 import { runAskBobMaterialsGenerateAction } from "@/app/(app)/askbob/materials-actions";
 
 type AskBobMaterialsPanelProps = {
@@ -15,19 +13,66 @@ type AskBobMaterialsPanelProps = {
   jobId: string;
   customerId?: string | null;
   diagnosisSummary?: string | null;
+  jobDescription?: string | null;
+  onMaterialsSummaryChange?: (summary: string | null) => void;
   onMaterialsSuccess?: () => void;
 };
 
-function buildMaterialsExtraDetails(
-  diagnosisSummary?: string | null,
-  extraDetails?: string,
-): string | null {
-  const parts: string[] = [];
-  if (diagnosisSummary?.trim()) {
-    parts.push(`Technician diagnosis summary (from Step 1): ${diagnosisSummary.trim()}`);
+function summarizeMaterialsSuggestion(suggestion: SmartQuoteSuggestion | null): string | null {
+  if (!suggestion) {
+    return null;
   }
-  if (extraDetails?.trim()) {
-    parts.push(extraDetails.trim());
+
+  const materialsCount = suggestion.materials?.length ?? 0;
+  const baseSentence =
+    materialsCount > 0
+      ? `AskBob suggested ${materialsCount} material${materialsCount === 1 ? "" : "s"} for this job.`
+      : "AskBob suggested no specific materials for this job.";
+
+  const notes = suggestion.notes?.trim();
+  if (notes) {
+    const firstSentence = notes.split(".")[0].trim();
+    if (firstSentence) {
+      return `${baseSentence} Notes: ${firstSentence}.`;
+    }
+  }
+
+  return baseSentence;
+}
+
+type MaterialsExtraDetailsInput = {
+  technicianNotes?: string | null;
+  diagnosisSummary?: string | null;
+  jobDescription?: string | null;
+};
+
+function buildJobDescriptionSnippet(description?: string | null): string | null {
+  if (!description) {
+    return null;
+  }
+  const trimmed = description.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const singleLine = trimmed.replace(/\s+/g, " ");
+  return singleLine.length > 240 ? `${singleLine.slice(0, 240)}...` : singleLine;
+}
+
+function buildMaterialsExtraDetails({
+  technicianNotes,
+  diagnosisSummary,
+  jobDescription,
+}: MaterialsExtraDetailsInput): string | null {
+  const parts: string[] = [];
+  const jobContext = buildJobDescriptionSnippet(jobDescription);
+  if (jobContext) {
+    parts.push(`Job description: ${jobContext}`);
+  }
+  if (technicianNotes?.trim()) {
+    parts.push(`Technician notes about materials: ${technicianNotes.trim()}`);
+  }
+  if (diagnosisSummary?.trim()) {
+    parts.push(`Diagnosis summary from Step 1: ${diagnosisSummary.trim()}`);
   }
   if (!parts.length) {
     return null;
@@ -38,15 +83,12 @@ function buildMaterialsExtraDetails(
 const DEFAULT_PROMPT = "List the materials needed for this job.";
 
 export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
-  const { jobId, onMaterialsSuccess, diagnosisSummary } = props;
+  const { jobId, onMaterialsSuccess, diagnosisSummary, jobDescription, onMaterialsSummaryChange } = props;
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [extraDetails, setExtraDetails] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
-  const [isApplying, setIsApplying] = useState(false);
-  const [applyError, setApplyError] = useState<string | null>(null);
-  const router = useRouter();
 
   const handleGenerate = async () => {
     const trimmedPrompt = prompt.trim();
@@ -55,48 +97,34 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
       return;
     }
 
+    onMaterialsSummaryChange?.(null);
+
     setIsLoading(true);
     setError(null);
-    setApplyError(null);
     try {
+      const trimmedExtraDetails = extraDetails.trim();
+      const extraDetailsPayload = buildMaterialsExtraDetails({
+        technicianNotes: trimmedExtraDetails || null,
+        diagnosisSummary,
+        jobDescription,
+      });
       const result = await runAskBobMaterialsGenerateAction({
         jobId,
         prompt: trimmedPrompt,
-        extraDetails: buildMaterialsExtraDetails(diagnosisSummary, extraDetails.trim()),
+        extraDetails: extraDetailsPayload,
+        hasDiagnosisContextForMaterials: Boolean(diagnosisSummary?.trim()),
+        hasJobDescriptionContextForMaterials: Boolean(jobDescription?.trim()),
       });
 
       setSuggestion(result.suggestion);
+      const summary = summarizeMaterialsSuggestion(result.suggestion);
+      onMaterialsSummaryChange?.(summary);
       onMaterialsSuccess?.();
     } catch (err) {
       console.error("[askbob-materials-ui] action failure", err);
       setError("AskBob couldn’t generate materials. Please try again.");
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleApplySuggestion = async () => {
-    if (!suggestion) {
-      return;
-    }
-    setApplyError(null);
-    setIsApplying(true);
-    try {
-      const result = await applyAskBobMaterialsQuoteAction({
-        jobId,
-        suggestion,
-      });
-      if (!result.ok) {
-        console.error("[askbob-materials-ui] apply action failed", result.error);
-        setApplyError("Couldn’t create a materials quote from this suggestion. Please try again.");
-        return;
-      }
-      void router.push(`/quotes/${result.materialsQuoteId}`);
-    } catch (err) {
-      console.error("[askbob-materials-ui] apply action error", err);
-      setApplyError("Couldn’t create a materials quote from this suggestion. Please try again.");
-    } finally {
-      setIsApplying(false);
     }
   };
 
@@ -120,7 +148,7 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
           Use this after you’ve outlined the scope so AskBob can recommend materials before you save anything.
         </p>
         <p className="text-xs text-slate-400">
-          AskBob also sees the Step 1 diagnosis summary (when available) alongside your notes to shape the list.
+          AskBob bases the materials list on the job description first; add notes if anything unusual comes up, and the diagnosis summary stays in play too.
         </p>
       </div>
 
@@ -191,19 +219,9 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
               <p className="text-sm text-slate-300">{suggestion.notes}</p>
             </div>
           )}
-          <div className="flex flex-col gap-2">
-            <HbButton
-              variant="secondary"
-              size="sm"
-              onClick={handleApplySuggestion}
-              disabled={isApplying}
-            >
-              {isApplying
-                ? "Creating materials quote…"
-                : "Create materials quote from AskBob suggestion"}
-            </HbButton>
-            {applyError && <p className="text-sm text-rose-300">{applyError}</p>}
-          </div>
+          <p className="text-xs text-slate-400">
+            Copy or reference these materials when you build your quote or materials list as needed.
+          </p>
         </div>
       )}
     </HbCard>

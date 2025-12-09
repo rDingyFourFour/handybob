@@ -14,6 +14,8 @@ type QuoteGeneratePayload = {
   jobId: string;
   prompt: string;
   extraDetails?: string | null;
+  hasDiagnosisContext?: boolean;
+  hasMaterialsContext?: boolean;
 };
 
 export type QuoteGenerateActionResult = {
@@ -69,6 +71,8 @@ export async function runAskBobQuoteGenerateAction(
     jobId: job.id,
     promptLength: trimmedPrompt.length,
     hasExtraDetails: Boolean(trimmedExtraDetails),
+    hasDiagnosisContext: Boolean(payload.hasDiagnosisContext),
+    hasMaterialsContext: Boolean(payload.hasMaterialsContext),
   });
 
   const taskInput: AskBobQuoteGenerateInput = {
