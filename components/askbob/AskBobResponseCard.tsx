@@ -49,6 +49,9 @@ export default function AskBobResponseCard({
       <div className="flex flex-col gap-1">
         <p className="text-sm font-semibold text-slate-100">AskBob suggestions</p>
         <p className="text-xs text-slate-400">Generated at {formattedDate}</p>
+        <p className="text-xs text-slate-400">
+          AskBob suggestions are starting points. Always review and edit before you save or send.
+        </p>
       </div>
 
       {(jobId || canDraftMessage) && (

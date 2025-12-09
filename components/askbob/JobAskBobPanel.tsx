@@ -41,10 +41,11 @@ export default function JobAskBobPanel({
     <HbCard className="space-y-4">
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
-        <h2 className="hb-heading-3 text-xl font-semibold">Job assistant</h2>
+        <h2 className="hb-heading-3 text-xl font-semibold">Step 1 · Diagnose the job</h2>
         <p className="text-sm text-slate-400">
-          Start here to understand the problem before quoting, ordering materials, or following up with the customer.
+          AskBob uses the job title, description, and your notes to outline how a technician might approach this job safely. Review and adjust these steps based on what you see on site.
         </p>
+        <p className="text-xs text-slate-500">These steps are suggestions, not a script—edit them freely.</p>
       </div>
       <AskBobForm
         workspaceId={workspaceId}

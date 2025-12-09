@@ -69,10 +69,7 @@ export default function JobAskBobContainer({
 }: JobAskBobContainerProps) {
   const promptSeed = jobDescription ?? "";
   const effectiveJobTitle = jobTitle?.trim() || "";
-  const hasJobDescription = Boolean(jobDescription?.trim());
-  const diagnoseDescription = hasJobDescription
-    ? "AskBob starts with the job description below. Add what you’re seeing on-site (symptoms, constraints, notes from the customer) so it can deliver a diagnostic plan before you move to materials or quoting."
-    : "Describe what you’re seeing on-site (symptoms, constraints, notes from the customer). AskBob will suggest a diagnostic plan you can adjust before tackling materials or a quote.";
+  const flowReminder = "Work through these steps in order, editing anything that doesn’t match what you see on site.";
   const [diagnosisSummary, setDiagnosisSummary] = useState<string | null>(null);
   const [materialsSummary, setMaterialsSummary] = useState<string | null>(null);
 
@@ -98,13 +95,11 @@ export default function JobAskBobContainer({
     <HbCard className="space-y-6">
       <div className="space-y-1">
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob Job Assistant</p>
-        <h2 className="hb-heading-3 text-xl font-semibold">AskBob Job Assistant</h2>
+        <h2 className="hb-heading-3 text-xl font-semibold">AskBob job assistant for this job</h2>
         <p className="text-sm text-slate-300">
-          AskBob is your AI job assistant for diagnosing this job, planning materials, and drafting a quote. Start here to run AI on the job before you move downstream.
+          AskBob uses this job’s title and description to help you diagnose issues, list materials, draft quotes, and plan follow-ups. Everything is approximate and must be reviewed by a technician before it’s shared with a customer.
         </p>
-        <p className="text-xs text-slate-500">
-          Suggestions are AI-generated, editable, and only saved when you choose to persist them.
-        </p>
+        <p className="text-xs text-slate-500">{flowReminder}</p>
         <JobAskBobHud
           lastTaskLabel={askBobLastTaskLabel}
           lastUsedAtDisplay={askBobLastUsedAtDisplay}
@@ -113,11 +108,7 @@ export default function JobAskBobContainer({
         />
       </div>
       <div className="space-y-8">
-        <AskBobSection
-          id="askbob-diagnose"
-          title="Step 1 – Diagnose this job"
-          description={diagnoseDescription}
-        >
+        <AskBobSection id="askbob-diagnose">
           <JobAskBobPanel
             workspaceId={workspaceId}
             jobId={jobId}
@@ -128,11 +119,7 @@ export default function JobAskBobContainer({
             onDiagnoseComplete={handleDiagnoseComplete}
           />
         </AskBobSection>
-        <AskBobSection
-          id="askbob-materials"
-          title="Step 2 – List materials for this job"
-          description="Use the diagnosis to ask AskBob for the materials you’ll need before you finalize anything."
-        >
+        <AskBobSection id="askbob-materials">
           <AskBobMaterialsPanel
             workspaceId={workspaceId}
             jobId={jobId}
@@ -144,11 +131,7 @@ export default function JobAskBobContainer({
             jobTitle={effectiveJobTitle}
           />
         </AskBobSection>
-        <AskBobSection
-          id="askbob-quote"
-          title="Step 3 – Generate a quote"
-          description="Combine your diagnosis with the materials list from Step 2 so AskBob can build a customer-ready quote."
-        >
+        <AskBobSection id="askbob-quote">
           <AskBobQuotePanel
             workspaceId={workspaceId}
             jobId={jobId}
@@ -160,11 +143,7 @@ export default function JobAskBobContainer({
             jobTitle={effectiveJobTitle}
           />
         </AskBobSection>
-        <AskBobSection
-          id="askbob-followup"
-          title="Step 4 – Follow up with the customer"
-          description="AskBob can help you decide when and how to follow up."
-        >
+        <AskBobSection id="askbob-followup">
           <JobAskBobFollowupPanel
             workspaceId={workspaceId}
             jobId={jobId}

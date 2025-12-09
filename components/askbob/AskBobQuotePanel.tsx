@@ -85,27 +85,7 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
 
   const normalizedJobTitle = jobTitle?.trim() ?? "";
-  const hasJobDescription = Boolean(jobDescription?.trim());
-  const hasMaterials = Boolean(materialsSummary?.trim());
-  const hasDiagnosis = Boolean(diagnosisSummary?.trim());
-  const contextText = (() => {
-    if (hasJobDescription) {
-      const extras = [hasMaterials ? "the Step 2 materials checklist" : null, hasDiagnosis ? "the Step 1 diagnosis" : null]
-        .filter(Boolean)
-        .join(hasMaterials && hasDiagnosis ? " and " : "");
-      if (extras) {
-        return `AskBob will base the quote on the job description and use ${extras} as supporting context.`;
-      }
-      return "AskBob will base the quote on the job description.";
-    }
-    if (hasMaterials || hasDiagnosis) {
-      const descriptors = [hasMaterials ? "the materials checklist from Step 2" : null, hasDiagnosis ? "the diagnosis from Step 1" : null]
-        .filter(Boolean)
-        .join(hasMaterials && hasDiagnosis ? " and " : "");
-      return `AskBob will use ${descriptors} as context for this quote.`;
-    }
-    return "AskBob will use the information you provide here as the primary context.";
-  })();
+  const contextText = "Use this as a starting point and fine-tune it to match your actual visit.";
 
   const handleGenerate = async () => {
     const trimmedPrompt = prompt.trim();
@@ -176,10 +156,10 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     <HbCard className="space-y-4">
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob quote</p>
-        <h2 className="hb-heading-3 text-xl font-semibold">Generate quote with AskBob</h2>
+        <h2 className="hb-heading-3 text-xl font-semibold">Step 3 · Draft a quote</h2>
         <p className="text-sm text-slate-400">
-          After you’ve confirmed the diagnosis and reviewed the Step 2 materials list, let AskBob turn that scope
-          into a customer-ready quote.
+          AskBob drafts a quote using the job title, description, materials checklist, and diagnosis summary. All pricing
+          is approximate—adjust scope, hours, and rates before you send this to a customer.
         </p>
         {normalizedJobTitle && (
           <p className="text-xs text-slate-500">Quote for {normalizedJobTitle}.</p>

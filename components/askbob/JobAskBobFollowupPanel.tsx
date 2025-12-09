@@ -72,12 +72,9 @@ export default function JobAskBobFollowupPanel({
   const followup = result;
   const showComposeCTA = Boolean(followup?.shouldSendMessage && customerId);
   const showDraftCTA = showComposeCTA;
-  const followsDraftChannelSms = followup?.suggestedChannel === "sms";
   const followupDraftHint =
     showDraftCTA && followup
-      ? followsDraftChannelSms
-        ? "AskBob will draft a short SMS you can edit before sending."
-        : "AskBob will draft a follow-up message you can edit before sending."
+      ? "AskBob will prefill an editable follow-up message based on this recommendation."
       : null;
   const followupComposerHref = showComposeCTA
     ? `/messages?${new URLSearchParams({
@@ -158,11 +155,10 @@ export default function JobAskBobFollowupPanel({
     <HbCard className="space-y-4">
       <div className="space-y-1">
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
-        <h2 className="hb-heading-3 text-xl font-semibold">
-          {normalizedJobTitle ? `AskBob: Follow-up guidance for ${normalizedJobTitle}` : "AskBob: What should I do next?"}
-        </h2>
+        <h2 className="hb-heading-3 text-xl font-semibold">Step 4 · Plan the follow-up</h2>
         <p className="text-sm text-slate-300">
-          AskBob analyzes this job’s status and follow-up signals to suggest a next best step after quotes or materials are in place.
+          AskBob looks at this job’s status, quotes, calls, messages, and appointments to suggest a next step. Use this to guide
+          your follow-up, not replace your judgment.
         </p>
       </div>
       <div className="flex flex-col gap-2">
@@ -179,8 +175,11 @@ export default function JobAskBobFollowupPanel({
       {result && (
         <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
           <div className="space-y-1">
-            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Recommended action</p>
+            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Suggested action</p>
             <p className="text-sm font-semibold text-slate-100">{result.recommendedAction}</p>
+            <p className="text-xs text-slate-500">
+              Treat this as a recommendation—adjust it to fit the customer and what you know.
+            </p>
           </div>
           <p className="text-sm text-slate-300">{result.rationale}</p>
           {result.steps.length > 0 && (

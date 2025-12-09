@@ -98,7 +98,6 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
   const normalizedJobTitle = jobTitle?.trim() ?? "";
-  const hasJobTitle = Boolean(normalizedJobTitle);
 
   const handleGenerate = async () => {
     const trimmedPrompt = prompt.trim();
@@ -154,16 +153,10 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
     <HbCard className="space-y-4">
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob materials</p>
-        <h2 className="hb-heading-3 text-xl font-semibold">AskBob materials helper</h2>
+        <h2 className="hb-heading-3 text-xl font-semibold">Step 2 · Build a materials checklist</h2>
         <p className="text-sm text-slate-400">
-          Use this after you’ve outlined the scope so AskBob can recommend materials before you save anything.
+          AskBob suggests a materials checklist using the job title, description, and your notes from Step 1. Use this as a planning list—verify quantities and brands before buying anything.
         </p>
-        <p className="text-xs text-slate-400">
-          AskBob bases the materials list on the job description first; add notes if anything unusual comes up, and the diagnosis summary stays in play too.
-        </p>
-        {hasJobTitle && (
-          <p className="text-xs text-slate-500">Using job {normalizedJobTitle} as context.</p>
-        )}
       </div>
 
       <div className="space-y-2">
@@ -191,9 +184,12 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
           placeholder="Add any notes that help AskBob fine-tune the list."
           aria-label="Extra details for AskBob materials generation"
         />
+        <p className="text-xs text-slate-500">
+          We include a short summary of your diagnosis so the materials match the likely work.
+        </p>
         <div className="flex items-center gap-3">
           <HbButton onClick={handleGenerate} disabled={isLoading} variant="secondary" size="sm">
-            {isLoading ? "Generating AskBob materials…" : "Generate materials with AskBob"}
+            {isLoading ? "Generating AskBob materials…" : "Generate materials list with AskBob"}
           </HbButton>
           <p className="text-xs text-slate-500">
             Suggestions stay in memory and won’t be saved unless you copy them into a materials quote.
