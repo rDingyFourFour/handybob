@@ -69,6 +69,7 @@ export default function JobAskBobContainer({
 }: JobAskBobContainerProps) {
   const promptSeed = jobDescription ?? "";
   const effectiveJobTitle = jobTitle?.trim() || "";
+  const effectiveJobDescription = jobDescription?.trim() || "";
   const flowReminder = "Work through these steps in order, editing anything that doesn’t match what you see on site.";
   const [diagnosisSummary, setDiagnosisSummary] = useState<string | null>(null);
   const [materialsSummary, setMaterialsSummary] = useState<string | null>(null);
@@ -79,6 +80,33 @@ export default function JobAskBobContainer({
   const handleMaterialsSummaryChange = (summary: string | null) => {
     setMaterialsSummary(summary);
   };
+
+  const trimmedDiagnosisSummary = diagnosisSummary?.trim() ?? "";
+  const trimmedMaterialsSummary = materialsSummary?.trim() ?? "";
+  const hasQuoteContextForFollowup = Boolean(askBobLastTaskLabel?.toLowerCase().includes("quote"));
+
+  const contextLabelsStep1: string[] = [];
+  if (effectiveJobTitle) {
+    contextLabelsStep1.push("job title");
+  }
+  if (effectiveJobDescription) {
+    contextLabelsStep1.push("job description");
+  }
+
+  const contextLabelsStep2: string[] = [...contextLabelsStep1];
+  if (trimmedDiagnosisSummary) {
+    contextLabelsStep2.push("AskBob diagnosis");
+  }
+
+  const contextLabelsStep3: string[] = [...contextLabelsStep2];
+  if (trimmedMaterialsSummary) {
+    contextLabelsStep3.push("AskBob materials checklist");
+  }
+
+  const contextLabelsStep4: string[] = [...contextLabelsStep3];
+  if (hasQuoteContextForFollowup) {
+    contextLabelsStep4.push("AskBob quote");
+  }
 
   const scrollToSection = (sectionId: string) => {
     if (typeof document === "undefined") {
@@ -117,6 +145,7 @@ export default function JobAskBobContainer({
             jobTitle={effectiveJobTitle}
             onDiagnoseSuccess={() => scrollToSection("askbob-materials")}
             onDiagnoseComplete={handleDiagnoseComplete}
+            contextLabels={contextLabelsStep1}
           />
         </AskBobSection>
         <AskBobSection id="askbob-materials">
@@ -125,10 +154,11 @@ export default function JobAskBobContainer({
             jobId={jobId}
             customerId={customerId ?? null}
             onMaterialsSuccess={() => scrollToSection("askbob-quote")}
-            diagnosisSummary={diagnosisSummary}
+            diagnosisSummaryForMaterials={diagnosisSummary}
             onMaterialsSummaryChange={handleMaterialsSummaryChange}
             jobDescription={jobDescription ?? null}
             jobTitle={effectiveJobTitle}
+            contextLabels={contextLabelsStep2}
           />
         </AskBobSection>
         <AskBobSection id="askbob-quote">
@@ -137,10 +167,11 @@ export default function JobAskBobContainer({
             jobId={jobId}
             customerId={customerId ?? null}
             onQuoteSuccess={() => scrollToSection("askbob-followup")}
-            diagnosisSummary={diagnosisSummary}
-            materialsSummary={materialsSummary}
+            diagnosisSummaryForQuote={diagnosisSummary}
+            materialsSummaryForQuote={materialsSummary}
             jobDescription={jobDescription ?? null}
             jobTitle={effectiveJobTitle}
+            contextLabels={contextLabelsStep3}
           />
         </AskBobSection>
         <AskBobSection id="askbob-followup">
@@ -149,6 +180,7 @@ export default function JobAskBobContainer({
             jobId={jobId}
             customerId={customerId ?? null}
             jobTitle={effectiveJobTitle}
+            contextLabels={contextLabelsStep4}
           />
         </AskBobSection>
       </div>

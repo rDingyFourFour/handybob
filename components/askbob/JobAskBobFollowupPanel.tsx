@@ -16,6 +16,7 @@ type JobAskBobFollowupPanelProps = {
   jobId: string;
   customerId?: string | null;
   jobTitle?: string | null;
+  contextLabels?: string[];
 };
 
 export default function JobAskBobFollowupPanel({
@@ -23,6 +24,7 @@ export default function JobAskBobFollowupPanel({
   jobId,
   customerId,
   jobTitle,
+  contextLabels,
 }: JobAskBobFollowupPanelProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -31,22 +33,11 @@ export default function JobAskBobFollowupPanel({
   const [isDrafting, setIsDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
   const normalizedJobTitle = jobTitle?.trim() ?? "";
-  const hasCommunicationSignals = Boolean(result?.shouldSendMessage || result?.shouldCall);
-  const hasVisitSignals = Boolean(result?.shouldScheduleVisit);
-  const hasQuoteSignals = Boolean(result?.shouldWait);
-  const contextLabels: string[] = [];
-  if (normalizedJobTitle) {
-    contextLabels.push("Job title");
-  }
-  if (hasCommunicationSignals) {
-    contextLabels.push("Recent messages/calls");
-  }
-  if (hasQuoteSignals) {
-    contextLabels.push("Quotes/invoices");
-  }
-  if (hasVisitSignals) {
-    contextLabels.push("Visits/appointments");
-  }
+  const contextLabelsToShow = contextLabels ?? [];
+  const contextUsedText =
+    contextLabelsToShow.length > 0
+      ? `Context used: ${contextLabelsToShow.join(", ")}`
+      : "Context used: none yet. AskBob will use job and follow-up details from this page.";
 
   const handleRequest = async () => {
     setErrorMessage(null);
@@ -175,9 +166,7 @@ export default function JobAskBobFollowupPanel({
           AskBob looks at this job’s status, quotes, calls, messages, and appointments to suggest a next step. Use this to guide
           your follow-up, not replace your judgment.
         </p>
-        {contextLabels.length > 0 && (
-          <p className="text-xs text-muted-foreground">Context used: {contextLabels.join(" · ")}</p>
-        )}
+        <p className="text-xs text-muted-foreground">{contextUsedText}</p>
       </div>
       <div className="flex flex-col gap-2">
         <HbButton

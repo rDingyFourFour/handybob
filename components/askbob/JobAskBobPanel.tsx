@@ -15,6 +15,7 @@ type JobAskBobPanelProps = {
   onDiagnoseComplete?: (response: AskBobResponseDTO) => void;
   jobDescription?: string | null;
   jobTitle?: string | null;
+  contextLabels?: string[];
 };
 
 export default function JobAskBobPanel({
@@ -26,6 +27,7 @@ export default function JobAskBobPanel({
   onDiagnoseComplete,
   jobDescription,
   jobTitle,
+  contextLabels,
 }: JobAskBobPanelProps) {
   useEffect(() => {
     console.log("[askbob-ui-entry]", {
@@ -37,15 +39,7 @@ export default function JobAskBobPanel({
     });
   }, [workspaceId, jobId, customerId, jobTitle]);
 
-  const normalizedJobTitle = jobTitle?.trim() ?? "";
-  const normalizedJobDescription = jobDescription?.trim() ?? "";
-  const contextLabels: string[] = [];
-  if (normalizedJobTitle) {
-    contextLabels.push("Job title");
-  }
-  if (normalizedJobDescription) {
-    contextLabels.push("Job description");
-  }
+  const labelsToShow = contextLabels ?? [];
 
   return (
     <HbCard className="space-y-4">
@@ -57,8 +51,12 @@ export default function JobAskBobPanel({
           Review and adjust these steps based on what you see on site.
         </p>
         <p className="text-xs text-slate-500">These steps are suggestions, not a script—edit them freely.</p>
-        {contextLabels.length > 0 && (
-          <p className="text-xs text-muted-foreground">Context used: {contextLabels.join(" · ")}</p>
+        {labelsToShow.length > 0 ? (
+          <p className="text-xs text-muted-foreground">Context used: {labelsToShow.join(", ")}</p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Context used: none yet. AskBob will use the job details you enter below.
+          </p>
         )}
       </div>
       <AskBobForm

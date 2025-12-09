@@ -16,10 +16,11 @@ type AskBobQuotePanelProps = {
   jobId: string;
   customerId?: string | null;
   onQuoteSuccess?: () => void;
-  diagnosisSummary?: string | null;
-  materialsSummary?: string | null;
+  diagnosisSummaryForQuote?: string | null;
+  materialsSummaryForQuote?: string | null;
   jobDescription?: string | null;
   jobTitle?: string | null;
+  contextLabels?: string[];
 };
 
 const DEFAULT_PROMPT = "Generate a standard quote for this job.";
@@ -104,7 +105,15 @@ function TotalsBlock({ suggestion }: TotalsBlockProps) {
 }
 
 export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
-  const { jobId, onQuoteSuccess, diagnosisSummary, materialsSummary, jobDescription, jobTitle } = props;
+  const {
+    jobId,
+    onQuoteSuccess,
+    diagnosisSummaryForQuote,
+    materialsSummaryForQuote,
+    jobDescription,
+    jobTitle,
+    contextLabels,
+  } = props;
   const router = useRouter();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [isLoading, setIsLoading] = useState(false);
@@ -114,22 +123,33 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
 
   const normalizedJobTitle = jobTitle?.trim() ?? "";
-  const normalizedJobDescription = jobDescription?.trim() ?? "";
-  const hasDiagnosisContextLabel = Boolean(diagnosisSummary?.trim());
-  const hasMaterialsContextLabel = Boolean(materialsSummary?.trim());
-  const contextLabels: string[] = [];
-  if (normalizedJobTitle) {
-    contextLabels.push("Job title");
-  }
-  if (normalizedJobDescription) {
-    contextLabels.push("Job description");
-  }
-  if (hasDiagnosisContextLabel) {
-    contextLabels.push("Diagnosis summary");
-  }
-  if (hasMaterialsContextLabel) {
-    contextLabels.push("Materials summary");
-  }
+  const contextLabelsToShow = contextLabels ?? [];
+  const scopeLines = suggestion?.scopeLines ?? [];
+  const materials = suggestion?.materials ?? [];
+  const notesText = suggestion?.notes?.trim() ?? "";
+  const scopeLinesCount = scopeLines.length;
+  const materialsLinesCount = materials.length;
+  const hasAnyScope = scopeLinesCount > 0;
+  const hasAnyMaterials = materialsLinesCount > 0;
+  const hasNotes = Boolean(notesText);
+  const hasAnyContent = hasAnyScope || hasAnyMaterials || hasNotes;
+  const showThinHint = hasAnyScope && !hasAnyMaterials;
+  const summaryLine = (() => {
+    const parts: string[] = [];
+    if (hasAnyScope) {
+      parts.push(`${scopeLinesCount} scope line${scopeLinesCount === 1 ? "" : "s"}`);
+    }
+    if (hasAnyMaterials) {
+      parts.push(`${materialsLinesCount} materials item${materialsLinesCount === 1 ? "" : "s"}`);
+    }
+    if (parts.length) {
+      return `Includes ${parts.join(" and ")}.`;
+    }
+    if (hasNotes) {
+      return "Includes notes from AskBob.";
+    }
+    return null;
+  })();
 
   const handleGenerate = async () => {
     const trimmedPrompt = prompt.trim();
@@ -143,8 +163,8 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
   try {
     const extraDetails = buildQuoteExtraDetails({
       populatedJobDescription: jobDescription,
-      materialsSummary,
-      diagnosisSummary,
+      materialsSummary: materialsSummaryForQuote,
+      diagnosisSummary: diagnosisSummaryForQuote,
       quoteNotes: trimmedPrompt,
       jobTitle: normalizedJobTitle,
     });
@@ -153,11 +173,11 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
       prompt: trimmedPrompt,
       extraDetails,
       jobTitle: normalizedJobTitle || undefined,
-      hasDiagnosisContext: Boolean(diagnosisSummary?.trim()),
-      hasMaterialsContext: Boolean(materialsSummary?.trim()),
+      hasDiagnosisContext: Boolean(diagnosisSummaryForQuote?.trim()),
+      hasMaterialsContext: Boolean(materialsSummaryForQuote?.trim()),
       hasJobDescriptionContext: Boolean(jobDescription?.trim()),
-      hasMaterialsSummary: Boolean(materialsSummary?.trim()),
-      hasDiagnosisSummary: Boolean(diagnosisSummary?.trim()),
+      hasMaterialsSummary: Boolean(materialsSummaryForQuote?.trim()),
+      hasDiagnosisSummary: Boolean(diagnosisSummaryForQuote?.trim()),
     });
 
     setSuggestion(result.suggestion);
@@ -208,8 +228,14 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
         {normalizedJobTitle && (
           <p className="text-xs text-slate-500">Quote for {normalizedJobTitle}.</p>
         )}
-        {contextLabels.length > 0 && (
-          <p className="text-xs text-muted-foreground">Context used: {contextLabels.join(" · ")}</p>
+        {contextLabelsToShow.length > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Context used: {contextLabelsToShow.join(", ")}
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Context used: none yet. AskBob will use the job details you enter below.
+          </p>
         )}
       </div>
       <div className="space-y-2">
@@ -240,75 +266,108 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
       </div>
       {suggestion && (
         <div className="space-y-4 border-t border-slate-800 pt-3">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-              Scope
-            </p>
-            <div className="space-y-2">
-              {suggestion.scopeLines.map((line, index) => (
-                <div key={`${line.description}-${index}`} className="flex justify-between text-sm">
-                  <div className="space-y-1">
-                    <p className="font-semibold text-slate-100">{line.description}</p>
-                    <p className="text-xs text-slate-500">
-                      Qty: {line.quantity}
-                      {line.unit ? ` ${line.unit}` : ""}
-                      {line.unitPrice != null ? ` · ${formatCurrency(line.unitPrice)} per unit` : ""}
-                    </p>
-                  </div>
-                  <p className="text-sm font-semibold text-slate-100">
-                    {line.lineTotal != null
-                      ? formatCurrency(line.lineTotal)
-                      : line.unitPrice != null
-                      ? formatCurrency(line.unitPrice * line.quantity)
-                      : "—"}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-          {suggestion.materials && suggestion.materials.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Suggested materials</p>
-              <div className="space-y-1">
-                {suggestion.materials.map((material, index) => (
-                  <div key={`${material.name}-${index}`} className="flex items-center justify-between text-sm">
-                    <div>
-                      <p className="font-semibold text-slate-100">{material.name}</p>
-                      <p className="text-xs text-slate-500">
-                        Qty: {material.quantity}
-                        {material.unit ? ` ${material.unit}` : ""}
-                      </p>
-                    </div>
-                    <p className="text-sm text-slate-100">
-                      {material.estimatedTotalCost != null
-                        ? formatCurrency(material.estimatedTotalCost)
-                        : material.estimatedUnitCost != null
-                        ? formatCurrency(material.estimatedUnitCost * material.quantity)
-                        : "—"}
-                    </p>
-                  </div>
-                ))}
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-slate-100">Suggested quote from AskBob</p>
+            {hasAnyContent ? (
+              <>
+                {summaryLine && <p className="text-xs text-muted-foreground">{summaryLine}</p>}
+                {showThinHint && (
+                  <p className="text-xs text-muted-foreground">Review and adjust these lines before sending to your customer.</p>
+                )}
+              </>
+            ) : (
+              <div className="space-y-1 text-sm text-muted-foreground">
+                <p>AskBob was not able to generate a detailed quote for this job yet.</p>
+                <p>You can try asking again with more specifics, or build a quote manually.</p>
               </div>
-            </div>
-          )}
-          {suggestion.notes && (
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Notes and caveats</p>
-              <p className="text-sm text-slate-300">{suggestion.notes}</p>
-            </div>
-          )}
-          <TotalsBlock suggestion={suggestion} />
-          <div className="space-y-2">
-            <HbButton
-              onClick={handleApplySuggestion}
-              disabled={isApplying || isLoading}
-              variant="secondary"
-              size="sm"
-            >
-              {isApplying ? "Applying AskBob suggestion…" : "Create quote from AskBob suggestion"}
-            </HbButton>
-            {applyError && <p className="text-sm text-rose-300">{applyError}</p>}
+            )}
           </div>
+          {hasAnyContent && (
+            <>
+              {hasAnyScope && (
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                    Scope
+                  </p>
+                  <div className="space-y-2">
+                    {scopeLines.map((line, index) => (
+                      <div key={`${line.description}-${index}`} className="flex justify-between text-sm">
+                        <div className="space-y-1">
+                          <p className="font-semibold text-slate-100">{line.description}</p>
+                          <p className="text-xs text-slate-500">
+                            Qty: {line.quantity}
+                            {line.unit ? ` ${line.unit}` : ""}
+                            {line.unitPrice != null ? ` · ${formatCurrency(line.unitPrice)} per unit` : ""}
+                          </p>
+                        </div>
+                        <p className="text-sm font-semibold text-slate-100">
+                          {line.lineTotal != null
+                            ? formatCurrency(line.lineTotal)
+                            : line.unitPrice != null
+                            ? formatCurrency(line.unitPrice * line.quantity)
+                            : "—"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {hasAnyMaterials && (
+                <div className="space-y-2">
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Suggested materials</p>
+                  <div className="space-y-1">
+                    {materials.map((material, index) => (
+                      <div key={`${material.name}-${index}`} className="flex items-center justify-between text-sm">
+                        <div>
+                          <p className="font-semibold text-slate-100">{material.name}</p>
+                          <p className="text-xs text-slate-500">
+                            Qty: {material.quantity}
+                            {material.unit ? ` ${material.unit}` : ""}
+                          </p>
+                        </div>
+                        <p className="text-sm text-slate-100">
+                          {material.estimatedTotalCost != null
+                            ? formatCurrency(material.estimatedTotalCost)
+                            : material.estimatedUnitCost != null
+                            ? formatCurrency(material.estimatedUnitCost * material.quantity)
+                            : "—"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {hasNotes && (
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Notes and caveats</p>
+                  <p className="text-sm text-slate-300">{notesText}</p>
+                </div>
+              )}
+              <TotalsBlock suggestion={suggestion} />
+            </>
+          )}
+          {hasAnyContent && (
+            <div className="space-y-2">
+              <HbButton
+                onClick={handleApplySuggestion}
+                disabled={isApplying || isLoading || !hasAnyScope}
+                variant="secondary"
+                size="sm"
+              >
+                {isApplying ? "Applying AskBob suggestion…" : "Create quote from AskBob suggestion"}
+              </HbButton>
+              {!hasAnyScope ? (
+                <p className="text-xs text-muted-foreground">
+                  AskBob did not return enough detail to create a quote. Try refining your question.
+                </p>
+              ) : (
+                <p className="text-xs text-slate-400">
+                  You can edit all lines and prices on the next screen before sharing with the customer.
+                </p>
+              )}
+              {applyError && <p className="text-sm text-rose-300">{applyError}</p>}
+            </div>
+          )}
         </div>
       )}
     </HbCard>
