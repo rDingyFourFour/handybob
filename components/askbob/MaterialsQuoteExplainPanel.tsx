@@ -58,8 +58,7 @@ export default function MaterialsQuoteExplainPanel({
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob explain</p>
         <h3 className="hb-heading-4 text-lg font-semibold">Explain materials with AskBob</h3>
         <p className="text-sm text-slate-300">
-          Get a customer-friendly explanation of what these materials cover. Review and edit
-          before sharing.
+          Generate a concise, plain-language explanation of what these materials cover, highlight key inclusions or exclusions, and remind the homeowner that pricing is an estimate.
         </p>
       </div>
       <div className="flex flex-col gap-2">
@@ -120,7 +119,7 @@ export default function MaterialsQuoteExplainPanel({
             </div>
           )}
           <p className="text-xs text-slate-500">
-            This is AI-generated. Review and adjust before you send it to a customer.
+            This explanation is AI-generated—review and revise it before sending it to a customer.
           </p>
         </div>
       )}

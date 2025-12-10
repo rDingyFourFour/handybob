@@ -233,8 +233,8 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
           )}
         </div>
         <p className="text-sm text-slate-400">
-          AskBob suggests a materials checklist using the job title, description, and your notes from Step 1. Use this as a
-          planning list—verify quantities and brands before buying anything.
+          AskBob suggests a materials checklist using the job title, description, and diagnosis notes.
+          Treat it as a planning list and verify quantities, brands, and costs before you commit to an order.
         </p>
         {contextParts.length > 0 ? (
           <p className="text-xs text-muted-foreground">
@@ -242,7 +242,7 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Context used: none yet. AskBob will use the job details you enter below.
+            Context used: none yet. Add the job details you want this checklist to reference.
           </p>
         )}
       </div>
@@ -273,7 +273,7 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
           aria-label="Extra details for AskBob materials generation"
         />
         <p className="text-xs text-slate-500">
-          We include a short summary of your diagnosis so the materials match the likely work.
+          The diagnosis summary helps align the materials with the likely work scope.
         </p>
         <div className="flex items-center gap-3">
           <HbButton onClick={handleGenerate} disabled={isLoading} variant="secondary" size="sm">
@@ -299,6 +299,7 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
               <>
                 <p className="text-xs text-muted-foreground">
                   AskBob suggested {materialsCount} material{materialsCount === 1 ? "" : "s"} for this job.
+                  Double-check quantities and availability before ordering.
                 </p>
                 <div className="space-y-2">
                   {materials.map((item, index) => (
@@ -328,9 +329,9 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
               <p className="text-sm text-slate-300">{suggestion.notes}</p>
             </div>
           )}
-          <p className="text-xs text-slate-400">
-            Copy or reference these materials when you build your quote or materials list as needed.
-          </p>
+            <p className="text-xs text-slate-400">
+              Reference or copy these materials into your official list once you confirm fit, price, and availability.
+            </p>
         </div>
       )}
     </HbCard>

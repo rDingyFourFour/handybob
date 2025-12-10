@@ -21,7 +21,7 @@ export default function JobAskBobHud({
     : placeholder;
   const titleAttr = hasSummary && lastUsedAtIso ? lastUsedAtIso : undefined;
   const scopeHint = hasSummary
-    ? "AskBob can help you with diagnosis, materials, quotes, and follow-ups for this job. Everything stays editable until you save it."
+    ? "AskBob can help you with diagnosis, materials, quotes, and follow-ups for this job. Suggestions stay editable and should be reviewed before you save them."
     : null;
 
   // TODO: Enhance this HUD with richer AskBob metadata once we track usage details.

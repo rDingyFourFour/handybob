@@ -83,7 +83,7 @@ export default async function AskBobPage({
         <div className="space-y-3">
           <h1 className="hb-heading-1 text-3xl font-semibold">AskBob</h1>
           <p className="hb-muted text-sm">
-            Describe a technical problem and AskBob will suggest steps, materials, safety cautions, and
+            Describe a technical problem and AskBob suggests steps, materials, safety cautions, and
             escalation guidance.
           </p>
         </div>

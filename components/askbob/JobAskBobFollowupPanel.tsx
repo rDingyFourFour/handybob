@@ -89,7 +89,7 @@ export default function JobAskBobFollowupPanel({
   const contextUsedText =
     contextParts.length > 0
       ? `Context used: ${contextParts.join(", ")}`
-      : "Context used: none yet. AskBob will use job and follow-up details from this page.";
+      : "Context used: none yet. Provide job and follow-up details on this page so AskBob can reference them.";
 
   const fallbackFriendlyDate =
     lastQuoteCreatedAtForFollowup && !lastQuoteCreatedAtFriendlyForFollowup
@@ -164,7 +164,7 @@ export default function JobAskBobFollowupPanel({
   const showMessageCTAs = Boolean(followup?.shouldSendMessage && customerId);
   const followupDraftHint =
     showMessageCTAs && followup
-      ? "AskBob will prefill an editable follow-up message based on this guidance."
+      ? "This draft follows the guidance and stays editable before you send it."
       : null;
   const followupComposerHref = showMessageCTAs
     ? `/messages?${new URLSearchParams({
@@ -266,8 +266,8 @@ export default function JobAskBobFollowupPanel({
           )}
         </div>
         <p className="text-sm text-slate-300">
-          AskBob looks at this job’s status, quotes, calls, messages, and appointments to suggest a next step. Use this to guide
-          your follow-up, not replace your judgment.
+          AskBob summarizes the job’s status, quotes, calls, messages, and appointments to suggest a next step. Use it as a guide and
+          rely on your judgment before you act.
         </p>
         {showQuoteContextLine && quoteDetailsHref && (
           <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">

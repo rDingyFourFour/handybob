@@ -163,7 +163,7 @@ export default function QuoteDetailsCard({
   const activeClientMessage = askBobExplanationState ?? storedClientMessage;
   const hasStoredMessage = Boolean(storedClientMessage);
   const clientMessageDescription = askBobExplanationState
-    ? "AskBob’s explanation drives the message you share with clients."
+    ? "AskBob’s explanation can guide the message you share with clients."
     : "The stored client message template will stay until you run AskBob.";
   const subtotalLabel = formatQuoteCurrency(subtotal ?? 0);
   const taxLabel = formatQuoteCurrency(tax ?? 0);
@@ -289,9 +289,9 @@ export default function QuoteDetailsCard({
                 </div>
               )}
               {askBobExplanationState && (
-                <p className="text-xs text-slate-500">
-                  This explanation is AI-generated—review and edit before sharing with customers.
-                </p>
+              <p className="text-xs text-slate-500">
+                This explanation is AI-generated—review pricing, inclusions, and exclusions before you share it.
+              </p>
               )}
               {askBobExplanationState && hasStoredMessage && (
                 <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-900/40 p-3 text-sm text-slate-300">

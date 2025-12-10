@@ -27,7 +27,7 @@ export default function JobNewAskBobHelper({ workspaceId, onApplySuggestion }: J
       ? "Generating AskBob’s suggestions…"
       : status === "error"
       ? errorMessage ?? "AskBob could not generate a suggestion."
-      : "AskBob will suggest a job title and description. You can edit them before saving.";
+      : "AskBob suggests a job title and description that you can edit before saving.";
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -73,8 +73,7 @@ export default function JobNewAskBobHelper({ workspaceId, onApplySuggestion }: J
           Step 1 · Describe the job with AskBob
         </h2>
         <p className="text-sm text-slate-400">
-          This is the first step of job creation. AskBob will fill in a suggested title and description,
-          and you can tweak them before saving.
+          This is the first step of job creation. AskBob suggests a title and description that you can tweak before saving.
         </p>
         <textarea
           value={prompt}

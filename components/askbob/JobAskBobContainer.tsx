@@ -32,7 +32,7 @@ export default function JobAskBobContainer({
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob Job Assistant</p>
         <h2 className="hb-heading-3 text-xl font-semibold">AskBob job assistant for this job</h2>
         <p className="text-sm text-slate-300">
-          AskBob uses this job’s title and description to help you diagnose issues, list materials, draft quotes, and plan follow-ups. Everything is approximate and must be reviewed by a technician before it’s shared with a customer.
+          AskBob reviews this job’s title and description to help you diagnose issues, list materials, draft quotes, and plan follow-ups. Treat every suggestion as approximate and review the details before sharing them with a customer.
         </p>
         <p className="text-xs text-slate-500">{flowReminder}</p>
         <JobAskBobHud

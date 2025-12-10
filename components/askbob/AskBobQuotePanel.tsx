@@ -300,8 +300,8 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
           )}
         </div>
         <p className="text-sm text-slate-400">
-          AskBob drafts a quote using the job title, description, materials checklist, and diagnosis summary. All pricing is
-          approximate—adjust scope, hours, and rates before you send this to a customer.
+          AskBob drafts a quote using the job title, description, materials checklist, and diagnosis summary.
+          Treat the results as an estimate and confirm scope, hours, and rates on site before sharing them with a customer.
         </p>
         {normalizedJobTitle && (
           <p className="text-xs text-slate-500">Quote for {normalizedJobTitle}.</p>
@@ -312,7 +312,7 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Context used: none yet. AskBob will use the job details you enter below.
+            Context used: none yet. Provide the job details below so the quote reflects the actual scope.
           </p>
         )}
       </div>
@@ -330,14 +330,14 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
           aria-label="Prompt for AskBob quote generation"
         />
           <p className="text-xs text-slate-400">
-            Call out any updates to the job description, materials checklist, or customer expectations so AskBob keeps the quote aligned.
+            Note any updates to the job description, materials checklist, or customer expectations so AskBob can align the quote.
           </p>
         <div className="flex items-center gap-3">
           <HbButton onClick={handleGenerate} disabled={isLoading || isApplying} variant="secondary" size="sm">
             {isLoading ? "Generating AskBob quote…" : "Generate quote with AskBob"}
           </HbButton>
           <p className="text-xs text-slate-500">
-            The suggestion stays in memory and won’t be saved until you copy it into a quote.
+            This suggestion remains editable and won’t be saved unless you copy it into an actual quote.
           </p>
         </div>
         {error && <p className="text-sm text-rose-300">{error}</p>}
@@ -355,8 +355,8 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
               </>
             ) : (
               <div className="space-y-1 text-sm text-muted-foreground">
-                <p>AskBob was not able to generate a detailed quote for this job yet.</p>
-                <p>You can try asking again with more specifics, or build a quote manually.</p>
+                <p>AskBob could not generate a detailed quote for this job yet.</p>
+                <p>Try again with more specifics or build the quote manually.</p>
               </div>
             )}
           </div>

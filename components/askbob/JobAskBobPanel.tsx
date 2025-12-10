@@ -141,15 +141,17 @@ export default function JobAskBobPanel({
           )}
         </div>
         <p className="text-sm text-slate-400">
-          AskBob uses the job title, description, and your notes to outline how a technician might approach this job safely.
-          Review and adjust these steps based on what you see on site.
+          AskBob reviews the job title, description, and your notes to outline how a technician might approach this job safely.
+          Confirm site conditions and adjust these recommendations before you act.
         </p>
-        <p className="text-xs text-slate-500">These steps are suggestions, not a script—edit them freely.</p>
+        <p className="text-xs text-slate-500">
+          These are editable starting points—adapt them to the crew and conditions on site.
+        </p>
         {labelsToShow.length > 0 ? (
           <p className="text-xs text-muted-foreground">Context used: {labelsToShow.join(", ")}</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Context used: none yet. AskBob will use the job details you enter below.
+            Context used: none yet. Add the job details below so AskBob can reference them.
           </p>
         )}
       </div>
