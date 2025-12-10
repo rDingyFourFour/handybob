@@ -55,6 +55,7 @@ export default function JobAskBobFlow({
     Boolean(hasQuoteContextForFollowup) || hasLocalAskBobQuoteFromFlow;
 
   const stepStatusItems = [
+    { label: "Step 1 Intake", done: true },
     { label: "Step 2 Diagnose", done: stepDiagnoseDone },
     { label: "Step 3 Materials checklist", done: stepMaterialsDone },
     { label: "Step 4 Quote suggestion", done: stepQuoteDone },

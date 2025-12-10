@@ -24,7 +24,7 @@ export default function JobAskBobContainer({
   stepStatusItems,
 }: JobAskBobContainerProps) {
   const flowReminder =
-    "Job intake happened when you created this job; continue through these steps to keep refining the scope.";
+    "Step 1 intake ran when this job was created; continue through Steps 2–5 to keep refining the scope.";
 
   return (
     <HbCard className="space-y-6">

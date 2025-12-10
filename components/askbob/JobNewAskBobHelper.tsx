@@ -70,7 +70,7 @@ export default function JobNewAskBobHelper({ workspaceId, onApplySuggestion }: J
       <HbCard className="space-y-3 border border-slate-800 bg-slate-950/60 px-4 py-4 text-sm text-slate-200">
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob job intake</p>
         <h2 className="hb-heading-3 text-xl font-semibold">
-          Describe the job and let AskBob draft a title & description
+          Step 1 · Describe the job with AskBob
         </h2>
         <p className="text-sm text-slate-400">
           This is the first step of job creation. AskBob will fill in a suggested title and description,
