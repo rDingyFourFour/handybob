@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import HbCard from "@/components/ui/hb-card";
+import HbButton from "@/components/ui/hb-button";
 import AskBobForm from "./AskBobForm";
 import type { AskBobResponseDTO } from "@/lib/domain/askbob/types";
 
@@ -80,6 +81,8 @@ export default function JobAskBobPanel({
 
   const normalizedJobTitle = jobTitle?.trim() ?? "";
   const normalizedJobDescription = jobDescription?.trim() ?? "";
+  const [latestAskBobResponse, setLatestAskBobResponse] = useState<AskBobResponseDTO | null>(null);
+  const [latestDiagnosisSummary, setLatestDiagnosisSummary] = useState<string | null>(null);
   const labelsToShow: string[] = [];
   if (normalizedJobTitle) {
     labelsToShow.push("job title");
@@ -90,22 +93,51 @@ export default function JobAskBobPanel({
 
   const handleResponse = (response: AskBobResponseDTO) => {
     const summary = buildDiagnosisSummary(response);
+    setLatestAskBobResponse(response);
+    setLatestDiagnosisSummary(summary);
     onDiagnoseComplete?.({
       diagnosisSummary: summary,
       askBobResponseId: response.responseId,
     });
   };
 
+  const handleReset = () => {
+    setLatestAskBobResponse(null);
+    setLatestDiagnosisSummary(null);
+    onDiagnoseComplete?.({ diagnosisSummary: null });
+    if (typeof document === "undefined") {
+      return;
+    }
+    const target = document.getElementById("askbob-diagnose");
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const hasDiagnosisResult = Boolean(latestAskBobResponse && latestDiagnosisSummary);
+
   return (
     <HbCard className="space-y-4">
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
-        <div className="flex items-center gap-2">
-          <h2 className="hb-heading-3 text-xl font-semibold">Step 1 · Diagnose the job</h2>
-          {stepCompleted && (
-            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
-              Done
-            </span>
+        <div className="flex flex-wrap items-center gap-2 justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="hb-heading-3 text-xl font-semibold">Step 1 · Diagnose the job</h2>
+            {stepCompleted && (
+              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
+                Done
+              </span>
+            )}
+          </div>
+          {hasDiagnosisResult && (
+            <HbButton
+              variant="ghost"
+              size="sm"
+              className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
+              onClick={handleReset}
+            >
+              Reset this step
+            </HbButton>
           )}
         </div>
         <p className="text-sm text-slate-400">

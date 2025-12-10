@@ -52,6 +52,9 @@ export default function JobAskBobContainer({
   const [step2MaterialsDone, setStep2MaterialsDone] = useState(false);
   const [step3QuoteDone, setStep3QuoteDone] = useState(false);
   const [step4FollowupDone, setStep4FollowupDone] = useState(false);
+  const [materialsResetToken, setMaterialsResetToken] = useState(0);
+  const [quoteResetToken, setQuoteResetToken] = useState(0);
+  const [followupResetToken, setFollowupResetToken] = useState(0);
   const effectiveHasQuoteContextForFollowup = Boolean(hasQuoteContextForFollowup);
   const combinedHasQuoteContextForFollowup = effectiveHasQuoteContextForFollowup || hasLocalAskBobQuoteFromFlow;
   const stepStatusItems = [
@@ -63,17 +66,29 @@ export default function JobAskBobContainer({
 
   const handleDiagnoseComplete = (context: JobDiagnosisContext) => {
     const summary = context.diagnosisSummary?.trim() ?? null;
-    setDiagnosisSummary(context.diagnosisSummary);
+    setDiagnosisSummary(summary);
     setMaterialsSummary(null);
-    if (summary) {
-      setStep1DiagnoseDone(true);
-    }
+    setHasLocalAskBobQuoteFromFlow(false);
+    setStep1DiagnoseDone(Boolean(summary));
+    setStep2MaterialsDone(false);
+    setStep3QuoteDone(false);
+    setStep4FollowupDone(false);
+    setMaterialsResetToken((value) => value + 1);
+    setQuoteResetToken((value) => value + 1);
+    setFollowupResetToken((value) => value + 1);
   };
   const handleMaterialsSummaryChange = (context: MaterialsSummaryContext) => {
-    setMaterialsSummary(context.materialsSummary);
+    const summary = context.materialsSummary?.trim() ?? null;
+    setMaterialsSummary(summary);
     const materialsCount = context.materialsCount ?? 0;
-    if (materialsCount > 0) {
-      setStep2MaterialsDone(true);
+    setStep2MaterialsDone(materialsCount > 0);
+    setHasLocalAskBobQuoteFromFlow(false);
+    setStep3QuoteDone(false);
+    setStep4FollowupDone(false);
+    setQuoteResetToken((value) => value + 1);
+    setFollowupResetToken((value) => value + 1);
+    if (!summary) {
+      setMaterialsResetToken((value) => value + 1);
     }
   };
 
@@ -81,10 +96,25 @@ export default function JobAskBobContainer({
     void quoteId;
     setHasLocalAskBobQuoteFromFlow(true);
     setStep3QuoteDone(true);
+    setStep4FollowupDone(false);
+    setFollowupResetToken((value) => value + 1);
   };
 
   const handleFollowupCompleted = () => {
     setStep4FollowupDone(true);
+  };
+
+  const handleQuoteReset = () => {
+    setHasLocalAskBobQuoteFromFlow(false);
+    setStep3QuoteDone(false);
+    setStep4FollowupDone(false);
+    setQuoteResetToken((value) => value + 1);
+    setFollowupResetToken((value) => value + 1);
+  };
+
+  const handleFollowupReset = () => {
+    setStep4FollowupDone(false);
+    setFollowupResetToken((value) => value + 1);
   };
 
   const scrollToSection = (sectionId: string) => {
@@ -150,6 +180,7 @@ export default function JobAskBobContainer({
             jobDescription={jobDescription ?? null}
             jobTitle={effectiveJobTitle}
             stepCompleted={step2MaterialsDone}
+            resetToken={materialsResetToken}
           />
         </AskBobSection>
         <AskBobSection id="askbob-quote">
@@ -165,6 +196,8 @@ export default function JobAskBobContainer({
             onQuoteApplied={handleAskBobQuoteApplied}
             onScrollToFollowup={() => scrollToSection("askbob-followup")}
             stepCompleted={step3QuoteDone}
+            resetToken={quoteResetToken}
+            onQuoteReset={handleQuoteReset}
           />
         </AskBobSection>
         <AskBobSection id="askbob-followup">
@@ -182,6 +215,8 @@ export default function JobAskBobContainer({
             lastQuoteCreatedAtFriendlyForFollowup={lastQuoteCreatedAtFriendly}
             stepCompleted={step4FollowupDone}
             onFollowupCompleted={handleFollowupCompleted}
+            resetToken={followupResetToken}
+            onReset={handleFollowupReset}
           />
         </AskBobSection>
       </div>

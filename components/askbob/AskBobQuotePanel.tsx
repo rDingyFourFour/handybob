@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import HbButton from "@/components/ui/hb-button";
@@ -23,6 +23,8 @@ type AskBobQuotePanelProps = {
   onQuoteApplied?: (quoteId: string) => void;
   onScrollToFollowup?: () => void;
   stepCompleted?: boolean;
+  resetToken?: number;
+  onQuoteReset?: () => void;
 };
 
 const DEFAULT_PROMPT = "Generate a standard quote for this job.";
@@ -117,6 +119,8 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     onQuoteApplied,
     onScrollToFollowup,
     stepCompleted,
+    resetToken,
+    onQuoteReset,
   } = props;
   const router = useRouter();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
@@ -126,6 +130,17 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
   const [applyError, setApplyError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
   const [appliedQuoteId, setAppliedQuoteId] = useState<string | null>(null);
+  useEffect(() => {
+    if (resetToken === undefined) {
+      return;
+    }
+    setSuggestion(null);
+    setError(null);
+    setApplyError(null);
+    setAppliedQuoteId(null);
+    setIsLoading(false);
+    setIsApplying(false);
+  }, [resetToken]);
 
   const normalizedJobTitle = jobTitle?.trim() ?? "";
   const normalizedJobDescription = jobDescription?.trim() ?? "";
@@ -172,6 +187,24 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     }
     return null;
   })();
+
+  const hasActiveSuggestion = Boolean(suggestion || appliedQuoteId);
+  const handleReset = () => {
+    setSuggestion(null);
+    setError(null);
+    setApplyError(null);
+    setAppliedQuoteId(null);
+    setIsLoading(false);
+    setIsApplying(false);
+    onQuoteReset?.();
+    if (typeof document === "undefined") {
+      return;
+    }
+    const target = document.getElementById("askbob-quote");
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
 
   const handleGenerate = async () => {
     const trimmedPrompt = prompt.trim();
@@ -246,12 +279,24 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     <HbCard className="space-y-4">
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob quote</p>
-        <div className="flex items-center gap-2">
-          <h2 className="hb-heading-3 text-xl font-semibold">Step 3 · Draft a quote</h2>
-          {stepCompleted && (
-            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
-              Done
-            </span>
+        <div className="flex flex-wrap items-center gap-2 justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="hb-heading-3 text-xl font-semibold">Step 3 · Draft a quote</h2>
+            {stepCompleted && (
+              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
+                Done
+              </span>
+            )}
+          </div>
+          {hasActiveSuggestion && (
+            <HbButton
+              variant="ghost"
+              size="sm"
+              className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
+              onClick={handleReset}
+            >
+              Reset this step
+            </HbButton>
           )}
         </div>
         <p className="text-sm text-slate-400">

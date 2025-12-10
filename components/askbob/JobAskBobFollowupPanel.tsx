@@ -26,6 +26,8 @@ type JobAskBobFollowupPanelProps = {
   lastQuoteCreatedAtFriendlyForFollowup?: string;
   stepCompleted?: boolean;
   onFollowupCompleted?: () => void;
+  resetToken?: number;
+  onReset?: () => void;
 };
 
 export default function JobAskBobFollowupPanel({
@@ -42,6 +44,8 @@ export default function JobAskBobFollowupPanel({
   lastQuoteCreatedAtFriendlyForFollowup,
   stepCompleted,
   onFollowupCompleted,
+  resetToken,
+  onReset,
 }: JobAskBobFollowupPanelProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -49,6 +53,16 @@ export default function JobAskBobFollowupPanel({
   const [result, setResult] = useState<AskBobJobFollowupResult | null>(null);
   const [isDrafting, setIsDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
+  useEffect(() => {
+    if (resetToken === undefined) {
+      return;
+    }
+    setResult(null);
+    setErrorMessage(null);
+    setDraftError(null);
+    setIsLoading(false);
+    setIsDrafting(false);
+  }, [resetToken]);
   const normalizedJobTitle = jobTitle?.trim() ?? "";
   const normalizedJobDescription = jobDescription?.trim() ?? "";
   const normalizedDiagnosisSummary = diagnosisSummaryForFollowup?.trim() ?? "";
@@ -87,6 +101,22 @@ export default function JobAskBobFollowupPanel({
     ? `Using your latest quote from ${displayFriendlyDate}.`
     : "Using your latest quote for this job.";
   const quoteDetailsHref = lastQuoteIdForFollowup ? `/quotes/${lastQuoteIdForFollowup}` : undefined;
+  const hasFollowupResult = Boolean(result);
+  const handleReset = () => {
+    setResult(null);
+    setErrorMessage(null);
+    setDraftError(null);
+    setIsDrafting(false);
+    setIsLoading(false);
+    onReset?.();
+    if (typeof document === "undefined") {
+      return;
+    }
+    const target = document.getElementById("askbob-followup");
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
 
   const handleRequest = async () => {
     setErrorMessage(null);
@@ -215,12 +245,24 @@ export default function JobAskBobFollowupPanel({
     <HbCard className="space-y-4">
       <div className="space-y-1">
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
-        <div className="flex items-center gap-2">
-          <h2 className="hb-heading-3 text-xl font-semibold">Step 4 · Plan the follow-up</h2>
-          {stepCompleted && (
-            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
-              Done
-            </span>
+        <div className="flex flex-wrap items-center gap-2 justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="hb-heading-3 text-xl font-semibold">Step 4 · Plan the follow-up</h2>
+            {stepCompleted && (
+              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
+                Done
+              </span>
+            )}
+          </div>
+          {hasFollowupResult && (
+            <HbButton
+              variant="ghost"
+              size="sm"
+              className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
+              onClick={handleReset}
+            >
+              Reset this step
+            </HbButton>
           )}
         </div>
         <p className="text-sm text-slate-300">

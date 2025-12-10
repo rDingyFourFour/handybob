@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
@@ -23,6 +23,7 @@ type AskBobMaterialsPanelProps = {
   onMaterialsSuccess?: () => void;
   jobTitle?: string | null;
   stepCompleted?: boolean;
+  resetToken?: number;
 };
 
 function summarizeMaterialsSuggestion(suggestion: SmartQuoteSuggestion | null): string | null {
@@ -104,6 +105,7 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
     onMaterialsSummaryChange,
     jobTitle,
     stepCompleted,
+    resetToken,
   } = props;
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [extraDetails, setExtraDetails] = useState("");
@@ -127,6 +129,30 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
   const materials = suggestion?.materials ?? [];
   const materialsCount = materials.length;
   const hasMaterials = materialsCount > 0;
+  const hasMaterialsSuggestion = Boolean(suggestion);
+
+  useEffect(() => {
+    if (resetToken === undefined) {
+      return;
+    }
+    setSuggestion(null);
+    setError(null);
+    setIsLoading(false);
+  }, [resetToken]);
+
+  const handleReset = () => {
+    setSuggestion(null);
+    setError(null);
+    setIsLoading(false);
+    onMaterialsSummaryChange?.({ materialsSummary: null, materialsCount: null });
+    if (typeof document === "undefined") {
+      return;
+    }
+    const target = document.getElementById("askbob-materials");
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
 
   const handleGenerate = async () => {
     const trimmedPrompt = prompt.trim();
@@ -186,12 +212,24 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
     <HbCard className="space-y-4">
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob materials</p>
-        <div className="flex items-center gap-2">
-          <h2 className="hb-heading-3 text-xl font-semibold">Step 2 · Build a materials checklist</h2>
-          {stepCompleted && (
-            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
-              Done
-            </span>
+        <div className="flex flex-wrap items-center gap-2 justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="hb-heading-3 text-xl font-semibold">Step 2 · Build a materials checklist</h2>
+            {stepCompleted && (
+              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
+                Done
+              </span>
+            )}
+          </div>
+          {hasMaterialsSuggestion && (
+            <HbButton
+              variant="ghost"
+              size="sm"
+              className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
+              onClick={handleReset}
+            >
+              Reset this step
+            </HbButton>
           )}
         </div>
         <p className="text-sm text-slate-400">

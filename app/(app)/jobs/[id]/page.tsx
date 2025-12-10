@@ -11,7 +11,7 @@ import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import { formatCurrency, formatFriendlyDateTime } from "@/utils/timeline/formatters";
 import { getJobAskBobHudSummary } from "@/lib/domain/askbob/service";
-import JobCallScriptPanel, { type PhoneMessageSummary } from "./JobCallScriptPanel";
+import JobDetailsCard from "@/components/JobDetailsCard";
 import {
   computeFollowupDueInfo,
   type FollowupDueStatus,
@@ -336,34 +336,12 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     callScriptQuoteId,
   });
 
-  let latestPhoneMessage: PhoneMessageSummary | null = null;
-  try {
-    const { data, error } = await supabase
-      .from<PhoneMessageSummary>("messages")
-      .select("id, channel, body, created_at, outcome")
-      .eq("workspace_id", workspace.id)
-      .eq("job_id", job.id)
-      .eq("channel", "phone")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) {
-      console.error("[job-detail] Latest phone message lookup failed", error);
-    } else {
-      latestPhoneMessage = data ?? null;
-    }
-  } catch (error) {
-    console.error("[job-detail] Latest phone message query failed", error);
-  }
-
   const customer =
     Array.isArray(job.customers) && job.customers.length > 0
       ? job.customers[0]
       : job.customers ?? null;
 
   const customerName = customer?.name ?? null;
-  const customerPhone = customer?.phone ?? null;
-  const customerFirstName = customerName ? customerName.split(" ")[0] : null;
   const customerId = customer?.id ?? job.customer_id ?? null;
 
   const displayJobTitle = job.title ?? "Untitled job";
@@ -377,12 +355,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     quoteParams.set("description", description);
   }
   const quoteHref = `/quotes/new?${quoteParams.toString()}`;
-  const callAgentParams = new URLSearchParams();
-  callAgentParams.set("jobId", job.id);
-  if (callScriptQuoteId) {
-    callAgentParams.set("quoteId", callScriptQuoteId);
-  }
-  const callAgentHref = `/calls/new?${callAgentParams.toString()}`;
+  const scheduleVisitHref = `/appointments/new?jobId=${job.id}`;
 
   let latestCall: LatestCallRecord | null = null;
   try {
@@ -439,100 +412,27 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
 
   return (
     <div className="hb-shell pt-20 pb-8">
-      <HbCard className="space-y-5">
-        <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job details</p>
-            <h1 className="hb-heading-2 text-2xl font-semibold">{displayJobTitle}</h1>
-            <p className="text-sm text-slate-400">Status: {job.status ?? "—"}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {customerId && customerName ? (
-                <Link
-                  href={`/customers/${customerId}`}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-slate-600 hover:bg-slate-900"
-                >
-                  <span className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Customer</span>
-                  <span className="text-sm">{customerName}</span>
-                </Link>
-              ) : (
-                <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-800 bg-slate-950/60 px-3 py-1 text-xs uppercase tracking-[0.3em] text-slate-500">
-                  Attach customer (coming soon)
-                </span>
-              )}
-            </div>
-          </div>
-        <div className="flex flex-wrap gap-2">
-          <HbButton as={Link} href={quoteHref} size="sm" variant="secondary">
-            Generate quote from job
-          </HbButton>
-          {acceptedQuote && (
-            <HbButton
-              as={Link}
-              href={`/invoices/new?jobId=${job.id}&quoteId=${acceptedQuote.id}`}
-              size="sm"
-              variant="secondary"
-            >
-              Create invoice
-            </HbButton>
-          )}
-          <HbButton as={Link} href={`/appointments/new?jobId=${job.id}`} size="sm" variant="secondary">
-            Schedule visit
-          </HbButton>
-          <HbButton as={Link} href={callAgentHref} size="sm" variant="secondary">
-            Open phone agent
-          </HbButton>
-          <HbButton as="a" href="/jobs" size="sm">
-            Back to jobs
-          </HbButton>
-        </div>
-        </header>
-        {followupStatusChipLabel && (
-          <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-sm text-slate-200">
-            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Next follow-up</p>
-            <div className="flex flex-wrap items-center gap-3">
-              <span
-                className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.3em] font-semibold ${followupStatusChipClass}`}
-              >
-                {followupStatusChipLabel}
-              </span>
-              <span className="text-sm text-slate-300">{followupDueInfo.dueLabel}</span>
-            </div>
-          </div>
-        )}
-        {!followupStatusChipLabel && (
-          <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-sm text-slate-200">
-            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Next follow-up</p>
-            <p className="text-sm text-slate-400">
-              No calls yet –{" "}
-              <Link className="font-semibold text-emerald-200 hover:text-emerald-100" href={callAgentHref}>
-                start with the phone agent
-              </Link>
-              .
-            </p>
-          </div>
-        )}
-        <div className="grid gap-3 text-sm text-slate-400 md:grid-cols-2">
-          <p>Urgency: {job.urgency ?? "—"}</p>
-          <p>Source: {job.source ?? "—"}</p>
-          <p>AI urgency: {job.ai_urgency ?? "—"}</p>
-          <p>Priority: {job.priority ?? "—"}</p>
-          <p>Attention reason: {job.attention_reason ?? "—"}</p>
-          <p>Attention score: {job.attention_score ?? "—"}</p>
-          <p>Created: {createdLabel}</p>
-          {customerName && customerId && (
-            <p>
-              Customer:{" "}
-              <Link href={`/customers/${customerId}`} className="text-sky-300 hover:text-sky-200">
-                {customerName}
-              </Link>
-            </p>
-          )}
-        </div>
-        <div className="space-y-3">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Description:</p>
-          <p className="text-sm text-slate-300">{job.description_raw ?? "No description provided."}</p>
-        </div>
-      </HbCard>
+      <JobDetailsCard
+        jobId={job.id}
+        title={displayJobTitle}
+        status={job.status}
+        quoteHref={quoteHref}
+        acceptedQuoteId={acceptedQuote?.id ?? null}
+        scheduleVisitHref={scheduleVisitHref}
+        unseenFollowupLabel={followupStatusChipLabel}
+        followupDueLabel={followupDueInfo.dueLabel}
+        followupStatusClass={followupStatusChipClass}
+        urgency={job.urgency}
+        source={job.source}
+        aiUrgency={job.ai_urgency}
+        priority={job.priority}
+        attentionReason={job.attention_reason}
+        attentionScore={job.attention_score}
+        createdLabel={createdLabel}
+        customerId={customerId}
+        customerName={customerName}
+        description={job.description_raw}
+      />
         <JobAskBobContainer
           workspaceId={workspace.id}
           jobId={job.id}
@@ -651,26 +551,6 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           </div>
         )}
       </HbCard>
-      {callScriptQuoteId ? (
-        <JobCallScriptPanel
-          quoteId={callScriptQuoteId}
-          jobId={job.id}
-          workspaceId={workspace.id}
-          latestPhoneMessage={latestPhoneMessage}
-          customerName={customerName}
-          customerFirstName={customerFirstName}
-          customerPhone={customerPhone}
-          mode="job"
-          context="job-sidebar"
-        />
-      ) : (
-        <HbCard className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Phone call script</p>
-          <p className="text-sm text-slate-400">
-            Create a quote for this job first, then we’ll help you draft a call script.
-          </p>
-        </HbCard>
-      )}
     </div>
   );
 }
