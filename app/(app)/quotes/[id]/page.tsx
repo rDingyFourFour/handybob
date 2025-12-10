@@ -4,15 +4,10 @@ import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
-import FollowupDraftPanel from "./FollowupDraftPanel";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
-import QuoteExplainPanel from "@/components/askbob/QuoteExplainPanel";
-import MaterialsQuoteExplainPanel from "@/components/askbob/MaterialsQuoteExplainPanel";
-import { createFollowupMessageAction } from "./followupMessageActions";
+import QuoteDetailsCard from "@/components/quotes/QuoteDetailsCard";
 // CHANGE: import call script action at top of quote detail page
-import CallScriptPanel from "./CallScriptPanel";
-import { CallScriptActionResponse, generateCallScriptForQuoteAction } from "./callScriptActions";
 
 type QuoteLineItem = {
   description?: string;
@@ -38,14 +33,10 @@ type QuoteRecord = {
   smart_quote_used: boolean | null;
 };
 
-const smartQuoteBadgeClasses =
-  "inline-flex items-center gap-2 rounded-full border px-3 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] bg-amber-500/10 border-amber-400/40 text-amber-300";
-const smartQuoteBadgeDotClasses = "h-1.5 w-1.5 rounded-full bg-amber-300";
-
-function formatDate(value: string | null) {
-  if (!value) return "—";
+function formatServerDateLabel(value: string | null): string | null {
+  if (!value) return null;
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "—";
+  if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
@@ -53,30 +44,6 @@ function formatDate(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function formatCurrency(value: number | null) {
-  if (value === null || value === undefined) return "—";
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(value);
-}
-
-function calculateDaysSince(value: string | null): number | null {
-  if (!value) {
-    return null;
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-  const diffMs = Date.now() - parsed.getTime();
-  if (diffMs <= 0) {
-    return 0;
-  }
-  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
 function fallbackCard(title: string, body: string) {
@@ -189,115 +156,41 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
   };
   console.log("[smart-quote-metrics] quote detail badge", logPayload);
   const lineItems = Array.isArray(quote.line_items) ? quote.line_items : [];
-  const firstItems = lineItems.slice(0, 3);
-  const callScriptAction: (
-    input: Parameters<typeof generateCallScriptForQuoteAction>[0]
-  ) => Promise<CallScriptActionResponse> = generateCallScriptForQuoteAction;
+  const headerActions = (
+    <div className="flex flex-wrap gap-3">
+      <HbButton as="a" href="/quotes" variant="secondary" size="sm">
+        Back to quotes
+      </HbButton>
+      {quote.job_id && (
+        <HbButton as="a" href={`/jobs/${quote.job_id}`} variant="secondary" size="sm">
+          Back to job
+        </HbButton>
+      )}
+    </div>
+  );
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
-      <HbCard className="space-y-5">
-        <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Quote details</p>
-            <h1 className="hb-heading-2 text-2xl font-semibold">{title}</h1>
-            <p className="text-sm text-slate-400">
-              Status: {statusLabel} · Total: {formatCurrency(quote.total)}
-            </p>
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-              Created: {formatDate(quote.created_at)}
-            </p>
-          </div>
-          <div className="flex flex-col items-end gap-3">
-            {isAiQuote && (
-              <span className={smartQuoteBadgeClasses}>
-                <span className={smartQuoteBadgeDotClasses} />
-                Smart Quote
-              </span>
-            )}
-            <div className="flex flex-wrap gap-3">
-              <HbButton as="a" href="/quotes" variant="secondary" size="sm">
-                Back to quotes
-              </HbButton>
-              {quote.job_id && (
-                <HbButton as="a" href={`/jobs/${quote.job_id}`} variant="secondary" size="sm">
-                  Back to job
-                </HbButton>
-              )}
-            </div>
-          </div>
-        </header>
-        <div className="grid gap-3 text-sm text-slate-400 md:grid-cols-2">
-          <p>
-            <span className="font-semibold">Subtotal:</span> {formatCurrency(quote.subtotal)}
-          </p>
-          <p>
-            <span className="font-semibold">Tax:</span> {formatCurrency(quote.tax)}
-          </p>
-          <p>
-            <span className="font-semibold">Accepted:</span> {formatDate(quote.accepted_at)}
-          </p>
-          <p>
-            <span className="font-semibold">Paid:</span> {formatDate(quote.paid_at)}
-          </p>
-          <p>
-            <span className="font-semibold">Updated:</span> {formatDate(quote.updated_at)}
-          </p>
-        </div>
-        {quote.client_message_template && (
-          <div className="space-y-2 text-sm text-slate-300">
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Client message</p>
-            <p>{quote.client_message_template}</p>
-          </div>
-        )}
-        {firstItems.length > 0 && (
-          <div className="space-y-2 text-sm text-slate-300">
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Line items</p>
-            <ul className="list-disc pl-4">
-              {firstItems.map((item, index) => (
-                <li key={index}>
-                  {item.description ?? "Item"} — {formatCurrency(item.amount ?? null)}
-                </li>
-              ))}
-            </ul>
-            {lineItems.length > firstItems.length && (
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                And {lineItems.length - firstItems.length} more item
-                {lineItems.length - firstItems.length === 1 ? "" : "s"}
-              </p>
-            )}
-          </div>
-        )}
-        <QuoteExplainPanel quoteId={quote.id} />
-        <div className="space-y-3">
-          <MaterialsQuoteExplainPanel quoteId={quote.id} />
-        </div>
-        <FollowupDraftPanel
-          quoteId={quote.id}
-          description={
-            quote.client_message_template ??
-            (quote.job_id ? `Quote for job ${quote.job_id}` : "Home services quote")
-          }
-          jobId={quote.job_id}
-          workspaceId={workspace.id}
-          status={quote.status ?? null}
-          totalAmount={quote.total ?? null}
-          customerName={null}
-          daysSinceQuote={calculateDaysSince(quote.created_at)}
-          createMessageAction={createFollowupMessageAction}
-        />
-        <CallScriptPanel
-          quoteId={quote.id}
-          callScriptAction={callScriptAction}
-          jobId={quote.job_id}
-          workspaceId={workspace.id}
-        />
-        <div className="space-y-3 text-sm text-slate-400">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Identifiers</p>
-          <p>ID: {quote.id}</p>
-          <p>Public token: {quote.public_token ?? "—"}</p>
-        </div>
-      </HbCard>
+      <QuoteDetailsCard
+        quoteId={quote.id}
+        title={title}
+        statusLabel={statusLabel}
+        createdLabel={formatServerDateLabel(quote.created_at)}
+        updatedLabel={formatServerDateLabel(quote.updated_at)}
+        jobTitle={quote.job_id ? `Job ${quote.job_id.slice(0, 8)}` : null}
+        customerDisplayName={null}
+        isAiQuote={isAiQuote}
+        headerActions={headerActions}
+        lineItems={lineItems}
+        clientMessageTemplate={quote.client_message_template}
+        publicToken={quote.public_token}
+        subtotal={quote.subtotal}
+        tax={quote.tax}
+        total={quote.total}
+        acceptedAt={quote.accepted_at}
+        paidAt={quote.paid_at}
+        updatedAt={quote.updated_at}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import HbButton from "@/components/ui/hb-button";
@@ -28,6 +28,8 @@ type JobDetailsCardProps = {
   description?: string | null;
 };
 
+const COLLAPSED_HINT_KEY = "hb_job_details_collapsed_hint_seen";
+
 export default function JobDetailsCard({
   jobId,
   title,
@@ -50,25 +52,75 @@ export default function JobDetailsCard({
   description,
 }: JobDetailsCardProps) {
   const [collapsed, setCollapsed] = useState(true);
+  const [showCollapsedHint, setShowCollapsedHint] = useState(false);
   const toggleLabel = useMemo(
     () => (collapsed ? "Show job details ▼" : "Hide job details ▲"),
     [collapsed],
   );
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      const seen = window.localStorage.getItem(COLLAPSED_HINT_KEY);
+      if (!seen) {
+        queueMicrotask(() => setShowCollapsedHint(true));
+      }
+    } catch {
+      queueMicrotask(() => setShowCollapsedHint(true));
+    }
+  }, []);
+
+  const markHintSeen = () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.setItem(COLLAPSED_HINT_KEY, "true");
+    } catch {
+    }
+  };
+
+  const handleToggle = () => {
+    if (collapsed) {
+      setShowCollapsedHint(false);
+      markHintSeen();
+    }
+    setCollapsed((value) => !value);
+  };
+
   return (
     <HbCard className="space-y-5">
       <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job details</p>
-              <h1 className="hb-heading-2 text-2xl font-semibold">{title}</h1>
-              <p className="text-sm text-slate-400">Status: {status ?? "—"}</p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 space-y-2">
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job details</p>
+                <h1 className="hb-heading-2 text-2xl font-semibold">{title}</h1>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-sm text-slate-400">
+                <span>Status: {status ?? "—"}</span>
+                <span>{followupDueLabel}</span>
+                {unseenFollowupLabel ? (
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.3em] font-semibold ${followupStatusClass}`}
+                  >
+                    {unseenFollowupLabel}
+                  </span>
+                ) : null}
+              </div>
+              {showCollapsedHint && collapsed && (
+                <p className="text-xs text-slate-400">
+                  Job details start collapsed. Click &quot;Show job details&quot; to see more.
+                </p>
+              )}
             </div>
             <button
               type="button"
               className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400 transition hover:text-slate-200"
-              onClick={() => setCollapsed((value) => !value)}
+              onClick={handleToggle}
               aria-expanded={!collapsed}
             >
               {toggleLabel}
