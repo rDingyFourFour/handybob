@@ -19,6 +19,8 @@ export type SupabaseQuery = {
   insert?: (...args: unknown[]) => SupabaseQuery;
   update?: (...args: unknown[]) => SupabaseQuery;
   delete?: (...args: unknown[]) => SupabaseQuery;
+  upsert?: (...args: unknown[]) => Promise<SupabaseQueryResponse>;
+  then?: (...args: unknown[]) => Promise<SupabaseQueryResponse>;
   limit: (size?: number, options?: unknown) => Promise<SupabaseQueryResponse>;
   maybeSingle: () => Promise<{ data: unknown | null; error: unknown | null }>;
   single: () => Promise<{ data: unknown | null; error: unknown | null }>;
@@ -54,12 +56,22 @@ function createQuery(table: string, state: SupabaseMockState): SupabaseQuery {
     insert: vi.fn(() => query),
     update: vi.fn(() => query),
     delete: vi.fn(() => query),
+    upsert: vi.fn(async () => {
+      const response = ensureResponse(state, table);
+      return Promise.resolve(response);
+    }),
     limit: vi.fn(async () => {
       const error = state.limitErrors[table];
       if (error) {
         return Promise.reject(error);
       }
       return Promise.resolve(ensureResponse(state, table));
+    }),
+    then: vi.fn((onFulfilled, onRejected) => {
+      const error = state.limitErrors[table];
+      const response = ensureResponse(state, table);
+      const promise = error ? Promise.reject(error) : Promise.resolve(response);
+      return promise.then(onFulfilled, onRejected);
     }),
     maybeSingle: vi.fn(async () => {
       const response = ensureResponse(state, table);

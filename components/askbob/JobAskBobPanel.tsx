@@ -5,46 +5,16 @@ import { useEffect, useState } from "react";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import AskBobForm from "./AskBobForm";
-import type { AskBobResponseDTO } from "@/lib/domain/askbob/types";
+import type {
+  AskBobDiagnoseSnapshotPayload,
+  AskBobResponseDTO,
+} from "@/lib/domain/askbob/types";
+import { buildDiagnosisSummary } from "@/lib/domain/askbob/summary";
 
 export type JobDiagnosisContext = {
   diagnosisSummary: string | null;
   askBobResponseId?: string | null;
 };
-
-function buildDiagnosisSummary(response: AskBobResponseDTO): string | null {
-  const normalizeItems = (sectionItems: string[]) =>
-    sectionItems
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .slice(0, 2);
-
-  const stepsSection =
-    response.sections.find((section) => section.type === "steps" && section.items.some(Boolean)) ??
-    response.sections.find((section) => section.items.some(Boolean));
-  const stepItems = stepsSection ? normalizeItems(stepsSection.items) : [];
-  const majorScope = stepItems.length ? `${stepsSection?.title ?? "Diagnosis"}: ${stepItems.join("; ")}` : null;
-
-  const safetySection = response.sections.find(
-    (section) => section.type === "safety" && section.items.some(Boolean),
-  );
-  const safetyItem = safetySection?.items.map((item) => item.trim()).find(Boolean) ?? null;
-
-  const summaryParts = [];
-  if (majorScope) {
-    summaryParts.push(majorScope);
-  }
-  if (safetyItem) {
-    summaryParts.push(`Safety note: ${safetyItem}`);
-  }
-
-  if (!summaryParts.length) {
-    return null;
-  }
-
-  const summary = summaryParts.join(" ").trim();
-  return summary.length ? summary : null;
-}
 
 type JobAskBobPanelProps = {
   workspaceId: string;
@@ -58,6 +28,7 @@ type JobAskBobPanelProps = {
   stepCompleted?: boolean;
   stepCollapsed?: boolean;
   onToggleStepCollapsed?: () => void;
+  initialDiagnoseSnapshot?: AskBobDiagnoseSnapshotPayload | null;
 };
 
 export default function JobAskBobPanel({
@@ -72,6 +43,7 @@ export default function JobAskBobPanel({
   stepCompleted,
   stepCollapsed = false,
   onToggleStepCollapsed,
+  initialDiagnoseSnapshot,
 }: JobAskBobPanelProps) {
   useEffect(() => {
     console.log("[askbob-ui-entry]", {
@@ -85,8 +57,12 @@ export default function JobAskBobPanel({
 
   const normalizedJobTitle = jobTitle?.trim() ?? "";
   const normalizedJobDescription = jobDescription?.trim() ?? "";
-  const [latestAskBobResponse, setLatestAskBobResponse] = useState<AskBobResponseDTO | null>(null);
-  const [latestDiagnosisSummary, setLatestDiagnosisSummary] = useState<string | null>(null);
+  const [latestAskBobResponse, setLatestAskBobResponse] = useState<AskBobResponseDTO | null>(
+    () => initialDiagnoseSnapshot?.response ?? null,
+  );
+  const [latestDiagnosisSummary, setLatestDiagnosisSummary] = useState<string | null>(() =>
+    initialDiagnoseSnapshot ? buildDiagnosisSummary(initialDiagnoseSnapshot.response) : null,
+  );
   const labelsToShow: string[] = [];
   if (normalizedJobTitle) {
     labelsToShow.push("job title");
@@ -181,6 +157,7 @@ export default function JobAskBobPanel({
               jobTitle={jobTitle}
               onSuccess={onDiagnoseSuccess}
               onResponse={handleResponse}
+              initialResponse={initialDiagnoseSnapshot?.response ?? undefined}
             />
           </>
         )}

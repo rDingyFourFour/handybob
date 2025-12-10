@@ -1,30 +1,36 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Database } from "@/lib/supabase/types";
+import { z } from "zod";
 import {
   AskBobContext,
+  AskBobDiagnoseSnapshotPayload,
   AskBobJobFollowupInput,
   AskBobJobFollowupResult,
   AskBobMaterialsExplainInput,
   AskBobMaterialsExplainResult,
   AskBobMaterialsGenerateInput,
   AskBobMaterialsGenerateResult,
-  AskBobMessageDraftInput,
-  AskBobMessageDraftResult,
   AskBobQuoteExplainInput,
   AskBobQuoteExplainResult,
   AskBobQuoteGenerateInput,
+  AskBobQuoteGenerateResult,
   AskBobResponseData,
   AskBobResponseDTO,
   AskBobResponseDTOSection,
-  AskBobTask,
-  AskBobTaskInput,
-  AskBobTaskResult,
+  AskBobJobTaskSnapshotTask,
+  AskBobMaterialsSnapshotPayload,
+  AskBobQuoteSnapshotPayload,
+  AskBobFollowupSnapshotPayload,
+  AskBobJobDiagnoseResult,
+  askBobMaterialItemSchema,
   askBobResponseDataSchema,
 } from "./types";
 import {
   createAskBobSession,
   createAskBobResponse,
   getLastAskBobActivityForJob,
+  getJobTaskSnapshotsForJob,
+  upsertJobTaskSnapshot,
 } from "./repository";
 import {
   callAskBobMessageDraft,
@@ -108,6 +114,7 @@ export async function runAskBobTask(
   const prompt = input.prompt?.trim();
   const extraDetails = input.extraDetails?.trim() ?? null;
   const jobTitle = input.jobTitle?.trim() ?? null;
+  const context = input.context;
 
   if (!prompt || prompt.length < MIN_PROMPT_LENGTH) {
     throw new Error("Please provide a bit more detail about the problem.");
@@ -115,13 +122,13 @@ export async function runAskBobTask(
 
   try {
     const session = await createAskBobSessionWithContext(supabase, {
-      context: input.context,
+      context,
       prompt,
     });
 
     const modelResult = await callAskBobModel({
       prompt,
-      context: input.context,
+      context,
       extraDetails,
       jobTitle,
     });
@@ -137,11 +144,29 @@ export async function runAskBobTask(
       createdAt: response.createdAt,
       data: modelResult.data,
     });
-
-    return {
+    const finalResult: AskBobJobDiagnoseResult = {
       ...dto,
       modelLatencyMs: modelResult.latencyMs,
     };
+
+    if (context.jobId) {
+      try {
+        await recordAskBobJobTaskSnapshot(supabase, {
+          workspaceId: context.workspaceId,
+          jobId: context.jobId,
+          task: "job.diagnose",
+          result: finalResult,
+        });
+      } catch (snapshotError) {
+        console.error("[askbob-snapshot-upsert] job diagnose failed", {
+          workspaceId: context.workspaceId,
+          jobId: context.jobId,
+          error: snapshotError,
+        });
+      }
+    }
+
+    return finalResult;
   } catch (error) {
     throw error;
   }
@@ -221,6 +246,23 @@ async function runAskBobQuoteGenerateTask(
       linesCount: modelResult.result.lines.length,
       materialsCount: modelResult.result.materials?.length ?? 0,
     });
+
+    if (context.jobId) {
+      try {
+        await recordAskBobJobTaskSnapshot(supabase, {
+          workspaceId: context.workspaceId,
+          jobId: context.jobId,
+          task: "quote.generate",
+          result: modelResult.result,
+        });
+      } catch (snapshotError) {
+        console.error("[askbob-snapshot-upsert] quote generate failed", {
+          workspaceId: context.workspaceId,
+          jobId: context.jobId,
+          error: snapshotError,
+        });
+      }
+    }
 
     return modelResult.result;
   } catch (error) {
@@ -330,6 +372,22 @@ export async function runAskBobJobFollowupTask(
       shouldWait: modelResult.result.shouldWait,
       hasQuoteContextForFollowup,
     });
+    if (jobId) {
+      try {
+        await recordAskBobJobTaskSnapshot(supabase, {
+          workspaceId: context.workspaceId,
+          jobId,
+          task: "job.followup",
+          result: modelResult.result,
+        });
+      } catch (snapshotError) {
+        console.error("[askbob-snapshot-upsert] job followup failed", {
+          workspaceId: context.workspaceId,
+          jobId,
+          error: snapshotError,
+        });
+      }
+    }
     return modelResult.result;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -431,6 +489,23 @@ async function runAskBobMaterialsGenerateTask(
       itemsCount: modelResult.result.items.length,
     });
 
+    if (context.jobId) {
+      try {
+        await recordAskBobJobTaskSnapshot(supabase, {
+          workspaceId: context.workspaceId,
+          jobId: context.jobId,
+          task: "materials.generate",
+          result: modelResult.result,
+        });
+      } catch (snapshotError) {
+        console.error("[askbob-snapshot-upsert] materials generate failed", {
+          workspaceId: context.workspaceId,
+          jobId: context.jobId,
+          error: snapshotError,
+        });
+      }
+    }
+
     return modelResult.result;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -446,6 +521,291 @@ async function runAskBobMaterialsGenerateTask(
 
     throw error;
   }
+}
+
+function buildDiagnoseSnapshotPayload(result: AskBobJobDiagnoseResult): AskBobDiagnoseSnapshotPayload {
+  return {
+    sessionId: result.sessionId,
+    responseId: result.responseId,
+    createdAt: result.createdAt,
+    sections: result.sections,
+    materials: result.materials,
+  };
+}
+
+function buildMaterialsSnapshotPayload(result: AskBobMaterialsGenerateResult): AskBobMaterialsSnapshotPayload {
+  return {
+    items: result.items,
+    notes: result.notes ?? null,
+  };
+}
+
+function buildQuoteSnapshotPayload(result: AskBobQuoteGenerateResult): AskBobQuoteSnapshotPayload {
+  return {
+    lines: result.lines,
+    materials: result.materials ?? null,
+    notes: result.notes ?? null,
+  };
+}
+
+function buildFollowupSnapshotPayload(result: AskBobJobFollowupResult): AskBobFollowupSnapshotPayload {
+  return {
+    recommendedAction: result.recommendedAction,
+    rationale: result.rationale,
+    steps: result.steps,
+    shouldSendMessage: result.shouldSendMessage,
+    shouldScheduleVisit: result.shouldScheduleVisit,
+    shouldCall: result.shouldCall,
+    shouldWait: result.shouldWait,
+    suggestedChannel: result.suggestedChannel ?? null,
+    suggestedDelayDays: result.suggestedDelayDays ?? null,
+    riskNotes: result.riskNotes ?? null,
+    modelLatencyMs: result.modelLatencyMs ?? null,
+  };
+}
+
+export async function recordAskBobJobTaskSnapshot(
+  supabase: DbClient,
+  params: {
+    workspaceId: string;
+    jobId: string;
+    task: AskBobJobTaskSnapshotTask;
+    result:
+      | AskBobJobDiagnoseResult
+      | AskBobMaterialsGenerateResult
+      | AskBobQuoteGenerateResult
+      | AskBobJobFollowupResult;
+  }
+): Promise<void> {
+  let payload:
+    | AskBobDiagnoseSnapshotPayload
+    | AskBobMaterialsSnapshotPayload
+    | AskBobQuoteSnapshotPayload
+    | AskBobFollowupSnapshotPayload
+    | null = null;
+  let summary: string | null = null;
+
+  switch (params.task) {
+    case "job.diagnose": {
+      const result = params.result as AskBobJobDiagnoseResult;
+      payload = buildDiagnoseSnapshotPayload(result);
+      const sectionsCount = payload.sections.length;
+      const materialsCount = payload.materials?.length ?? 0;
+      summary = `sections:${sectionsCount},materials:${materialsCount}`;
+      break;
+    }
+    case "materials.generate": {
+      const result = params.result as AskBobMaterialsGenerateResult;
+      payload = buildMaterialsSnapshotPayload(result);
+      summary = `items:${payload.items.length}`;
+      break;
+    }
+    case "quote.generate": {
+      const result = params.result as AskBobQuoteGenerateResult;
+      payload = buildQuoteSnapshotPayload(result);
+      summary = `lines:${payload.lines.length},materials:${payload.materials?.length ?? 0}`;
+      break;
+    }
+    case "job.followup": {
+      const result = params.result as AskBobJobFollowupResult;
+      payload = buildFollowupSnapshotPayload(result);
+      summary = `steps:${payload.steps.length},message:${payload.shouldSendMessage ? 1 : 0}`;
+      break;
+    }
+  }
+
+  if (!payload) {
+    return;
+  }
+
+  try {
+    await upsertJobTaskSnapshot(supabase, {
+      workspaceId: params.workspaceId,
+      jobId: params.jobId,
+      task: params.task,
+      payload,
+    });
+    console.log("[askbob-snapshot-upsert]", {
+      workspaceId: params.workspaceId,
+      jobId: params.jobId,
+      task: params.task,
+      summary,
+    });
+  } catch (error) {
+    console.error("[askbob-snapshot-upsert] Failed to persist snapshot", {
+      workspaceId: params.workspaceId,
+      jobId: params.jobId,
+      task: params.task,
+      error,
+    });
+  }
+}
+
+const askBobSectionTypeSchema = z.enum(["steps", "materials", "safety", "costTime", "escalation"]);
+const askBobResponseSectionSchema = z.object({
+  type: askBobSectionTypeSchema,
+  title: z.string(),
+  items: z.array(z.string()),
+});
+const diagnoseSnapshotSchema = z.object({
+  sessionId: z.string().min(1),
+  responseId: z.string().min(1),
+  createdAt: z.string(),
+  sections: z.array(askBobResponseSectionSchema),
+  materials: z.array(askBobMaterialItemSchema).optional(),
+});
+const askBobMaterialItemResultSchema = z.object({
+  name: z.string().min(1),
+  sku: z.string().optional().nullable(),
+  category: z.string().optional().nullable(),
+  quantity: z.number(),
+  unit: z.string().optional().nullable(),
+  estimatedUnitCost: z.number().nullable().optional(),
+  estimatedTotalCost: z.number().nullable().optional(),
+  notes: z.string().optional().nullable(),
+});
+const materialsSnapshotSchema = z.object({
+  items: z.array(askBobMaterialItemResultSchema),
+  notes: z.string().optional().nullable(),
+});
+const quoteLineSchema = z.object({
+  description: z.string(),
+  quantity: z.number(),
+  unit: z.string().optional().nullable(),
+  unitPrice: z.number().nullable().optional(),
+  lineTotal: z.number().nullable().optional(),
+});
+const quoteMaterialLineSchema = z.object({
+  name: z.string(),
+  quantity: z.number(),
+  unit: z.string().optional().nullable(),
+  estimatedUnitCost: z.number().nullable().optional(),
+  estimatedTotalCost: z.number().nullable().optional(),
+});
+const quoteSnapshotSchema = z.object({
+  lines: z.array(quoteLineSchema),
+  materials: z.array(quoteMaterialLineSchema).optional().nullable(),
+  notes: z.string().optional().nullable(),
+});
+const followupStepSchema = z.object({
+  label: z.string(),
+  detail: z.string().optional().nullable(),
+});
+const followupSnapshotSchema = z.object({
+  recommendedAction: z.string(),
+  rationale: z.string(),
+  steps: z.array(followupStepSchema),
+  shouldSendMessage: z.boolean(),
+  shouldScheduleVisit: z.boolean(),
+  shouldCall: z.boolean(),
+  shouldWait: z.boolean(),
+  suggestedChannel: z.enum(["sms", "email", "phone"]).optional().nullable(),
+  suggestedDelayDays: z.number().optional().nullable(),
+  riskNotes: z.string().optional().nullable(),
+  modelLatencyMs: z.number().optional().nullable(),
+});
+
+export async function getJobAskBobSnapshotsForJob(
+  supabase: DbClient,
+  params: { workspaceId: string; jobId: string }
+): Promise<{
+  diagnoseSnapshot: AskBobDiagnoseSnapshotPayload | null;
+  materialsSnapshot: AskBobMaterialsSnapshotPayload | null;
+  quoteSnapshot: AskBobQuoteSnapshotPayload | null;
+  followupSnapshot: AskBobFollowupSnapshotPayload | null;
+}> {
+  const rows = await getJobTaskSnapshotsForJob(supabase, params);
+  const snapshots = {
+    diagnoseSnapshot: null,
+    materialsSnapshot: null,
+    quoteSnapshot: null,
+    followupSnapshot: null,
+  };
+  const counts = {
+    diagnose: 0,
+    materials: 0,
+    quote: 0,
+    followup: 0,
+  };
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object") {
+      continue;
+    }
+    switch (row.task) {
+      case "job.diagnose": {
+        const parsed = diagnoseSnapshotSchema.safeParse(row.payload);
+        if (parsed.success) {
+          snapshots.diagnoseSnapshot = parsed.data;
+          counts.diagnose += 1;
+        } else {
+          console.warn("[askbob-snapshot-decode-error]", {
+            workspaceId: params.workspaceId,
+            jobId: params.jobId,
+            task: row.task,
+            errors: parsed.error.errors.map((error) => error.message),
+          });
+        }
+        break;
+      }
+      case "materials.generate": {
+        const parsed = materialsSnapshotSchema.safeParse(row.payload);
+        if (parsed.success) {
+          snapshots.materialsSnapshot = parsed.data;
+          counts.materials += 1;
+        } else {
+          console.warn("[askbob-snapshot-decode-error]", {
+            workspaceId: params.workspaceId,
+            jobId: params.jobId,
+            task: row.task,
+            errors: parsed.error.errors.map((error) => error.message),
+          });
+        }
+        break;
+      }
+      case "quote.generate": {
+        const parsed = quoteSnapshotSchema.safeParse(row.payload);
+        if (parsed.success) {
+          snapshots.quoteSnapshot = parsed.data;
+          counts.quote += 1;
+        } else {
+          console.warn("[askbob-snapshot-decode-error]", {
+            workspaceId: params.workspaceId,
+            jobId: params.jobId,
+            task: row.task,
+            errors: parsed.error.errors.map((error) => error.message),
+          });
+        }
+        break;
+      }
+      case "job.followup": {
+        const parsed = followupSnapshotSchema.safeParse(row.payload);
+        if (parsed.success) {
+          snapshots.followupSnapshot = parsed.data;
+          counts.followup += 1;
+        } else {
+          console.warn("[askbob-snapshot-decode-error]", {
+            workspaceId: params.workspaceId,
+            jobId: params.jobId,
+            task: row.task,
+            errors: parsed.error.errors.map((error) => error.message),
+          });
+        }
+        break;
+      }
+    }
+  }
+
+  const totalLoaded = counts.diagnose + counts.materials + counts.quote + counts.followup;
+  if (totalLoaded > 0) {
+    console.log("[askbob-snapshot-load]", {
+      workspaceId: params.workspaceId,
+      jobId: params.jobId,
+      counts,
+    });
+  }
+
+  return snapshots;
 }
 
 const TASK_LABELS: Record<AskBobTask, string> = {

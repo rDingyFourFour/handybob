@@ -11,6 +11,54 @@ export type AskBobTask =
   | "materials.explain"
   | "job.followup";
 
+export type AskBobJobTaskSnapshotTask =
+  | "job.diagnose"
+  | "materials.generate"
+  | "quote.generate"
+  | "job.followup";
+
+export interface AskBobDiagnoseSnapshotPayload {
+  sessionId: string;
+  responseId: string;
+  createdAt: string;
+  sections: AskBobResponseDTOSection[];
+  materials?: AskBobMaterialItem[];
+}
+
+export interface AskBobMaterialsSnapshotPayload {
+  items: AskBobMaterialItemResult[];
+  notes?: string | null;
+}
+
+export interface AskBobQuoteSnapshotPayload {
+  lines: AskBobQuoteLineResult[];
+  materials?: AskBobQuoteMaterialLineResult[] | null;
+  notes?: string | null;
+}
+
+export interface AskBobFollowupSnapshotPayload {
+  recommendedAction: string;
+  rationale: string;
+  steps: AskBobJobFollowupResult["steps"];
+  shouldSendMessage: boolean;
+  shouldScheduleVisit: boolean;
+  shouldCall: boolean;
+  shouldWait: boolean;
+  suggestedChannel?: AskBobJobFollowupResult["suggestedChannel"];
+  suggestedDelayDays?: number | null;
+  riskNotes?: string | null;
+  modelLatencyMs?: number | null;
+}
+
+export interface AskBobJobTaskSnapshot {
+  task: AskBobJobTaskSnapshotTask;
+  payload:
+    | AskBobDiagnoseSnapshotPayload
+    | AskBobMaterialsSnapshotPayload
+    | AskBobQuoteSnapshotPayload
+    | AskBobFollowupSnapshotPayload;
+}
+
 export type AskBobSection = "steps" | "materials" | "safety" | "costTime" | "escalation";
 
 export type AskBobMaterialItem = {

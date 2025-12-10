@@ -48,3 +48,25 @@ function normalizeNullableString(value?: string | null): string | null {
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
 }
+
+export function summarizeMaterialsSuggestion(suggestion: SmartQuoteSuggestion | null): string | null {
+  if (!suggestion) {
+    return null;
+  }
+
+  const materialsCount = suggestion.materials?.length ?? 0;
+  const baseSentence =
+    materialsCount > 0
+      ? `AskBob suggested ${materialsCount} material${materialsCount === 1 ? "" : "s"} for this job.`
+      : "AskBob suggested no specific materials for this job.";
+
+  const notes = suggestion.notes?.trim();
+  if (notes) {
+    const firstSentence = notes.split(".")[0].trim();
+    if (firstSentence) {
+      return `${baseSentence} Notes: ${firstSentence}.`;
+    }
+  }
+
+  return baseSentence;
+}

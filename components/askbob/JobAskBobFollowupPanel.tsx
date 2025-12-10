@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
-import type { AskBobJobFollowupResult } from "@/lib/domain/askbob/types";
+import type {
+  AskBobFollowupSnapshotPayload,
+  AskBobJobFollowupResult,
+} from "@/lib/domain/askbob/types";
 import { runAskBobJobFollowupAction } from "@/app/(app)/askbob/followup-actions";
 import { draftAskBobJobFollowupMessageAction } from "@/app/(app)/askbob/followup-message-draft-actions";
 import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
@@ -30,6 +33,7 @@ type JobAskBobFollowupPanelProps = {
   onReset?: () => void;
   stepCollapsed?: boolean;
   onToggleStepCollapsed?: () => void;
+  initialFollowupSnapshot?: AskBobFollowupSnapshotPayload | null;
 };
 
 export default function JobAskBobFollowupPanel({
@@ -50,15 +54,28 @@ export default function JobAskBobFollowupPanel({
   onReset,
   stepCollapsed = false,
   onToggleStepCollapsed,
+  initialFollowupSnapshot,
 }: JobAskBobFollowupPanelProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [result, setResult] = useState<AskBobJobFollowupResult | null>(null);
+  const initialFollowupResult = initialFollowupSnapshot
+    ? {
+        ...initialFollowupSnapshot,
+        modelLatencyMs: initialFollowupSnapshot.modelLatencyMs ?? 0,
+        rawModelOutput: null,
+      }
+    : null;
+  const [result, setResult] = useState<AskBobJobFollowupResult | null>(initialFollowupResult);
   const [isDrafting, setIsDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
+  const hasResetEffectRun = useRef(false);
   useEffect(() => {
     if (resetToken === undefined) {
+      return;
+    }
+    if (!hasResetEffectRun.current) {
+      hasResetEffectRun.current = true;
       return;
     }
     setResult(null);

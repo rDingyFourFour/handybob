@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import HbButton from "@/components/ui/hb-button";
@@ -8,8 +8,15 @@ import HbCard from "@/components/ui/hb-card";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import { runAskBobQuoteGenerateAction } from "@/app/(app)/askbob/quote-actions";
 import { createQuoteFromAskBobAction } from "@/app/(app)/quotes/askbob-actions";
-import { SmartQuoteSuggestion } from "@/lib/domain/quotes/askbob-adapter";
-import { estimateSmartQuoteTotals } from "@/lib/domain/quotes/askbob-adapter";
+import {
+  adaptAskBobQuoteToSmartQuote,
+  estimateSmartQuoteTotals,
+  SmartQuoteSuggestion,
+} from "@/lib/domain/quotes/askbob-adapter";
+import type {
+  AskBobQuoteGenerateResult,
+  AskBobQuoteSnapshotPayload,
+} from "@/lib/domain/askbob/types";
 
 type AskBobQuotePanelProps = {
   workspaceId: string;
@@ -25,6 +32,7 @@ type AskBobQuotePanelProps = {
   stepCompleted?: boolean;
   resetToken?: number;
   onQuoteReset?: () => void;
+  initialQuoteSnapshot?: AskBobQuoteSnapshotPayload | null;
 };
 
 const DEFAULT_PROMPT = "Generate a standard quote for this job.";
@@ -123,6 +131,7 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     onQuoteReset,
     stepCollapsed = false,
     onToggleStepCollapsed,
+    initialQuoteSnapshot,
   } = props;
   const router = useRouter();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
@@ -130,10 +139,24 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
   const [isApplying, setIsApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
-  const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
   const [appliedQuoteId, setAppliedQuoteId] = useState<string | null>(null);
+  const initialQuoteSuggestion = initialQuoteSnapshot
+    ? adaptAskBobQuoteToSmartQuote({
+        lines: initialQuoteSnapshot.lines,
+        materials: initialQuoteSnapshot.materials ?? null,
+        notes: initialQuoteSnapshot.notes ?? null,
+        modelLatencyMs: 0,
+        rawModelOutput: null,
+      } as AskBobQuoteGenerateResult)
+    : null;
+  const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(initialQuoteSuggestion);
+  const hasResetEffectRun = useRef(false);
   useEffect(() => {
     if (resetToken === undefined) {
+      return;
+    }
+    if (!hasResetEffectRun.current) {
+      hasResetEffectRun.current = true;
       return;
     }
     setSuggestion(null);

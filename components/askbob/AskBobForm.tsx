@@ -20,6 +20,7 @@ type AskBobFormProps = {
   onResponse?: (response: AskBobResponseDTO) => void;
   initialPrompt?: string;
   askBobOrigin?: string | null;
+  initialResponse?: AskBobResponseDTO | null;
 };
 
 const MIN_PROMPT_LENGTH = 10;
@@ -80,12 +81,16 @@ export default function AskBobForm({
   onResponse,
   initialPrompt,
   askBobOrigin,
+  initialResponse,
 }: AskBobFormProps) {
   const trimmedJobDescription = jobDescription?.trim() ?? "";
   const hasPromptSeed = Boolean(trimmedJobDescription);
   const initialPromptValue = initialPrompt?.trim() ?? "";
+  const initialResponseValue = initialResponse ?? null;
   const [prompt, setPrompt] = useState(() => initialPromptValue || trimmedJobDescription);
-  const [response, setResponse] = useState<AskBobResponseDTO | null>(null);
+  const [response, setResponse] = useState<AskBobResponseDTO | null>(
+    () => initialResponseValue,
+  );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const effectiveJobTitle = jobTitle?.trim() ?? "";

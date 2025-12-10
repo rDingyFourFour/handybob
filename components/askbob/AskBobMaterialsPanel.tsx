@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import { formatCurrency } from "@/utils/timeline/formatters";
-import { SmartQuoteSuggestion } from "@/lib/domain/quotes/askbob-adapter";
+import type {
+  AskBobMaterialsGenerateResult,
+  AskBobMaterialsSnapshotPayload,
+} from "@/lib/domain/askbob/types";
+import {
+  adaptAskBobMaterialsToSmartQuote,
+  SmartQuoteSuggestion,
+  summarizeMaterialsSuggestion,
+} from "@/lib/domain/quotes/materials-askbob-adapter";
 import { runAskBobMaterialsGenerateAction } from "@/app/(app)/askbob/materials-actions";
 
 export type MaterialsSummaryContext = {
@@ -26,29 +34,8 @@ type AskBobMaterialsPanelProps = {
   resetToken?: number;
   stepCollapsed?: boolean;
   onToggleStepCollapsed?: () => void;
+  initialMaterialsSnapshot?: AskBobMaterialsSnapshotPayload | null;
 };
-
-function summarizeMaterialsSuggestion(suggestion: SmartQuoteSuggestion | null): string | null {
-  if (!suggestion) {
-    return null;
-  }
-
-  const materialsCount = suggestion.materials?.length ?? 0;
-  const baseSentence =
-    materialsCount > 0
-      ? `AskBob suggested ${materialsCount} material${materialsCount === 1 ? "" : "s"} for this job.`
-      : "AskBob suggested no specific materials for this job.";
-
-  const notes = suggestion.notes?.trim();
-  if (notes) {
-    const firstSentence = notes.split(".")[0].trim();
-    if (firstSentence) {
-      return `${baseSentence} Notes: ${firstSentence}.`;
-    }
-  }
-
-  return baseSentence;
-}
 
 type MaterialsExtraDetailsInput = {
   jobTitle?: string | null;
@@ -110,12 +97,24 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
     resetToken,
     stepCollapsed = false,
     onToggleStepCollapsed,
+    initialMaterialsSnapshot,
   } = props;
+  const initialMaterialsSuggestion = initialMaterialsSnapshot
+    ? adaptAskBobMaterialsToSmartQuote({
+        items: initialMaterialsSnapshot.items,
+        notes: initialMaterialsSnapshot.notes ?? null,
+        modelLatencyMs: 0,
+        rawModelOutput: null,
+      } as AskBobMaterialsGenerateResult)
+    : null;
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [extraDetails, setExtraDetails] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
+  const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(
+    initialMaterialsSuggestion,
+  );
+  const hasResetEffectRun = useRef(false);
   const normalizedJobTitle = jobTitle?.trim() ?? "";
   const normalizedJobDescription = jobDescription?.trim() ?? "";
   const normalizedDiagnosisSummary = diagnosisSummaryForMaterials?.trim() ?? "";
@@ -139,6 +138,10 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
 
   useEffect(() => {
     if (resetToken === undefined) {
+      return;
+    }
+    if (!hasResetEffectRun.current) {
+      hasResetEffectRun.current = true;
       return;
     }
     setSuggestion(null);

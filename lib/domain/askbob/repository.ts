@@ -152,3 +152,57 @@ export async function getLastAskBobActivityForJob(
     tasksSeen: totalRunsCount > 0 ? ["job.diagnose"] : [],
   };
 }
+
+export async function upsertJobTaskSnapshot(
+  supabase: DbClient,
+  params: {
+    workspaceId: string;
+    jobId: string;
+    task: string;
+    payload: unknown;
+  }
+): Promise<void> {
+  const { error } = await supabase
+    .from("askbob_job_task_snapshots")
+    .upsert(
+      {
+        workspace_id: params.workspaceId,
+        job_id: params.jobId,
+        task: params.task,
+        payload: params.payload,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "workspace_id,job_id,task" },
+    );
+
+  if (error) {
+    console.error("[askbob-repository] Failed to upsert task snapshot", {
+      workspaceId: params.workspaceId,
+      jobId: params.jobId,
+      task: params.task,
+      errorMessage: error?.message ?? "Unknown error",
+    });
+  }
+}
+
+export async function getJobTaskSnapshotsForJob(
+  supabase: DbClient,
+  params: { workspaceId: string; jobId: string }
+): Promise<{ task: string; payload: unknown }[]> {
+  const { data, error } = await supabase
+    .from("askbob_job_task_snapshots")
+    .select("task, payload")
+    .eq("workspace_id", params.workspaceId)
+    .eq("job_id", params.jobId);
+
+  if (error) {
+    console.error("[askbob-repository] Failed to load task snapshots", {
+      workspaceId: params.workspaceId,
+      jobId: params.jobId,
+      errorMessage: error?.message ?? "Unknown error",
+    });
+    return [];
+  }
+
+  return data ?? [];
+}

@@ -10,7 +10,10 @@ import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import { formatCurrency, formatFriendlyDateTime } from "@/utils/timeline/formatters";
-import { getJobAskBobHudSummary } from "@/lib/domain/askbob/service";
+import {
+  getJobAskBobHudSummary,
+  getJobAskBobSnapshotsForJob,
+} from "@/lib/domain/askbob/service";
 import JobDetailsCard from "@/components/JobDetailsCard";
 import {
   computeFollowupDueInfo,
@@ -256,6 +259,29 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     }
   }
 
+  let askBobSnapshots = {
+    diagnoseSnapshot: null,
+    materialsSnapshot: null,
+    quoteSnapshot: null,
+    followupSnapshot: null,
+  };
+  try {
+    askBobSnapshots = await getJobAskBobSnapshotsForJob(supabase, {
+      workspaceId: workspace.id,
+      jobId: job.id,
+    });
+  } catch (error) {
+    console.error("[job-detail] Failed to load AskBob snapshots", error);
+  }
+
+  const {
+    diagnoseSnapshot,
+    materialsSnapshot,
+    quoteSnapshot,
+    followupSnapshot,
+  } = askBobSnapshots;
+
+
   let upcomingAppointments: JobAppointmentRow[] = [];
   let upcomingAppointmentsError = false;
   try {
@@ -445,6 +471,10 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           lastQuoteId={lastQuoteId ?? null}
           lastQuoteCreatedAt={lastQuoteCreatedAt ?? null}
           lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? null}
+          initialDiagnoseSnapshot={diagnoseSnapshot ?? undefined}
+          initialMaterialsSnapshot={materialsSnapshot ?? undefined}
+          initialQuoteSnapshot={quoteSnapshot ?? undefined}
+          initialFollowupSnapshot={followupSnapshot ?? undefined}
         />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">
