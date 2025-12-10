@@ -333,7 +333,6 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
   const lastQuoteCreatedAtFriendly = lastQuoteCreatedAt
     ? formatFriendlyDateTime(lastQuoteCreatedAt, "")
     : null;
-
   if (!quotesError) {
     const aiCount = quotes.reduce(
       (count, quote) => (quote.smart_quote_used ? count + 1 : count),
@@ -468,7 +467,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
           askBobLastUsedAtIso={askBobLastUsedAtIso}
           askBobRunsSummary={askBobRunsSummary}
-          lastQuoteId={lastQuoteId ?? null}
+          initialLastQuoteId={lastQuoteId ?? null}
           lastQuoteCreatedAt={lastQuoteCreatedAt ?? null}
           lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? null}
           initialDiagnoseSnapshot={diagnoseSnapshot ?? undefined}

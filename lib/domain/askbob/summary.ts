@@ -7,14 +7,24 @@ function normalizeItems(sectionItems: string[]) {
     .slice(0, 2);
 }
 
-export function buildDiagnosisSummary(response: AskBobResponseDTO): string | null {
+export function buildDiagnosisSummary(
+  response: AskBobResponseDTO | null | undefined,
+): string | null {
+  if (!response) {
+    return null;
+  }
+  const sections = Array.isArray(response.sections) ? response.sections : [];
+  if (!sections.length) {
+    return null;
+  }
+
   const stepsSection =
-    response.sections.find((section) => section.type === "steps" && section.items.some(Boolean)) ??
-    response.sections.find((section) => section.items.some(Boolean));
+    sections.find((section) => section.type === "steps" && section.items.some(Boolean)) ??
+    sections.find((section) => section.items.some(Boolean));
   const stepItems = stepsSection ? normalizeItems(stepsSection.items) : [];
   const majorScope = stepItems.length ? `${stepsSection?.title ?? "Diagnosis"}: ${stepItems.join("; ")}` : null;
 
-  const safetySection = response.sections.find(
+  const safetySection = sections.find(
     (section) => section.type === "safety" && section.items.some(Boolean),
   );
   const safetyItem = safetySection?.items.map((item) => item.trim()).find(Boolean) ?? null;

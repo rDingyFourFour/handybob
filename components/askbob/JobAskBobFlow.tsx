@@ -31,7 +31,7 @@ type JobAskBobFlowProps = {
   askBobLastUsedAtDisplay?: string | null;
   askBobLastUsedAtIso?: string | null;
   askBobRunsSummary?: string | null;
-  lastQuoteId?: string | null;
+  initialLastQuoteId?: string | null;
   lastQuoteCreatedAt?: string | null;
   lastQuoteCreatedAtFriendly?: string | null;
   initialDiagnoseSnapshot?: AskBobDiagnoseSnapshotPayload | null;
@@ -56,7 +56,7 @@ export default function JobAskBobFlow({
   askBobLastUsedAtDisplay,
   askBobLastUsedAtIso,
   askBobRunsSummary,
-  lastQuoteId,
+  initialLastQuoteId,
   lastQuoteCreatedAt,
   lastQuoteCreatedAtFriendly,
   initialDiagnoseSnapshot,
@@ -82,26 +82,25 @@ export default function JobAskBobFlow({
   const [diagnosisSummary, setDiagnosisSummary] = useState<string | null>(
     diagnosisSummaryInitialValue,
   );
+  const [diagnosisDone, setDiagnosisDone] = useState(false);
   const [materialsSummary, setMaterialsSummary] = useState<string | null>(
     materialsSummaryInitialValue ?? null,
   );
+  const [materialsDone, setMaterialsDone] = useState(false);
   const [sessionQuote, setSessionQuote] = useState<SessionQuote | null>(null);
   const [diagnoseCollapsed, setDiagnoseCollapsed] = useState(false);
   const [materialsCollapsed, setMaterialsCollapsed] = useState(false);
   const [quoteCollapsed, setQuoteCollapsed] = useState(false);
   const [followupCollapsed, setFollowupCollapsed] = useState(false);
   const [hasAutoCollapsedAllSteps, setHasAutoCollapsedAllSteps] = useState(false);
-  const [stepDiagnoseDone, setStepDiagnoseDone] = useState(Boolean(initialDiagnoseSnapshot));
-  const [stepMaterialsDone, setStepMaterialsDone] = useState(Boolean(initialMaterialsSnapshot));
-  const [stepQuoteDone, setStepQuoteDone] = useState(false);
-  const [stepFollowupDone, setStepFollowupDone] = useState(Boolean(initialFollowupSnapshot));
+  const [followupDone, setFollowupDone] = useState(false);
   const [materialsResetToken, setMaterialsResetToken] = useState(0);
   const [quoteResetToken, setQuoteResetToken] = useState(0);
   const [followupResetToken, setFollowupResetToken] = useState(0);
 
-  const serverQuoteCandidate = lastQuoteId
+  const serverQuoteCandidate = initialLastQuoteId
     ? {
-        quoteId: lastQuoteId,
+        quoteId: initialLastQuoteId,
         createdAtIso: lastQuoteCreatedAt ?? null,
         friendlyLabel: lastQuoteCreatedAtFriendly?.trim() ? lastQuoteCreatedAtFriendly : null,
       }
@@ -110,12 +109,13 @@ export default function JobAskBobFlow({
   const hasQuoteSnapshotContext = Boolean(initialQuoteSnapshot);
   const combinedHasQuoteContextForFollowup =
     Boolean(effectiveLastQuote?.quoteId) || hasQuoteSnapshotContext;
+  const quoteDone = Boolean(sessionQuote);
   const stepStatusItems = [
     { label: "Step 1 Intake", done: true },
-    { label: "Step 2 Diagnose", done: stepDiagnoseDone },
-    { label: "Step 3 Materials checklist", done: stepMaterialsDone },
-    { label: "Step 4 Quote suggestion", done: stepQuoteDone },
-    { label: "Step 5 Follow-up guidance", done: stepFollowupDone },
+    { label: "Step 2 Diagnose", done: diagnosisDone },
+    { label: "Step 3 Materials checklist", done: materialsDone },
+    { label: "Step 4 Quote suggestion", done: quoteDone },
+    { label: "Step 5 Follow-up guidance", done: followupDone },
   ];
 
   const promptSeed = jobDescription ?? "";
@@ -135,12 +135,11 @@ export default function JobAskBobFlow({
   const handleDiagnoseComplete = (context: JobDiagnosisContext) => {
     const summary = context.diagnosisSummary?.trim() ?? null;
     setDiagnosisSummary(summary);
+    setDiagnosisDone(Boolean(summary));
     setMaterialsSummary(null);
+    setMaterialsDone(false);
     setSessionQuote(null);
-    setStepDiagnoseDone(Boolean(summary));
-    setStepMaterialsDone(false);
-    setStepQuoteDone(false);
-    setStepFollowupDone(false);
+    setFollowupDone(false);
     setMaterialsResetToken((value) => value + 1);
     setQuoteResetToken((value) => value + 1);
     setFollowupResetToken((value) => value + 1);
@@ -149,11 +148,9 @@ export default function JobAskBobFlow({
   const handleMaterialsSummaryChange = (context: MaterialsSummaryContext) => {
     const summary = context.materialsSummary?.trim() ?? null;
     setMaterialsSummary(summary);
-    const materialsCount = context.materialsCount ?? 0;
-    setStepMaterialsDone(materialsCount > 0);
+    setMaterialsDone(Boolean(summary));
     setSessionQuote(null);
-    setStepQuoteDone(false);
-    setStepFollowupDone(false);
+    setFollowupDone(false);
     setQuoteResetToken((value) => value + 1);
     setFollowupResetToken((value) => value + 1);
     if (!summary) {
@@ -170,26 +167,26 @@ export default function JobAskBobFlow({
       createdAtIso: normalizedCreatedAt,
       friendlyLabel,
     });
-    setStepQuoteDone(true);
-    setStepFollowupDone(false);
+    setFollowupDone(false);
     setFollowupResetToken((value) => value + 1);
   };
 
   const handleQuoteReset = () => {
     setSessionQuote(null);
-    setStepQuoteDone(false);
-    setStepFollowupDone(false);
+    setFollowupDone(false);
     setQuoteResetToken((value) => value + 1);
     setFollowupResetToken((value) => value + 1);
   };
 
   const handleFollowupCompleted = () => {
-    setStepFollowupDone(true);
+    const followupNowDone = true;
+    setFollowupDone(followupNowDone);
     if (
       !hasAutoCollapsedAllSteps &&
-      stepDiagnoseDone &&
-      stepMaterialsDone &&
-      stepQuoteDone
+      diagnosisDone &&
+      materialsDone &&
+      quoteDone &&
+      followupNowDone
     ) {
       setDiagnoseCollapsed(true);
       setMaterialsCollapsed(true);
@@ -199,7 +196,7 @@ export default function JobAskBobFlow({
     }
   };
   const handleFollowupReset = () => {
-    setStepFollowupDone(false);
+    setFollowupDone(false);
     setFollowupResetToken((value) => value + 1);
   };
 
@@ -223,7 +220,7 @@ export default function JobAskBobFlow({
             initialDiagnoseSnapshot={initialDiagnoseSnapshot ?? undefined}
             onDiagnoseSuccess={() => scrollToSection("askbob-materials")}
             onDiagnoseComplete={handleDiagnoseComplete}
-            stepCompleted={stepDiagnoseDone}
+            stepCompleted={diagnosisDone}
             stepCollapsed={diagnoseCollapsed}
             onToggleStepCollapsed={() => setDiagnoseCollapsed((value) => !value)}
           />
@@ -239,7 +236,7 @@ export default function JobAskBobFlow({
             jobDescription={jobDescription ?? null}
             jobTitle={normalizedJobTitle}
             initialMaterialsSnapshot={initialMaterialsSnapshot ?? undefined}
-            stepCompleted={stepMaterialsDone}
+            stepCompleted={materialsDone}
             resetToken={materialsResetToken}
             stepCollapsed={materialsCollapsed}
             onToggleStepCollapsed={() => setMaterialsCollapsed((value) => !value)}
@@ -257,7 +254,7 @@ export default function JobAskBobFlow({
             jobTitle={normalizedJobTitle}
             onQuoteApplied={handleAskBobQuoteApplied}
             onScrollToFollowup={() => scrollToSection("askbob-followup")}
-            stepCompleted={stepQuoteDone}
+            stepCompleted={quoteDone}
             resetToken={quoteResetToken}
             onQuoteReset={handleQuoteReset}
             stepCollapsed={quoteCollapsed}
@@ -278,7 +275,7 @@ export default function JobAskBobFlow({
             lastQuoteIdForFollowup={effectiveLastQuote?.quoteId ?? undefined}
             lastQuoteCreatedAtForFollowup={effectiveLastQuote?.createdAtIso ?? undefined}
             lastQuoteCreatedAtLabelForFollowup={effectiveLastQuote?.friendlyLabel ?? undefined}
-            stepCompleted={stepFollowupDone}
+            stepCompleted={followupDone}
             onFollowupCompleted={handleFollowupCompleted}
             resetToken={followupResetToken}
             onReset={handleFollowupReset}
