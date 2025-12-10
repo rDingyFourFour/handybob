@@ -8,6 +8,7 @@ import AskBobQuotePanel from "@/components/askbob/AskBobQuotePanel";
 import JobAskBobFollowupPanel from "@/components/askbob/JobAskBobFollowupPanel";
 import JobAskBobPanel, { type JobDiagnosisContext } from "@/components/askbob/JobAskBobPanel";
 import JobAskBobContainer from "@/components/askbob/JobAskBobContainer";
+import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
 
 type JobAskBobFlowProps = {
   workspaceId: string;
@@ -19,10 +20,15 @@ type JobAskBobFlowProps = {
   askBobLastUsedAtDisplay?: string | null;
   askBobLastUsedAtIso?: string | null;
   askBobRunsSummary?: string | null;
-  hasQuoteContextForFollowup?: boolean;
   lastQuoteId?: string | null;
   lastQuoteCreatedAt?: string | null;
   lastQuoteCreatedAtFriendly?: string | null;
+};
+
+type SessionQuote = {
+  quoteId: string;
+  createdAtIso: string | null;
+  friendlyLabel: string | null;
 };
 
 export default function JobAskBobFlow({
@@ -35,14 +41,13 @@ export default function JobAskBobFlow({
   askBobLastUsedAtDisplay,
   askBobLastUsedAtIso,
   askBobRunsSummary,
-  hasQuoteContextForFollowup,
   lastQuoteId,
   lastQuoteCreatedAt,
   lastQuoteCreatedAtFriendly,
 }: JobAskBobFlowProps) {
   const [diagnosisSummary, setDiagnosisSummary] = useState<string | null>(null);
   const [materialsSummary, setMaterialsSummary] = useState<string | null>(null);
-  const [hasLocalAskBobQuoteFromFlow, setHasLocalAskBobQuoteFromFlow] = useState(false);
+  const [sessionQuote, setSessionQuote] = useState<SessionQuote | null>(null);
   const [stepDiagnoseDone, setStepDiagnoseDone] = useState(false);
   const [stepMaterialsDone, setStepMaterialsDone] = useState(false);
   const [stepQuoteDone, setStepQuoteDone] = useState(false);
@@ -51,8 +56,15 @@ export default function JobAskBobFlow({
   const [quoteResetToken, setQuoteResetToken] = useState(0);
   const [followupResetToken, setFollowupResetToken] = useState(0);
 
-  const combinedHasQuoteContextForFollowup =
-    Boolean(hasQuoteContextForFollowup) || hasLocalAskBobQuoteFromFlow;
+  const serverQuoteCandidate = lastQuoteId
+    ? {
+        quoteId: lastQuoteId,
+        createdAtIso: lastQuoteCreatedAt ?? null,
+        friendlyLabel: lastQuoteCreatedAtFriendly?.trim() ? lastQuoteCreatedAtFriendly : null,
+      }
+    : null;
+  const effectiveLastQuote = sessionQuote ?? serverQuoteCandidate;
+  const combinedHasQuoteContextForFollowup = Boolean(effectiveLastQuote?.quoteId);
 
   const stepStatusItems = [
     { label: "Step 1 Intake", done: true },
@@ -80,7 +92,7 @@ export default function JobAskBobFlow({
     const summary = context.diagnosisSummary?.trim() ?? null;
     setDiagnosisSummary(summary);
     setMaterialsSummary(null);
-    setHasLocalAskBobQuoteFromFlow(false);
+    setSessionQuote(null);
     setStepDiagnoseDone(Boolean(summary));
     setStepMaterialsDone(false);
     setStepQuoteDone(false);
@@ -95,7 +107,7 @@ export default function JobAskBobFlow({
     setMaterialsSummary(summary);
     const materialsCount = context.materialsCount ?? 0;
     setStepMaterialsDone(materialsCount > 0);
-    setHasLocalAskBobQuoteFromFlow(false);
+    setSessionQuote(null);
     setStepQuoteDone(false);
     setStepFollowupDone(false);
     setQuoteResetToken((value) => value + 1);
@@ -105,15 +117,22 @@ export default function JobAskBobFlow({
     }
   };
 
-  const handleAskBobQuoteApplied = () => {
-    setHasLocalAskBobQuoteFromFlow(true);
+  const handleAskBobQuoteApplied = (quoteId: string, createdAt?: string | null) => {
+    const normalizedCreatedAt = createdAt?.trim() || new Date().toISOString();
+    const friendlyDate = formatFriendlyDateTime(normalizedCreatedAt, "");
+    const friendlyLabel = friendlyDate?.trim() ? friendlyDate : null;
+    setSessionQuote({
+      quoteId,
+      createdAtIso: normalizedCreatedAt,
+      friendlyLabel,
+    });
     setStepQuoteDone(true);
     setStepFollowupDone(false);
     setFollowupResetToken((value) => value + 1);
   };
 
   const handleQuoteReset = () => {
-    setHasLocalAskBobQuoteFromFlow(false);
+    setSessionQuote(null);
     setStepQuoteDone(false);
     setStepFollowupDone(false);
     setQuoteResetToken((value) => value + 1);
@@ -192,9 +211,9 @@ export default function JobAskBobFlow({
             diagnosisSummaryForFollowup={diagnosisSummary}
             materialsSummaryForFollowup={materialsSummary}
             hasQuoteContextForFollowup={combinedHasQuoteContextForFollowup}
-            lastQuoteIdForFollowup={lastQuoteId ?? undefined}
-            lastQuoteCreatedAtForFollowup={lastQuoteCreatedAt ?? undefined}
-            lastQuoteCreatedAtFriendlyForFollowup={lastQuoteCreatedAtFriendly ?? undefined}
+            lastQuoteIdForFollowup={effectiveLastQuote?.quoteId ?? undefined}
+            lastQuoteCreatedAtForFollowup={effectiveLastQuote?.createdAtIso ?? undefined}
+            lastQuoteCreatedAtLabelForFollowup={effectiveLastQuote?.friendlyLabel ?? undefined}
             stepCompleted={stepFollowupDone}
             onFollowupCompleted={handleFollowupCompleted}
             resetToken={followupResetToken}

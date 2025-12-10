@@ -20,7 +20,7 @@ type AskBobQuotePanelProps = {
   materialsSummaryForQuote?: string | null;
   jobDescription?: string | null;
   jobTitle?: string | null;
-  onQuoteApplied?: (quoteId: string) => void;
+  onQuoteApplied?: (quoteId: string, createdAt?: string | null) => void;
   onScrollToFollowup?: () => void;
   stepCompleted?: boolean;
   resetToken?: number;
@@ -261,7 +261,7 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
 
       if (result.ok) {
         setAppliedQuoteId(result.quoteId);
-        onQuoteApplied?.(result.quoteId);
+        onQuoteApplied?.(result.quoteId, result.createdAt);
         onScrollToFollowup?.();
         return;
       }

@@ -23,7 +23,7 @@ type JobAskBobFollowupPanelProps = {
   hasQuoteContextForFollowup?: boolean;
   lastQuoteIdForFollowup?: string;
   lastQuoteCreatedAtForFollowup?: string;
-  lastQuoteCreatedAtFriendlyForFollowup?: string;
+  lastQuoteCreatedAtLabelForFollowup?: string;
   stepCompleted?: boolean;
   onFollowupCompleted?: () => void;
   resetToken?: number;
@@ -41,7 +41,7 @@ export default function JobAskBobFollowupPanel({
   hasQuoteContextForFollowup,
   lastQuoteIdForFollowup,
   lastQuoteCreatedAtForFollowup,
-  lastQuoteCreatedAtFriendlyForFollowup,
+  lastQuoteCreatedAtLabelForFollowup,
   stepCompleted,
   onFollowupCompleted,
   resetToken,
@@ -92,10 +92,10 @@ export default function JobAskBobFollowupPanel({
       : "Context used: none yet. Provide job and follow-up details on this page so AskBob can reference them.";
 
   const fallbackFriendlyDate =
-    lastQuoteCreatedAtForFollowup && !lastQuoteCreatedAtFriendlyForFollowup
+    lastQuoteCreatedAtForFollowup && !lastQuoteCreatedAtLabelForFollowup
       ? formatFriendlyDateTime(lastQuoteCreatedAtForFollowup, "")
       : null;
-  const displayFriendlyDate = lastQuoteCreatedAtFriendlyForFollowup ?? fallbackFriendlyDate;
+  const displayFriendlyDate = lastQuoteCreatedAtLabelForFollowup ?? fallbackFriendlyDate;
   const showQuoteContextLine = Boolean(hasQuoteContextForFollowup && lastQuoteIdForFollowup);
   const quoteContextLabel = displayFriendlyDate
     ? `Using your latest quote from ${displayFriendlyDate}.`

@@ -10,7 +10,7 @@ type CreateQuoteFromAskBobPayload = {
 };
 
 export type CreateQuoteFromAskBobResult =
-  | { ok: true; quoteId: string }
+  | { ok: true; quoteId: string; createdAt: string }
   | { ok: false; error: string };
 
 export async function createQuoteFromAskBobAction(
@@ -80,7 +80,7 @@ export async function createQuoteFromAskBobAction(
         line_items: lineItems,
         smart_quote_used: true,
       })
-      .select("id")
+      .select("id, created_at")
       .single();
 
     if (error || !data?.id) {
@@ -104,7 +104,8 @@ export async function createQuoteFromAskBobAction(
       materialsCount: payload.suggestion.materials?.length ?? 0,
     });
 
-    return { ok: true, quoteId: data.id };
+    const createdAt = data.created_at ?? new Date().toISOString();
+    return { ok: true, quoteId: data.id, createdAt };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const truncated = message.length <= 200 ? message : `${message.slice(0, 197)}...`;
