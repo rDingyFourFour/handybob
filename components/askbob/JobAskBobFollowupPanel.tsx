@@ -28,6 +28,8 @@ type JobAskBobFollowupPanelProps = {
   onFollowupCompleted?: () => void;
   resetToken?: number;
   onReset?: () => void;
+  stepCollapsed?: boolean;
+  onToggleStepCollapsed?: () => void;
 };
 
 export default function JobAskBobFollowupPanel({
@@ -46,6 +48,8 @@ export default function JobAskBobFollowupPanel({
   onFollowupCompleted,
   resetToken,
   onReset,
+  stepCollapsed = false,
+  onToggleStepCollapsed,
 }: JobAskBobFollowupPanelProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -241,6 +245,9 @@ export default function JobAskBobFollowupPanel({
       }`
     : null;
 
+  const toggleLabel = stepCollapsed ? "Show step" : "Hide step";
+  const handleToggle = () => onToggleStepCollapsed?.();
+
   return (
     <HbCard className="space-y-4">
       <div className="space-y-1">
@@ -254,106 +261,120 @@ export default function JobAskBobFollowupPanel({
               </span>
             )}
           </div>
-          {hasFollowupResult && (
+          <div className="flex flex-wrap items-center gap-2">
             <HbButton
               variant="ghost"
               size="sm"
               className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
-              onClick={handleReset}
+              onClick={handleToggle}
             >
-              Reset this step
+              {toggleLabel}
             </HbButton>
-          )}
+            {hasFollowupResult && (
+              <HbButton
+                variant="ghost"
+                size="sm"
+                className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
+                onClick={handleReset}
+              >
+                Reset this step
+              </HbButton>
+            )}
+          </div>
         </div>
-        <p className="text-sm text-slate-300">
-          AskBob summarizes the job’s status, quotes, calls, messages, and appointments to suggest a next step. Use it as a guide and
-          rely on your judgment before you act.
-        </p>
-        {showQuoteContextLine && quoteDetailsHref && (
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
-            <p className="m-0 text-xs text-slate-300">{quoteContextLabel}</p>
+      </div>
+      {!stepCollapsed && (
+        <>
+          <p className="text-sm text-slate-300">
+            AskBob summarizes the job’s status, quotes, calls, messages, and appointments to suggest a next step. Use it as a guide and
+            rely on your judgment before you act.
+          </p>
+          {showQuoteContextLine && quoteDetailsHref && (
+            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
+              <p className="m-0 text-xs text-slate-300">{quoteContextLabel}</p>
+              <HbButton
+                as={Link}
+                href={quoteDetailsHref}
+                variant="ghost"
+                size="sm"
+                className="px-2 py-0.5 text-[11px] uppercase tracking-[0.3em]"
+              >
+                View quote details
+              </HbButton>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">{contextUsedText}</p>
+          <div className="flex flex-col gap-2">
             <HbButton
-              as={Link}
-              href={quoteDetailsHref}
-              variant="ghost"
               size="sm"
-              className="px-2 py-0.5 text-[11px] uppercase tracking-[0.3em]"
+              variant="secondary"
+              disabled={isLoading}
+              onClick={handleRequest}
             >
-              View quote details
+              {isLoading ? "Analyzing follow-up…" : "Get follow-up recommendation"}
             </HbButton>
+            {errorMessage && <p className="text-sm text-rose-400">{errorMessage}</p>}
           </div>
-        )}
-        <p className="text-xs text-muted-foreground">{contextUsedText}</p>
-      </div>
-      <div className="flex flex-col gap-2">
-        <HbButton
-          size="sm"
-          variant="secondary"
-          disabled={isLoading}
-          onClick={handleRequest}
-        >
-          {isLoading ? "Analyzing follow-up…" : "Get follow-up recommendation"}
-        </HbButton>
-        {errorMessage && <p className="text-sm text-rose-400">{errorMessage}</p>}
-      </div>
-      {result && (
-        <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
-          <div className="space-y-1">
-            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Suggested action</p>
-            <p className="text-sm font-semibold text-slate-100">{result.recommendedAction}</p>
-          </div>
-          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Why AskBob suggests this</p>
-          <p className="text-sm text-slate-300">{result.rationale}</p>
-          {result.steps.length > 0 && (
-            <ol className="space-y-2 text-sm text-slate-300">
-              {result.steps.map((step, index) => (
-                <li key={`step-${index}`} className="space-y-1">
-                  <p className="font-semibold text-slate-100">
-                    {index + 1}. {step.label}
-                  </p>
-                  {step.detail && <p className="text-xs text-slate-500">{step.detail}</p>}
-                </li>
-              ))}
-            </ol>
-          )}
-          {signalText && (
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{signalText}</p>
-          )}
-          {result.riskNotes && (
-            <p className="text-xs text-slate-500">Note: {result.riskNotes}</p>
-          )}
-          {showMessageCTAs && (
-            <div className="space-y-2 pt-2">
-              <div className="space-y-2">
-                <HbButton
-                  size="sm"
-                  variant="secondary"
-                  className="w-full"
-                  disabled={isDrafting}
-                  onClick={handleDraftClick}
-                >
-                  {isDrafting ? "Drafting…" : "Draft follow-up message with AskBob"}
-                </HbButton>
-                {draftError && <p className="text-sm text-rose-400">{draftError}</p>}
+          {result && (
+            <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
+              <div className="space-y-1">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Suggested action</p>
+                <p className="text-sm font-semibold text-slate-100">{result.recommendedAction}</p>
               </div>
-              {followupComposerHref && (
-                <HbButton
-                  as={Link}
-                  href={followupComposerHref}
-                  variant="secondary"
-                  size="sm"
-                  className="w-full"
-                  onClick={handleComposeClick}
-                >
-                  Compose follow-up message
-                </HbButton>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Why AskBob suggests this</p>
+              <p className="text-sm text-slate-300">{result.rationale}</p>
+              {result.steps.length > 0 && (
+                <ol className="space-y-2 text-sm text-slate-300">
+                  {result.steps.map((step, index) => (
+                    <li key={`step-${index}`} className="space-y-1">
+                      <p className="font-semibold text-slate-100">
+                        {index + 1}. {step.label}
+                      </p>
+                      {step.detail && <p className="text-xs text-slate-500">{step.detail}</p>}
+                    </li>
+                  ))}
+                </ol>
               )}
-              {followupDraftHint && (
-                <p className="text-xs text-slate-400">{followupDraftHint}</p>
+              {signalText && (
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{signalText}</p>
+              )}
+              {result.riskNotes && (
+                <p className="text-xs text-slate-500">Note: {result.riskNotes}</p>
+              )}
+              {showMessageCTAs && (
+                <div className="space-y-2 pt-2">
+                  <div className="space-y-2">
+                    <HbButton
+                      size="sm"
+                      variant="secondary"
+                      className="w-full"
+                      disabled={isDrafting}
+                      onClick={handleDraftClick}
+                    >
+                      {isDrafting ? "Drafting…" : "Draft follow-up message with AskBob"}
+                    </HbButton>
+                    {draftError && <p className="text-sm text-rose-400">{draftError}</p>}
+                  </div>
+                  {followupComposerHref && (
+                    <HbButton
+                      as={Link}
+                      href={followupComposerHref}
+                      variant="secondary"
+                      size="sm"
+                      className="w-full"
+                      onClick={handleComposeClick}
+                    >
+                      Compose follow-up message
+                    </HbButton>
+                  )}
+                  {followupDraftHint && (
+                    <p className="text-xs text-slate-400">{followupDraftHint}</p>
+                  )}
+                </div>
               )}
             </div>
           )}
-        </div>
+        </>
       )}
     </HbCard>
   );

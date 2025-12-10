@@ -121,6 +121,8 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     stepCompleted,
     resetToken,
     onQuoteReset,
+    stepCollapsed = false,
+    onToggleStepCollapsed,
   } = props;
   const router = useRouter();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
@@ -275,6 +277,9 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     }
   };
 
+  const toggleLabel = stepCollapsed ? "Show step" : "Hide step";
+  const handleToggle = () => onToggleStepCollapsed?.();
+
   return (
     <HbCard className="space-y-4">
       <div>
@@ -288,179 +293,195 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
               </span>
             )}
           </div>
-          {hasActiveSuggestion && (
+          <div className="flex flex-wrap items-center gap-2">
             <HbButton
               variant="ghost"
               size="sm"
               className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
-              onClick={handleReset}
+              onClick={handleToggle}
             >
-              Reset this step
+              {toggleLabel}
             </HbButton>
-          )}
-        </div>
-        <p className="text-sm text-slate-400">
-          AskBob drafts a quote using the job title, description, materials checklist, and diagnosis summary.
-          Treat the results as an estimate and confirm scope, hours, and rates on site before sharing them with a customer.
-        </p>
-        {normalizedJobTitle && (
-          <p className="text-xs text-slate-500">Quote for {normalizedJobTitle}.</p>
-        )}
-        {contextParts.length > 0 ? (
-          <p className="text-xs text-muted-foreground">
-            Context used: {contextParts.join(", ")}
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Context used: none yet. Provide the job details below so the quote reflects the actual scope.
-          </p>
-        )}
-      </div>
-      <div className="space-y-2">
-        <label htmlFor="askbob-quote-prompt" className="text-xs uppercase tracking-[0.3em] text-slate-500">
-          Description
-        </label>
-        <textarea
-          id="askbob-quote-prompt"
-          className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-          rows={3}
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-          placeholder="Describe the scope and expectations for the quote."
-          aria-label="Prompt for AskBob quote generation"
-        />
-          <p className="text-xs text-slate-400">
-            Note any updates to the job description, materials checklist, or customer expectations so AskBob can align the quote.
-          </p>
-        <div className="flex items-center gap-3">
-          <HbButton onClick={handleGenerate} disabled={isLoading || isApplying} variant="secondary" size="sm">
-            {isLoading ? "Generating AskBob quote…" : "Generate quote with AskBob"}
-          </HbButton>
-          <p className="text-xs text-slate-500">
-            This suggestion remains editable and won’t be saved unless you copy it into an actual quote.
-          </p>
-        </div>
-        {error && <p className="text-sm text-rose-300">{error}</p>}
-      </div>
-      {suggestion && (
-        <div className="space-y-4 border-t border-slate-800 pt-3">
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-slate-100">Suggested quote from AskBob</p>
-            {hasAnyContent ? (
-              <>
-                {summaryLine && <p className="text-xs text-muted-foreground">{summaryLine}</p>}
-                {showThinHint && (
-                  <p className="text-xs text-muted-foreground">Review and adjust these lines before sending to your customer.</p>
-                )}
-              </>
-            ) : (
-              <div className="space-y-1 text-sm text-muted-foreground">
-                <p>AskBob could not generate a detailed quote for this job yet.</p>
-                <p>Try again with more specifics or build the quote manually.</p>
-              </div>
+            {hasActiveSuggestion && (
+              <HbButton
+                variant="ghost"
+                size="sm"
+                className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
+                onClick={handleReset}
+              >
+                Reset this step
+              </HbButton>
             )}
           </div>
-          {hasAnyContent && (
-            <>
-              {hasAnyScope && (
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                    Scope
-                  </p>
-                  <div className="space-y-2">
-                    {scopeLines.map((line, index) => (
-                      <div key={`${line.description}-${index}`} className="flex justify-between text-sm">
-                        <div className="space-y-1">
-                          <p className="font-semibold text-slate-100">{line.description}</p>
-                          <p className="text-xs text-slate-500">
-                            Qty: {line.quantity}
-                            {line.unit ? ` ${line.unit}` : ""}
-                            {line.unitPrice != null ? ` · ${formatCurrency(line.unitPrice)} per unit` : ""}
-                          </p>
-                        </div>
-                        <p className="text-sm font-semibold text-slate-100">
-                          {line.lineTotal != null
-                            ? formatCurrency(line.lineTotal)
-                            : line.unitPrice != null
-                            ? formatCurrency(line.unitPrice * line.quantity)
-                            : "—"}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {hasAnyMaterials && (
-                <div className="space-y-2">
-                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Suggested materials</p>
-                  <div className="space-y-1">
-                    {materials.map((material, index) => (
-                      <div key={`${material.name}-${index}`} className="flex items-center justify-between text-sm">
-                        <div>
-                          <p className="font-semibold text-slate-100">{material.name}</p>
-                          <p className="text-xs text-slate-500">
-                            Qty: {material.quantity}
-                            {material.unit ? ` ${material.unit}` : ""}
-                          </p>
-                        </div>
-                        <p className="text-sm text-slate-100">
-                          {material.estimatedTotalCost != null
-                            ? formatCurrency(material.estimatedTotalCost)
-                            : material.estimatedUnitCost != null
-                            ? formatCurrency(material.estimatedUnitCost * material.quantity)
-                            : "—"}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {hasNotes && (
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Notes and caveats</p>
-                  <p className="text-sm text-slate-300">{notesText}</p>
-                </div>
-              )}
-              <TotalsBlock suggestion={suggestion} />
-            </>
-          )}
-          {hasAnyContent && (
+        </div>
+      </div>
+      {!stepCollapsed && (
+        <>
           <div className="space-y-2">
-            <HbButton
-              onClick={handleApplySuggestion}
-              disabled={isApplying || isLoading || !hasAnyScope}
-              variant="secondary"
-              size="sm"
-            >
-              {isApplying ? "Applying AskBob suggestion…" : "Create quote from AskBob suggestion"}
-            </HbButton>
-            {!hasAnyScope ? (
+            <p className="text-sm text-slate-400">
+              AskBob drafts a quote using the job title, description, materials checklist, and diagnosis summary.
+              Treat the results as an estimate and confirm scope, hours, and rates on site before sharing them with a customer.
+            </p>
+            {normalizedJobTitle && (
+              <p className="text-xs text-slate-500">Quote for {normalizedJobTitle}.</p>
+            )}
+            {contextParts.length > 0 ? (
               <p className="text-xs text-muted-foreground">
-                AskBob did not return enough detail to create a quote. Try refining your question.
+                Context used: {contextParts.join(", ")}
               </p>
             ) : (
-              <p className="text-xs text-slate-400">
-                You can edit all lines and prices on the next screen before sharing with the customer.
+              <p className="text-xs text-muted-foreground">
+                Context used: none yet. Provide the job details below so the quote reflects the actual scope.
               </p>
             )}
-            {applyError && <p className="text-sm text-rose-300">{applyError}</p>}
-            {appliedQuoteId && (
-              <div className="space-y-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/5 p-3 text-xs text-emerald-200">
-                <p>Quote created and saved for this job. Next: check AskBob’s follow-up guidance below.</p>
-                <HbButton
-                  variant="secondary"
-                  size="sm"
-                  className="w-fit"
-                  onClick={() => router.push(`/quotes/${appliedQuoteId}`)}
-                >
-                  View quote details
-                </HbButton>
-              </div>
-            )}
           </div>
-        )}
-      </div>
-    )}
+          <div className="space-y-2">
+            <label htmlFor="askbob-quote-prompt" className="text-xs uppercase tracking-[0.3em] text-slate-500">
+              Description
+            </label>
+            <textarea
+              id="askbob-quote-prompt"
+              className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              rows={3}
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              placeholder="Describe the scope and expectations for the quote."
+              aria-label="Prompt for AskBob quote generation"
+            />
+            <p className="text-xs text-slate-400">
+              Note any updates to the job description, materials checklist, or customer expectations so AskBob can align the quote.
+            </p>
+            <div className="flex items-center gap-3">
+              <HbButton onClick={handleGenerate} disabled={isLoading || isApplying} variant="secondary" size="sm">
+                {isLoading ? "Generating AskBob quote…" : "Generate quote with AskBob"}
+              </HbButton>
+              <p className="text-xs text-slate-500">
+                This suggestion remains editable and won’t be saved unless you copy it into an actual quote.
+              </p>
+            </div>
+            {error && <p className="text-sm text-rose-300">{error}</p>}
+          </div>
+          {suggestion && (
+            <div className="space-y-4 border-t border-slate-800 pt-3">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-100">Suggested quote from AskBob</p>
+                {hasAnyContent ? (
+                  <>
+                    {summaryLine && <p className="text-xs text-muted-foreground">{summaryLine}</p>}
+                    {showThinHint && (
+                      <p className="text-xs text-muted-foreground">Review and adjust these lines before sending to your customer.</p>
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    <p>AskBob could not generate a detailed quote for this job yet.</p>
+                    <p>Try again with more specifics or build the quote manually.</p>
+                  </div>
+                )}
+              </div>
+              {hasAnyContent && (
+                <>
+                  {hasAnyScope && (
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                        Scope
+                      </p>
+                      <div className="space-y-2">
+                        {scopeLines.map((line, index) => (
+                          <div key={`${line.description}-${index}`} className="flex justify-between text-sm">
+                            <div className="space-y-1">
+                              <p className="font-semibold text-slate-100">{line.description}</p>
+                              <p className="text-xs text-slate-500">
+                                Qty: {line.quantity}
+                                {line.unit ? ` ${line.unit}` : ""}
+                                {line.unitPrice != null ? ` · ${formatCurrency(line.unitPrice)} per unit` : ""}
+                              </p>
+                            </div>
+                            <p className="text-sm font-semibold text-slate-100">
+                              {line.lineTotal != null
+                                ? formatCurrency(line.lineTotal)
+                                : line.unitPrice != null
+                                ? formatCurrency(line.unitPrice * line.quantity)
+                                : "—"}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {hasAnyMaterials && (
+                    <div className="space-y-2">
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Suggested materials</p>
+                      <div className="space-y-1">
+                        {materials.map((material, index) => (
+                          <div key={`${material.name}-${index}`} className="flex items-center justify-between text-sm">
+                            <div>
+                              <p className="font-semibold text-slate-100">{material.name}</p>
+                              <p className="text-xs text-slate-500">
+                                Qty: {material.quantity}
+                                {material.unit ? ` ${material.unit}` : ""}
+                              </p>
+                            </div>
+                            <p className="text-sm text-slate-100">
+                              {material.estimatedTotalCost != null
+                                ? formatCurrency(material.estimatedTotalCost)
+                                : material.estimatedUnitCost != null
+                                ? formatCurrency(material.estimatedUnitCost * material.quantity)
+                                : "—"}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {hasNotes && (
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Notes and caveats</p>
+                      <p className="text-sm text-slate-300">{notesText}</p>
+                    </div>
+                  )}
+                  <TotalsBlock suggestion={suggestion} />
+                </>
+              )}
+              {hasAnyContent && (
+                <div className="space-y-2">
+                  <HbButton
+                    onClick={handleApplySuggestion}
+                    disabled={isApplying || isLoading || !hasAnyScope}
+                    variant="secondary"
+                    size="sm"
+                  >
+                    {isApplying ? "Applying AskBob suggestion…" : "Create quote from AskBob suggestion"}
+                  </HbButton>
+                  {!hasAnyScope ? (
+                    <p className="text-xs text-muted-foreground">
+                      AskBob did not return enough detail to create a quote. Try refining your question.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-400">
+                      You can edit all lines and prices on the next screen before sharing with the customer.
+                    </p>
+                  )}
+                  {applyError && <p className="text-sm text-rose-300">{applyError}</p>}
+                  {appliedQuoteId && (
+                    <div className="space-y-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/5 p-3 text-xs text-emerald-200">
+                      <p>Quote created and saved for this job. Next: check AskBob’s follow-up guidance below.</p>
+                      <HbButton
+                        variant="secondary"
+                        size="sm"
+                        className="w-fit"
+                        onClick={() => router.push(`/quotes/${appliedQuoteId}`)}
+                      >
+                        View quote details
+                      </HbButton>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
     </HbCard>
   );
 }

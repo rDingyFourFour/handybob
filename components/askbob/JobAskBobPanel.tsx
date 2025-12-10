@@ -56,6 +56,8 @@ type JobAskBobPanelProps = {
   jobDescription?: string | null;
   jobTitle?: string | null;
   stepCompleted?: boolean;
+  stepCollapsed?: boolean;
+  onToggleStepCollapsed?: () => void;
 };
 
 export default function JobAskBobPanel({
@@ -68,6 +70,8 @@ export default function JobAskBobPanel({
   jobDescription,
   jobTitle,
   stepCompleted,
+  stepCollapsed = false,
+  onToggleStepCollapsed,
 }: JobAskBobPanelProps) {
   useEffect(() => {
     console.log("[askbob-ui-entry]", {
@@ -115,6 +119,8 @@ export default function JobAskBobPanel({
   };
 
   const hasDiagnosisResult = Boolean(latestAskBobResponse && latestDiagnosisSummary);
+  const toggleLabel = stepCollapsed ? "Show step" : "Hide step";
+  const handleToggle = () => onToggleStepCollapsed?.();
 
   return (
     <HbCard className="space-y-4">
@@ -129,42 +135,56 @@ export default function JobAskBobPanel({
               </span>
             )}
           </div>
-          {hasDiagnosisResult && (
+          <div className="flex flex-wrap items-center gap-2">
             <HbButton
               variant="ghost"
               size="sm"
               className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
-              onClick={handleReset}
+              onClick={handleToggle}
             >
-              Reset this step
+              {toggleLabel}
             </HbButton>
-          )}
+            {hasDiagnosisResult && (
+              <HbButton
+                variant="ghost"
+                size="sm"
+                className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
+                onClick={handleReset}
+              >
+                Reset this step
+              </HbButton>
+            )}
+          </div>
         </div>
-        <p className="text-sm text-slate-400">
-          AskBob reviews the job title, description, and your notes to outline how a technician might approach this job safely.
-          Confirm site conditions and adjust these recommendations before you act.
-        </p>
-        <p className="text-xs text-slate-500">
-          These are editable starting points—adapt them to the crew and conditions on site.
-        </p>
-        {labelsToShow.length > 0 ? (
-          <p className="text-xs text-muted-foreground">Context used: {labelsToShow.join(", ")}</p>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Context used: none yet. Add the job details below so AskBob can reference them.
-          </p>
+        {!stepCollapsed && (
+          <>
+            <p className="text-sm text-slate-400">
+              AskBob reviews the job title, description, and your notes to outline how a technician might approach this job safely.
+              Confirm site conditions and adjust these recommendations before you act.
+            </p>
+            <p className="text-xs text-slate-500">
+              These are editable starting points—adapt them to the crew and conditions on site.
+            </p>
+            {labelsToShow.length > 0 ? (
+              <p className="text-xs text-muted-foreground">Context used: {labelsToShow.join(", ")}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Context used: none yet. Add the job details below so AskBob can reference them.
+              </p>
+            )}
+            <AskBobForm
+              workspaceId={workspaceId}
+              jobId={jobId}
+              customerId={customerId ?? undefined}
+              quoteId={quoteId ?? undefined}
+              jobDescription={jobDescription}
+              jobTitle={jobTitle}
+              onSuccess={onDiagnoseSuccess}
+              onResponse={handleResponse}
+            />
+          </>
         )}
       </div>
-      <AskBobForm
-        workspaceId={workspaceId}
-        jobId={jobId}
-        customerId={customerId ?? undefined}
-        quoteId={quoteId ?? undefined}
-        jobDescription={jobDescription}
-        jobTitle={jobTitle}
-        onSuccess={onDiagnoseSuccess}
-        onResponse={handleResponse}
-      />
     </HbCard>
   );
 }

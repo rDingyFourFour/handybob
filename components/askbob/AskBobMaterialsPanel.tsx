@@ -24,6 +24,8 @@ type AskBobMaterialsPanelProps = {
   jobTitle?: string | null;
   stepCompleted?: boolean;
   resetToken?: number;
+  stepCollapsed?: boolean;
+  onToggleStepCollapsed?: () => void;
 };
 
 function summarizeMaterialsSuggestion(suggestion: SmartQuoteSuggestion | null): string | null {
@@ -106,6 +108,8 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
     jobTitle,
     stepCompleted,
     resetToken,
+    stepCollapsed = false,
+    onToggleStepCollapsed,
   } = props;
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [extraDetails, setExtraDetails] = useState("");
@@ -130,6 +134,8 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
   const materialsCount = materials.length;
   const hasMaterials = materialsCount > 0;
   const hasMaterialsSuggestion = Boolean(suggestion);
+  const toggleLabel = stepCollapsed ? "Show step" : "Hide step";
+  const handleToggle = () => onToggleStepCollapsed?.();
 
   useEffect(() => {
     if (resetToken === undefined) {
@@ -221,118 +227,134 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
               </span>
             )}
           </div>
-          {hasMaterialsSuggestion && (
+          <div className="flex flex-wrap items-center gap-2">
             <HbButton
               variant="ghost"
               size="sm"
               className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
-              onClick={handleReset}
+              onClick={handleToggle}
             >
-              Reset this step
+              {toggleLabel}
             </HbButton>
-          )}
-        </div>
-        <p className="text-sm text-slate-400">
-          AskBob suggests a materials checklist using the job title, description, and diagnosis notes.
-          Treat it as a planning list and verify quantities, brands, and costs before you commit to an order.
-        </p>
-        {contextParts.length > 0 ? (
-          <p className="text-xs text-muted-foreground">
-            Context used: {contextParts.join(", ")}
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Context used: none yet. Add the job details you want this checklist to reference.
-          </p>
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-xs uppercase tracking-[0.3em] text-slate-500" htmlFor="askbob-materials-prompt">
-          Description
-        </label>
-        <textarea
-          id="askbob-materials-prompt"
-          className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-          rows={3}
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-          placeholder="Describe the materials you want AskBob to list."
-          aria-label="Prompt for AskBob materials generation"
-        />
-        <label className="text-xs uppercase tracking-[0.3em] text-slate-500" htmlFor="askbob-materials-extra">
-          Extra details (optional)
-        </label>
-        <textarea
-          id="askbob-materials-extra"
-          className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-          rows={2}
-          value={extraDetails}
-          onChange={(event) => setExtraDetails(event.target.value)}
-          placeholder="Add any notes that help AskBob fine-tune the list."
-          aria-label="Extra details for AskBob materials generation"
-        />
-        <p className="text-xs text-slate-500">
-          The diagnosis summary helps align the materials with the likely work scope.
-        </p>
-        <div className="flex items-center gap-3">
-          <HbButton onClick={handleGenerate} disabled={isLoading} variant="secondary" size="sm">
-            {isLoading ? "Generating AskBob materials…" : "Generate materials list with AskBob"}
-          </HbButton>
-          <p className="text-xs text-slate-500">
-            Suggestions stay in memory and won’t be saved unless you copy them into a materials quote.
-          </p>
-        </div>
-        {error && <p className="text-sm text-rose-300">{error}</p>}
-      </div>
-
-      {suggestion && (
-        <div className="space-y-3 border-t border-slate-800 pt-3">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-              AskBob materials suggestion (not yet saved)
-            </p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-slate-100">Suggested materials from AskBob</p>
-            {hasMaterials ? (
-              <>
-                <p className="text-xs text-muted-foreground">
-                  AskBob suggested {materialsCount} material{materialsCount === 1 ? "" : "s"} for this job.
-                  Double-check quantities and availability before ordering.
-                </p>
-                <div className="space-y-2">
-                  {materials.map((item, index) => (
-                    <div key={`${item.name}-${index}`} className="flex items-center justify-between text-sm">
-                      <div>
-                        <p className="font-semibold text-slate-100">{item.name}</p>
-                        <p className="text-xs text-slate-500">
-                          Qty: {item.quantity}
-                          {item.unit ? ` ${item.unit}` : ""}
-                        </p>
-                      </div>
-                      <p className="text-sm text-slate-100">{renderCost(item)}</p>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="space-y-1 pt-1 text-sm text-muted-foreground">
-                <p>AskBob didn’t find any specific materials to list from this description.</p>
-                <p>You can update the notes above to be more specific, then ask again, or add your own checklist below.</p>
-              </div>
+            {hasMaterialsSuggestion && (
+              <HbButton
+                variant="ghost"
+                size="sm"
+                className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
+                onClick={handleReset}
+              >
+                Reset this step
+              </HbButton>
             )}
           </div>
-          {suggestion.notes && (
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Notes</p>
-              <p className="text-sm text-slate-300">{suggestion.notes}</p>
+        </div>
+      </div>
+      {!stepCollapsed && (
+        <>
+          <div className="space-y-2">
+            <p className="text-sm text-slate-400">
+              AskBob suggests a materials checklist using the job title, description, and diagnosis notes.
+              Treat it as a planning list and verify quantities, brands, and costs before you commit to an order.
+            </p>
+            {contextParts.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Context used: {contextParts.join(", ")}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Context used: none yet. Add the job details you want this checklist to reference.
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs uppercase tracking-[0.3em] text-slate-500" htmlFor="askbob-materials-prompt">
+              Description
+            </label>
+            <textarea
+              id="askbob-materials-prompt"
+              className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              rows={3}
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              placeholder="Describe the materials you want AskBob to list."
+              aria-label="Prompt for AskBob materials generation"
+            />
+            <label className="text-xs uppercase tracking-[0.3em] text-slate-500" htmlFor="askbob-materials-extra">
+              Extra details (optional)
+            </label>
+            <textarea
+              id="askbob-materials-extra"
+              className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              rows={2}
+              value={extraDetails}
+              onChange={(event) => setExtraDetails(event.target.value)}
+              placeholder="Add any notes that help AskBob fine-tune the list."
+              aria-label="Extra details for AskBob materials generation"
+            />
+            <p className="text-xs text-slate-500">
+              The diagnosis summary helps align the materials with the likely work scope.
+            </p>
+            <div className="flex items-center gap-3">
+              <HbButton onClick={handleGenerate} disabled={isLoading} variant="secondary" size="sm">
+                {isLoading ? "Generating AskBob materials…" : "Generate materials list with AskBob"}
+              </HbButton>
+              <p className="text-xs text-slate-500">
+                Suggestions stay in memory and won’t be saved unless you copy them into a materials quote.
+              </p>
+            </div>
+            {error && <p className="text-sm text-rose-300">{error}</p>}
+          </div>
+
+          {suggestion && (
+            <div className="space-y-3 border-t border-slate-800 pt-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                  AskBob materials suggestion (not yet saved)
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-100">Suggested materials from AskBob</p>
+                {hasMaterials ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      AskBob suggested {materialsCount} material{materialsCount === 1 ? "" : "s"} for this job.
+                      Double-check quantities and availability before ordering.
+                    </p>
+                    <div className="space-y-2">
+                      {materials.map((item, index) => (
+                        <div key={`${item.name}-${index}`} className="flex items-center justify-between text-sm">
+                          <div>
+                            <p className="font-semibold text-slate-100">{item.name}</p>
+                            <p className="text-xs text-slate-500">
+                              Qty: {item.quantity}
+                              {item.unit ? ` ${item.unit}` : ""}
+                            </p>
+                          </div>
+                          <p className="text-sm text-slate-100">{renderCost(item)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-1 pt-1 text-sm text-muted-foreground">
+                    <p>AskBob didn’t find any specific materials to list from this description.</p>
+                    <p>You can update the notes above to be more specific, then ask again, or add your own checklist below.</p>
+                  </div>
+                )}
+              </div>
+              {suggestion.notes && (
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Notes</p>
+                  <p className="text-sm text-slate-300">{suggestion.notes}</p>
+                </div>
+              )}
+              <p className="text-xs text-slate-400">
+                Reference or copy these materials into your official list once you confirm fit, price, and availability.
+              </p>
             </div>
           )}
-            <p className="text-xs text-slate-400">
-              Reference or copy these materials into your official list once you confirm fit, price, and availability.
-            </p>
-        </div>
+        </>
       )}
     </HbCard>
   );
