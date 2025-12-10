@@ -1,59 +1,105 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useState, type FormEvent } from "react";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
+import { generateAskBobJobIntakeAction } from "@/app/(app)/askbob/job-intake-action";
 
 type JobNewAskBobHelperProps = {
-  initialTitle?: string;
-  initialDescription?: string;
+  workspaceId: string;
+  onApplySuggestion: (payload: { title: string; description: string }) => void;
 };
 
-export default function JobNewAskBobHelper({
-  initialTitle,
-  initialDescription,
-}: JobNewAskBobHelperProps) {
-  const router = useRouter();
-  const normalizedTitle = initialTitle?.trim() ?? "";
-  const normalizedDescription = initialDescription?.trim() ?? "";
-  const hasTitlePrefill = Boolean(normalizedTitle);
-  const hasDescriptionPrefill = Boolean(normalizedDescription);
+type Status = "idle" | "loading" | "success" | "error";
 
-  const handleOpenAskBob = () => {
-    const params = new URLSearchParams();
-    if (hasTitlePrefill) {
-      params.set("title", normalizedTitle);
+export default function JobNewAskBobHelper({ workspaceId, onApplySuggestion }: JobNewAskBobHelperProps) {
+  const [prompt, setPrompt] = useState("");
+  const [status, setStatus] = useState<Status>("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hasAppliedSuggestion, setHasAppliedSuggestion] = useState(false);
+
+  const isSubmitting = status === "loading";
+  const trimmedPrompt = prompt.trim();
+
+  const helperMessage =
+    status === "loading"
+      ? "Generating AskBob’s suggestions…"
+      : status === "error"
+      ? errorMessage ?? "AskBob could not generate a suggestion."
+      : "AskBob will suggest a job title and description. You can edit them before saving.";
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!trimmedPrompt) {
+      setStatus("error");
+      setErrorMessage("Please describe the job first.");
+      return;
     }
-    if (hasDescriptionPrefill) {
-      params.set("description", normalizedDescription);
+
+    setStatus("loading");
+    setErrorMessage(null);
+
+    try {
+      const result = await generateAskBobJobIntakeAction({
+        workspaceId,
+        prompt: trimmedPrompt,
+      });
+
+      const suggestedTitle = result?.suggestedTitle?.trim() ?? "";
+      const suggestedDescription = result?.suggestedDescription?.trim() ?? "";
+      const finalDescription = suggestedDescription || trimmedPrompt;
+
+      onApplySuggestion({
+        title: suggestedTitle,
+        description: finalDescription,
+      });
+
+      setHasAppliedSuggestion(true);
+      setStatus("success");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "AskBob could not generate a suggestion.";
+      setStatus("error");
+      setErrorMessage(message);
+      console.error("[jobs-new-askbob]", { error });
     }
-    params.set("origin", "jobs-new");
-    console.log("[jobs-new-askbob-click]", {
-      hasTitlePrefill,
-      hasDescriptionPrefill,
-      titleLength: normalizedTitle.length,
-      descriptionLength: normalizedDescription.length,
-    });
-    router.push(`/askbob?${params.toString()}`);
   };
 
   return (
-    <HbCard className="space-y-3 border border-slate-800 bg-slate-950/60 px-4 py-4 text-sm text-slate-200">
-      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob helper</p>
-      <h2 className="hb-heading-3 text-xl font-semibold">Need help describing this job?</h2>
-      <p className="text-sm text-slate-400">
-        AskBob can brainstorm scope, risks, and materials before you save the job. Open a new session with the
-        details you already have so you can export a plan or jump back here later.
-      </p>
-      <div className="space-y-2">
-        <HbButton type="button" variant="primary" onClick={handleOpenAskBob}>
-          Open AskBob with this job
-        </HbButton>
-        <p className="text-[11px] text-slate-500">
-          AskBob opens in a new view, and you can create a job from the result when you’re ready.
+    <form onSubmit={handleSubmit}>
+      <HbCard className="space-y-3 border border-slate-800 bg-slate-950/60 px-4 py-4 text-sm text-slate-200">
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob job intake</p>
+        <h2 className="hb-heading-3 text-xl font-semibold">Describe the job in your own words</h2>
+        <p className="text-sm text-slate-400">
+          AskBob will suggest a title and description that you can edit before saving the job.
         </p>
-      </div>
-    </HbCard>
+        <textarea
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+          placeholder="Customer wants their back porch repaired and painted before the summer event."
+          className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          rows={4}
+        />
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="w-full text-[11px] text-slate-400 md:pr-3">
+            <p className={status === "error" ? "text-rose-300" : "text-slate-400"}>{helperMessage}</p>
+            {hasAppliedSuggestion && (
+              <p className="text-[11px] text-emerald-300">
+                Title and description have been prefilled; you can edit them before saving.
+              </p>
+            )}
+          </div>
+          <HbButton
+            type="submit"
+            size="sm"
+            variant="secondary"
+            disabled={isSubmitting || !trimmedPrompt}
+            className="w-full md:w-auto"
+          >
+            {isSubmitting ? "Suggesting…" : "Suggest title & description"}
+          </HbButton>
+        </div>
+      </HbCard>
+    </form>
   );
 }

@@ -1,12 +1,10 @@
 "use client";
 
-import { useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
-
-import { requestSmartJobIntake } from "./jobIntakeAiActions";
 
 type JobCustomer = {
   id: string;
@@ -18,194 +16,63 @@ type CreateJobAction = (formData: FormData) => Promise<unknown>;
 type JobFormShellProps = {
   createJobAction: CreateJobAction;
   customers: JobCustomer[];
-  workspaceId: string;
   selectedCustomer?: JobCustomer | null;
   initialTitle?: string;
   initialDescription?: string;
   askBobOrigin?: string | null;
 };
 
-type AiStatus = "idle" | "loading" | "disabled" | "error" | "applied";
-
-const aiBaseHints: Record<AiStatus, string> = {
-  idle: "Optional: describe the job and we’ll suggest a title, notes, and status.",
-  loading: "Generating job details…",
-  disabled: "Smart Job Intake is currently disabled.",
-  error: "We couldn’t suggest job details. Please try again or fill them in manually.",
-  applied: "Smart Job Intake applied. Review and edit the fields below.",
-};
-
 export default function JobFormShell({
   createJobAction,
   customers,
-  workspaceId,
   selectedCustomer,
   initialTitle,
   initialDescription,
   askBobOrigin,
 }: JobFormShellProps) {
-  const initialTitleValue = initialTitle?.trim() ?? "";
-  const initialDescriptionValue = initialDescription?.trim() ?? "";
-  const [title, setTitle] = useState(initialTitleValue);
-  const [description, setDescription] = useState(initialDescriptionValue);
+  const normalizedInitialTitle = initialTitle?.trim() ?? "";
+  const normalizedInitialDescription = initialDescription?.trim() ?? "";
+  const hasAskBobPrefill = Boolean(normalizedInitialTitle || normalizedInitialDescription);
+
+  const [title, setTitle] = useState(normalizedInitialTitle);
+  const [description, setDescription] = useState(normalizedInitialDescription);
   const [status, setStatus] = useState("lead");
-  const [userTouchedTitle, setUserTouchedTitle] = useState(false);
-  const [userTouchedDescription, setUserTouchedDescription] = useState(false);
-  const [userTouchedStatus, setUserTouchedStatus] = useState(false);
 
-  const [hasAiTouchedTitle, setHasAiTouchedTitle] = useState(false);
-  const [hasAiTouchedDescription, setHasAiTouchedDescription] = useState(false);
-  const [hasAiTouchedStatus, setHasAiTouchedStatus] = useState(false);
+  const lastAppliedTitleRef = useRef(normalizedInitialTitle);
+  const lastAppliedDescriptionRef = useRef(normalizedInitialDescription);
 
-  const [aiStatus, setAiStatus] = useState<AiStatus>("idle");
-  const [aiErrorMessage, setAiErrorMessage] = useState<string | null>(null);
-  const [aiDescriptionInput, setAiDescriptionInput] = useState("");
-
-  const aiHint =
-    aiStatus === "error"
-      ? aiErrorMessage?.trim() ?? aiBaseHints[aiStatus]
-      : aiBaseHints[aiStatus];
-  const hasAiAppliedAnyField =
-    hasAiTouchedTitle || hasAiTouchedDescription || hasAiTouchedStatus;
-  const isGenerateDisabled = !aiDescriptionInput.trim() || aiStatus === "loading";
-  const hasAskBobPrefill = Boolean(initialTitleValue || initialDescriptionValue);
-
-  const handleSmartJobDetails = async () => {
-    const trimmedDescription = aiDescriptionInput.trim();
-    if (!trimmedDescription) {
-      setAiStatus("error");
-      setAiErrorMessage("Please describe the job first.");
-      return;
+  useEffect(() => {
+    const normalized = initialTitle?.trim() ?? "";
+    if (normalized !== lastAppliedTitleRef.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTitle(normalized);
+      lastAppliedTitleRef.current = normalized;
     }
+  }, [initialTitle]);
 
-    setAiStatus("loading");
-    setAiErrorMessage(null);
-
-    try {
-      const response = await requestSmartJobIntake({
-        description: trimmedDescription,
-        workspaceId,
-      });
-
-      if (!response.ok) {
-        if (response.error === "ai_disabled") {
-          setAiStatus("disabled");
-          setAiErrorMessage(response.message);
-          return;
-        }
-        setAiStatus("error");
-        setAiErrorMessage(
-          response.message ??
-            "We couldn’t generate job details. Please try again or fill them in manually.",
-        );
-        return;
-      }
-
-      const data = response.data;
-      if (!data) {
-        setAiStatus("error");
-        setAiErrorMessage("We couldn’t parse job details from the AI response.");
-        return;
-      }
-
-      let appliedFields = 0;
-
-      if (data.title && !userTouchedTitle) {
-        setTitle(data.title);
-        setHasAiTouchedTitle(true);
-        appliedFields += 1;
-      }
-
-      if (data.notes && !userTouchedDescription) {
-        setDescription(data.notes);
-        setHasAiTouchedDescription(true);
-        appliedFields += 1;
-      }
-
-      if (data.statusSuggestion && !userTouchedStatus) {
-        setStatus(data.statusSuggestion);
-        setHasAiTouchedStatus(true);
-        appliedFields += 1;
-      }
-
-      if (appliedFields > 0) {
-        setAiStatus("applied");
-        setAiErrorMessage(null);
-      } else {
-        setAiStatus("idle");
-        setAiErrorMessage("No fields were updated because you already customized them.");
-      }
-    } catch (error) {
-      setAiStatus("error");
-      setAiErrorMessage("We couldn’t suggest job details. Please try again or fill them in manually.");
-      console.error("[jobs/new] smart intake failed", error);
+  useEffect(() => {
+    const normalized = initialDescription?.trim() ?? "";
+    if (normalized !== lastAppliedDescriptionRef.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDescription(normalized);
+      lastAppliedDescriptionRef.current = normalized;
     }
-  };
+  }, [initialDescription]);
 
   const handleTitleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (!userTouchedTitle) {
-      setUserTouchedTitle(true);
-    }
     setTitle(event.target.value);
   };
 
   const handleDescriptionChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    if (!userTouchedDescription) {
-      setUserTouchedDescription(true);
-    }
     setDescription(event.target.value);
   };
 
   const handleStatusChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    if (!userTouchedStatus) {
-      setUserTouchedStatus(true);
-    }
     setStatus(event.target.value);
   };
 
   return (
     <div className="space-y-5">
-      <HbCard className="space-y-4">
-        <div className="space-y-1">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Smart Job Intake (optional)</p>
-          <p className="text-sm font-semibold">Need a hand filling out the job?</p>
-          <p className="text-[11px] text-slate-400">
-            Paste or type what the customer told you and we’ll suggest a title and notes for the job.
-          </p>
-        </div>
-        <textarea
-          value={aiDescriptionInput}
-          onChange={(event) => setAiDescriptionInput(event.target.value)}
-          placeholder="Customer wants a new deck built, needs materials sourced, and prefers late afternoon visits."
-          className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          rows={4}
-        />
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="w-full flex-grow text-[11px] md:text-left md:pr-3">
-            <p className={`whitespace-pre-line ${aiStatus === "error" ? "text-rose-300" : "text-slate-400"}`}>
-              {aiHint}
-            </p>
-            {aiStatus === "applied" && hasAiAppliedAnyField && (
-              <p className="text-[11px] text-emerald-300">
-                Smart Job Intake suggested values for the fields above.
-              </p>
-            )}
-            {!aiDescriptionInput.trim() && (
-              <p className="text-[11px] text-rose-300">Please describe the job first.</p>
-            )}
-          </div>
-          <HbButton
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={handleSmartJobDetails}
-            disabled={isGenerateDisabled}
-          >
-            {aiStatus === "loading" ? "Generating…" : "Generate job details"}
-          </HbButton>
-        </div>
-      </HbCard>
-
       <HbCard className="space-y-4">
         <form action={createJobAction} className="space-y-5">
           {askBobOrigin === "askbob" && hasAskBobPrefill && (

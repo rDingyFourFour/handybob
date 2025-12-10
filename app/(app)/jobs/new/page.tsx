@@ -4,8 +4,7 @@ import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
-import JobFormShell from "./JobFormShell";
-import JobNewAskBobHelper from "@/components/askbob/JobNewAskBobHelper";
+import JobNewPageClient from "./JobNewPageClient";
 
 async function createJobAction(formData: FormData) {
   "use server";
@@ -184,25 +183,15 @@ export default async function NewJobPage({
           </p>
         )}
       </header>
-      <div className="space-y-6 lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,320px)] lg:items-start lg:gap-6">
-        <div>
-          <JobFormShell
-            customers={customers}
-            createJobAction={createJobAction}
-            workspaceId={workspace.id}
-            selectedCustomer={customerFromQuery}
-            initialTitle={askBobTitle}
-            initialDescription={askBobDescription}
-            askBobOrigin={askBobOrigin}
-          />
-        </div>
-        <div className="lg:sticky lg:top-[5rem]">
-          <JobNewAskBobHelper
-            initialTitle={askBobTitle}
-            initialDescription={askBobDescription}
-          />
-        </div>
-      </div>
+      <JobNewPageClient
+        customers={customers}
+        createJobAction={createJobAction}
+        workspaceId={workspace.id}
+        selectedCustomer={customerFromQuery}
+        initialTitle={askBobTitle}
+        initialDescription={askBobDescription}
+        askBobOrigin={askBobOrigin}
+      />
     </div>
   );
 }
