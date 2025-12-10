@@ -122,7 +122,7 @@ export default function JobAskBobPanel({
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <div className="flex items-center gap-2">
-            <h2 className="hb-heading-3 text-xl font-semibold">Step 1 · Diagnose the job</h2>
+            <h2 className="hb-heading-3 text-xl font-semibold">Step 2 · Diagnose the job</h2>
             {stepCompleted && (
               <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
                 Done

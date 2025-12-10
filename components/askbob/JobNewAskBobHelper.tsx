@@ -69,9 +69,12 @@ export default function JobNewAskBobHelper({ workspaceId, onApplySuggestion }: J
     <form onSubmit={handleSubmit}>
       <HbCard className="space-y-3 border border-slate-800 bg-slate-950/60 px-4 py-4 text-sm text-slate-200">
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob job intake</p>
-        <h2 className="hb-heading-3 text-xl font-semibold">Describe the job in your own words</h2>
+        <h2 className="hb-heading-3 text-xl font-semibold">
+          Describe the job and let AskBob draft a title & description
+        </h2>
         <p className="text-sm text-slate-400">
-          AskBob will suggest a title and description that you can edit before saving the job.
+          This is the first step of job creation. AskBob will fill in a suggested title and description,
+          and you can tweak them before saving.
         </p>
         <textarea
           value={prompt}

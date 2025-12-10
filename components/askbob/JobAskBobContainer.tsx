@@ -1,132 +1,30 @@
 "use client";
 
-import { useState } from "react";
-
 import HbCard from "@/components/ui/hb-card";
-import AskBobSection from "@/components/askbob/AskBobSection";
-import AskBobMaterialsPanel from "@/components/askbob/AskBobMaterialsPanel";
-import AskBobQuotePanel from "@/components/askbob/AskBobQuotePanel";
-import JobAskBobFollowupPanel from "@/components/askbob/JobAskBobFollowupPanel";
 import JobAskBobHud from "@/components/askbob/JobAskBobHud";
-import JobAskBobPanel, { type JobDiagnosisContext } from "@/components/askbob/JobAskBobPanel";
-import type { MaterialsSummaryContext } from "@/components/askbob/AskBobMaterialsPanel";
+
+type StepStatusItem = {
+  label: string;
+  done: boolean;
+};
 
 type JobAskBobContainerProps = {
-  workspaceId: string;
-  jobId: string;
-  customerId?: string | null;
-  jobDescription?: string | null | undefined;
-  jobTitle?: string | null | undefined;
   askBobLastTaskLabel?: string | null;
   askBobLastUsedAtDisplay?: string | null;
   askBobLastUsedAtIso?: string | null;
   askBobRunsSummary?: string | null;
-  hasQuoteContextForFollowup?: boolean;
-  lastQuoteId?: string;
-  lastQuoteCreatedAt?: string;
-  lastQuoteCreatedAtFriendly?: string;
+  stepStatusItems: StepStatusItem[];
 };
 
 export default function JobAskBobContainer({
-  workspaceId,
-  jobId,
-  customerId,
-  jobDescription,
-  jobTitle,
   askBobLastTaskLabel,
   askBobLastUsedAtDisplay,
   askBobLastUsedAtIso,
   askBobRunsSummary,
-  hasQuoteContextForFollowup,
-  lastQuoteId,
-  lastQuoteCreatedAt,
-  lastQuoteCreatedAtFriendly,
+  stepStatusItems,
 }: JobAskBobContainerProps) {
-  const promptSeed = jobDescription ?? "";
-  const effectiveJobTitle = jobTitle?.trim() || "";
-  const flowReminder = "Work through these steps in order, editing anything that doesn’t match what you see on site.";
-  const [diagnosisSummary, setDiagnosisSummary] = useState<string | null>(null);
-  const [materialsSummary, setMaterialsSummary] = useState<string | null>(null);
-  const [hasLocalAskBobQuoteFromFlow, setHasLocalAskBobQuoteFromFlow] = useState(false);
-  const [step1DiagnoseDone, setStep1DiagnoseDone] = useState(false);
-  const [step2MaterialsDone, setStep2MaterialsDone] = useState(false);
-  const [step3QuoteDone, setStep3QuoteDone] = useState(false);
-  const [step4FollowupDone, setStep4FollowupDone] = useState(false);
-  const [materialsResetToken, setMaterialsResetToken] = useState(0);
-  const [quoteResetToken, setQuoteResetToken] = useState(0);
-  const [followupResetToken, setFollowupResetToken] = useState(0);
-  const effectiveHasQuoteContextForFollowup = Boolean(hasQuoteContextForFollowup);
-  const combinedHasQuoteContextForFollowup = effectiveHasQuoteContextForFollowup || hasLocalAskBobQuoteFromFlow;
-  const stepStatusItems = [
-    { label: "Step 1 Diagnose", done: step1DiagnoseDone },
-    { label: "Step 2 Materials", done: step2MaterialsDone },
-    { label: "Step 3 Quote", done: step3QuoteDone },
-    { label: "Step 4 Follow-up", done: step4FollowupDone },
-  ];
-
-  const handleDiagnoseComplete = (context: JobDiagnosisContext) => {
-    const summary = context.diagnosisSummary?.trim() ?? null;
-    setDiagnosisSummary(summary);
-    setMaterialsSummary(null);
-    setHasLocalAskBobQuoteFromFlow(false);
-    setStep1DiagnoseDone(Boolean(summary));
-    setStep2MaterialsDone(false);
-    setStep3QuoteDone(false);
-    setStep4FollowupDone(false);
-    setMaterialsResetToken((value) => value + 1);
-    setQuoteResetToken((value) => value + 1);
-    setFollowupResetToken((value) => value + 1);
-  };
-  const handleMaterialsSummaryChange = (context: MaterialsSummaryContext) => {
-    const summary = context.materialsSummary?.trim() ?? null;
-    setMaterialsSummary(summary);
-    const materialsCount = context.materialsCount ?? 0;
-    setStep2MaterialsDone(materialsCount > 0);
-    setHasLocalAskBobQuoteFromFlow(false);
-    setStep3QuoteDone(false);
-    setStep4FollowupDone(false);
-    setQuoteResetToken((value) => value + 1);
-    setFollowupResetToken((value) => value + 1);
-    if (!summary) {
-      setMaterialsResetToken((value) => value + 1);
-    }
-  };
-
-  const handleAskBobQuoteApplied = (quoteId: string) => {
-    void quoteId;
-    setHasLocalAskBobQuoteFromFlow(true);
-    setStep3QuoteDone(true);
-    setStep4FollowupDone(false);
-    setFollowupResetToken((value) => value + 1);
-  };
-
-  const handleFollowupCompleted = () => {
-    setStep4FollowupDone(true);
-  };
-
-  const handleQuoteReset = () => {
-    setHasLocalAskBobQuoteFromFlow(false);
-    setStep3QuoteDone(false);
-    setStep4FollowupDone(false);
-    setQuoteResetToken((value) => value + 1);
-    setFollowupResetToken((value) => value + 1);
-  };
-
-  const handleFollowupReset = () => {
-    setStep4FollowupDone(false);
-    setFollowupResetToken((value) => value + 1);
-  };
-
-  const scrollToSection = (sectionId: string) => {
-    if (typeof document === "undefined") {
-      return;
-    }
-    const target = document.getElementById(sectionId);
-    if (!target) {
-      return;
-    }
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+  const flowReminder =
+    "Job intake happened when you created this job; continue through these steps to keep refining the scope.";
 
   return (
     <HbCard className="space-y-6">
@@ -155,70 +53,6 @@ export default function JobAskBobContainer({
             </span>
           </div>
         ))}
-      </div>
-      <div className="space-y-8">
-        <AskBobSection id="askbob-diagnose">
-          <JobAskBobPanel
-            workspaceId={workspaceId}
-            jobId={jobId}
-            customerId={customerId ?? undefined}
-            jobDescription={promptSeed}
-            jobTitle={effectiveJobTitle}
-            onDiagnoseSuccess={() => scrollToSection("askbob-materials")}
-            onDiagnoseComplete={handleDiagnoseComplete}
-            stepCompleted={step1DiagnoseDone}
-          />
-        </AskBobSection>
-        <AskBobSection id="askbob-materials">
-          <AskBobMaterialsPanel
-            workspaceId={workspaceId}
-            jobId={jobId}
-            customerId={customerId ?? null}
-            onMaterialsSuccess={() => scrollToSection("askbob-quote")}
-            diagnosisSummaryForMaterials={diagnosisSummary}
-            onMaterialsSummaryChange={handleMaterialsSummaryChange}
-            jobDescription={jobDescription ?? null}
-            jobTitle={effectiveJobTitle}
-            stepCompleted={step2MaterialsDone}
-            resetToken={materialsResetToken}
-          />
-        </AskBobSection>
-        <AskBobSection id="askbob-quote">
-          <AskBobQuotePanel
-            workspaceId={workspaceId}
-            jobId={jobId}
-            customerId={customerId ?? null}
-            onQuoteSuccess={() => scrollToSection("askbob-followup")}
-            diagnosisSummaryForQuote={diagnosisSummary}
-            materialsSummaryForQuote={materialsSummary}
-            jobDescription={jobDescription ?? null}
-            jobTitle={effectiveJobTitle}
-            onQuoteApplied={handleAskBobQuoteApplied}
-            onScrollToFollowup={() => scrollToSection("askbob-followup")}
-            stepCompleted={step3QuoteDone}
-            resetToken={quoteResetToken}
-            onQuoteReset={handleQuoteReset}
-          />
-        </AskBobSection>
-        <AskBobSection id="askbob-followup">
-          <JobAskBobFollowupPanel
-            workspaceId={workspaceId}
-            jobId={jobId}
-            customerId={customerId ?? null}
-            jobTitle={effectiveJobTitle}
-            jobDescription={jobDescription ?? null}
-            diagnosisSummaryForFollowup={diagnosisSummary}
-            materialsSummaryForFollowup={materialsSummary}
-            hasQuoteContextForFollowup={combinedHasQuoteContextForFollowup}
-            lastQuoteIdForFollowup={lastQuoteId}
-            lastQuoteCreatedAtForFollowup={lastQuoteCreatedAt}
-            lastQuoteCreatedAtFriendlyForFollowup={lastQuoteCreatedAtFriendly}
-            stepCompleted={step4FollowupDone}
-            onFollowupCompleted={handleFollowupCompleted}
-            resetToken={followupResetToken}
-            onReset={handleFollowupReset}
-          />
-        </AskBobSection>
       </div>
     </HbCard>
   );

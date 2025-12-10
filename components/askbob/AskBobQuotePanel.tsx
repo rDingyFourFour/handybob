@@ -281,7 +281,7 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob quote</p>
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <div className="flex items-center gap-2">
-            <h2 className="hb-heading-3 text-xl font-semibold">Step 3 · Draft a quote</h2>
+            <h2 className="hb-heading-3 text-xl font-semibold">Step 4 · Draft a quote</h2>
             {stepCompleted && (
               <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
                 Done

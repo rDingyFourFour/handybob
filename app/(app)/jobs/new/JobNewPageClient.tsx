@@ -38,20 +38,16 @@ export default function JobNewPageClient({
   };
 
   return (
-    <div className="space-y-6 lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,320px)] lg:items-start lg:gap-6">
-      <div>
-        <JobFormShell
-          customers={customers}
-          createJobAction={createJobAction}
-          selectedCustomer={selectedCustomer}
-          initialTitle={titleSuggestion}
-          initialDescription={descriptionSuggestion}
-          askBobOrigin={askBobOrigin}
-        />
-      </div>
-      <div className="lg:sticky lg:top-[5rem]">
-        <JobNewAskBobHelper workspaceId={workspaceId} onApplySuggestion={handleApplySuggestion} />
-      </div>
+    <div className="space-y-6">
+      <JobNewAskBobHelper workspaceId={workspaceId} onApplySuggestion={handleApplySuggestion} />
+      <JobFormShell
+        customers={customers}
+        createJobAction={createJobAction}
+        selectedCustomer={selectedCustomer}
+        initialTitle={titleSuggestion}
+        initialDescription={descriptionSuggestion}
+        askBobOrigin={askBobOrigin}
+      />
     </div>
   );
 }

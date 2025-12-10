@@ -17,7 +17,7 @@ import {
   type FollowupDueStatus,
   type FollowupDueInfo,
 } from "@/lib/domain/communications/followupRecommendations";
-import JobAskBobContainer from "@/components/askbob/JobAskBobContainer";
+import JobAskBobFlow from "@/components/askbob/JobAskBobFlow";
 
 type JobRecord = {
   id: string;
@@ -433,20 +433,20 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
         customerName={customerName}
         description={job.description_raw}
       />
-        <JobAskBobContainer
+        <JobAskBobFlow
           workspaceId={workspace.id}
           jobId={job.id}
-          customerId={customerId ?? undefined}
-          jobDescription={job.description_raw ?? ""}
+          customerId={customerId ?? null}
+          jobDescription={job.description_raw ?? null}
           jobTitle={askBobJobTitle}
           askBobLastTaskLabel={askBobLastTaskLabel}
           askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
           askBobLastUsedAtIso={askBobLastUsedAtIso}
           askBobRunsSummary={askBobRunsSummary}
           hasQuoteContextForFollowup={hasQuoteContextForFollowup}
-          lastQuoteId={lastQuoteId ?? undefined}
-          lastQuoteCreatedAt={lastQuoteCreatedAt ?? undefined}
-          lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? undefined}
+          lastQuoteId={lastQuoteId ?? null}
+          lastQuoteCreatedAt={lastQuoteCreatedAt ?? null}
+          lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? null}
         />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">
