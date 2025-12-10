@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import JobFormShell from "./JobFormShell";
+import JobNewAskBobHelper from "@/components/askbob/JobNewAskBobHelper";
 
 async function createJobAction(formData: FormData) {
   "use server";
@@ -82,6 +83,18 @@ export default async function NewJobPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const searchParams = await searchParamsPromise;
+  const askBobTitleParam = searchParams?.title;
+  const askBobDescriptionParam = searchParams?.description;
+  const askBobOriginParam = searchParams?.origin;
+  const askBobTitle =
+    typeof askBobTitleParam === "string" && askBobTitleParam.trim()
+      ? askBobTitleParam.trim()
+      : "";
+  const askBobDescription =
+    typeof askBobDescriptionParam === "string" && askBobDescriptionParam.trim()
+      ? askBobDescriptionParam.trim()
+      : "";
+  const askBobOrigin = typeof askBobOriginParam === "string" ? askBobOriginParam : null;
   const rawCustomerId = searchParams?.customerId;
   const requestedCustomerId = Array.isArray(rawCustomerId) ? rawCustomerId[0] : rawCustomerId ?? null;
   const customerIdFromQuery = requestedCustomerId?.trim() ? requestedCustomerId.trim() : null;
@@ -119,6 +132,16 @@ export default async function NewJobPage({
 
   if (!workspace) {
     redirect("/");
+  }
+
+  if (askBobOrigin === "askbob") {
+    console.log("[jobs-new-from-askbob]", {
+      workspaceId: workspace.id,
+      hasTitlePrefill: Boolean(askBobTitle),
+      hasDescriptionPrefill: Boolean(askBobDescription),
+      titleLength: askBobTitle.length,
+      descriptionLength: askBobDescription.length,
+    });
   }
 
   const { data: customersData } = await supabase
@@ -161,12 +184,25 @@ export default async function NewJobPage({
           </p>
         )}
       </header>
-      <JobFormShell
-        customers={customers}
-        createJobAction={createJobAction}
-        workspaceId={workspace.id}
-        selectedCustomer={customerFromQuery}
-      />
+      <div className="space-y-6 lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,320px)] lg:items-start lg:gap-6">
+        <div>
+          <JobFormShell
+            customers={customers}
+            createJobAction={createJobAction}
+            workspaceId={workspace.id}
+            selectedCustomer={customerFromQuery}
+            initialTitle={askBobTitle}
+            initialDescription={askBobDescription}
+            askBobOrigin={askBobOrigin}
+          />
+        </div>
+        <div className="lg:sticky lg:top-[5rem]">
+          <JobNewAskBobHelper
+            initialTitle={askBobTitle}
+            initialDescription={askBobDescription}
+          />
+        </div>
+      </div>
     </div>
   );
 }

@@ -8,7 +8,30 @@ import AskBobPageEntryLogger from "@/components/askbob/AskBobPageEntryLogger";
 
 export const dynamic = "force-dynamic";
 
-export default async function AskBobPage() {
+export default async function AskBobPage({
+  searchParams,
+}: {
+  searchParams?: { [key: string]: string | string[] | undefined };
+}) {
+  const originParam = typeof searchParams?.origin === "string" ? searchParams.origin : null;
+  const titleParam =
+    typeof searchParams?.title === "string" && searchParams.title.trim()
+      ? searchParams.title.trim()
+      : "";
+  const descriptionParam =
+    typeof searchParams?.description === "string" && searchParams.description.trim()
+      ? searchParams.description.trim()
+      : "";
+  let defaultPrompt: string | undefined;
+  if (originParam === "jobs-new") {
+    const contextParts: string[] = [];
+    if (titleParam) contextParts.push(titleParam);
+    if (descriptionParam) contextParts.push(descriptionParam);
+    const context = contextParts.join(" – ").trim();
+    if (context) {
+      defaultPrompt = `Help me turn this into a clear job scope and checklist: ${context}`;
+    }
+  }
   let supabaseClient;
   try {
     supabaseClient = await createServerClient();
@@ -64,7 +87,11 @@ export default async function AskBobPage() {
             escalation guidance.
           </p>
         </div>
-        <AskBobForm workspaceId={workspace.id} />
+        <AskBobForm
+          workspaceId={workspace.id}
+          initialPrompt={defaultPrompt}
+          askBobOrigin={originParam}
+        />
       </div>
     </>
   );

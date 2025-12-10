@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useState, useTransition } from "react";
+import { FormEvent, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
@@ -17,6 +18,8 @@ type AskBobFormProps = {
   jobDescription?: string | null;
   jobTitle?: string | null;
   onResponse?: (response: AskBobResponseDTO) => void;
+  initialPrompt?: string;
+  askBobOrigin?: string | null;
 };
 
 const MIN_PROMPT_LENGTH = 10;
@@ -75,14 +78,19 @@ export default function AskBobForm({
   jobDescription,
   jobTitle,
   onResponse,
+  initialPrompt,
+  askBobOrigin,
 }: AskBobFormProps) {
   const trimmedJobDescription = jobDescription?.trim() ?? "";
   const hasPromptSeed = Boolean(trimmedJobDescription);
-  const [prompt, setPrompt] = useState(() => trimmedJobDescription);
+  const initialPromptValue = initialPrompt?.trim() ?? "";
+  const [prompt, setPrompt] = useState(() => initialPromptValue || trimmedJobDescription);
   const [response, setResponse] = useState<AskBobResponseDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const effectiveJobTitle = jobTitle?.trim() ?? "";
+  const router = useRouter();
+  const isStandaloneAskBob = !jobId;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -146,6 +154,70 @@ export default function AskBobForm({
     ? "Diagnose this job with AskBob"
     : "Ask Bob for help";
 
+  const trimmedPrompt = prompt.trim();
+  const sanitizedPrompt = trimmedPrompt.replace(/\s+/g, " ");
+  const responseSummary = useMemo(() => {
+    if (!response) {
+      return null;
+    }
+    for (const section of response.sections) {
+      for (const item of section.items) {
+        const normalized = item?.trim();
+        if (normalized) {
+          return normalized;
+        }
+      }
+    }
+    return null;
+  }, [response]);
+  const fallbackTitle = sanitizedPrompt
+    ? `AskBob job: ${sanitizedPrompt.slice(0, 70)}${sanitizedPrompt.length > 70 ? "…" : ""}`
+    : "";
+  const suggestedTitle = responseSummary?.length
+    ? responseSummary.length > 80
+      ? `${responseSummary.slice(0, 77)}…`
+      : responseSummary
+    : fallbackTitle;
+  const stepsSection = response?.sections.find((section) => section.type === "steps");
+  const stepItems = stepsSection?.items ?? [];
+  const stepTextList = stepItems
+    .map((step) => step.trim())
+    .filter((step) => Boolean(step))
+    .slice(0, 3)
+    .map((step, index) => `${index + 1}. ${step}`);
+  const descriptionParts: string[] = [];
+  if (trimmedPrompt) {
+    descriptionParts.push(`Original request: ${trimmedPrompt}`);
+  }
+  if (responseSummary) {
+    descriptionParts.push(`AskBob summary: ${responseSummary}`);
+  }
+  if (stepTextList.length) {
+    descriptionParts.push(`Key steps:\n${stepTextList.join("\n")}`);
+  }
+  const suggestedDescription = descriptionParts.join("\n\n").trim();
+  const showCreateJobCTA =
+    isStandaloneAskBob && Boolean(suggestedTitle || suggestedDescription);
+  const showAskBobOriginHint = askBobOrigin === "jobs-new";
+  const handleCreateJobFromAskBob = () => {
+    const params = new URLSearchParams();
+    if (suggestedTitle) {
+      params.set("title", suggestedTitle);
+    }
+    if (suggestedDescription) {
+      params.set("description", suggestedDescription);
+    }
+    params.set("origin", "askbob");
+    console.log("[askbob-create-job-click]", {
+      workspaceId,
+      promptLength: trimmedPrompt.length,
+      hasSummary: Boolean(responseSummary),
+      titleLength: suggestedTitle.length,
+      descriptionLength: suggestedDescription.length,
+    });
+    router.push(`/jobs/new?${params.toString()}`);
+  };
+
   return (
     <div className="space-y-6">
       <HbCard className="space-y-4">
@@ -154,6 +226,11 @@ export default function AskBobForm({
             <label htmlFor="askbob-prompt" className="text-sm font-semibold text-slate-100">
               Describe the problem
             </label>
+            {showAskBobOriginHint && (
+              <p className="text-xs text-slate-400">
+                This AskBob session was opened from the New Job page. You can create a job from the result when you’re ready.
+              </p>
+            )}
             <textarea
               id="askbob-prompt"
               name="prompt"
@@ -197,6 +274,14 @@ export default function AskBobForm({
           jobId={jobId ?? undefined}
           customerId={customerId ?? undefined}
         />
+      )}
+      {response && showCreateJobCTA && (
+        <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
+          <p className="text-sm text-slate-100">Happy with this AskBob result? Turn it into a new job.</p>
+          <HbButton type="button" variant="primary" onClick={handleCreateJobFromAskBob}>
+            Create job from this AskBob result
+          </HbButton>
+        </div>
       )}
     </div>
   );

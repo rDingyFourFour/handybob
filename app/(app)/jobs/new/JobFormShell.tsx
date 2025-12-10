@@ -20,6 +20,9 @@ type JobFormShellProps = {
   customers: JobCustomer[];
   workspaceId: string;
   selectedCustomer?: JobCustomer | null;
+  initialTitle?: string;
+  initialDescription?: string;
+  askBobOrigin?: string | null;
 };
 
 type AiStatus = "idle" | "loading" | "disabled" | "error" | "applied";
@@ -37,9 +40,14 @@ export default function JobFormShell({
   customers,
   workspaceId,
   selectedCustomer,
+  initialTitle,
+  initialDescription,
+  askBobOrigin,
 }: JobFormShellProps) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const initialTitleValue = initialTitle?.trim() ?? "";
+  const initialDescriptionValue = initialDescription?.trim() ?? "";
+  const [title, setTitle] = useState(initialTitleValue);
+  const [description, setDescription] = useState(initialDescriptionValue);
   const [status, setStatus] = useState("lead");
   const [userTouchedTitle, setUserTouchedTitle] = useState(false);
   const [userTouchedDescription, setUserTouchedDescription] = useState(false);
@@ -60,6 +68,7 @@ export default function JobFormShell({
   const hasAiAppliedAnyField =
     hasAiTouchedTitle || hasAiTouchedDescription || hasAiTouchedStatus;
   const isGenerateDisabled = !aiDescriptionInput.trim() || aiStatus === "loading";
+  const hasAskBobPrefill = Boolean(initialTitleValue || initialDescriptionValue);
 
   const handleSmartJobDetails = async () => {
     const trimmedDescription = aiDescriptionInput.trim();
@@ -199,6 +208,11 @@ export default function JobFormShell({
 
       <HbCard className="space-y-4">
         <form action={createJobAction} className="space-y-5">
+          {askBobOrigin === "askbob" && hasAskBobPrefill && (
+            <p className="text-xs text-slate-400">
+              This job was prefilled from an AskBob suggestion. You can edit any field before saving.
+            </p>
+          )}
           {customers.length === 0 && (
             <div className="text-sm text-rose-400">
               No customers in this workspace. Create a customer first to assign a job.
