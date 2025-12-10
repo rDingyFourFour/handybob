@@ -22,6 +22,7 @@ type AskBobMaterialsPanelProps = {
   onMaterialsSummaryChange?: (context: MaterialsSummaryContext) => void;
   onMaterialsSuccess?: () => void;
   jobTitle?: string | null;
+  stepCompleted?: boolean;
 };
 
 function summarizeMaterialsSuggestion(suggestion: SmartQuoteSuggestion | null): string | null {
@@ -95,8 +96,15 @@ function buildMaterialsExtraDetails({
 const DEFAULT_PROMPT = "List the materials needed for this job.";
 
 export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
-  const { jobId, onMaterialsSuccess, diagnosisSummaryForMaterials, jobDescription, onMaterialsSummaryChange, jobTitle } =
-    props;
+  const {
+    jobId,
+    onMaterialsSuccess,
+    diagnosisSummaryForMaterials,
+    jobDescription,
+    onMaterialsSummaryChange,
+    jobTitle,
+    stepCompleted,
+  } = props;
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [extraDetails, setExtraDetails] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -178,7 +186,14 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
     <HbCard className="space-y-4">
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob materials</p>
-        <h2 className="hb-heading-3 text-xl font-semibold">Step 2 · Build a materials checklist</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="hb-heading-3 text-xl font-semibold">Step 2 · Build a materials checklist</h2>
+          {stepCompleted && (
+            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
+              Done
+            </span>
+          )}
+        </div>
         <p className="text-sm text-slate-400">
           AskBob suggests a materials checklist using the job title, description, and your notes from Step 1. Use this as a
           planning list—verify quantities and brands before buying anything.

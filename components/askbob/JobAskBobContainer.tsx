@@ -22,6 +22,9 @@ type JobAskBobContainerProps = {
   askBobLastUsedAtIso?: string | null;
   askBobRunsSummary?: string | null;
   hasQuoteContextForFollowup?: boolean;
+  lastQuoteId?: string;
+  lastQuoteCreatedAt?: string;
+  lastQuoteCreatedAtFriendly?: string;
 };
 
 export default function JobAskBobContainer({
@@ -35,20 +38,53 @@ export default function JobAskBobContainer({
   askBobLastUsedAtIso,
   askBobRunsSummary,
   hasQuoteContextForFollowup,
+  lastQuoteId,
+  lastQuoteCreatedAt,
+  lastQuoteCreatedAtFriendly,
 }: JobAskBobContainerProps) {
   const promptSeed = jobDescription ?? "";
   const effectiveJobTitle = jobTitle?.trim() || "";
   const flowReminder = "Work through these steps in order, editing anything that doesn’t match what you see on site.";
   const [diagnosisSummary, setDiagnosisSummary] = useState<string | null>(null);
   const [materialsSummary, setMaterialsSummary] = useState<string | null>(null);
+  const [hasLocalAskBobQuoteFromFlow, setHasLocalAskBobQuoteFromFlow] = useState(false);
+  const [step1DiagnoseDone, setStep1DiagnoseDone] = useState(false);
+  const [step2MaterialsDone, setStep2MaterialsDone] = useState(false);
+  const [step3QuoteDone, setStep3QuoteDone] = useState(false);
+  const [step4FollowupDone, setStep4FollowupDone] = useState(false);
   const effectiveHasQuoteContextForFollowup = Boolean(hasQuoteContextForFollowup);
+  const combinedHasQuoteContextForFollowup = effectiveHasQuoteContextForFollowup || hasLocalAskBobQuoteFromFlow;
+  const stepStatusItems = [
+    { label: "Step 1 Diagnose", done: step1DiagnoseDone },
+    { label: "Step 2 Materials", done: step2MaterialsDone },
+    { label: "Step 3 Quote", done: step3QuoteDone },
+    { label: "Step 4 Follow-up", done: step4FollowupDone },
+  ];
 
   const handleDiagnoseComplete = (context: JobDiagnosisContext) => {
+    const summary = context.diagnosisSummary?.trim() ?? null;
     setDiagnosisSummary(context.diagnosisSummary);
     setMaterialsSummary(null);
+    if (summary) {
+      setStep1DiagnoseDone(true);
+    }
   };
   const handleMaterialsSummaryChange = (context: MaterialsSummaryContext) => {
     setMaterialsSummary(context.materialsSummary);
+    const materialsCount = context.materialsCount ?? 0;
+    if (materialsCount > 0) {
+      setStep2MaterialsDone(true);
+    }
+  };
+
+  const handleAskBobQuoteApplied = (quoteId: string) => {
+    void quoteId;
+    setHasLocalAskBobQuoteFromFlow(true);
+    setStep3QuoteDone(true);
+  };
+
+  const handleFollowupCompleted = () => {
+    setStep4FollowupDone(true);
   };
 
   const scrollToSection = (sectionId: string) => {
@@ -78,6 +114,18 @@ export default function JobAskBobContainer({
           runsSummary={askBobRunsSummary}
         />
       </div>
+      <div className="space-y-1 rounded-2xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-xs text-slate-400">
+        {stepStatusItems.map((step) => (
+          <div key={step.label} className="flex items-center justify-between">
+            <span className="text-slate-200">{step.label}</span>
+            <span
+              className={`text-[11px] font-semibold uppercase ${step.done ? "text-emerald-300" : "text-slate-500"}`}
+            >
+              {step.done ? "Done" : "Not started"}
+            </span>
+          </div>
+        ))}
+      </div>
       <div className="space-y-8">
         <AskBobSection id="askbob-diagnose">
           <JobAskBobPanel
@@ -88,6 +136,7 @@ export default function JobAskBobContainer({
             jobTitle={effectiveJobTitle}
             onDiagnoseSuccess={() => scrollToSection("askbob-materials")}
             onDiagnoseComplete={handleDiagnoseComplete}
+            stepCompleted={step1DiagnoseDone}
           />
         </AskBobSection>
         <AskBobSection id="askbob-materials">
@@ -100,6 +149,7 @@ export default function JobAskBobContainer({
             onMaterialsSummaryChange={handleMaterialsSummaryChange}
             jobDescription={jobDescription ?? null}
             jobTitle={effectiveJobTitle}
+            stepCompleted={step2MaterialsDone}
           />
         </AskBobSection>
         <AskBobSection id="askbob-quote">
@@ -112,6 +162,9 @@ export default function JobAskBobContainer({
             materialsSummaryForQuote={materialsSummary}
             jobDescription={jobDescription ?? null}
             jobTitle={effectiveJobTitle}
+            onQuoteApplied={handleAskBobQuoteApplied}
+            onScrollToFollowup={() => scrollToSection("askbob-followup")}
+            stepCompleted={step3QuoteDone}
           />
         </AskBobSection>
         <AskBobSection id="askbob-followup">
@@ -123,7 +176,12 @@ export default function JobAskBobContainer({
             jobDescription={jobDescription ?? null}
             diagnosisSummaryForFollowup={diagnosisSummary}
             materialsSummaryForFollowup={materialsSummary}
-            hasQuoteContextForFollowup={effectiveHasQuoteContextForFollowup}
+            hasQuoteContextForFollowup={combinedHasQuoteContextForFollowup}
+            lastQuoteIdForFollowup={lastQuoteId}
+            lastQuoteCreatedAtForFollowup={lastQuoteCreatedAt}
+            lastQuoteCreatedAtFriendlyForFollowup={lastQuoteCreatedAtFriendly}
+            stepCompleted={step4FollowupDone}
+            onFollowupCompleted={handleFollowupCompleted}
           />
         </AskBobSection>
       </div>

@@ -54,6 +54,7 @@ type JobAskBobPanelProps = {
   onDiagnoseComplete?: (context: JobDiagnosisContext) => void;
   jobDescription?: string | null;
   jobTitle?: string | null;
+  stepCompleted?: boolean;
 };
 
 export default function JobAskBobPanel({
@@ -65,6 +66,7 @@ export default function JobAskBobPanel({
   onDiagnoseComplete,
   jobDescription,
   jobTitle,
+  stepCompleted,
 }: JobAskBobPanelProps) {
   useEffect(() => {
     console.log("[askbob-ui-entry]", {
@@ -98,7 +100,14 @@ export default function JobAskBobPanel({
     <HbCard className="space-y-4">
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
-        <h2 className="hb-heading-3 text-xl font-semibold">Step 1 · Diagnose the job</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="hb-heading-3 text-xl font-semibold">Step 1 · Diagnose the job</h2>
+          {stepCompleted && (
+            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
+              Done
+            </span>
+          )}
+        </div>
         <p className="text-sm text-slate-400">
           AskBob uses the job title, description, and your notes to outline how a technician might approach this job safely.
           Review and adjust these steps based on what you see on site.

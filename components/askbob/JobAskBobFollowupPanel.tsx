@@ -10,6 +10,7 @@ import HbCard from "@/components/ui/hb-card";
 import type { AskBobJobFollowupResult } from "@/lib/domain/askbob/types";
 import { runAskBobJobFollowupAction } from "@/app/(app)/askbob/followup-actions";
 import { draftAskBobJobFollowupMessageAction } from "@/app/(app)/askbob/followup-message-draft-actions";
+import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
 
 type JobAskBobFollowupPanelProps = {
   workspaceId: string;
@@ -20,6 +21,11 @@ type JobAskBobFollowupPanelProps = {
   diagnosisSummaryForFollowup?: string | null;
   materialsSummaryForFollowup?: string | null;
   hasQuoteContextForFollowup?: boolean;
+  lastQuoteIdForFollowup?: string;
+  lastQuoteCreatedAtForFollowup?: string;
+  lastQuoteCreatedAtFriendlyForFollowup?: string;
+  stepCompleted?: boolean;
+  onFollowupCompleted?: () => void;
 };
 
 export default function JobAskBobFollowupPanel({
@@ -31,6 +37,11 @@ export default function JobAskBobFollowupPanel({
   diagnosisSummaryForFollowup,
   materialsSummaryForFollowup,
   hasQuoteContextForFollowup,
+  lastQuoteIdForFollowup,
+  lastQuoteCreatedAtForFollowup,
+  lastQuoteCreatedAtFriendlyForFollowup,
+  stepCompleted,
+  onFollowupCompleted,
 }: JobAskBobFollowupPanelProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -66,6 +77,17 @@ export default function JobAskBobFollowupPanel({
       ? `Context used: ${contextParts.join(", ")}`
       : "Context used: none yet. AskBob will use job and follow-up details from this page.";
 
+  const fallbackFriendlyDate =
+    lastQuoteCreatedAtForFollowup && !lastQuoteCreatedAtFriendlyForFollowup
+      ? formatFriendlyDateTime(lastQuoteCreatedAtForFollowup, "")
+      : null;
+  const displayFriendlyDate = lastQuoteCreatedAtFriendlyForFollowup ?? fallbackFriendlyDate;
+  const showQuoteContextLine = Boolean(hasQuoteContextForFollowup && lastQuoteIdForFollowup);
+  const quoteContextLabel = displayFriendlyDate
+    ? `Using your latest quote from ${displayFriendlyDate}.`
+    : "Using your latest quote for this job.";
+  const quoteDetailsHref = lastQuoteIdForFollowup ? `/quotes/${lastQuoteIdForFollowup}` : undefined;
+
   const handleRequest = async () => {
     setErrorMessage(null);
     setIsLoading(true);
@@ -85,6 +107,7 @@ export default function JobAskBobFollowupPanel({
         return;
       }
       setResult(response.followup);
+      onFollowupCompleted?.();
     } catch (error) {
       console.error("[askbob-job-followup-ui] client error", error);
       setErrorMessage("AskBob couldn’t generate a follow-up suggestion right now. Please try again.");
@@ -192,11 +215,32 @@ export default function JobAskBobFollowupPanel({
     <HbCard className="space-y-4">
       <div className="space-y-1">
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
-        <h2 className="hb-heading-3 text-xl font-semibold">Step 4 · Plan the follow-up</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="hb-heading-3 text-xl font-semibold">Step 4 · Plan the follow-up</h2>
+          {stepCompleted && (
+            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
+              Done
+            </span>
+          )}
+        </div>
         <p className="text-sm text-slate-300">
           AskBob looks at this job’s status, quotes, calls, messages, and appointments to suggest a next step. Use this to guide
           your follow-up, not replace your judgment.
         </p>
+        {showQuoteContextLine && quoteDetailsHref && (
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
+            <p className="m-0 text-xs text-slate-300">{quoteContextLabel}</p>
+            <HbButton
+              as={Link}
+              href={quoteDetailsHref}
+              variant="ghost"
+              size="sm"
+              className="px-2 py-0.5 text-[11px] uppercase tracking-[0.3em]"
+            >
+              View quote details
+            </HbButton>
+          </div>
+        )}
         <p className="text-xs text-muted-foreground">{contextUsedText}</p>
       </div>
       <div className="flex flex-col gap-2">

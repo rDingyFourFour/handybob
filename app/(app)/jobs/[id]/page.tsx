@@ -300,6 +300,13 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     quotesError = true;
   }
 
+  const latestQuote = quotes[0] ?? null;
+  const lastQuoteId = latestQuote?.id ?? null;
+  const lastQuoteCreatedAt = latestQuote?.created_at ?? null;
+  const lastQuoteCreatedAtFriendly = lastQuoteCreatedAt
+    ? formatFriendlyDateTime(lastQuoteCreatedAt, "")
+    : null;
+
   if (!quotesError) {
     const aiCount = quotes.reduce(
       (count, quote) => (quote.smart_quote_used ? count + 1 : count),
@@ -537,6 +544,9 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           askBobLastUsedAtIso={askBobLastUsedAtIso}
           askBobRunsSummary={askBobRunsSummary}
           hasQuoteContextForFollowup={hasQuoteContextForFollowup}
+          lastQuoteId={lastQuoteId ?? undefined}
+          lastQuoteCreatedAt={lastQuoteCreatedAt ?? undefined}
+          lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? undefined}
         />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">

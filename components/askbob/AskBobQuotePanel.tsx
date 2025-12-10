@@ -20,6 +20,9 @@ type AskBobQuotePanelProps = {
   materialsSummaryForQuote?: string | null;
   jobDescription?: string | null;
   jobTitle?: string | null;
+  onQuoteApplied?: (quoteId: string) => void;
+  onScrollToFollowup?: () => void;
+  stepCompleted?: boolean;
 };
 
 const DEFAULT_PROMPT = "Generate a standard quote for this job.";
@@ -111,6 +114,9 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     materialsSummaryForQuote,
     jobDescription,
     jobTitle,
+    onQuoteApplied,
+    onScrollToFollowup,
+    stepCompleted,
   } = props;
   const router = useRouter();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
@@ -119,6 +125,7 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(null);
+  const [appliedQuoteId, setAppliedQuoteId] = useState<string | null>(null);
 
   const normalizedJobTitle = jobTitle?.trim() ?? "";
   const normalizedJobDescription = jobDescription?.trim() ?? "";
@@ -220,7 +227,9 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
       });
 
       if (result.ok) {
-        router.push(`/quotes/${result.quoteId}`);
+        setAppliedQuoteId(result.quoteId);
+        onQuoteApplied?.(result.quoteId);
+        onScrollToFollowup?.();
         return;
       }
 
@@ -237,7 +246,14 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     <HbCard className="space-y-4">
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob quote</p>
-        <h2 className="hb-heading-3 text-xl font-semibold">Step 3 · Draft a quote</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="hb-heading-3 text-xl font-semibold">Step 3 · Draft a quote</h2>
+          {stepCompleted && (
+            <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
+              Done
+            </span>
+          )}
+        </div>
         <p className="text-sm text-slate-400">
           AskBob drafts a quote using the job title, description, materials checklist, and diagnosis summary. All pricing is
           approximate—adjust scope, hours, and rates before you send this to a customer.
@@ -364,29 +380,42 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
             </>
           )}
           {hasAnyContent && (
-            <div className="space-y-2">
-              <HbButton
-                onClick={handleApplySuggestion}
-                disabled={isApplying || isLoading || !hasAnyScope}
-                variant="secondary"
-                size="sm"
-              >
-                {isApplying ? "Applying AskBob suggestion…" : "Create quote from AskBob suggestion"}
-              </HbButton>
-              {!hasAnyScope ? (
-                <p className="text-xs text-muted-foreground">
-                  AskBob did not return enough detail to create a quote. Try refining your question.
-                </p>
-              ) : (
-                <p className="text-xs text-slate-400">
-                  You can edit all lines and prices on the next screen before sharing with the customer.
-                </p>
-              )}
-              {applyError && <p className="text-sm text-rose-300">{applyError}</p>}
-            </div>
-          )}
-        </div>
-      )}
+          <div className="space-y-2">
+            <HbButton
+              onClick={handleApplySuggestion}
+              disabled={isApplying || isLoading || !hasAnyScope}
+              variant="secondary"
+              size="sm"
+            >
+              {isApplying ? "Applying AskBob suggestion…" : "Create quote from AskBob suggestion"}
+            </HbButton>
+            {!hasAnyScope ? (
+              <p className="text-xs text-muted-foreground">
+                AskBob did not return enough detail to create a quote. Try refining your question.
+              </p>
+            ) : (
+              <p className="text-xs text-slate-400">
+                You can edit all lines and prices on the next screen before sharing with the customer.
+              </p>
+            )}
+            {applyError && <p className="text-sm text-rose-300">{applyError}</p>}
+            {appliedQuoteId && (
+              <div className="space-y-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/5 p-3 text-xs text-emerald-200">
+                <p>Quote created and saved for this job. Next: check AskBob’s follow-up guidance below.</p>
+                <HbButton
+                  variant="secondary"
+                  size="sm"
+                  className="w-fit"
+                  onClick={() => router.push(`/quotes/${appliedQuoteId}`)}
+                >
+                  View quote details
+                </HbButton>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )}
     </HbCard>
   );
 }

@@ -46,7 +46,6 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
   const normalizedJobTitle = parsed.jobTitle ?? null;
   const diagnosisSummaryForLog = parsed.diagnosisSummary ?? null;
   const materialsSummaryForLog = parsed.materialsSummary ?? null;
-  const hasQuoteContextForFollowup = Boolean(parsed.hasQuoteContextForFollowup);
   const hasDiagnosisContextForFollowup = Boolean(diagnosisSummaryForLog);
   const hasMaterialsContextForFollowup = Boolean(materialsSummaryForLog);
 
@@ -123,7 +122,8 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
 
   const latestCall = callRes.data?.[0] ?? null;
   const latestMessage = messageRes.data?.[0] ?? null;
-  const latestQuote = quoteRes.data?.find((quote) => Boolean(quote.created_at)) ?? null;
+  const quotesList = quoteRes.data ?? [];
+  const latestQuote = quotesList.find((quote) => Boolean(quote.created_at)) ?? null;
   const latestInvoice =
     invoiceRes.data?.find((invoice) => Boolean(invoice.due_at)) ??
     invoiceRes.data?.[0] ??
@@ -136,9 +136,10 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
   const lastInvoiceDueAt = latestInvoice?.due_at ?? null;
 
   const hasOpenQuote =
-    (quoteRes.data ?? []).some(
+    quotesList.some(
       (quote) => quote.status && !["accepted", "paid"].includes(quote.status),
     ) && Boolean(quoteRes.data?.length);
+  const hasQuoteContextForFollowup = quotesList.length > 0;
   const hasUnpaidInvoice =
     (invoiceRes.data ?? []).some((invoice) => invoice.status !== "paid" && Boolean(invoice.id)) &&
     Boolean(invoiceRes.data?.length);
@@ -199,7 +200,7 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
     hasOpenQuote,
     hasUnpaidInvoice,
     notesSummary,
-    hasQuoteContextForFollowup: hasQuoteContext,
+    hasQuoteContextForFollowup,
   };
 
   try {

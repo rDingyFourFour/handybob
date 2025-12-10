@@ -23,10 +23,10 @@
         <mxCell id="7" value="Domain services\n(lib/domain/*, shared SQL/business logic)" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=12;fontColor=#0B0B0B;strokeColor=#984807;fillColor=#F8CECC;" vertex="1" parent="1">
           <mxGeometry x="320" y="460" width="260" height="110" as="geometry"/>
         </mxCell>
-        <mxCell id="8" value="API & webhook routes\n(app/api/stripe, app/api/webhooks/voice, etc.)" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=12;fontColor=#0B0B0B;strokeColor=#8A6E4B;fillColor=#FFF2CC;" vertex="1" parent="1">
+        <mxCell id="8" value="API &amp; webhook routes\n(app/api/stripe, app/api/webhooks/voice, etc.)" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=12;fontColor=#0B0B0B;strokeColor=#8A6E4B;fillColor=#FFF2CC;" vertex="1" parent="1">
           <mxGeometry x="620" y="460" width="270" height="110" as="geometry"/>
         </mxCell>
-        <mxCell id="9" value="Stripe webhook & payment links" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=12;fontColor=#0B0B0B;strokeColor=#1A1A1A;fillColor=#F5F5F5;" vertex="1" parent="1">
+        <mxCell id="9" value="Stripe webhook &amp; payment links" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=12;fontColor=#0B0B0B;strokeColor=#1A1A1A;fillColor=#F5F5F5;" vertex="1" parent="1">
           <mxGeometry x="660" y="610" width="220" height="80" as="geometry"/>
         </mxCell>
         <mxCell id="10" value="Twilio voice / webhook processing" style="rounded=1;whiteSpace=wrap;html=1;align=center;fontSize=12;fontColor=#0B0B0B;strokeColor=#1A1A1A;fillColor=#F5F5F5;" vertex="1" parent="1">
