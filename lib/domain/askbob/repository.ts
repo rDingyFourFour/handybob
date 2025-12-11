@@ -95,6 +95,12 @@ type AskBobJobActivityRow = {
   created_at: string;
 };
 
+type AskBobJobTaskSnapshotRow = {
+  task: AskBobJobTaskSnapshotTask;
+  payload: unknown;
+  updated_at: string | null;
+};
+
 export interface AskBobJobActivitySummary {
   task: AskBobTask;
   createdAt: string;
@@ -122,7 +128,6 @@ export async function getLastAskBobActivityForJob(
     .eq("job_id", params.jobId);
 
   const totalRunsCount = count ?? 0;
-
   if (latestError && !latest) {
     console.error("[askbob-repository] Failed to load last activity", {
       workspaceId: params.workspaceId,
@@ -140,16 +145,75 @@ export async function getLastAskBobActivityForJob(
     });
   }
 
-  const createdAt = latest?.created_at ?? null;
-  if (!createdAt) {
-    return null;
+  const snapshots = await getJobTaskSnapshotsForJob(supabase, params);
+  const seenTasks: AskBobTask[] = [];
+  for (const row of snapshots) {
+    if (!row || !row.task) {
+      continue;
+    }
+    if (!seenTasks.includes(row.task)) {
+      seenTasks.push(row.task);
+    }
+  }
+  if (!seenTasks.length && totalRunsCount > 0) {
+    seenTasks.push("job.diagnose");
+  }
+
+  const sessionTimestamp = latest?.created_at ?? null;
+  const parseTimestamp = (value?: string | null) => {
+    if (!value) {
+      return NaN;
+    }
+    const ms = Date.parse(value);
+    return Number.isNaN(ms) ? NaN : ms;
+  };
+
+  let latestSnapshot: AskBobJobTaskSnapshotRow | null = null;
+  let latestSnapshotTime = NaN;
+  for (const row of snapshots) {
+    const rowTime = parseTimestamp(row.updated_at);
+    if (Number.isNaN(rowTime)) {
+      continue;
+    }
+    if (Number.isNaN(latestSnapshotTime) || rowTime > latestSnapshotTime) {
+      latestSnapshotTime = rowTime;
+      latestSnapshot = row;
+    }
+  }
+
+  let lastTask: AskBobTask = "job.diagnose";
+  let lastUsedAt: string | null = sessionTimestamp;
+  const sessionTime = parseTimestamp(sessionTimestamp);
+  if (latestSnapshot && latestSnapshot.updated_at) {
+    if (Number.isNaN(sessionTime) || latestSnapshotTime >= sessionTime) {
+      lastTask = latestSnapshot.task;
+      lastUsedAt = latestSnapshot.updated_at;
+    }
+  } else if (sessionTimestamp) {
+    lastTask = "job.diagnose";
+    lastUsedAt = sessionTimestamp;
+  } else if (seenTasks.length > 0) {
+    lastTask = seenTasks[seenTasks.length - 1];
+    lastUsedAt = latestSnapshot?.updated_at ?? null;
+  }
+
+  if (!lastUsedAt) {
+    if (!seenTasks.length) {
+      return null;
+    }
+    return {
+      task: lastTask,
+      createdAt: null,
+      totalRunsCount,
+      tasksSeen: seenTasks,
+    };
   }
 
   return {
-    task: "job.diagnose",
-    createdAt,
+    task: lastTask,
+    createdAt: lastUsedAt,
     totalRunsCount,
-    tasksSeen: totalRunsCount > 0 ? ["job.diagnose"] : [],
+    tasksSeen: seenTasks,
   };
 }
 
@@ -188,10 +252,10 @@ export async function upsertJobTaskSnapshot(
 export async function getJobTaskSnapshotsForJob(
   supabase: DbClient,
   params: { workspaceId: string; jobId: string }
-): Promise<{ task: string; payload: unknown }[]> {
+): Promise<AskBobJobTaskSnapshotRow[]> {
   const { data, error } = await supabase
     .from("askbob_job_task_snapshots")
-    .select("task, payload")
+    .select("task, payload, updated_at")
     .eq("workspace_id", params.workspaceId)
     .eq("job_id", params.jobId);
 

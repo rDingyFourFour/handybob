@@ -97,6 +97,11 @@ export default function JobAskBobFlow({
   const [materialsResetToken, setMaterialsResetToken] = useState(0);
   const [quoteResetToken, setQuoteResetToken] = useState(0);
   const [followupResetToken, setFollowupResetToken] = useState(0);
+  const [askBobScheduledAppointment, setAskBobScheduledAppointment] = useState<{
+    startAt: string;
+    friendlyLabel: string | null;
+    appointmentId?: string | null;
+  } | null>(null);
 
   const serverQuoteCandidate = initialLastQuoteId
     ? {
@@ -143,6 +148,7 @@ export default function JobAskBobFlow({
     setMaterialsResetToken((value) => value + 1);
     setQuoteResetToken((value) => value + 1);
     setFollowupResetToken((value) => value + 1);
+    setAskBobScheduledAppointment(null);
   };
 
   const handleMaterialsSummaryChange = (context: MaterialsSummaryContext) => {
@@ -156,6 +162,7 @@ export default function JobAskBobFlow({
     if (!summary) {
       setMaterialsResetToken((value) => value + 1);
     }
+    setAskBobScheduledAppointment(null);
   };
 
   const handleAskBobQuoteApplied = (quoteId: string, createdAt?: string | null) => {
@@ -176,6 +183,7 @@ export default function JobAskBobFlow({
     setFollowupDone(false);
     setQuoteResetToken((value) => value + 1);
     setFollowupResetToken((value) => value + 1);
+    setAskBobScheduledAppointment(null);
   };
 
   const handleFollowupCompleted = () => {
@@ -198,6 +206,14 @@ export default function JobAskBobFlow({
   const handleFollowupReset = () => {
     setFollowupDone(false);
     setFollowupResetToken((value) => value + 1);
+    setAskBobScheduledAppointment(null);
+  };
+  const handleAskBobAppointmentScheduled = (info: {
+    startAt: string;
+    friendlyLabel: string | null;
+    appointmentId?: string | null;
+  }) => {
+    setAskBobScheduledAppointment(info);
   };
 
   return (
@@ -282,6 +298,8 @@ export default function JobAskBobFlow({
             stepCollapsed={followupCollapsed}
             onToggleStepCollapsed={() => setFollowupCollapsed((value) => !value)}
             initialFollowupSnapshot={initialFollowupSnapshot ?? undefined}
+            askBobAppointmentScheduled={askBobScheduledAppointment ?? undefined}
+            onAskBobAppointmentScheduled={handleAskBobAppointmentScheduled}
           />
         </AskBobSection>
       </div>

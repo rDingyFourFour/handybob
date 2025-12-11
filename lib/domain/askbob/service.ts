@@ -6,6 +6,8 @@ import {
   AskBobDiagnoseSnapshotPayload,
   AskBobJobFollowupInput,
   AskBobJobFollowupResult,
+  AskBobJobScheduleInput,
+  AskBobJobScheduleResult,
   AskBobMaterialsExplainInput,
   AskBobMaterialsExplainResult,
   AskBobMaterialsGenerateInput,
@@ -40,6 +42,7 @@ import {
   callAskBobQuoteGenerate,
   callAskBobMaterialsGenerate,
   callAskBobJobFollowup,
+  callAskBobJobSchedule,
 } from "@/utils/openai/askbob";
 
 type DbClient = SupabaseClient<Database>;
@@ -105,6 +108,10 @@ export async function runAskBobTask(
 
   if (input.task === "job.followup") {
     return runAskBobJobFollowupTask(input);
+  }
+
+  if (input.task === "job.schedule") {
+    return runAskBobJobScheduleTask(input);
   }
 
   if (input.task === "materials.explain") {
@@ -331,6 +338,7 @@ export async function runAskBobJobFollowupTask(
   const jobId = context.jobId ?? null;
   const jobTitle = input.jobTitle?.trim() ?? null;
   const hasQuoteContextForFollowup = Boolean(input.hasQuoteContextForFollowup);
+  const hasAskBobAppointment = Boolean(input.hasAskBobAppointment);
   console.log("[askbob-job-followup-service-request]", {
     workspaceId,
     userId,
@@ -341,6 +349,7 @@ export async function runAskBobJobFollowupTask(
     hasUnpaidInvoice: input.hasUnpaidInvoice,
     hasJobTitle: Boolean(jobTitle),
     hasQuoteContextForFollowup,
+    hasAskBobAppointment,
   });
 
   const trimmedFollowupLabel = input.followupDueLabel?.trim();
@@ -371,6 +380,7 @@ export async function runAskBobJobFollowupTask(
       shouldCall: modelResult.result.shouldCall,
       shouldWait: modelResult.result.shouldWait,
       hasQuoteContextForFollowup,
+      hasAskBobAppointment,
     });
     if (jobId) {
       try {
@@ -398,6 +408,94 @@ export async function runAskBobJobFollowupTask(
       userId,
       jobId,
       errorMessage: truncatedError,
+    });
+    throw error;
+  }
+}
+
+export async function runAskBobJobScheduleTask(
+  input: AskBobJobScheduleInput
+): Promise<AskBobJobScheduleResult> {
+  const { context } = input;
+  const workspaceId = context.workspaceId;
+  const userId = context.userId;
+  const jobId = context.jobId ?? null;
+  const jobTitle = input.jobTitle?.trim() ?? null;
+  const jobDescription =
+    input.jobDescription && input.jobDescription.trim().length
+      ? input.jobDescription.trim()
+      : null;
+  const trimmedFollowupLabel = input.followupDueLabel?.trim();
+  const normalizedPreferredDays = input.availability.preferredDays
+    ?.map((day) => day?.trim())
+    .filter((day): day is string => Boolean(day));
+  const normalizedAvailability = {
+    workingHours: {
+      startAt: input.availability.workingHours.startAt.trim(),
+      endAt: input.availability.workingHours.endAt.trim(),
+    },
+    preferredDays:
+      normalizedPreferredDays && normalizedPreferredDays.length
+        ? normalizedPreferredDays
+        : undefined,
+    timezone: input.availability.timezone?.trim() ?? null,
+  };
+
+    console.log("[askbob-job-schedule-request]", {
+      workspaceId,
+      userId,
+      jobId,
+      followupDueStatus: input.followupDueStatus,
+      hasVisitScheduled: input.hasVisitScheduled,
+      hasQuote: input.hasQuote,
+      hasInvoice: input.hasInvoice,
+    hasJobTitle: Boolean(jobTitle),
+    isAskBobScheduler: true,
+    task: "job.scheduler",
+    });
+
+  const normalizedInput: AskBobJobScheduleInput = {
+    ...input,
+    jobTitle,
+    jobDescription,
+    followupDueLabel:
+      trimmedFollowupLabel && trimmedFollowupLabel.length
+        ? trimmedFollowupLabel
+        : input.followupDueLabel,
+    notesSummary:
+      input.notesSummary && input.notesSummary.trim().length
+        ? input.notesSummary.trim()
+        : null,
+    availability: normalizedAvailability,
+  };
+
+  try {
+    const modelResult = await callAskBobJobSchedule(normalizedInput);
+    console.log("[askbob-job-schedule-success]", {
+      workspaceId,
+      userId,
+      jobId,
+      followupDueStatus: input.followupDueStatus,
+      suggestionsCount: modelResult.result.suggestions.length,
+      modelLatencyMs: modelResult.result.modelLatencyMs,
+      isAskBobScheduler: true,
+      task: "job.scheduler",
+    });
+
+    return modelResult.result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-job-schedule-failure]", {
+      workspaceId,
+      userId,
+      jobId,
+      followupDueStatus: input.followupDueStatus,
+      errorMessage: truncatedError,
+      isAskBobScheduler: true,
+      task: "job.scheduler",
     });
     throw error;
   }
@@ -564,6 +662,20 @@ function buildFollowupSnapshotPayload(result: AskBobJobFollowupResult): AskBobFo
   };
 }
 
+function buildScheduleSnapshotPayload(
+  result: AskBobJobScheduleSnapshotPayload,
+): AskBobJobScheduleSnapshotPayload {
+  return {
+    appointmentId: result.appointmentId,
+    startAt: result.startAt,
+    endAt: result.endAt,
+    friendlyLabel:
+      result.friendlyLabel && result.friendlyLabel.trim()
+        ? result.friendlyLabel.trim()
+        : null,
+  };
+}
+
 export async function recordAskBobJobTaskSnapshot(
   supabase: DbClient,
   params: {
@@ -574,7 +686,8 @@ export async function recordAskBobJobTaskSnapshot(
       | AskBobJobDiagnoseResult
       | AskBobMaterialsGenerateResult
       | AskBobQuoteGenerateResult
-      | AskBobJobFollowupResult;
+      | AskBobJobFollowupResult
+      | AskBobJobScheduleSnapshotPayload;
   }
 ): Promise<void> {
   let payload:
@@ -582,6 +695,7 @@ export async function recordAskBobJobTaskSnapshot(
     | AskBobMaterialsSnapshotPayload
     | AskBobQuoteSnapshotPayload
     | AskBobFollowupSnapshotPayload
+    | AskBobJobScheduleSnapshotPayload
     | null = null;
   let summary: string | null = null;
 
@@ -610,6 +724,12 @@ export async function recordAskBobJobTaskSnapshot(
       const result = params.result as AskBobJobFollowupResult;
       payload = buildFollowupSnapshotPayload(result);
       summary = `steps:${payload.steps.length},message:${payload.shouldSendMessage ? 1 : 0}`;
+      break;
+    }
+    case "job.schedule": {
+      const result = params.result as AskBobJobScheduleSnapshotPayload;
+      payload = buildScheduleSnapshotPayload(result);
+      summary = `appointment:${payload.appointmentId}`;
       break;
     }
   }
@@ -816,6 +936,7 @@ const TASK_LABELS: Record<AskBobTask, string> = {
   "quote.explain": "Explained quote",
   "materials.explain": "Explained materials quote",
   "job.followup": "Suggested follow-up action",
+  "job.schedule": "Scheduled appointment",
 };
 
 const TASK_SHORT_LABELS: Record<AskBobTask, string> = {
@@ -826,6 +947,7 @@ const TASK_SHORT_LABELS: Record<AskBobTask, string> = {
   "quote.explain": "quote explain",
   "materials.explain": "materials explain",
   "job.followup": "follow-up",
+  "job.schedule": "scheduled appointment",
 };
 
 export async function getJobAskBobHudSummary(

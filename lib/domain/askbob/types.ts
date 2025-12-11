@@ -9,13 +9,15 @@ export type AskBobTask =
   | "materials.generate"
   | "quote.explain"
   | "materials.explain"
-  | "job.followup";
+  | "job.followup"
+  | "job.schedule";
 
 export type AskBobJobTaskSnapshotTask =
   | "job.diagnose"
   | "materials.generate"
   | "quote.generate"
-  | "job.followup";
+  | "job.followup"
+  | "job.schedule";
 
 export interface AskBobDiagnoseSnapshotPayload {
   sessionId: string;
@@ -50,13 +52,21 @@ export interface AskBobFollowupSnapshotPayload {
   modelLatencyMs?: number | null;
 }
 
+export interface AskBobJobScheduleSnapshotPayload {
+  appointmentId: string;
+  startAt: string;
+  endAt: string | null;
+  friendlyLabel?: string | null;
+}
+
 export interface AskBobJobTaskSnapshot {
   task: AskBobJobTaskSnapshotTask;
   payload:
     | AskBobDiagnoseSnapshotPayload
     | AskBobMaterialsSnapshotPayload
     | AskBobQuoteSnapshotPayload
-    | AskBobFollowupSnapshotPayload;
+    | AskBobFollowupSnapshotPayload
+    | AskBobJobScheduleSnapshotPayload;
 }
 
 export type AskBobSection = "steps" | "materials" | "safety" | "costTime" | "escalation";
@@ -310,6 +320,7 @@ export interface AskBobJobFollowupInput {
   hasUnpaidInvoice: boolean;
   notesSummary?: string | null;
   hasQuoteContextForFollowup?: boolean;
+  hasAskBobAppointment?: boolean;
 }
 
 export interface AskBobJobFollowupResult {
@@ -323,6 +334,48 @@ export interface AskBobJobFollowupResult {
   suggestedChannel?: "sms" | "email" | "phone" | null;
   suggestedDelayDays?: number | null;
   riskNotes?: string | null;
+  modelLatencyMs: number;
+  rawModelOutput?: unknown;
+}
+
+export interface AskBobWorkingHoursWindow {
+  startAt: string;
+  endAt: string;
+}
+
+export interface AskBobJobScheduleAvailability {
+  workingHours: AskBobWorkingHoursWindow;
+  preferredDays?: string[] | null;
+  timezone?: string | null;
+}
+
+export type AskBobUrgencyLevel = "low" | "medium" | "high";
+
+export interface AskBobJobScheduleSuggestion {
+  startAt: string;
+  endAt: string;
+  label: string;
+  reason?: string | null;
+  urgency?: AskBobUrgencyLevel | null;
+}
+
+export interface AskBobJobScheduleInput {
+  task: "job.schedule";
+  context: AskBobTaskContext;
+  jobTitle?: string | null;
+  jobDescription?: string | null;
+  followupDueStatus: "none" | "due" | "overdue" | "upcoming";
+  followupDueLabel: string;
+  hasVisitScheduled: boolean;
+  hasQuote: boolean;
+  hasInvoice: boolean;
+  notesSummary?: string | null;
+  availability: AskBobJobScheduleAvailability;
+}
+
+export interface AskBobJobScheduleResult {
+  suggestions: AskBobJobScheduleSuggestion[];
+  explanation?: string | null;
   modelLatencyMs: number;
   rawModelOutput?: unknown;
 }
@@ -352,7 +405,8 @@ export type AskBobTaskInput =
   | AskBobMaterialsGenerateInput
   | AskBobQuoteExplainInput
   | AskBobMaterialsExplainInput
-  | AskBobJobFollowupInput;
+  | AskBobJobFollowupInput
+  | AskBobJobScheduleInput;
 export type AskBobTaskResult =
   | AskBobJobDiagnoseResult
   | AskBobMessageDraftResult
@@ -360,7 +414,8 @@ export type AskBobTaskResult =
   | AskBobMaterialsGenerateResult
   | AskBobQuoteExplainResult
   | AskBobMaterialsExplainResult
-  | AskBobJobFollowupResult;
+  | AskBobJobFollowupResult
+  | AskBobJobScheduleResult;
 
 // Zod schemas for validation
 

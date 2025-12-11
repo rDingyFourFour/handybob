@@ -24,6 +24,7 @@ const jobFollowupPayloadSchema = z.object({
   diagnosisSummary: z.string().optional().nullable().transform(normalizeOptionalString),
   materialsSummary: z.string().optional().nullable().transform(normalizeOptionalString),
   hasQuoteContextForFollowup: z.boolean().optional(),
+  hasAskBobAppointment: z.boolean().optional(),
 });
 
 export type JobFollowupPayload = z.infer<typeof jobFollowupPayloadSchema>;
@@ -48,6 +49,7 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
   const materialsSummaryForLog = parsed.materialsSummary ?? null;
   const hasDiagnosisContextForFollowup = Boolean(diagnosisSummaryForLog);
   const hasMaterialsContextForFollowup = Boolean(materialsSummaryForLog);
+  const hasAskBobAppointment = Boolean(parsed.hasAskBobAppointment);
 
   const supabase = await createServerClient();
   const { workspace, user } = await getCurrentWorkspace({ supabase });
@@ -171,6 +173,7 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
     hasDiagnosisContextForFollowup,
     hasMaterialsContextForFollowup,
     hasQuoteContextForFollowup,
+    hasAskBobAppointment,
   });
 
   const notesSummary =
@@ -201,6 +204,7 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
     hasUnpaidInvoice,
     notesSummary,
     hasQuoteContextForFollowup,
+    hasAskBobAppointment,
   };
 
   try {
@@ -219,6 +223,7 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
       hasDiagnosisContextForFollowup,
       hasMaterialsContextForFollowup,
       hasQuoteContextForFollowup,
+      hasAskBobAppointment,
     });
     return { ok: true, jobId: job.id, followup: result };
   } catch (error) {

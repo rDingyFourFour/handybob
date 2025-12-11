@@ -5,6 +5,10 @@ import type {
   AskBobContext,
   AskBobJobFollowupInput,
   AskBobJobFollowupResult,
+  AskBobJobScheduleInput,
+  AskBobJobScheduleResult,
+  AskBobJobScheduleSuggestion,
+  AskBobUrgencyLevel,
   AskBobLineExplanation,
   AskBobMaterialExplanation,
   AskBobMaterialItem,
@@ -45,6 +49,7 @@ const MAX_QUOTE_LINES = 20;
 const MAX_MATERIAL_ITEMS = 25;
 const MAX_MATERIAL_EXPLANATION_ITEMS = 25;
 const MAX_FOLLOWUP_STEPS = 10;
+const MAX_SCHEDULE_SUGGESTIONS = 3;
 
 const JOB_DIAGNOSE_INSTRUCTIONS = [
   ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
@@ -122,6 +127,16 @@ const FOLLOWUP_INSTRUCTIONS = [
   "Review the follow-up context and respond with strict JSON matching the keys: recommendedAction (short required string), rationale (short paragraph), steps (array of { label, detail? }), shouldSendMessage (boolean), shouldScheduleVisit (boolean), shouldCall (boolean), shouldWait (boolean), suggestedChannel (optional 'sms' | 'email' | 'phone'), suggestedDelayDays (optional number), riskNotes (optional string), and modelLatencyMs (number).",
 ].join(" ");
 
+const SCHEDULE_INSTRUCTIONS = [
+  ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
+  "You are AskBob, the HandyBob scheduler. Evaluate the job context, follow-up signals, and availability to recommend 1-3 time windows for a real appointment. Respond with JSON only (no prose) matching the keys: suggestions (array of { startAt, endAt, label, reason?, urgency? }), explanation (optional string), and modelLatencyMs (number).",
+  "Only suggest times in the future, honor the provided working hours and any preferred days, and explain why each window works (travel buffer, urgency, follow-up timing, etc.). Express startAt and endAt in ISO 8601 format using the business timezone when possible, and limit the list to at most three options. Include an urgency flag (low/medium/high) when the slot is time-sensitive or important.",
+  "If the available context is too thin to suggest meaningful windows, return an empty suggestions array and a neutral explanation such as 'Need more details to propose a time.' Do not auto-book; AskBob only suggests slots.",
+  SAFETY_GUARDRAILS,
+  COST_GUARDRAILS,
+  SCOPE_LIMIT_GUARDRAILS,
+].join(" ");
+
 const MESSAGE_DRAFT_INSTRUCTIONS = [
   ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
   "You are AskBob, a technician assistant for HandyBob. Respond with a JSON object only (no surrounding prose) containing the keys: body (required, a brief customer-facing message), suggestedChannel (optional, 'sms' or 'email'), and summary (optional, a short explanation of the messaging goal). Keep the tone professional and respectful, and avoid emojis, slang, and excessive exclamation points.",
@@ -187,6 +202,12 @@ type CallAskBobMaterialsExplainResult = {
 
 type CallAskBobJobFollowupResult = {
   result: AskBobJobFollowupResult;
+  latencyMs: number;
+  modelName: string;
+};
+
+type CallAskBobJobScheduleResult = {
+  result: AskBobJobScheduleResult;
   latencyMs: number;
   modelName: string;
 };
@@ -850,6 +871,133 @@ export async function callAskBobJobFollowup(
   }
 }
 
+export async function callAskBobJobSchedule(
+  input: AskBobJobScheduleInput
+): Promise<CallAskBobJobScheduleResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured for AskBob.");
+  }
+
+  const { context } = input;
+  const contextParts = [
+    `workspaceId=${context.workspaceId}`,
+    `userId=${context.userId}`,
+    context.jobId ? `jobId=${context.jobId}` : null,
+    context.customerId ? `customerId=${context.customerId}` : null,
+    context.quoteId ? `quoteId=${context.quoteId}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const jobTitleLine = input.jobTitle?.trim() ? `Job title: ${input.jobTitle.trim()}` : null;
+  const jobDescriptionBlock =
+    input.jobDescription && input.jobDescription.trim().length
+      ? `Job description:\n${input.jobDescription.trim()}`
+      : null;
+
+  const followupContext = {
+    followupDueStatus: input.followupDueStatus,
+    followupDueLabel: input.followupDueLabel,
+    hasVisitScheduled: input.hasVisitScheduled,
+    hasQuote: input.hasQuote,
+    hasInvoice: input.hasInvoice,
+  };
+
+  const availabilityBlock = `Availability:\n${JSON.stringify(input.availability, null, 2)}`;
+  const notesBlock =
+    input.notesSummary && input.notesSummary.trim().length
+      ? `Notes: ${input.notesSummary.trim()}`
+      : null;
+
+  const messageParts = [
+    `Context: ${contextParts}`,
+    jobTitleLine,
+    jobDescriptionBlock,
+    `Follow-up context:\n${JSON.stringify(followupContext, null, 2)}`,
+    availabilityBlock,
+    notesBlock,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join("\n\n");
+
+  const openai = new OpenAI({ apiKey });
+  const modelRequestStart = Date.now();
+  let modelName = DEFAULT_MODEL;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: "system", content: SCHEDULE_INSTRUCTIONS },
+        { role: "user", content: messageParts },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    modelName = completion.model ?? DEFAULT_MODEL;
+    const messageContent = completion.choices?.[0]?.message?.content;
+    const payload = extractModelPayload(messageContent, {
+      workspaceId: context.workspaceId,
+      model: modelName,
+    });
+
+    const suggestions = normalizeScheduleSuggestions(payload.suggestions);
+    const { items: limitedSuggestions, truncatedCount } = limitArray(
+      suggestions,
+      MAX_SCHEDULE_SUGGESTIONS,
+    );
+    if (truncatedCount > 0) {
+      console.log("[askbob-job-schedule-truncated]", {
+        workspaceId: context.workspaceId,
+        userId: context.userId,
+        jobId: context.jobId ?? null,
+        suggestionsBefore: suggestions.length,
+        suggestionsAfter: limitedSuggestions.length,
+      });
+    }
+
+    const explanation = normalizeNullableString(payload.explanation);
+    const latencyMs = Date.now() - modelRequestStart;
+    console.log("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: true,
+      task: "job.schedule",
+    });
+
+    const result: AskBobJobScheduleResult = {
+      suggestions: limitedSuggestions,
+      explanation,
+      modelLatencyMs: latencyMs,
+      rawModelOutput:
+        typeof messageContent === "string" ? messageContent.trim() : null,
+    };
+
+    return { result, latencyMs, modelName };
+  } catch (error) {
+    const latencyMs = Date.now() - modelRequestStart;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: false,
+      task: "job.schedule",
+      errorMessage: truncatedError,
+    });
+    throw error;
+  }
+}
+
 export async function callAskBobQuoteGenerate({
   prompt,
   context,
@@ -1458,6 +1606,83 @@ function normalizeFollowupSteps(value: unknown): { label: string; detail?: strin
     })
     .filter(
       (entry): entry is { label: string; detail?: string | null } => Boolean(entry),
+    );
+
+  return normalized;
+}
+
+function normalizeScheduleSuggestions(
+  value: unknown
+): AskBobJobScheduleSuggestion[] {
+  if (!Array.isArray(value)) return [];
+
+  const normalized = value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const record = entry as Record<string, unknown>;
+      const startAt =
+        normalizeNullableString(
+          record.startAt ??
+            record.start ??
+            record.windowStart ??
+            record.slotStart ??
+            record.start_time ??
+            record.startTime,
+        ) ?? null;
+      const endAt =
+        normalizeNullableString(
+          record.endAt ??
+            record.end ??
+            record.windowEnd ??
+            record.slotEnd ??
+            record.end_time ??
+            record.endTime,
+        ) ?? null;
+      const label =
+        normalizeNullableString(
+          record.label ??
+            record.title ??
+            record.summary ??
+            record.slotLabel ??
+            record.windowLabel,
+        ) ?? null;
+
+      if (!startAt || !endAt || !label) {
+        return null;
+      }
+
+      const reason = normalizeNullableString(
+        record.reason ?? record.note ?? record.why ?? record.context,
+      );
+      const urgencyCandidate = normalizeNullableString(
+        record.urgency ??
+          record.priority ??
+          record.urgencyLevel ??
+          record.priorityLevel,
+      );
+      const urgencyNormalized = urgencyCandidate?.toLowerCase();
+      const urgency =
+        urgencyNormalized === "low" ||
+        urgencyNormalized === "medium" ||
+        urgencyNormalized === "high"
+          ? (urgencyNormalized as AskBobUrgencyLevel)
+          : undefined;
+
+      const suggestion: AskBobJobScheduleSuggestion = {
+        startAt,
+        endAt,
+        label,
+      };
+      if (reason) {
+        suggestion.reason = reason;
+      }
+      if (urgency) {
+        suggestion.urgency = urgency;
+      }
+      return suggestion;
+    })
+    .filter(
+      (entry): entry is AskBobJobScheduleSuggestion => Boolean(entry),
     );
 
   return normalized;
