@@ -9,7 +9,7 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
-import { formatCurrency, formatFriendlyDateTime } from "@/utils/timeline/formatters";
+import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
 import {
   getJobAskBobHudSummary,
   getJobAskBobSnapshotsForJob,
@@ -21,6 +21,7 @@ import {
   type FollowupDueInfo,
 } from "@/lib/domain/communications/followupRecommendations";
 import JobAskBobFlow from "@/components/askbob/JobAskBobFlow";
+import JobQuotesCard from "@/components/jobs/JobQuotesCard";
 import JobRecentActivityCard from "@/components/jobs/JobRecentActivityCard";
 
 type JobRecord = {
@@ -101,10 +102,6 @@ function formatAppointmentTimeRange(start: string | null, end: string | null) {
   const endLabel = new Date(end).toLocaleTimeString(undefined, options);
   return `${startLabel} — ${endLabel}`;
 }
-
-const smartQuoteBadgeClasses =
-  "inline-flex items-center gap-2 rounded-full border px-3 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] bg-amber-500/10 border-amber-400/40 text-amber-300";
-const smartQuoteBadgeDotClasses = "h-1.5 w-1.5 rounded-full bg-amber-300";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -435,7 +432,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     : "";
 
   return (
-    <div className="hb-shell pt-20 pb-8">
+    <div className="hb-shell pt-20 pb-8 space-y-6">
       <JobDetailsCard
         jobId={job.id}
         title={displayJobTitle}
@@ -457,24 +454,24 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
         customerName={customerName}
         description={job.description_raw}
       />
-        <JobAskBobFlow
-          workspaceId={workspace.id}
-          jobId={job.id}
-          customerId={customerId ?? null}
-          jobDescription={job.description_raw ?? null}
-          jobTitle={askBobJobTitle}
-          askBobLastTaskLabel={askBobLastTaskLabel}
-          askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
-          askBobLastUsedAtIso={askBobLastUsedAtIso}
-          askBobRunsSummary={askBobRunsSummary}
-          initialLastQuoteId={lastQuoteId ?? null}
-          lastQuoteCreatedAt={lastQuoteCreatedAt ?? null}
-          lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? null}
-          initialDiagnoseSnapshot={diagnoseSnapshot ?? undefined}
-          initialMaterialsSnapshot={materialsSnapshot ?? undefined}
-          initialQuoteSnapshot={quoteSnapshot ?? undefined}
-          initialFollowupSnapshot={followupSnapshot ?? undefined}
-        />
+      <JobAskBobFlow
+        workspaceId={workspace.id}
+        jobId={job.id}
+        customerId={customerId ?? null}
+        jobDescription={job.description_raw ?? null}
+        jobTitle={askBobJobTitle}
+        askBobLastTaskLabel={askBobLastTaskLabel}
+        askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
+        askBobLastUsedAtIso={askBobLastUsedAtIso}
+        askBobRunsSummary={askBobRunsSummary}
+        initialLastQuoteId={lastQuoteId ?? null}
+        lastQuoteCreatedAt={lastQuoteCreatedAt ?? null}
+        lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? null}
+        initialDiagnoseSnapshot={diagnoseSnapshot ?? undefined}
+        initialMaterialsSnapshot={materialsSnapshot ?? undefined}
+        initialQuoteSnapshot={quoteSnapshot ?? undefined}
+        initialFollowupSnapshot={followupSnapshot ?? undefined}
+      />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
@@ -525,62 +522,8 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           </div>
         )}
       </HbCard>
-      <HbCard className="space-y-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job quotes</p>
-          <h2 className="hb-heading-3 text-xl font-semibold">Quotes for this job</h2>
-        </div>
-      {quotesError ? (
-        <div className="space-y-2 text-sm text-slate-400">
-            <p>Something went wrong. We couldn’t load quotes for this job.</p>
-            <HbButton as={Link} href={quoteHref} size="sm" variant="secondary">
-              New quote for this job
-            </HbButton>
-          </div>
-        ) : quotes.length === 0 ? (
-          <div className="space-y-2 text-sm text-slate-400">
-            <p>No quotes yet for this job.</p>
-            <HbButton as={Link} href={quoteHref} size="sm" variant="secondary">
-              New quote for this job
-            </HbButton>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {quotes.map((quote) => {
-              const isAiQuote = !!quote.smart_quote_used;
-              return (
-                <Link
-                  key={quote.id}
-                  href={`/quotes/${quote.id}`}
-                  className="block rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-300 transition hover:border-slate-600 hover:bg-slate-900"
-                >
-                  <div className="flex items-center justify-between text-sm text-slate-200">
-                    <span className="font-semibold">Quote {quote.id.slice(0, 8)}</span>
-                    <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                      Created {formatDate(quote.created_at)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span className="flex items-center gap-2">
-                      Status: {quote.status ?? "—"}
-                      {isAiQuote && (
-                        <span className={smartQuoteBadgeClasses}>
-                          <span className={smartQuoteBadgeDotClasses} />
-                          Smart Quote
-                        </span>
-                      )}
-                    </span>
-                    <span>Total: {quote.total != null ? formatCurrency(quote.total) : "—"}</span>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </HbCard>
-      <div className="mt-6">
-        <JobRecentActivityCard jobId={job.id} workspaceId={workspace.id} />
-      </div>
+      <JobQuotesCard quotes={quotes} quotesError={quotesError} quoteHref={quoteHref} />
+      <JobRecentActivityCard jobId={job.id} workspaceId={workspace.id} />
     </div>
   );
 }
