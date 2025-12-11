@@ -12,6 +12,7 @@ import AskBobCallAssistPanel, {
 } from "@/components/askbob/AskBobCallAssistPanel";
 import JobAskBobFollowupPanel from "@/components/askbob/JobAskBobFollowupPanel";
 import JobAskBobPanel, { type JobDiagnosisContext } from "@/components/askbob/JobAskBobPanel";
+import JobAskBobAfterCallPanel from "@/components/askbob/JobAskBobAfterCallPanel";
 import JobAskBobContainer from "@/components/askbob/JobAskBobContainer";
 import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
 import {
@@ -19,6 +20,7 @@ import {
   summarizeMaterialsSuggestion,
 } from "@/lib/domain/quotes/materials-askbob-adapter";
 import type {
+  AskBobAfterCallSnapshotPayload,
   AskBobDiagnoseSnapshotPayload,
   AskBobFollowupSnapshotPayload,
   AskBobJobFollowupResult,
@@ -77,7 +79,10 @@ type JobAskBobFlowProps = {
   initialMaterialsSnapshot?: AskBobMaterialsSnapshotPayload | null;
   initialQuoteSnapshot?: AskBobQuoteSnapshotPayload | null;
   initialFollowupSnapshot?: AskBobFollowupSnapshotPayload | null;
+  initialAfterCallSnapshot?: AskBobAfterCallSnapshotPayload | null;
   lastQuoteSummary?: string | null;
+  latestCallLabel?: string | null;
+  hasLatestCall?: boolean;
 };
 
 type SessionQuote = {
@@ -106,7 +111,10 @@ export default function JobAskBobFlow({
   initialMaterialsSnapshot,
   initialQuoteSnapshot,
   initialFollowupSnapshot,
+  initialAfterCallSnapshot,
   lastQuoteSummary,
+  latestCallLabel,
+  hasLatestCall,
 }: JobAskBobFlowProps) {
   const diagnosisSummaryInitialValue = initialDiagnoseSnapshot
     ? buildDiagnosisSummary(initialDiagnoseSnapshot.response)
@@ -165,6 +173,11 @@ export default function JobAskBobFlow({
   const [schedulerCollapsed, setSchedulerCollapsed] = useState(false);
   const [callScriptCollapsed, setCallScriptCollapsed] = useState(false);
   const [schedulerResetToken, setSchedulerResetToken] = useState(0);
+  const [afterCallSummary, setAfterCallSummary] = useState<string | null>(
+    initialAfterCallSnapshot?.afterCallSummary ?? null,
+  );
+  const [afterCallCollapsed, setAfterCallCollapsed] = useState(false);
+  const [afterCallResetToken, setAfterCallResetToken] = useState(0);
 
   const serverQuoteCandidate = initialLastQuoteId
     ? {
@@ -179,6 +192,7 @@ export default function JobAskBobFlow({
     Boolean(effectiveLastQuote?.quoteId) || hasQuoteSnapshotContext;
   const quoteDone = Boolean(sessionQuote);
   const callScriptDone = Boolean(callScriptSummary);
+  const afterCallDone = Boolean(afterCallSummary);
   const stepStatusItems = [
     { label: "Step 1 Intake", done: true },
     { label: "Step 2 Diagnose", done: diagnosisDone },
@@ -187,6 +201,7 @@ export default function JobAskBobFlow({
     { label: "Step 5 Follow-up guidance", done: followupDone },
     { label: "Step 6 Schedule visit", done: schedulerDone },
     { label: "Step 7 Prepare a phone call with AskBob", done: callScriptDone },
+    { label: "Step 8 · After the call summary", done: afterCallDone },
   ];
 
   const promptSeed = jobDescription ?? "";
@@ -290,6 +305,14 @@ export default function JobAskBobFlow({
     maybeAutoCollapseSteps();
   };
 
+  const handleAfterCallSummaryChange = (summary: string | null) => {
+    const normalized = summary?.trim() ?? null;
+    setAfterCallSummary(normalized);
+    if (normalized) {
+      maybeAutoCollapseSteps();
+    }
+  };
+
   const handleFollowupResult = useCallback(
     (result: AskBobJobFollowupResult | null) => {
       if (!result) {
@@ -327,6 +350,7 @@ export default function JobAskBobFlow({
     !followupDone ||
     !schedulerDone ||
     !callScriptDone
+    || !afterCallDone
   ) {
     return;
   }
@@ -344,6 +368,12 @@ export default function JobAskBobFlow({
     setFollowupDone(false);
     setFollowupResetToken((value) => value + 1);
     handleSchedulerReset();
+  };
+
+  const handleAfterCallReset = () => {
+    setAfterCallSummary(null);
+    setAfterCallResetToken((value) => value + 1);
+    setAfterCallCollapsed(false);
   };
 
   const handleJumpToCallAssist = () => {
@@ -390,6 +420,23 @@ export default function JobAskBobFlow({
             stepCompleted={diagnosisDone}
             stepCollapsed={diagnoseCollapsed}
             onToggleStepCollapsed={() => setDiagnoseCollapsed((value) => !value)}
+          />
+        </AskBobSection>
+        <AskBobSection id="askbob-after-call">
+          <JobAskBobAfterCallPanel
+            workspaceId={workspaceId}
+            jobId={jobId}
+            jobTitle={normalizedJobTitle}
+            jobDescription={jobDescription ?? null}
+            latestCallLabel={latestCallLabel ?? null}
+            hasCall={Boolean(hasLatestCall ?? latestCallLabel)}
+            stepCompleted={afterCallDone}
+            resetToken={afterCallResetToken}
+            onReset={handleAfterCallReset}
+            stepCollapsed={afterCallCollapsed}
+            onToggleStepCollapsed={() => setAfterCallCollapsed((value) => !value)}
+            initialAfterCallSnapshot={initialAfterCallSnapshot ?? undefined}
+            onAfterCallSummaryChange={handleAfterCallSummaryChange}
           />
         </AskBobSection>
         <AskBobSection id="askbob-materials">

@@ -107,23 +107,35 @@ describe("AskBob snapshots", () => {
           notes: "Quote note",
         },
       },
-      {
-        task: "job.followup",
-        payload: {
-          recommendedAction: "Follow up",
-          rationale: "Need more info",
-          steps: [{ label: "Call customer", detail: "Ask about access" }],
-          shouldSendMessage: true,
-          shouldScheduleVisit: false,
-          shouldCall: true,
-          shouldWait: false,
-          suggestedChannel: "sms",
-          suggestedDelayDays: 2,
-          riskNotes: "High priority",
-          modelLatencyMs: 250,
-        },
+    {
+      task: "job.followup",
+      payload: {
+        recommendedAction: "Follow up",
+        rationale: "Need more info",
+        steps: [{ label: "Call customer", detail: "Ask about access" }],
+        shouldSendMessage: true,
+        shouldScheduleVisit: false,
+        shouldCall: true,
+        shouldWait: false,
+        suggestedChannel: "sms",
+        suggestedDelayDays: 2,
+        riskNotes: "High priority",
+        modelLatencyMs: 250,
       },
-    ];
+    },
+    {
+      task: "job.after_call",
+      payload: {
+        afterCallSummary: "Spoke with the customer about the leak",
+        recommendedActionLabel: "Send confirmation",
+        recommendedActionSteps: ["Confirm visit window", "Log call details"],
+        suggestedChannel: "sms",
+        urgencyLevel: "normal",
+        notesForTech: "Check the attic access during the follow-up",
+        modelLatencyMs: 180,
+      },
+    },
+  ];
 
     const state = setupSupabaseMock({
       askbob_job_task_snapshots: { data: rows, error: null },
@@ -139,5 +151,6 @@ describe("AskBob snapshots", () => {
     expect(snapshots.materialsSnapshot?.items?.length).toBe(1);
     expect(snapshots.quoteSnapshot?.lines?.[0]?.description).toBe("Service");
     expect(snapshots.followupSnapshot?.steps?.[0]?.label).toBe("Call customer");
+    expect(snapshots.afterCallSnapshot?.recommendedActionLabel).toBe("Send confirmation");
   });
 });

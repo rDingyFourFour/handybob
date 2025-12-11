@@ -57,6 +57,11 @@ type LatestCallRecord = {
   job_id: string | null;
   workspace_id: string | null;
   created_at: string | null;
+  started_at: string | null;
+  duration_seconds: number | null;
+  status: string | null;
+  outcome: string | null;
+  direction: string | null;
 };
 
 type JobAppointmentRow = {
@@ -114,6 +119,44 @@ function formatDate(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function buildCallLabel(call: LatestCallRecord | null): string | null {
+  if (!call) {
+    return null;
+  }
+  const when = call.started_at ?? call.created_at;
+  const whenLabel = when ? formatFriendlyDateTime(when, "") : null;
+  const outcome = friendlyCallOutcome(call);
+  const duration = describeCallDuration(call.duration_seconds);
+  const parts = [
+    whenLabel ? `Call on ${whenLabel}` : null,
+    outcome,
+    duration,
+  ].filter(Boolean);
+  if (!parts.length) {
+    return "Most recent call";
+  }
+  return parts.join(" · ");
+}
+
+function friendlyCallOutcome(call: LatestCallRecord): string | null {
+  const raw = call.outcome?.replace(/_/g, " ") || call.status;
+  if (!raw) {
+    return null;
+  }
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function describeCallDuration(durationSeconds: number | null): string | null {
+  if (durationSeconds == null) {
+    return null;
+  }
+  if (durationSeconds >= 60) {
+    const minutes = Math.round(durationSeconds / 60);
+    return `${minutes} min`;
+  }
+  return `${durationSeconds} sec`;
 }
 
 function fallbackCard(title: string, body: string, action?: ReactNode) {
@@ -261,6 +304,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     materialsSnapshot: null,
     quoteSnapshot: null,
     followupSnapshot: null,
+    afterCallSnapshot: null,
   };
   try {
     askBobSnapshots = await getJobAskBobSnapshotsForJob(supabase, {
@@ -276,6 +320,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
     materialsSnapshot,
     quoteSnapshot,
     followupSnapshot,
+    afterCallSnapshot,
   } = askBobSnapshots;
 
 
@@ -394,7 +439,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
   try {
     const { data, error } = await supabase
       .from<LatestCallRecord>("calls")
-      .select("id, job_id, workspace_id, created_at")
+      .select("id, job_id, workspace_id, created_at, started_at, duration_seconds, status, outcome, direction")
       .eq("workspace_id", workspace.id)
       .eq("job_id", job.id)
       .order("created_at", { ascending: false })
@@ -442,6 +487,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
   const followupStatusChipClass = latestCall
     ? followupStatusClasses[followupDueInfo.dueStatus]
     : "";
+  const latestCallLabelText = buildCallLabel(latestCall);
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -485,7 +531,10 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           initialMaterialsSnapshot={materialsSnapshot ?? undefined}
           initialQuoteSnapshot={quoteSnapshot ?? undefined}
           initialFollowupSnapshot={followupSnapshot ?? undefined}
+          initialAfterCallSnapshot={afterCallSnapshot ?? undefined}
           lastQuoteSummary={lastQuoteSummary}
+          latestCallLabel={latestCallLabelText}
+          hasLatestCall={Boolean(latestCall)}
         />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">

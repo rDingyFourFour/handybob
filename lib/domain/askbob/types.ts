@@ -11,14 +11,16 @@ export type AskBobTask =
   | "materials.explain"
   | "job.followup"
   | "job.schedule"
-  | "job.call_script";
+  | "job.call_script"
+  | "job.after_call";
 
 export type AskBobJobTaskSnapshotTask =
   | "job.diagnose"
   | "materials.generate"
   | "quote.generate"
   | "job.followup"
-  | "job.schedule";
+  | "job.schedule"
+  | "job.after_call";
 
 export interface AskBobDiagnoseSnapshotPayload {
   sessionId: string;
@@ -71,7 +73,8 @@ export interface AskBobJobTaskSnapshot {
     | AskBobMaterialsSnapshotPayload
     | AskBobQuoteSnapshotPayload
     | AskBobFollowupSnapshotPayload
-    | AskBobJobScheduleSnapshotPayload;
+    | AskBobJobScheduleSnapshotPayload
+    | AskBobAfterCallSnapshotPayload;
 }
 
 export type AskBobSection = "steps" | "materials" | "safety" | "costTime" | "escalation";
@@ -351,6 +354,50 @@ export interface AskBobJobFollowupResult {
   rawModelOutput?: unknown;
 }
 
+export type AskBobAfterCallSuggestedChannel = "sms" | "phone" | "email" | "none";
+
+export type AskBobAfterCallUrgencyLevel = "low" | "normal" | "high";
+
+export interface AskBobJobAfterCallInput {
+  task: "job.after_call";
+  context: AskBobTaskContextWithJob;
+  jobTitle?: string | null;
+  jobDescription?: string | null;
+  callId?: string | null;
+  callOutcome?: string | null;
+  callDurationSeconds?: number | null;
+  callStartedAt?: string | null;
+  callEndedAt?: string | null;
+  callerName?: string | null;
+  customerName?: string | null;
+  phoneNumber?: string | null;
+  existingCallSummary?: string | null;
+  recentJobSignals?: string | null;
+}
+
+export interface AskBobJobAfterCallResult {
+  afterCallSummary: string;
+  recommendedActionLabel: string;
+  recommendedActionSteps: string[];
+  suggestedChannel: AskBobAfterCallSuggestedChannel;
+  draftMessageBody?: string | null;
+  urgencyLevel: AskBobAfterCallUrgencyLevel;
+  notesForTech?: string | null;
+  modelLatencyMs: number;
+  rawModelOutput?: unknown;
+}
+
+export interface AskBobAfterCallSnapshotPayload {
+  afterCallSummary: string;
+  recommendedActionLabel: string;
+  recommendedActionSteps: string[];
+  suggestedChannel: AskBobAfterCallSuggestedChannel;
+  draftMessageBody?: string | null;
+  urgencyLevel: AskBobAfterCallUrgencyLevel;
+  notesForTech?: string | null;
+  modelLatencyMs?: number | null;
+}
+
 export interface AskBobWorkingHoursWindow {
   startAt: string;
   endAt: string;
@@ -461,7 +508,8 @@ export type AskBobTaskInput =
   | AskBobMaterialsExplainInput
   | AskBobJobFollowupInput
   | AskBobJobScheduleInput
-  | AskBobJobCallScriptInput;
+  | AskBobJobCallScriptInput
+  | AskBobJobAfterCallInput;
 export type AskBobTaskResult =
   | AskBobJobDiagnoseResult
   | AskBobMessageDraftResult
@@ -471,7 +519,8 @@ export type AskBobTaskResult =
   | AskBobMaterialsExplainResult
   | AskBobJobFollowupResult
   | AskBobJobScheduleResult
-  | AskBobJobCallScriptResult;
+  | AskBobJobCallScriptResult
+  | AskBobJobAfterCallResult;
 
 // Zod schemas for validation
 

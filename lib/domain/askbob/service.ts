@@ -2,8 +2,10 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { Database } from "@/lib/supabase/types";
 import { z } from "zod";
 import {
+  AskBobAfterCallSnapshotPayload,
   AskBobContext,
   AskBobDiagnoseSnapshotPayload,
+  AskBobJobAfterCallInput,
   AskBobJobCallScriptInput,
   AskBobJobCallScriptResult,
   AskBobJobFollowupInput,
@@ -46,6 +48,7 @@ import {
   callAskBobJobFollowup,
   callAskBobJobSchedule,
   callAskBobJobCallScript,
+  callAskBobJobAfterCall,
 } from "@/utils/openai/askbob";
 
 type DbClient = SupabaseClient<Database>;
@@ -119,6 +122,10 @@ export async function runAskBobTask(
 
   if (input.task === "job.call_script") {
     return runAskBobJobCallScriptTask(supabase, input);
+  }
+
+  if (input.task === "job.after_call") {
+    return runAskBobJobAfterCallTask(supabase, input);
   }
 
   if (input.task === "materials.explain") {
@@ -427,6 +434,68 @@ export async function runAskBobJobFollowupTask(
   }
 }
 
+export async function runAskBobJobAfterCallTask(
+  supabase: DbClient,
+  input: AskBobJobAfterCallInput
+): Promise<AskBobJobAfterCallResult> {
+  const { context } = input;
+  const workspaceId = context.workspaceId;
+  const userId = context.userId;
+  const jobId = context.jobId;
+  console.log("[askbob-after-call-request]", {
+    workspaceId,
+    userId,
+    jobId,
+    hasCallId: Boolean(input.callId),
+    callOutcome: input.callOutcome ?? null,
+    callDurationSeconds: input.callDurationSeconds ?? null,
+  });
+
+  try {
+    const modelResult = await callAskBobJobAfterCall(input);
+    const result = modelResult.result;
+    console.log("[askbob-after-call-success]", {
+      workspaceId,
+      userId,
+      jobId,
+      modelLatencyMs: result.modelLatencyMs,
+      recommendedActionLabel: result.recommendedActionLabel,
+      suggestedChannel: result.suggestedChannel,
+      urgencyLevel: result.urgencyLevel,
+    });
+
+    if (jobId) {
+      try {
+        await recordAskBobJobTaskSnapshot(supabase, {
+          workspaceId: context.workspaceId,
+          jobId,
+          task: "job.after_call",
+          result,
+        });
+      } catch (snapshotError) {
+        console.error("[askbob-snapshot-upsert] job after call failed", {
+          workspaceId: context.workspaceId,
+          jobId,
+          error: snapshotError,
+        });
+      }
+    }
+
+    return result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+    console.error("[askbob-after-call-failure]", {
+      workspaceId,
+      userId,
+      jobId,
+      errorMessage: truncatedError,
+    });
+    throw error;
+  }
+}
+
 export async function runAskBobJobScheduleTask(
   input: AskBobJobScheduleInput
 ): Promise<AskBobJobScheduleResult> {
@@ -722,6 +791,19 @@ function buildFollowupSnapshotPayload(result: AskBobJobFollowupResult): AskBobFo
   };
 }
 
+function buildAfterCallSnapshotPayload(result: AskBobJobAfterCallResult): AskBobAfterCallSnapshotPayload {
+  return {
+    afterCallSummary: result.afterCallSummary,
+    recommendedActionLabel: result.recommendedActionLabel,
+    recommendedActionSteps: result.recommendedActionSteps,
+    suggestedChannel: result.suggestedChannel,
+    draftMessageBody: result.draftMessageBody ?? null,
+    urgencyLevel: result.urgencyLevel,
+    notesForTech: result.notesForTech ?? null,
+    modelLatencyMs: result.modelLatencyMs ?? null,
+  };
+}
+
 function buildScheduleSnapshotPayload(
   result: AskBobJobScheduleSnapshotPayload,
 ): AskBobJobScheduleSnapshotPayload {
@@ -743,11 +825,12 @@ export async function recordAskBobJobTaskSnapshot(
     jobId: string;
     task: AskBobJobTaskSnapshotTask;
     result:
-      | AskBobJobDiagnoseResult
-      | AskBobMaterialsGenerateResult
-      | AskBobQuoteGenerateResult
-      | AskBobJobFollowupResult
-      | AskBobJobScheduleSnapshotPayload;
+    | AskBobJobDiagnoseResult
+    | AskBobMaterialsGenerateResult
+    | AskBobQuoteGenerateResult
+    | AskBobJobFollowupResult
+    | AskBobJobScheduleSnapshotPayload
+    | AskBobJobAfterCallResult;
   }
 ): Promise<void> {
   let payload:
@@ -790,6 +873,12 @@ export async function recordAskBobJobTaskSnapshot(
       const result = params.result as AskBobJobScheduleSnapshotPayload;
       payload = buildScheduleSnapshotPayload(result);
       summary = `appointment:${payload.appointmentId}`;
+      break;
+    }
+    case "job.after_call": {
+      const result = params.result as AskBobJobAfterCallResult;
+      payload = buildAfterCallSnapshotPayload(result);
+      summary = `action:${payload.recommendedActionLabel},steps:${payload.recommendedActionSteps.length}`;
       break;
     }
   }
@@ -889,6 +978,17 @@ const followupSnapshotSchema = z.object({
   modelLatencyMs: z.number().optional().nullable(),
 });
 
+const afterCallSnapshotSchema = z.object({
+  afterCallSummary: z.string(),
+  recommendedActionLabel: z.string(),
+  recommendedActionSteps: z.array(z.string()),
+  suggestedChannel: z.enum(["sms", "phone", "email", "none"]),
+  draftMessageBody: z.string().optional().nullable(),
+  urgencyLevel: z.enum(["low", "normal", "high"]),
+  notesForTech: z.string().optional().nullable(),
+  modelLatencyMs: z.number().optional().nullable(),
+});
+
 export async function getJobAskBobSnapshotsForJob(
   supabase: DbClient,
   params: { workspaceId: string; jobId: string }
@@ -897,6 +997,7 @@ export async function getJobAskBobSnapshotsForJob(
   materialsSnapshot: AskBobMaterialsSnapshotPayload | null;
   quoteSnapshot: AskBobQuoteSnapshotPayload | null;
   followupSnapshot: AskBobFollowupSnapshotPayload | null;
+  afterCallSnapshot: AskBobAfterCallSnapshotPayload | null;
 }> {
   const rows = await getJobTaskSnapshotsForJob(supabase, params);
   const snapshots = {
@@ -904,12 +1005,14 @@ export async function getJobAskBobSnapshotsForJob(
     materialsSnapshot: null,
     quoteSnapshot: null,
     followupSnapshot: null,
+    afterCallSnapshot: null,
   };
   const counts = {
     diagnose: 0,
     materials: 0,
     quote: 0,
     followup: 0,
+    afterCall: 0,
   };
 
   for (const row of rows) {
@@ -977,10 +1080,26 @@ export async function getJobAskBobSnapshotsForJob(
         }
         break;
       }
+      case "job.after_call": {
+        const parsed = afterCallSnapshotSchema.safeParse(row.payload);
+        if (parsed.success) {
+          snapshots.afterCallSnapshot = parsed.data;
+          counts.afterCall += 1;
+        } else {
+          console.warn("[askbob-snapshot-decode-error]", {
+            workspaceId: params.workspaceId,
+            jobId: params.jobId,
+            task: row.task,
+            errors: parsed.error.errors.map((error) => error.message),
+          });
+        }
+        break;
+      }
     }
   }
 
-  const totalLoaded = counts.diagnose + counts.materials + counts.quote + counts.followup;
+  const totalLoaded =
+    counts.diagnose + counts.materials + counts.quote + counts.followup + counts.afterCall;
   if (totalLoaded > 0) {
     console.log("[askbob-snapshot-load]", {
       workspaceId: params.workspaceId,
@@ -1001,6 +1120,7 @@ const TASK_LABELS: Record<AskBobTask, string> = {
   "materials.explain": "Explained materials quote",
   "job.followup": "Suggested follow-up action",
   "job.schedule": "Scheduled appointment",
+  "job.after_call": "Summarized last call",
 };
 
 const TASK_SHORT_LABELS: Record<AskBobTask, string> = {
@@ -1012,6 +1132,7 @@ const TASK_SHORT_LABELS: Record<AskBobTask, string> = {
   "materials.explain": "materials explain",
   "job.followup": "follow-up",
   "job.schedule": "scheduled appointment",
+  "job.after_call": "after call",
 };
 
 export async function getJobAskBobHudSummary(

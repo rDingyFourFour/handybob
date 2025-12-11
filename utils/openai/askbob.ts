@@ -9,6 +9,8 @@ import type {
   AskBobJobScheduleResult,
   AskBobJobCallScriptInput,
   AskBobJobCallScriptResult,
+  AskBobJobAfterCallInput,
+  AskBobJobAfterCallResult,
   AskBobSchedulerSlot,
   AskBobUrgencyLevel,
   AskBobLineExplanation,
@@ -52,6 +54,7 @@ const MAX_MATERIAL_ITEMS = 25;
 const MAX_MATERIAL_EXPLANATION_ITEMS = 25;
 const MAX_FOLLOWUP_STEPS = 10;
 const MAX_SCHEDULE_SUGGESTIONS = 3;
+const MAX_AFTER_CALL_STEPS = 6;
 
 const JOB_DIAGNOSE_INSTRUCTIONS = [
   ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
@@ -151,6 +154,16 @@ const CALL_SCRIPT_INSTRUCTIONS = [
   SCOPE_LIMIT_GUARDRAILS,
 ].join(" ");
 
+const AFTER_CALL_INSTRUCTIONS = [
+  ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
+  "You are AskBob, the HandyBob after-call summarizer. Study the useful context and recent call details, then respond with a strict JSON object only (no surrounding prose) containing the keys: afterCallSummary (a short recap of what happened on the call), recommendedActionLabel (the best next move), recommendedActionSteps (array of short follow-up steps), suggestedChannel (sms, phone, email, or none), draftMessageBody (optional SMS/email draft), urgencyLevel (low, normal, or high), notesForTech (optional extra guidance), and modelLatencyMs (number).",
+  "Keep the tone professional, safety-focused, and realistic; emphasize clear next steps such as confirming details over SMS, scheduling another visit, calling back, or closing the loop without over-promising service or payments. If discussing payments or scope, mention caution/safety and avoid unauthorized commitments.",
+  "recommendedActionSteps should be 3-5 concise bullets and start with actionable verbs; when draftMessageBody is provided, tailor it to the suggested channel with polite, businesslike language. If no outreach is needed, set suggestedChannel to none and leave draftMessageBody empty.",
+  SAFETY_GUARDRAILS,
+  COST_GUARDRAILS,
+  SCOPE_LIMIT_GUARDRAILS,
+].join(" ");
+
 const MESSAGE_DRAFT_INSTRUCTIONS = [
   ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
   "You are AskBob, a technician assistant for HandyBob. Respond with a JSON object only (no surrounding prose) containing the keys: body (required, a brief customer-facing message), suggestedChannel (optional, 'sms' or 'email'), and summary (optional, a short explanation of the messaging goal). Keep the tone professional and respectful, and avoid emojis, slang, and excessive exclamation points.",
@@ -228,6 +241,12 @@ type CallAskBobJobScheduleResult = {
 
 type CallAskBobJobCallScriptResult = {
   result: AskBobJobCallScriptResult;
+  latencyMs: number;
+  modelName: string;
+};
+
+type CallAskBobJobAfterCallResult = {
+  result: AskBobJobAfterCallResult;
   latencyMs: number;
   modelName: string;
 };
@@ -892,6 +911,180 @@ export async function callAskBobJobFollowup(
       workspaceId: context.workspaceId,
       userId: context.userId,
       jobId: context.jobId ?? null,
+      errorMessage: truncatedError,
+    });
+
+    throw error;
+  }
+}
+
+export async function callAskBobJobAfterCall(
+  input: AskBobJobAfterCallInput,
+): Promise<CallAskBobJobAfterCallResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured for AskBob.");
+  }
+
+  const { context } = input;
+  const contextParts = [
+    `workspaceId=${context.workspaceId}`,
+    `userId=${context.userId}`,
+    context.jobId ? `jobId=${context.jobId}` : null,
+    context.customerId ? `customerId=${context.customerId}` : null,
+    context.quoteId ? `quoteId=${context.quoteId}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const jobTitleLine = input.jobTitle?.trim() ? `Job title: ${input.jobTitle.trim()}` : null;
+  const jobDescriptionBlock = input.jobDescription?.trim()
+    ? `Job description:\n${input.jobDescription.trim()}`
+    : null;
+
+  const callMetadataLines = [
+    `Outcome: ${input.callOutcome?.trim() || "unknown"}`,
+    `Duration seconds: ${input.callDurationSeconds ?? "unknown"}`,
+    `Call started at: ${input.callStartedAt ?? "unknown"}`,
+    `Call ended at: ${input.callEndedAt ?? "unknown"}`,
+  ];
+  if (input.callerName?.trim()) {
+    callMetadataLines.push(`Caller name: ${input.callerName.trim()}`);
+  }
+  if (input.customerName?.trim()) {
+    callMetadataLines.push(`Customer name: ${input.customerName.trim()}`);
+  }
+  if (input.phoneNumber?.trim()) {
+    callMetadataLines.push(`Phone number: ${input.phoneNumber.trim()}`);
+  }
+  if (input.existingCallSummary?.trim()) {
+    callMetadataLines.push(`Existing summary:\n${input.existingCallSummary.trim()}`);
+  }
+  const callContextBlock = `Call metadata:\n${callMetadataLines.join("\n")}`;
+  const signalsBlock = input.recentJobSignals?.trim()
+    ? `Recent signals:\n${input.recentJobSignals.trim()}`
+    : null;
+  const extraDetailsBlock =
+    input.extraDetails && input.extraDetails.trim().length
+      ? `Additional guidance:\n${input.extraDetails.trim()}`
+      : null;
+
+  const messageParts = [
+    `Context: ${contextParts}`,
+    jobTitleLine,
+    jobDescriptionBlock,
+    callContextBlock,
+    signalsBlock,
+    extraDetailsBlock,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join("\n\n");
+
+  const openai = new OpenAI({ apiKey });
+  const modelRequestStart = Date.now();
+  let modelName = DEFAULT_MODEL;
+  try {
+    const completion = await openai.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: "system", content: AFTER_CALL_INSTRUCTIONS },
+        { role: "user", content: messageParts },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    modelName = completion.model ?? DEFAULT_MODEL;
+    const messageContent = completion.choices?.[0]?.message?.content;
+    const payload = extractModelPayload(messageContent, {
+      workspaceId: context.workspaceId,
+      model: modelName,
+    });
+
+    const afterCallSummary = normalizeNullableString(payload.afterCallSummary);
+    if (!afterCallSummary) {
+      throw new Error("AskBob after-call response is missing a summary.");
+    }
+    const recommendedActionLabel = normalizeNullableString(payload.recommendedActionLabel);
+    if (!recommendedActionLabel) {
+      throw new Error("AskBob after-call response is missing a recommended action label.");
+    }
+
+    const rawSteps = normalizeAfterCallSteps(payload.recommendedActionSteps);
+    const { items: recommendedActionSteps, truncatedCount } = limitArray(
+      rawSteps,
+      MAX_AFTER_CALL_STEPS,
+    );
+    if (!recommendedActionSteps.length) {
+      throw new Error("AskBob after-call response is missing recommended action steps.");
+    }
+    if (truncatedCount > 0) {
+      console.log("[askbob-after-call-truncated]", {
+        workspaceId: context.workspaceId,
+        userId: context.userId,
+        jobId: context.jobId ?? null,
+        stepsBefore: rawSteps.length,
+        stepsAfter: recommendedActionSteps.length,
+      });
+    }
+
+    const suggestedChannelRaw = normalizeNullableString(payload.suggestedChannel);
+    const suggestedChannel =
+      suggestedChannelRaw === "sms" ||
+      suggestedChannelRaw === "email" ||
+      suggestedChannelRaw === "phone" ||
+      suggestedChannelRaw === "none"
+        ? suggestedChannelRaw
+        : "none";
+    const draftMessageBody = normalizeNullableString(payload.draftMessageBody);
+    const urgencyRaw = normalizeNullableString(payload.urgencyLevel);
+    const urgencyLevel =
+      urgencyRaw === "low" || urgencyRaw === "normal" || urgencyRaw === "high"
+        ? urgencyRaw
+        : "normal";
+    const notesForTech = normalizeNullableString(payload.notesForTech);
+
+    const latencyMs = Date.now() - modelRequestStart;
+    console.log("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: true,
+      task: "job.after_call",
+    });
+
+    const result: AskBobJobAfterCallResult = {
+      afterCallSummary,
+      recommendedActionLabel,
+      recommendedActionSteps,
+      suggestedChannel,
+      draftMessageBody,
+      urgencyLevel,
+      notesForTech,
+      modelLatencyMs: latencyMs,
+      rawModelOutput: typeof messageContent === "string" ? messageContent.trim() : null,
+    };
+
+    return {
+      result,
+      latencyMs,
+      modelName,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - modelRequestStart;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: false,
+      task: "job.after_call",
       errorMessage: truncatedError,
     });
 
@@ -1791,6 +1984,14 @@ function normalizeFollowupSteps(value: unknown): { label: string; detail?: strin
     );
 
   return normalized;
+}
+
+function normalizeAfterCallSteps(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((entry) => normalizeNullableString(entry))
+    .filter((entry): entry is string => Boolean(entry));
 }
 
 function normalizeSchedulerSlots(value: unknown): AskBobSchedulerSlot[] {
