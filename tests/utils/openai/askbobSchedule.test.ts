@@ -29,6 +29,7 @@ describe("callAskBobJobSchedule", () => {
     context: {
       workspaceId: "workspace-1",
       userId: "user-1",
+      jobId: "job-123",
     },
     jobTitle: "Leaky faucet",
     jobDescription: "Fix the leaky faucet near the sink.",
@@ -57,7 +58,7 @@ describe("callAskBobJobSchedule", () => {
   it("parses JSON output, truncates to 3 suggestions, and logs the truncation", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const suggestionPayload = {
-      suggestions: [
+      slots: [
         {
           startAt: "2025-01-01T09:00:00-05:00",
           endAt: "2025-01-01T10:00:00-05:00",
@@ -75,6 +76,7 @@ describe("callAskBobJobSchedule", () => {
           startAt: "2025-01-03T14:00:00-05:00",
           endAt: "2025-01-03T15:00:00-05:00",
           label: "Afternoon slot",
+          guidance: "Best after the call with the customer",
         },
         {
           startAt: "2025-01-04T16:00:00-05:00",
@@ -82,7 +84,9 @@ describe("callAskBobJobSchedule", () => {
           label: "Late window",
         },
       ],
-      explanation: "These slots respect the provided working hours.",
+      rationale: "These slots respect the provided working hours.",
+      safetyNotes: "Double-check that the drain access panel is unlocked.",
+      confirmWithCustomerNotes: "Let the customer pick their preferred time.",
     };
     __mockCreate.mockResolvedValue({
       model: "gpt-4.1",
@@ -99,14 +103,18 @@ describe("callAskBobJobSchedule", () => {
 
     const result = await callAskBobJobSchedule(buildInput());
 
-    expect(result.result.suggestions.length).toBe(3);
-    expect(result.result.explanation).toBe(suggestionPayload.explanation);
+    expect(result.result.slots.length).toBe(3);
+    expect(result.result.rationale).toBe(suggestionPayload.rationale);
+    expect(result.result.safetyNotes).toBe(suggestionPayload.safetyNotes);
+    expect(result.result.confirmWithCustomerNotes).toBe(
+      suggestionPayload.confirmWithCustomerNotes,
+    );
     expect(logSpy).toHaveBeenCalledWith(
       "[askbob-job-schedule-truncated]",
       expect.objectContaining({
         workspaceId: "workspace-1",
-        suggestionsBefore: 4,
-        suggestionsAfter: 3,
+        slotsBefore: 4,
+        slotsAfter: 3,
       }),
     );
 

@@ -7,7 +7,7 @@ import type {
   AskBobJobFollowupResult,
   AskBobJobScheduleInput,
   AskBobJobScheduleResult,
-  AskBobJobScheduleSuggestion,
+  AskBobSchedulerSlot,
   AskBobUrgencyLevel,
   AskBobLineExplanation,
   AskBobMaterialExplanation,
@@ -129,9 +129,9 @@ const FOLLOWUP_INSTRUCTIONS = [
 
 const SCHEDULE_INSTRUCTIONS = [
   ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
-  "You are AskBob, the HandyBob scheduler. Evaluate the job context, follow-up signals, and availability to recommend 1-3 time windows for a real appointment. Respond with JSON only (no prose) matching the keys: suggestions (array of { startAt, endAt, label, reason?, urgency? }), explanation (optional string), and modelLatencyMs (number).",
-  "Only suggest times in the future, honor the provided working hours and any preferred days, and explain why each window works (travel buffer, urgency, follow-up timing, etc.). Express startAt and endAt in ISO 8601 format using the business timezone when possible, and limit the list to at most three options. Include an urgency flag (low/medium/high) when the slot is time-sensitive or important.",
-  "If the available context is too thin to suggest meaningful windows, return an empty suggestions array and a neutral explanation such as 'Need more details to propose a time.' Do not auto-book; AskBob only suggests slots.",
+  "You are AskBob, the HandyBob scheduler. Review the job context, diagnostics, and follow-up signals, then recommend 1-3 time windows for a real visit. Respond with JSON only (no prose) matching the keys: slots (array of { startAt, endAt, label, location?, reason?, guidance? }), rationale (optional string), safetyNotes (optional string), confirmWithCustomerNotes (optional string), and modelLatencyMs (number).",
+  "Only suggest times later than the current moment, honor any available time windows, and explain why each window works (travel, prep, urgency, etc.). Express startAt and endAt in ISO 8601 format using the business timezone when possible, and limit the list to at most three slots. Include a short rationale for why each slot works and, when relevant, mention any customer confirmations or safety checks that should happen before the visit.",
+  "If the provided context is too thin for confident suggestions, return an empty slots array and a rationale such as 'Need more details to propose a time.' Do not auto-book; AskBob just recommends windows.",
   SAFETY_GUARDRAILS,
   COST_GUARDRAILS,
   SCOPE_LIMIT_GUARDRAILS,
@@ -890,33 +890,32 @@ export async function callAskBobJobSchedule(
     .filter(Boolean)
     .join(", ");
 
-  const jobTitleLine = input.jobTitle?.trim() ? `Job title: ${input.jobTitle.trim()}` : null;
-  const jobDescriptionBlock =
-    input.jobDescription && input.jobDescription.trim().length
-      ? `Job description:\n${input.jobDescription.trim()}`
-      : null;
-
-  const followupContext = {
-    followupDueStatus: input.followupDueStatus,
-    followupDueLabel: input.followupDueLabel,
-    hasVisitScheduled: input.hasVisitScheduled,
-    hasQuote: input.hasQuote,
-    hasInvoice: input.hasInvoice,
+  const contextBlocks: string[] = [];
+  const addContextBlock = (label: string, value?: string | null) => {
+    if (!value) {
+      return;
+    }
+    const trimmed = value.trim();
+    if (!trimmed.length) {
+      return;
+    }
+    contextBlocks.push(`${label}:\n${trimmed}`);
   };
-
-  const availabilityBlock = `Availability:\n${JSON.stringify(input.availability, null, 2)}`;
-  const notesBlock =
-    input.notesSummary && input.notesSummary.trim().length
-      ? `Notes: ${input.notesSummary.trim()}`
+  addContextBlock("Job title", input.jobTitle);
+  addContextBlock("Job description", input.jobDescription);
+  addContextBlock("Diagnosis summary", input.diagnosisSummary);
+  addContextBlock("Materials summary", input.materialsSummary);
+  addContextBlock("Quote summary", input.quoteSummary);
+  addContextBlock("Follow-up summary", input.followupSummary);
+  const contextBlock = contextBlocks.length ? contextBlocks.join("\n\n") : null;
+  const extraDetailsBlock =
+    input.extraDetails && input.extraDetails.trim().length
+      ? `Additional context:\n${input.extraDetails.trim()}`
       : null;
-
   const messageParts = [
     `Context: ${contextParts}`,
-    jobTitleLine,
-    jobDescriptionBlock,
-    `Follow-up context:\n${JSON.stringify(followupContext, null, 2)}`,
-    availabilityBlock,
-    notesBlock,
+    contextBlock,
+    extraDetailsBlock,
   ]
     .filter((part): part is string => Boolean(part))
     .join("\n\n");
@@ -937,14 +936,28 @@ export async function callAskBobJobSchedule(
 
     modelName = completion.model ?? DEFAULT_MODEL;
     const messageContent = completion.choices?.[0]?.message?.content;
-    const payload = extractModelPayload(messageContent, {
-      workspaceId: context.workspaceId,
-      model: modelName,
-    });
+    const rawModelOutput =
+      typeof messageContent === "string" ? messageContent.trim() : null;
+    let payload: ModelPayload | null = null;
+    let parseError: Error | null = null;
+    try {
+      payload = extractModelPayload(messageContent, {
+        workspaceId: context.workspaceId,
+        model: modelName,
+      });
+    } catch (error) {
+      parseError = error instanceof Error ? error : new Error(String(error));
+      console.error("[askbob-job-schedule-parse-failure]", {
+        workspaceId: context.workspaceId,
+        userId: context.userId,
+        jobId: context.jobId ?? null,
+        errorMessage: parseError.message,
+      });
+    }
 
-    const suggestions = normalizeScheduleSuggestions(payload.suggestions);
-    const { items: limitedSuggestions, truncatedCount } = limitArray(
-      suggestions,
+    const slots = payload ? normalizeSchedulerSlots(payload.slots) : [];
+    const { items: limitedSlots, truncatedCount } = limitArray(
+      slots,
       MAX_SCHEDULE_SUGGESTIONS,
     );
     if (truncatedCount > 0) {
@@ -952,12 +965,16 @@ export async function callAskBobJobSchedule(
         workspaceId: context.workspaceId,
         userId: context.userId,
         jobId: context.jobId ?? null,
-        suggestionsBefore: suggestions.length,
-        suggestionsAfter: limitedSuggestions.length,
+        slotsBefore: slots.length,
+        slotsAfter: limitedSlots.length,
       });
     }
 
-    const explanation = normalizeNullableString(payload.explanation);
+    const rationale = payload ? normalizeNullableString(payload.rationale) : null;
+    const safetyNotes = payload ? normalizeNullableString(payload.safetyNotes) : null;
+    const confirmWithCustomerNotes = payload
+      ? normalizeNullableString(payload.confirmWithCustomerNotes ?? payload.confirmNotes)
+      : null;
     const latencyMs = Date.now() - modelRequestStart;
     console.log("[askbob-model-call]", {
       model: modelName,
@@ -970,11 +987,12 @@ export async function callAskBobJobSchedule(
     });
 
     const result: AskBobJobScheduleResult = {
-      suggestions: limitedSuggestions,
-      explanation,
+      slots: limitedSlots,
+      rationale,
+      safetyNotes,
+      confirmWithCustomerNotes,
       modelLatencyMs: latencyMs,
-      rawModelOutput:
-        typeof messageContent === "string" ? messageContent.trim() : null,
+      rawModelOutput,
     };
 
     return { result, latencyMs, modelName };
@@ -1611,14 +1629,14 @@ function normalizeFollowupSteps(value: unknown): { label: string; detail?: strin
   return normalized;
 }
 
-function normalizeScheduleSuggestions(
-  value: unknown
-): AskBobJobScheduleSuggestion[] {
+function normalizeSchedulerSlots(value: unknown): AskBobSchedulerSlot[] {
   if (!Array.isArray(value)) return [];
 
   const normalized = value
     .map((entry) => {
-      if (!entry || typeof entry !== "object") return null;
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
       const record = entry as Record<string, unknown>;
       const startAt =
         normalizeNullableString(
@@ -1641,8 +1659,8 @@ function normalizeScheduleSuggestions(
       const label =
         normalizeNullableString(
           record.label ??
+            record.summaryLabel ??
             record.title ??
-            record.summary ??
             record.slotLabel ??
             record.windowLabel,
         ) ?? null;
@@ -1651,14 +1669,15 @@ function normalizeScheduleSuggestions(
         return null;
       }
 
+      const location = normalizeNullableString(record.location ?? record.place);
       const reason = normalizeNullableString(
-        record.reason ?? record.note ?? record.why ?? record.context,
+        record.reason ?? record.rationale ?? record.note ?? record.context ?? record.why,
+      );
+      const guidance = normalizeNullableString(
+        record.guidance ?? record.details ?? record.notes ?? record.comment,
       );
       const urgencyCandidate = normalizeNullableString(
-        record.urgency ??
-          record.priority ??
-          record.urgencyLevel ??
-          record.priorityLevel,
+        record.urgency ?? record.priority ?? record.urgencyLevel ?? record.priorityLevel,
       );
       const urgencyNormalized = urgencyCandidate?.toLowerCase();
       const urgency =
@@ -1668,22 +1687,26 @@ function normalizeScheduleSuggestions(
           ? (urgencyNormalized as AskBobUrgencyLevel)
           : undefined;
 
-      const suggestion: AskBobJobScheduleSuggestion = {
+      const slot: AskBobSchedulerSlot = {
         startAt,
         endAt,
         label,
       };
+      if (location) {
+        slot.location = location;
+      }
       if (reason) {
-        suggestion.reason = reason;
+        slot.reason = reason;
+      }
+      if (guidance) {
+        slot.guidance = guidance;
       }
       if (urgency) {
-        suggestion.urgency = urgency;
+        slot.urgency = urgency;
       }
-      return suggestion;
+      return slot;
     })
-    .filter(
-      (entry): entry is AskBobJobScheduleSuggestion => Boolean(entry),
-    );
+    .filter((entry): entry is AskBobSchedulerSlot => Boolean(entry));
 
   return normalized;
 }

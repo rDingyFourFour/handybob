@@ -38,14 +38,14 @@ describe("runAskBobJobScheduleTask", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     callAskBobJobScheduleMock.mockResolvedValue({
       result: {
-        suggestions: [
+        slots: [
           {
             startAt: "2025-01-01T09:00:00-05:00",
             endAt: "2025-01-01T10:00:00-05:00",
             label: "Morning window",
           },
         ],
-        explanation: "Recommend a morning slot",
+        rationale: "Recommend a morning slot",
         modelLatencyMs: 150,
       },
       latencyMs: 150,
@@ -54,14 +54,14 @@ describe("runAskBobJobScheduleTask", () => {
 
     const result = await runAskBobJobScheduleTask(buildInput());
 
-    expect(result.suggestions).toHaveLength(1);
+    expect(result.slots).toHaveLength(1);
     expect(logSpy).toHaveBeenCalledWith(
       "[askbob-job-schedule-request]",
       expect.objectContaining({ workspaceId: "workspace-1" }),
     );
     expect(logSpy).toHaveBeenCalledWith(
       "[askbob-job-schedule-success]",
-      expect.objectContaining({ suggestionsCount: 1, modelLatencyMs: 150 }),
+      expect.objectContaining({ slotsCount: 1, modelLatencyMs: 150 }),
     );
     expect(errorSpy).not.toHaveBeenCalled();
 

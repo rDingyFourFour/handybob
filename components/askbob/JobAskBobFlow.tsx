@@ -5,6 +5,7 @@ import { useState } from "react";
 import AskBobSection from "@/components/askbob/AskBobSection";
 import AskBobMaterialsPanel, { type MaterialsSummaryContext } from "@/components/askbob/AskBobMaterialsPanel";
 import AskBobQuotePanel from "@/components/askbob/AskBobQuotePanel";
+import AskBobSchedulerPanel from "@/components/askbob/AskBobSchedulerPanel";
 import JobAskBobFollowupPanel from "@/components/askbob/JobAskBobFollowupPanel";
 import JobAskBobPanel, { type JobDiagnosisContext } from "@/components/askbob/JobAskBobPanel";
 import JobAskBobContainer from "@/components/askbob/JobAskBobContainer";
@@ -19,7 +20,11 @@ import type {
   AskBobMaterialsSnapshotPayload,
   AskBobQuoteSnapshotPayload,
 } from "@/lib/domain/askbob/types";
-import { buildDiagnosisSummary } from "@/lib/domain/askbob/summary";
+import {
+  buildDiagnosisSummary,
+  buildFollowupSummaryFromSnapshot,
+  buildQuoteSummaryFromSnapshot,
+} from "@/lib/domain/askbob/summary";
 
 type JobAskBobFlowProps = {
   workspaceId: string;
@@ -88,6 +93,11 @@ export default function JobAskBobFlow({
   );
   const [materialsDone, setMaterialsDone] = useState(false);
   const [sessionQuote, setSessionQuote] = useState<SessionQuote | null>(null);
+  const followupSummaryInitialValue = buildFollowupSummaryFromSnapshot(initialFollowupSnapshot);
+  const quoteSummaryInitialValue = buildQuoteSummaryFromSnapshot(initialQuoteSnapshot ?? null);
+
+  const [followupSummary, setFollowupSummary] = useState<string | null>(followupSummaryInitialValue);
+  const [quoteSummary, setQuoteSummary] = useState<string | null>(quoteSummaryInitialValue);
   const [diagnoseCollapsed, setDiagnoseCollapsed] = useState(false);
   const [materialsCollapsed, setMaterialsCollapsed] = useState(false);
   const [quoteCollapsed, setQuoteCollapsed] = useState(false);
@@ -97,11 +107,14 @@ export default function JobAskBobFlow({
   const [materialsResetToken, setMaterialsResetToken] = useState(0);
   const [quoteResetToken, setQuoteResetToken] = useState(0);
   const [followupResetToken, setFollowupResetToken] = useState(0);
-  const [askBobScheduledAppointment, setAskBobScheduledAppointment] = useState<{
+  const [sessionAskBobAppointment, setSessionAskBobAppointment] = useState<{
     startAt: string;
     friendlyLabel: string | null;
     appointmentId?: string | null;
   } | null>(null);
+  const [schedulerDone, setSchedulerDone] = useState(false);
+  const [schedulerCollapsed, setSchedulerCollapsed] = useState(false);
+  const [schedulerResetToken, setSchedulerResetToken] = useState(0);
 
   const serverQuoteCandidate = initialLastQuoteId
     ? {
@@ -121,6 +134,7 @@ export default function JobAskBobFlow({
     { label: "Step 3 Materials checklist", done: materialsDone },
     { label: "Step 4 Quote suggestion", done: quoteDone },
     { label: "Step 5 Follow-up guidance", done: followupDone },
+    { label: "Step 6 Schedule visit", done: schedulerDone },
   ];
 
   const promptSeed = jobDescription ?? "";
@@ -148,7 +162,7 @@ export default function JobAskBobFlow({
     setMaterialsResetToken((value) => value + 1);
     setQuoteResetToken((value) => value + 1);
     setFollowupResetToken((value) => value + 1);
-    setAskBobScheduledAppointment(null);
+    handleSchedulerReset();
   };
 
   const handleMaterialsSummaryChange = (context: MaterialsSummaryContext) => {
@@ -162,7 +176,7 @@ export default function JobAskBobFlow({
     if (!summary) {
       setMaterialsResetToken((value) => value + 1);
     }
-    setAskBobScheduledAppointment(null);
+    handleSchedulerReset();
   };
 
   const handleAskBobQuoteApplied = (quoteId: string, createdAt?: string | null) => {
@@ -176,6 +190,9 @@ export default function JobAskBobFlow({
     });
     setFollowupDone(false);
     setFollowupResetToken((value) => value + 1);
+    handleSchedulerReset();
+    const quoteSummaryText = friendlyLabel ? `Latest quote from ${friendlyLabel}.` : null;
+    setQuoteSummary(quoteSummaryText);
   };
 
   const handleQuoteReset = () => {
@@ -183,37 +200,55 @@ export default function JobAskBobFlow({
     setFollowupDone(false);
     setQuoteResetToken((value) => value + 1);
     setFollowupResetToken((value) => value + 1);
-    setAskBobScheduledAppointment(null);
+    handleSchedulerReset();
+    setQuoteSummary(quoteSummaryInitialValue);
   };
 
   const handleFollowupCompleted = () => {
-    const followupNowDone = true;
-    setFollowupDone(followupNowDone);
-    if (
-      !hasAutoCollapsedAllSteps &&
-      diagnosisDone &&
-      materialsDone &&
-      quoteDone &&
-      followupNowDone
-    ) {
-      setDiagnoseCollapsed(true);
-      setMaterialsCollapsed(true);
-      setQuoteCollapsed(true);
-      setFollowupCollapsed(true);
-      setHasAutoCollapsedAllSteps(true);
-    }
+    setFollowupDone(true);
+    maybeAutoCollapseSteps();
   };
+
+  const handleSchedulerReset = () => {
+    setSchedulerDone(false);
+    setSchedulerCollapsed(false);
+    setSessionAskBobAppointment(null);
+    setSchedulerResetToken((value) => value + 1);
+  };
+
+  const maybeAutoCollapseSteps = () => {
+    if (
+      hasAutoCollapsedAllSteps ||
+      !diagnosisDone ||
+      !materialsDone ||
+      !quoteDone ||
+      !followupDone ||
+      !schedulerDone
+    ) {
+      return;
+    }
+    setDiagnoseCollapsed(true);
+    setMaterialsCollapsed(true);
+    setQuoteCollapsed(true);
+    setFollowupCollapsed(true);
+    setSchedulerCollapsed(true);
+    setHasAutoCollapsedAllSteps(true);
+  };
+
   const handleFollowupReset = () => {
     setFollowupDone(false);
     setFollowupResetToken((value) => value + 1);
-    setAskBobScheduledAppointment(null);
+    handleSchedulerReset();
   };
+
   const handleAskBobAppointmentScheduled = (info: {
     startAt: string;
     friendlyLabel: string | null;
     appointmentId?: string | null;
   }) => {
-    setAskBobScheduledAppointment(info);
+    setSessionAskBobAppointment(info);
+    setSchedulerDone(true);
+    maybeAutoCollapseSteps();
   };
 
   return (
@@ -298,8 +333,29 @@ export default function JobAskBobFlow({
             stepCollapsed={followupCollapsed}
             onToggleStepCollapsed={() => setFollowupCollapsed((value) => !value)}
             initialFollowupSnapshot={initialFollowupSnapshot ?? undefined}
-            askBobAppointmentScheduled={askBobScheduledAppointment ?? undefined}
+            askBobAppointmentScheduled={sessionAskBobAppointment ?? undefined}
             onAskBobAppointmentScheduled={handleAskBobAppointmentScheduled}
+            onFollowupSummaryUpdate={setFollowupSummary}
+          />
+        </AskBobSection>
+        <AskBobSection id="askbob-scheduler">
+          <AskBobSchedulerPanel
+            workspaceId={workspaceId}
+            jobId={jobId}
+            customerId={customerId ?? null}
+            jobTitle={normalizedJobTitle}
+            jobDescription={jobDescription ?? null}
+            diagnosisSummaryForScheduler={diagnosisSummary}
+            materialsSummaryForScheduler={materialsSummary}
+            quoteSummaryForScheduler={quoteSummary}
+            followupSummaryForScheduler={followupSummary}
+            stepCompleted={schedulerDone}
+            resetToken={schedulerResetToken}
+            onReset={handleSchedulerReset}
+            stepCollapsed={schedulerCollapsed}
+            onToggleStepCollapsed={() => setSchedulerCollapsed((value) => !value)}
+            onAppointmentScheduled={handleAskBobAppointmentScheduled}
+            onScrollIntoView={() => scrollToSection("askbob-scheduler")}
           />
         </AskBobSection>
       </div>

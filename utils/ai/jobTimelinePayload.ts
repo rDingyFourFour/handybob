@@ -197,9 +197,51 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
     })
   );
 
+  const askBobSnapshotsRes = await supabase
+    .from("askbob_job_task_snapshots")
+    .select("payload")
+    .eq("workspace_id", workspaceId)
+    .eq("job_id", jobId)
+    .eq("task", "job.schedule")
+    .order("updated_at", { ascending: false })
+    .limit(5);
+  const askBobStartTimes = new Map<string, string | null>();
+  (askBobSnapshotsRes.data ?? []).forEach((row) => {
+    if (!row || typeof row !== "object") {
+      return;
+    }
+    const payload = row.payload as { startAt?: string | null; friendlyLabel?: string | null } | null;
+    if (!payload || !payload.startAt) {
+      return;
+    }
+    if (!askBobStartTimes.has(payload.startAt)) {
+      askBobStartTimes.set(payload.startAt, payload.friendlyLabel ?? null);
+    }
+  });
+
   const customerRecord = Array.isArray(job.customers) ? job.customers[0] : job.customers;
 
-  const sortedEvents = [...events]
+  const annotatedEvents = events.map((event) => {
+    if (event.type === "appointment" && event.timestamp && askBobStartTimes.has(event.timestamp)) {
+      const friendlyLabel = askBobStartTimes.get(event.timestamp);
+      const detailParts = [];
+      if (friendlyLabel) {
+        detailParts.push(friendlyLabel);
+      }
+      if (event.detail) {
+        detailParts.push(event.detail);
+      }
+      return {
+        ...event,
+        title: "AskBob scheduled appointment",
+        detail: detailParts.join(" · ") || "AskBob scheduled a visit",
+        status: "AskBob",
+      };
+    }
+    return event;
+  });
+
+  const sortedEvents = [...annotatedEvents]
     .sort((a, b) => {
       const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
       const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;

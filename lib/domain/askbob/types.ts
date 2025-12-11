@@ -122,6 +122,10 @@ export interface AskBobTaskContext {
   quoteId?: string | null;
 }
 
+export type AskBobTaskContextWithJob = Omit<AskBobTaskContext, "jobId"> & {
+  jobId: string;
+};
+
 export type AskBobContext = AskBobTaskContext;
 
 export interface AskBobRequestInput {
@@ -351,31 +355,43 @@ export interface AskBobJobScheduleAvailability {
 
 export type AskBobUrgencyLevel = "low" | "medium" | "high";
 
-export interface AskBobJobScheduleSuggestion {
+export interface AskBobSchedulerSlot {
   startAt: string;
   endAt: string;
   label: string;
+  location?: string | null;
   reason?: string | null;
+  guidance?: string | null;
   urgency?: AskBobUrgencyLevel | null;
 }
 
+export type AskBobJobScheduleSuggestion = AskBobSchedulerSlot;
+
 export interface AskBobJobScheduleInput {
   task: "job.schedule";
-  context: AskBobTaskContext;
+  context: AskBobTaskContextWithJob;
+  customerId?: string | null;
   jobTitle?: string | null;
   jobDescription?: string | null;
-  followupDueStatus: "none" | "due" | "overdue" | "upcoming";
-  followupDueLabel: string;
-  hasVisitScheduled: boolean;
-  hasQuote: boolean;
-  hasInvoice: boolean;
+  diagnosisSummary?: string | null;
+  materialsSummary?: string | null;
+  quoteSummary?: string | null;
+  followupSummary?: string | null;
+  extraDetails?: string | null;
+  followupDueStatus?: "none" | "due" | "overdue" | "upcoming";
+  followupDueLabel?: string;
+  hasVisitScheduled?: boolean;
+  hasQuote?: boolean;
+  hasInvoice?: boolean;
   notesSummary?: string | null;
-  availability: AskBobJobScheduleAvailability;
+  availability?: AskBobJobScheduleAvailability;
 }
 
 export interface AskBobJobScheduleResult {
-  suggestions: AskBobJobScheduleSuggestion[];
-  explanation?: string | null;
+  slots: AskBobSchedulerSlot[];
+  rationale?: string | null;
+  safetyNotes?: string | null;
+  confirmWithCustomerNotes?: string | null;
   modelLatencyMs: number;
   rawModelOutput?: unknown;
 }

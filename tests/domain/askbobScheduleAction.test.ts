@@ -50,18 +50,13 @@ const defaultResponses = {
 const payloadTemplate = {
   workspaceId: "workspace-1",
   jobId: "job-123",
-  preferredDays: ["Monday", "Tuesday"],
-  preferredStartAt: "09:00",
-  preferredEndAt: "15:00",
+  prompt: "Prefer midweek slots",
 };
 
 function buildPayload(overrides?: Partial<typeof payloadTemplate>) {
   return {
     workspaceId: "workspace-1",
     jobId: "job-123",
-    preferredDays: ["Monday", " Wednesday "],
-    preferredStartAt: "09:00",
-    preferredEndAt: "15:00",
     ...overrides,
   };
 }
@@ -78,18 +73,18 @@ beforeEach(() => {
 });
 
 describe("runAskBobJobScheduleAction", () => {
-  it("returns suggestions and logs UI request/success", async () => {
+  it("returns scheduler result and logs UI request/success", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     runAskBobTaskMock.mockResolvedValue({
-      suggestions: [
+      slots: [
         {
           startAt: "2025-01-08T09:00:00-05:00",
           endAt: "2025-01-08T10:00:00-05:00",
           label: "Morning slot",
         },
       ],
-      explanation: "Fits in between appointments",
+      rationale: "Fits in between appointments",
       modelLatencyMs: 180,
     });
 
@@ -97,16 +92,18 @@ describe("runAskBobJobScheduleAction", () => {
     const result = await runAskBobJobScheduleAction(payload);
 
     expect(result.ok).toBe(true);
-    expect(result.suggestions).toHaveLength(1);
+    expect(result.schedulerResult.slots).toHaveLength(1);
+    expect(result.schedulerResult.rationale).toBe("Fits in between appointments");
     expect(result.modelLatencyMs).toBe(180);
     expect(runAskBobTaskMock).toHaveBeenCalledOnce();
     expect(runAskBobTaskMock).toHaveBeenCalledWith(
       supabaseState.supabase,
       expect.objectContaining({
         task: "job.schedule",
-        availability: expect.objectContaining({
-          workingHours: { startAt: "09:00", endAt: "15:00" },
-          preferredDays: ["Monday", "Wednesday"],
+        context: expect.objectContaining({
+          jobId: "job-123",
+          workspaceId: "workspace-1",
+          userId: "user-1",
         }),
       })
     );
@@ -116,7 +113,7 @@ describe("runAskBobJobScheduleAction", () => {
     );
     expect(logSpy).toHaveBeenCalledWith(
       "[askbob-job-schedule-ui-success]",
-      expect.objectContaining({ suggestionsCount: 1, reason: "suggestions" }),
+      expect.objectContaining({ proposedSlotsCount: 1 }),
     );
     expect(errorSpy).not.toHaveBeenCalled();
 
@@ -124,23 +121,23 @@ describe("runAskBobJobScheduleAction", () => {
     errorSpy.mockRestore();
   });
 
-  it("handles no suggestions gracefully", async () => {
+  it("handles no slots gracefully", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     runAskBobTaskMock.mockResolvedValue({
-      suggestions: [],
-      explanation: "Need more context",
+      slots: [],
+      rationale: "Need more context",
       modelLatencyMs: 92,
     });
 
     const result = await runAskBobJobScheduleAction(payloadTemplate);
 
     expect(result.ok).toBe(true);
-    expect(result.suggestions).toEqual([]);
-    expect(result.explanation).toBe("Need more context");
+    expect(result.schedulerResult.slots).toEqual([]);
+    expect(result.schedulerResult.rationale).toBe("Need more context");
     expect(result.modelLatencyMs).toBe(92);
     expect(logSpy).toHaveBeenCalledWith(
       "[askbob-job-schedule-ui-success]",
-      expect.objectContaining({ reason: "no_suggestions", suggestionsCount: 0 }),
+      expect.objectContaining({ proposedSlotsCount: 0 }),
     );
 
     logSpy.mockRestore();
@@ -152,9 +149,6 @@ describe("runAskBobJobScheduleAction", () => {
     const response = await runAskBobJobScheduleAction({
       workspaceId: "workspace-other",
       jobId: "job-123",
-      preferredDays: ["Monday"],
-      preferredStartAt: "09:00",
-      preferredEndAt: "15:00",
     });
 
     expect(response).toEqual({ ok: false, error: "wrong_workspace" });

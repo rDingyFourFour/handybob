@@ -107,7 +107,7 @@ export async function runAskBobTask(
   }
 
   if (input.task === "job.followup") {
-    return runAskBobJobFollowupTask(input);
+    return runAskBobJobFollowupTask(supabase, input);
   }
 
   if (input.task === "job.schedule") {
@@ -330,6 +330,7 @@ export async function runAskBobQuoteExplainTask(
 }
 
 export async function runAskBobJobFollowupTask(
+  supabase: DbClient,
   input: AskBobJobFollowupInput
 ): Promise<AskBobJobFollowupResult> {
   const { context } = input;
@@ -419,67 +420,50 @@ export async function runAskBobJobScheduleTask(
   const { context } = input;
   const workspaceId = context.workspaceId;
   const userId = context.userId;
-  const jobId = context.jobId ?? null;
-  const jobTitle = input.jobTitle?.trim() ?? null;
-  const jobDescription =
-    input.jobDescription && input.jobDescription.trim().length
-      ? input.jobDescription.trim()
-      : null;
-  const trimmedFollowupLabel = input.followupDueLabel?.trim();
-  const normalizedPreferredDays = input.availability.preferredDays
-    ?.map((day) => day?.trim())
-    .filter((day): day is string => Boolean(day));
-  const normalizedAvailability = {
-    workingHours: {
-      startAt: input.availability.workingHours.startAt.trim(),
-      endAt: input.availability.workingHours.endAt.trim(),
-    },
-    preferredDays:
-      normalizedPreferredDays && normalizedPreferredDays.length
-        ? normalizedPreferredDays
-        : undefined,
-    timezone: input.availability.timezone?.trim() ?? null,
-  };
-
-    console.log("[askbob-job-schedule-request]", {
-      workspaceId,
-      userId,
-      jobId,
-      followupDueStatus: input.followupDueStatus,
-      hasVisitScheduled: input.hasVisitScheduled,
-      hasQuote: input.hasQuote,
-      hasInvoice: input.hasInvoice,
-    hasJobTitle: Boolean(jobTitle),
-    isAskBobScheduler: true,
-    task: "job.scheduler",
-    });
-
+  const jobId = context.jobId;
   const normalizedInput: AskBobJobScheduleInput = {
     ...input,
-    jobTitle,
-    jobDescription,
+    jobTitle: input.jobTitle?.trim() ?? null,
+    jobDescription: input.jobDescription?.trim() ?? null,
+    diagnosisSummary: input.diagnosisSummary?.trim() ?? null,
+    materialsSummary: input.materialsSummary?.trim() ?? null,
+    quoteSummary: input.quoteSummary?.trim() ?? null,
+    followupSummary: input.followupSummary?.trim() ?? null,
+    extraDetails: input.extraDetails?.trim() ?? null,
     followupDueLabel:
-      trimmedFollowupLabel && trimmedFollowupLabel.length
-        ? trimmedFollowupLabel
-        : input.followupDueLabel,
+      input.followupDueLabel && input.followupDueLabel.trim().length
+        ? input.followupDueLabel.trim()
+        : undefined,
     notesSummary:
       input.notesSummary && input.notesSummary.trim().length
         ? input.notesSummary.trim()
         : null,
-    availability: normalizedAvailability,
+    availability: input.availability,
   };
+
+  console.log("[askbob-job-schedule-request]", {
+    workspaceId,
+    userId,
+    jobId: jobId ?? null,
+    hasJobTitle: Boolean(normalizedInput.jobTitle),
+    hasJobDescription: Boolean(normalizedInput.jobDescription),
+    hasDiagnosisSummary: Boolean(normalizedInput.diagnosisSummary),
+    hasMaterialsSummary: Boolean(normalizedInput.materialsSummary),
+    hasQuoteSummary: Boolean(normalizedInput.quoteSummary),
+    hasFollowupSummary: Boolean(normalizedInput.followupSummary),
+    hasExtraDetails: Boolean(normalizedInput.extraDetails),
+    hasNotesSummary: Boolean(normalizedInput.notesSummary),
+    followupDueStatus: normalizedInput.followupDueStatus ?? null,
+  });
 
   try {
     const modelResult = await callAskBobJobSchedule(normalizedInput);
     console.log("[askbob-job-schedule-success]", {
       workspaceId,
       userId,
-      jobId,
-      followupDueStatus: input.followupDueStatus,
-      suggestionsCount: modelResult.result.suggestions.length,
+      jobId: jobId ?? null,
+      slotsCount: modelResult.result.slots.length,
       modelLatencyMs: modelResult.result.modelLatencyMs,
-      isAskBobScheduler: true,
-      task: "job.scheduler",
     });
 
     return modelResult.result;
@@ -487,15 +471,11 @@ export async function runAskBobJobScheduleTask(
     const errorMessage = error instanceof Error ? error.message : String(error);
     const truncatedError =
       errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
-
     console.error("[askbob-job-schedule-failure]", {
       workspaceId,
       userId,
-      jobId,
-      followupDueStatus: input.followupDueStatus,
+      jobId: jobId ?? null,
       errorMessage: truncatedError,
-      isAskBobScheduler: true,
-      task: "job.scheduler",
     });
     throw error;
   }

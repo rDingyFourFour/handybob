@@ -46,6 +46,7 @@ type JobAskBobFollowupPanelProps = {
     friendlyLabel: string | null;
     appointmentId?: string | null;
   }) => void;
+  onFollowupSummaryUpdate?: (summary: string | null) => void;
 };
 
 export default function JobAskBobFollowupPanel({
@@ -68,7 +69,7 @@ export default function JobAskBobFollowupPanel({
   onToggleStepCollapsed,
   initialFollowupSnapshot,
   askBobAppointmentScheduled,
-  onAskBobAppointmentScheduled,
+  onFollowupSummaryUpdate,
 }: JobAskBobFollowupPanelProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -274,6 +275,27 @@ export default function JobAskBobFollowupPanel({
   useEffect(() => {
     setDraftError(null);
   }, [result]);
+
+  useEffect(() => {
+    if (!onFollowupSummaryUpdate) {
+      return;
+    }
+    if (!result) {
+      onFollowupSummaryUpdate(null);
+      return;
+    }
+    const summaryParts: string[] = [];
+    const recommended = result.recommendedAction?.trim();
+    if (recommended) {
+      summaryParts.push(recommended);
+    }
+    const rationale = result.rationale?.trim();
+    if (rationale) {
+      summaryParts.push(rationale);
+    }
+    const summary = summaryParts.filter(Boolean).join(" ").trim();
+    onFollowupSummaryUpdate(summary.length ? summary : null);
+  }, [onFollowupSummaryUpdate, result]);
 
   useEffect(() => {
     setScheduleError(null);
