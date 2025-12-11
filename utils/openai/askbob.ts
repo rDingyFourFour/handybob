@@ -879,6 +879,11 @@ export async function callAskBobJobSchedule(
     throw new Error("OPENAI_API_KEY is not configured for AskBob.");
   }
 
+  const nowTimestamp = input.nowTimestamp ?? Date.now();
+  const nowIso = new Date(nowTimestamp).toISOString();
+  const todayDateIso =
+    input.todayDateIso ?? new Date(nowTimestamp).toISOString().split("T")[0];
+
   const { context } = input;
   const contextParts = [
     `workspaceId=${context.workspaceId}`,
@@ -912,10 +917,17 @@ export async function callAskBobJobSchedule(
     input.extraDetails && input.extraDetails.trim().length
       ? `Additional context:\n${input.extraDetails.trim()}`
       : null;
+  const timingInstructions = [
+    `Today is ${todayDateIso}.`,
+    `The current moment is ${nowIso}.`,
+    "Only propose appointment start times that are strictly in the future relative to today.",
+    "Never suggest any time or date that has already passed; interpret ambiguous dates as today or later.",
+  ].join("\n");
   const messageParts = [
     `Context: ${contextParts}`,
     contextBlock,
     extraDetailsBlock,
+    timingInstructions,
   ]
     .filter((part): part is string => Boolean(part))
     .join("\n\n");

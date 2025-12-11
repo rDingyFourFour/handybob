@@ -42,13 +42,24 @@ beforeEach(() => {
   });
 });
 
+function buildFutureWindow() {
+  const startDate = new Date(Date.now() + 10 * 60 * 1000);
+  const endDate = new Date(startDate);
+  endDate.setMinutes(endDate.getMinutes() + 60);
+  return {
+    startAt: startDate.toISOString(),
+    endAt: endDate.toISOString(),
+  };
+}
+
 describe("runAskBobScheduleAppointmentAction", () => {
   it("creates the appointment and returns the id", async () => {
+    const { startAt, endAt } = buildFutureWindow();
     const response = await runAskBobScheduleAppointmentAction({
       workspaceId: "workspace-1",
       jobId: "job-1",
-      startAt: "2025-01-08T09:00:00Z",
-      endAt: "2025-01-08T10:00:00Z",
+      startAt,
+      endAt,
       title: "Visit for Test job",
     });
 
@@ -59,8 +70,8 @@ describe("runAskBobScheduleAppointmentAction", () => {
     expect(response.appointmentId).toBe("appt-1");
     expect(supabaseState.queries.appointments.insert).toHaveBeenCalledWith(
       expect.objectContaining({
-        start_time: "2025-01-08T09:00:00.000Z",
-        end_time: "2025-01-08T10:00:00.000Z",
+        start_time: startAt,
+        end_time: endAt,
         job_id: "job-1",
         title: "Visit for Test job",
       }),
@@ -68,10 +79,11 @@ describe("runAskBobScheduleAppointmentAction", () => {
   });
 
   it("returns wrong_workspace when workspace mismatches", async () => {
+    const { startAt } = buildFutureWindow();
     const response = await runAskBobScheduleAppointmentAction({
       workspaceId: "workspace-other",
       jobId: "job-1",
-      startAt: "2025-01-08T09:00:00Z",
+      startAt,
     });
 
     expect(response).toEqual({ ok: false, error: "wrong_workspace" });
@@ -80,10 +92,11 @@ describe("runAskBobScheduleAppointmentAction", () => {
   it("returns job_not_found when the job is missing", async () => {
     supabaseState.responses.jobs = { data: [], error: null };
 
+    const { startAt } = buildFutureWindow();
     const response = await runAskBobScheduleAppointmentAction({
       workspaceId: "workspace-1",
       jobId: "job-999",
-      startAt: "2025-01-08T09:00:00Z",
+      startAt,
     });
 
     expect(response).toEqual({ ok: false, error: "job_not_found" });

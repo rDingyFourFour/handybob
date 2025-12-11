@@ -87,6 +87,20 @@ export async function runAskBobScheduleAppointmentAction(
     return { ok: false, error: "invalid_start_time" };
   }
 
+  const now = new Date();
+  if (startDate.getTime() <= now.getTime()) {
+    console.error("[askbob-job-schedule-invalid-time]", {
+      workspaceId: workspace.id,
+      userId: user.id,
+      jobId: job.id,
+      requestedStartAt: startDate.toISOString(),
+      serverNow: now.toISOString(),
+      customerId: parsed.customerId ?? null,
+      task: "job.scheduler",
+    });
+    return { ok: false, error: "start_time_not_in_future", jobId: job.id };
+  }
+
   let endTimeIso: string | null = null;
   if (parsed.endAt) {
     const endDate = new Date(parsed.endAt);

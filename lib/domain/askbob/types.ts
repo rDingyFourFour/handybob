@@ -385,6 +385,8 @@ export interface AskBobJobScheduleInput {
   hasInvoice?: boolean;
   notesSummary?: string | null;
   availability?: AskBobJobScheduleAvailability;
+  todayDateIso?: string | null;
+  nowTimestamp?: number;
 }
 
 export interface AskBobJobScheduleResult {

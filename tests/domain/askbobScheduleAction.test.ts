@@ -76,11 +76,13 @@ describe("runAskBobJobScheduleAction", () => {
   it("returns scheduler result and logs UI request/success", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const futureStart = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const futureEnd = new Date(Date.now() + 90 * 60 * 1000).toISOString();
     runAskBobTaskMock.mockResolvedValue({
       slots: [
         {
-          startAt: "2025-01-08T09:00:00-05:00",
-          endAt: "2025-01-08T10:00:00-05:00",
+          startAt: futureStart,
+          endAt: futureEnd,
           label: "Morning slot",
         },
       ],
@@ -106,6 +108,10 @@ describe("runAskBobJobScheduleAction", () => {
           userId: "user-1",
         }),
       })
+    );
+    const schedulerArg = runAskBobTaskMock.mock.calls[0][1];
+    expect(schedulerArg.todayDateIso).toBe(
+      new Date(schedulerArg.nowTimestamp).toISOString().split("T")[0],
     );
     expect(logSpy).toHaveBeenCalledWith(
       "[askbob-job-schedule-ui-request]",
@@ -141,6 +147,66 @@ describe("runAskBobJobScheduleAction", () => {
     );
 
     logSpy.mockRestore();
+  });
+
+  it("filters out past slots before returning future suggestions", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const now = Date.now();
+    const pastSlot = {
+      startAt: new Date(now - 20 * 60 * 1000).toISOString(),
+      endAt: new Date(now - 19 * 60 * 1000).toISOString(),
+      label: "Past slot",
+    };
+    const futureSlot = {
+      startAt: new Date(now + 20 * 60 * 1000).toISOString(),
+      endAt: new Date(now + 80 * 60 * 1000).toISOString(),
+      label: "Future slot",
+    };
+    runAskBobTaskMock.mockResolvedValue({
+      slots: [pastSlot, futureSlot],
+      rationale: "Custom rationale",
+      modelLatencyMs: 110,
+    });
+
+    const result = await runAskBobJobScheduleAction(payloadTemplate);
+
+    expect(result.schedulerResult.slots.map((slot) => slot.startAt)).toEqual([
+      futureSlot.startAt,
+    ]);
+    expect(logSpy).toHaveBeenCalledWith(
+      "[askbob-job-schedule-ui-success]",
+      expect.objectContaining({ proposedSlotsCount: 1 }),
+    );
+
+    logSpy.mockRestore();
+  });
+
+  it("logs when all suggested slots are in the past and returns none", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const now = Date.now();
+    const pastSlot = {
+      startAt: new Date(now - 30 * 60 * 1000).toISOString(),
+      endAt: new Date(now - 29 * 60 * 1000).toISOString(),
+      label: "Traveling back in time",
+    };
+    runAskBobTaskMock.mockResolvedValue({
+      slots: [pastSlot],
+      rationale: "Need more context",
+      modelLatencyMs: 95,
+    });
+
+    const result = await runAskBobJobScheduleAction(payloadTemplate);
+
+    expect(result.schedulerResult.slots).toHaveLength(0);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[askbob-job-schedule-filtered-past-slots]",
+      expect.objectContaining({
+        rawCount: 1,
+        filteredCount: 0,
+      }),
+    );
+
+    warnSpy.mockRestore();
   });
 
   it("returns wrong_workspace when workspace does not match", async () => {

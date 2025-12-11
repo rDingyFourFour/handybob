@@ -11,6 +11,9 @@ import { runAskBobScheduleAppointmentAction } from "@/app/(app)/askbob/job-sched
 import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
 import type { AskBobJobScheduleResult, AskBobSchedulerSlot } from "@/lib/domain/askbob/types";
 
+const toLocalDateKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
 type AskBobSchedulerPanelProps = {
   workspaceId: string;
   jobId: string;
@@ -64,6 +67,51 @@ export default function AskBobSchedulerPanel({
   } | null>(null);
   const [schedulingSlotId, setSchedulingSlotId] = useState<string | null>(null);
   const lastHandledResetToken = useRef<number | undefined>(undefined);
+  const nowTimestamp = Date.now();
+  const schedulerSlots = schedulerResult?.slots ?? [];
+  const panelNow = new Date(nowTimestamp);
+  const selectedDayKey = toLocalDateKey(panelNow);
+  const enrichedSlots = schedulerSlots.map((slot) => {
+    const startDate = new Date(slot.startAt);
+    return {
+      slot,
+      dayKey: toLocalDateKey(startDate),
+      startTime: startDate.getTime(),
+    };
+  });
+  const todaySlotsRemovedCount = enrichedSlots.filter(
+    (entry) => entry.dayKey === selectedDayKey && entry.startTime <= nowTimestamp,
+  ).length;
+  const filteredSlots = enrichedSlots
+    .filter((entry) => (entry.dayKey !== selectedDayKey ? true : entry.startTime > nowTimestamp))
+    .map((entry) => entry.slot);
+
+  if (schedulerSlots.length) {
+    console.log("[askbob-scheduler-ui] slots prepared", {
+      selectedDay: selectedDayKey,
+      now: panelNow.toISOString(),
+      rawCount: schedulerSlots.length,
+      filteredCount: filteredSlots.length,
+      rawSlots: schedulerSlots.map((slot) => slot.startAt),
+      filteredSlots: filteredSlots.map((slot) => slot.startAt),
+    });
+  }
+
+  const shouldFallbackToRaw =
+    filteredSlots.length === 0 && schedulerSlots.length > 0;
+  if (shouldFallbackToRaw) {
+    console.warn("[askbob-scheduler-ui] filtered slots empty, falling back to raw slots", {
+      selectedDay: selectedDayKey,
+      now: panelNow.toISOString(),
+      rawCount: schedulerSlots.length,
+      filteredCount: filteredSlots.length,
+    });
+  }
+
+  const displaySlots = shouldFallbackToRaw ? schedulerSlots : filteredSlots;
+  const showOnlyFutureHint = !shouldFallbackToRaw && todaySlotsRemovedCount > 0;
+  const showNoFutureSlotsMessage =
+    !displaySlots.length && schedulerSlots.length > 0 && !shouldFallbackToRaw;
 
   const contextParts: string[] = [];
   if (jobTitle?.trim()) {
@@ -135,7 +183,11 @@ export default function AskBobSchedulerPanel({
         title: slot.label,
       });
       if (!response.ok) {
-        setAppointmentError("AskBob couldn’t schedule the appointment right now. Please try again.");
+        if (response.error === "start_time_not_in_future") {
+          setAppointmentError("Please choose a time in the future.");
+        } else {
+          setAppointmentError("AskBob couldn’t schedule the appointment right now. Please try again.");
+        }
         return;
       }
       const friendlyLabel =
@@ -264,6 +316,32 @@ export default function AskBobSchedulerPanel({
             >
               {isGenerating ? "Generating suggestions…" : "Generate appointment suggestions"}
             </HbButton>
+            {scheduledInfo && (
+              <div className="rounded border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-emerald-200">
+                <p className="m-0">
+                  Appointment scheduled for{" "}
+                  {scheduledInfo.friendlyLabel ??
+                    formatFriendlyDateTime(scheduledInfo.startAt, "") ??
+                    scheduledInfo.startAt}.
+                </p>
+                {scheduledInfo.appointmentId && (
+                  <HbButton
+                    as={Link}
+                    href={`/appointments/${scheduledInfo.appointmentId}`}
+                    variant="ghost"
+                    size="xs"
+                    className="px-2 py-0.5 text-[11px] uppercase tracking-[0.3em]"
+                  >
+                    View appointment details
+                  </HbButton>
+                )}
+              </div>
+            )}
+            {showOnlyFutureHint && (
+              <p className="text-xs text-slate-400">
+                Only future times are shown; earlier slots have passed.
+              </p>
+            )}
             {schedulerResult?.rationale && (
               <p className="text-sm text-slate-300">{schedulerResult.rationale}</p>
             )}
@@ -273,12 +351,17 @@ export default function AskBobSchedulerPanel({
             {schedulerResult?.confirmWithCustomerNotes && (
               <p className="text-xs text-slate-400">{schedulerResult.confirmWithCustomerNotes}</p>
             )}
+            {showNoFutureSlotsMessage && (
+              <p className="text-sm text-slate-400">
+                All of AskBob’s suggested times have already passed. Try again for another day.
+              </p>
+            )}
             {schedulerResult && !schedulerResult.slots.length && (
               <p className="text-sm text-slate-400">AskBob couldn’t find any appointment windows right now.</p>
             )}
-            {schedulerResult?.slots.length ? (
+            {displaySlots.length ? (
               <div className="space-y-3">
-                {schedulerResult.slots.map((slot) => {
+                {displaySlots.map((slot) => {
                   const startLabel = formatFriendlyDateTime(slot.startAt, "") ?? slot.startAt;
                   const endLabel = slot.endAt
                     ? formatFriendlyDateTime(slot.endAt, "") ?? slot.endAt

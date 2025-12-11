@@ -9,6 +9,7 @@ import {
   AskBobDiagnoseSnapshotPayload,
   AskBobFollowupSnapshotPayload,
   AskBobJobScheduleInput,
+  AskBobJobScheduleResult,
   AskBobJobTaskSnapshotTask,
   AskBobMaterialsSnapshotPayload,
   AskBobQuoteSnapshotPayload,
@@ -135,6 +136,9 @@ export async function runAskBobJobScheduleAction(
 
   const jobTitle = normalizeOptionalString(job.title ?? undefined);
   const jobDescription = normalizeOptionalString(job.description_raw ?? undefined);
+  const now = new Date();
+  const nowTimestamp = now.getTime();
+  const todayDateIso = now.toISOString().split("T")[0];
 
   console.log("[askbob-job-schedule-ui-request]", {
     workspaceId: workspace.id,
@@ -145,6 +149,7 @@ export async function runAskBobJobScheduleAction(
     hasQuoteContext: Boolean(quoteSummary),
     hasFollowupContext: Boolean(followupSummary),
     hasExtraDetails: Boolean(extraDetails),
+    todayDateIso,
   });
 
   const schedulerInput: AskBobJobScheduleInput = {
@@ -162,28 +167,51 @@ export async function runAskBobJobScheduleAction(
     quoteSummary,
     followupSummary,
     extraDetails,
+    todayDateIso,
+    nowTimestamp,
   };
 
   try {
     const result = await runAskBobTask(supabase, schedulerInput);
+    const rawSlots = result.slots;
+    const futureSlots = rawSlots.filter((slot) => {
+      const startTime = new Date(slot.startAt).getTime();
+      return Number.isFinite(startTime) && startTime > nowTimestamp;
+    });
+    if (!futureSlots.length && rawSlots.length) {
+      console.warn("[askbob-job-schedule-filtered-past-slots]", {
+        workspaceId: workspace.id,
+        userId: user.id,
+        jobId: job.id,
+        rawCount: rawSlots.length,
+        filteredCount: futureSlots.length,
+        todayDateIso,
+        nowTimestamp,
+      });
+    }
+    const filteredResult: AskBobJobScheduleResult = {
+      ...result,
+      slots: futureSlots,
+    };
+
     console.log("[askbob-job-schedule-ui-success]", {
       workspaceId: workspace.id,
       userId: user.id,
       jobId: job.id,
-      proposedSlotsCount: result.slots.length,
-      modelLatencyMs: result.modelLatencyMs,
+      proposedSlotsCount: filteredResult.slots.length,
+      modelLatencyMs: filteredResult.modelLatencyMs,
     });
 
     return {
       ok: true,
       jobId: job.id,
       schedulerResult: {
-        slots: result.slots,
-        rationale: result.rationale ?? null,
-        safetyNotes: result.safetyNotes ?? null,
-        confirmWithCustomerNotes: result.confirmWithCustomerNotes ?? null,
+        slots: filteredResult.slots,
+        rationale: filteredResult.rationale ?? null,
+        safetyNotes: filteredResult.safetyNotes ?? null,
+        confirmWithCustomerNotes: filteredResult.confirmWithCustomerNotes ?? null,
       },
-      modelLatencyMs: result.modelLatencyMs,
+      modelLatencyMs: filteredResult.modelLatencyMs,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
