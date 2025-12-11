@@ -72,6 +72,7 @@ describe("AskBobCallAssistPanel", () => {
           onStartCallWithScript={onStartCall}
         />,
       );
+      await Promise.resolve();
     });
 
     const generateButton = findButton(container, "Generate call script");
@@ -94,5 +95,42 @@ describe("AskBobCallAssistPanel", () => {
     expect(payload.customerPhone).toBe("+1555000000");
     expect(payload.scriptBody).toContain("Hello there");
     expect(payload.scriptBody).toContain("Main script body");
+  });
+
+  it("prefills call purpose and tone from follow-up hints", async () => {
+    await act(async () => {
+      root?.render(
+        <AskBobCallAssistPanel
+          stepNumber={7}
+          workspaceId="workspace-1"
+          userId="user-1"
+          jobId="job-1"
+          customerId="customer-1"
+          customerDisplayName="Customer Name"
+          customerPhoneNumber="+1555000000"
+          jobTitle="Fix sink"
+          jobDescription="Description"
+          diagnosisSummary="Diagnosis"
+          materialsSummary="Materials"
+          lastQuoteSummary="Quote #1"
+          followupSummary="Follow-up"
+          followupCallRecommended
+          followupCallPurpose="Explain quote and get a decision"
+          followupCallTone="friendly and confident"
+          onToggleCollapse={vi.fn()}
+          onCallScriptSummaryChange={vi.fn()}
+          stepCollapsed={false}
+          stepCompleted={false}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const toneInput = container.querySelector<HTMLInputElement>('input[placeholder="friendly and clear"]');
+    expect(toneInput?.value).toBe("friendly and confident");
+    expect(container.textContent).toContain(
+      "AskBob follow-up suggests calling for: Explain quote and get a decision",
+    );
+    expect(container.textContent).toContain("Suggested tone: friendly and confident");
   });
 });

@@ -358,6 +358,7 @@ export async function runAskBobJobFollowupTask(
     hasJobTitle: Boolean(jobTitle),
     hasQuoteContextForFollowup,
     hasAskBobAppointment,
+    hasCallRecommendation: false,
   });
 
   const trimmedFollowupLabel = input.followupDueLabel?.trim();
@@ -377,6 +378,7 @@ export async function runAskBobJobFollowupTask(
 
   try {
     const modelResult = await callAskBobJobFollowup(normalizedInput);
+    const hasCallRecommendation = Boolean(modelResult.result.callRecommended);
     console.log("[askbob-job-followup-service-success]", {
       workspaceId,
       userId,
@@ -389,6 +391,9 @@ export async function runAskBobJobFollowupTask(
       shouldWait: modelResult.result.shouldWait,
       hasQuoteContextForFollowup,
       hasAskBobAppointment,
+      hasCallRecommendation,
+      callPurpose: modelResult.result.callPurpose ?? null,
+      callTone: modelResult.result.callTone ?? null,
     });
     if (jobId) {
       try {
@@ -416,6 +421,7 @@ export async function runAskBobJobFollowupTask(
       userId,
       jobId,
       errorMessage: truncatedError,
+      hasCallRecommendation: false,
     });
     throw error;
   }
@@ -708,6 +714,10 @@ function buildFollowupSnapshotPayload(result: AskBobJobFollowupResult): AskBobFo
     suggestedChannel: result.suggestedChannel ?? null,
     suggestedDelayDays: result.suggestedDelayDays ?? null,
     riskNotes: result.riskNotes ?? null,
+    callRecommended: result.callRecommended ?? false,
+    callPurpose: result.callPurpose ?? null,
+    callTone: result.callTone ?? null,
+    callUrgencyLabel: result.callUrgencyLabel ?? null,
     modelLatencyMs: result.modelLatencyMs ?? null,
   };
 }
@@ -872,6 +882,10 @@ const followupSnapshotSchema = z.object({
   suggestedChannel: z.enum(["sms", "email", "phone"]).optional().nullable(),
   suggestedDelayDays: z.number().optional().nullable(),
   riskNotes: z.string().optional().nullable(),
+  callRecommended: z.boolean().optional(),
+  callPurpose: z.string().optional().nullable(),
+  callTone: z.string().optional().nullable(),
+  callUrgencyLabel: z.string().optional().nullable(),
   modelLatencyMs: z.number().optional().nullable(),
 });
 

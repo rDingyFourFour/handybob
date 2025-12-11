@@ -63,10 +63,23 @@ describe("JobAskBobFlow wiring", () => {
           initialDiagnoseSnapshot={null}
           initialMaterialsSnapshot={null}
           initialQuoteSnapshot={null}
-          initialFollowupSnapshot={null}
+          initialFollowupSnapshot={{
+            recommendedAction: "Call to check in",
+            rationale: "Need an update",
+            steps: [],
+            shouldSendMessage: false,
+            shouldScheduleVisit: false,
+            shouldCall: true,
+            shouldWait: false,
+            modelLatencyMs: 0,
+            callRecommended: true,
+            callPurpose: "Explain quote",
+            callTone: "friendly and confident",
+          }}
           lastQuoteSummary={null}
         />,
       );
+      await Promise.resolve();
     });
 
     expect(capturedPanelProps).toMatchObject({
@@ -75,6 +88,9 @@ describe("JobAskBobFlow wiring", () => {
       customerId: "customer-1",
       customerDisplayName: "Customer",
       customerPhoneNumber: "+15551234567",
+      followupCallRecommended: true,
+      followupCallPurpose: "Explain quote",
+      followupCallTone: "friendly and confident",
     });
     expect(typeof capturedPanelProps?.onStartCallWithScript).toBe("function");
   });

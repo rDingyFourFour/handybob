@@ -20,6 +20,7 @@ import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
 type JobAskBobFollowupPanelProps = {
   workspaceId: string;
   jobId: string;
+  userId: string;
   customerId?: string | null;
   jobTitle?: string | null;
   jobDescription?: string | null;
@@ -33,6 +34,7 @@ type JobAskBobFollowupPanelProps = {
   onFollowupCompleted?: () => void;
   resetToken?: number;
   onReset?: () => void;
+  onFollowupResult?: (result: AskBobJobFollowupResult | null) => void;
   stepCollapsed?: boolean;
   onToggleStepCollapsed?: () => void;
   initialFollowupSnapshot?: AskBobFollowupSnapshotPayload | null;
@@ -47,11 +49,13 @@ type JobAskBobFollowupPanelProps = {
     appointmentId?: string | null;
   }) => void;
   onFollowupSummaryUpdate?: (summary: string | null) => void;
+  onJumpToCallAssist?: () => void;
 };
 
 export default function JobAskBobFollowupPanel({
   workspaceId,
   jobId,
+  userId,
   customerId,
   jobTitle,
   jobDescription,
@@ -70,6 +74,8 @@ export default function JobAskBobFollowupPanel({
   initialFollowupSnapshot,
   askBobAppointmentScheduled,
   onFollowupSummaryUpdate,
+  onFollowupResult,
+  onJumpToCallAssist,
 }: JobAskBobFollowupPanelProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -277,6 +283,10 @@ export default function JobAskBobFollowupPanel({
   }, [result]);
 
   useEffect(() => {
+    onFollowupResult?.(result);
+  }, [onFollowupResult, result]);
+
+  useEffect(() => {
     if (!onFollowupSummaryUpdate) {
       return;
     }
@@ -305,6 +315,11 @@ export default function JobAskBobFollowupPanel({
   }, [result]);
 
   const followup = result;
+  const callRecommended = Boolean(followup?.callRecommended);
+  const callPurposeSuggestion = followup?.callPurpose?.trim() ?? null;
+  const callToneSuggestion = followup?.callTone?.trim() ?? null;
+  const hasScheduleContext = Boolean(askBobAppointmentScheduled);
+  const showCallAssistCTA = callRecommended && Boolean(onJumpToCallAssist);
   const showMessageCTAs = Boolean(followup?.shouldSendMessage && customerId);
   const followupDraftHint =
     showMessageCTAs && followup
@@ -375,6 +390,18 @@ export default function JobAskBobFollowupPanel({
     } finally {
       setIsDrafting(false);
     }
+  };
+
+  const handleJumpToCallAssist = () => {
+    console.log("[askbob-followup-to-call-assist-click]", {
+      workspaceId,
+      userId,
+      jobId,
+      hasCallRecommendation: callRecommended,
+      hasQuoteContext,
+      hasScheduleContext,
+    });
+    onJumpToCallAssist?.();
   };
 
   const signalText = result
@@ -481,6 +508,21 @@ export default function JobAskBobFollowupPanel({
               </div>
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Why AskBob suggests this</p>
               <p className="text-sm text-slate-300">{result.rationale}</p>
+              {callRecommended && (
+                <div className="space-y-1 border-b border-slate-800/60 pb-2 text-xs text-slate-400">
+                  <p className="m-0 text-[11px] uppercase tracking-[0.3em] text-emerald-300">
+                    AskBob suggests a phone call
+                  </p>
+                  {callPurposeSuggestion && (
+                    <p className="m-0 font-semibold text-slate-100">
+                      Purpose: {callPurposeSuggestion}
+                    </p>
+                  )}
+                  {callToneSuggestion && (
+                    <p className="m-0 text-xs text-slate-400">Tone: {callToneSuggestion}</p>
+                  )}
+                </div>
+              )}
               {result.steps.length > 0 && (
                 <ol className="space-y-2 text-sm text-slate-300">
                   {result.steps.map((step, index) => (
@@ -528,6 +570,21 @@ export default function JobAskBobFollowupPanel({
                   {followupDraftHint && (
                     <p className="text-xs text-slate-400">{followupDraftHint}</p>
                   )}
+                </div>
+              )}
+              {showCallAssistCTA && (
+                <div className="space-y-2 border-t border-slate-800 pt-3">
+                  <HbButton
+                    size="sm"
+                    variant="secondary"
+                    className="w-full"
+                    onClick={handleJumpToCallAssist}
+                  >
+                    Use AskBob to prep this call (Step 7)
+                  </HbButton>
+                  <p className="text-xs text-slate-400">
+                    Step 7 helps you draft a script to move this call forward.
+                  </p>
                 </div>
               )}
               <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">

@@ -29,6 +29,9 @@ type AskBobCallAssistPanelProps = {
   materialsSummary?: string | null;
   lastQuoteSummary?: string | null;
   followupSummary?: string | null;
+  followupCallRecommended?: boolean;
+  followupCallPurpose?: string | null;
+  followupCallTone?: string | null;
   stepCompleted?: boolean;
   stepCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -36,6 +39,7 @@ type AskBobCallAssistPanelProps = {
   onCallScriptSummaryChange?: (summary: string | null) => void;
   userId?: string | null;
   onStartCallWithScript?: (payload: StartCallWithScriptPayload) => void;
+  onScrollIntoView?: () => void;
 };
 
 type ScriptResult = {
@@ -53,6 +57,39 @@ const CALL_PURPOSE_OPTIONS: { value: AskBobCallPurpose; label: string }[] = [
   { value: "followup", label: "Follow-up call" },
 ];
 
+const CALL_PURPOSE_KEYWORDS: [RegExp, AskBobCallPurpose][] = [
+  [/schedule|visit|appointment|book/i, "scheduling"],
+  [/follow(?:-| )?up|quote|decision|approval|check[- ]?in/i, "followup"],
+  [/intake|intro|initial|new customer/i, "intake"],
+];
+
+function guessCallPurposeCategory(
+  followupPurpose: string | null,
+  fallback: AskBobCallPurpose,
+): AskBobCallPurpose {
+  if (!followupPurpose) {
+    return fallback;
+  }
+  for (const [pattern, category] of CALL_PURPOSE_KEYWORDS) {
+    if (pattern.test(followupPurpose)) {
+      return category;
+    }
+  }
+  return fallback;
+}
+
+function deriveCallPurpose(params: {
+  followupCallRecommended?: boolean;
+  followupCallPurpose?: string | null;
+  lastQuoteSummary?: string | null;
+}): AskBobCallPurpose {
+  const base: AskBobCallPurpose =
+    Boolean(params.followupCallRecommended) || Boolean(params.lastQuoteSummary)
+      ? "followup"
+      : "intake";
+  return guessCallPurposeCategory(params.followupCallPurpose ?? null, base);
+}
+
 export default function AskBobCallAssistPanel({
   stepNumber,
   workspaceId,
@@ -66,6 +103,9 @@ export default function AskBobCallAssistPanel({
   materialsSummary,
   lastQuoteSummary,
   followupSummary,
+  followupCallRecommended,
+  followupCallPurpose,
+  followupCallTone,
   stepCompleted = false,
   stepCollapsed = false,
   onToggleCollapse,
@@ -74,7 +114,14 @@ export default function AskBobCallAssistPanel({
   userId,
   onStartCallWithScript,
 }: AskBobCallAssistPanelProps) {
-  const defaultCallPurpose: AskBobCallPurpose = lastQuoteSummary ? "followup" : "intake";
+  const normalizedFollowupCallPurpose = followupCallPurpose?.trim() ?? null;
+  const normalizedFollowupCallTone = followupCallTone?.trim() ?? null;
+  const trimmedLastQuoteSummary = lastQuoteSummary?.trim() ?? null;
+  const initialCallPurpose = deriveCallPurpose({
+    followupCallRecommended,
+    followupCallPurpose: normalizedFollowupCallPurpose,
+    lastQuoteSummary: trimmedLastQuoteSummary,
+  });
   const effectiveCustomerName = customerDisplayName?.trim()
     ? customerDisplayName.trim()
     : null;
@@ -85,13 +132,15 @@ export default function AskBobCallAssistPanel({
     effectiveCustomerName && effectiveCustomerPhone
       ? `Ready to call: ${effectiveCustomerName} at ${effectiveCustomerPhone}`
       : effectiveCustomerName
-      ? `Ready to call: ${effectiveCustomerName}`
-      : effectiveCustomerPhone
-      ? `Ready to call: ${effectiveCustomerPhone}`
-      : null;
+        ? `Ready to call: ${effectiveCustomerName}`
+        : effectiveCustomerPhone
+          ? `Ready to call: ${effectiveCustomerPhone}`
+          : null;
   const hasReadyCallInfo = Boolean(readyToCallLabel);
-  const [callPurpose, setCallPurpose] = useState<AskBobCallPurpose>(defaultCallPurpose);
-  const [callTone, setCallTone] = useState(CALL_TONE_DEFAULT);
+  const [callPurpose, setCallPurpose] = useState<AskBobCallPurpose>(initialCallPurpose);
+  const [callTone, setCallTone] = useState<string>(normalizedFollowupCallTone ?? CALL_TONE_DEFAULT);
+  const [hasManuallySetPurpose, setHasManuallySetPurpose] = useState(false);
+  const [hasManuallySetTone, setHasManuallySetTone] = useState(false);
   const [scriptResult, setScriptResult] = useState<ScriptResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -133,11 +182,47 @@ export default function AskBobCallAssistPanel({
     };
   }, [resetCopyFeedback]);
 
+  useEffect(() => {
+    if (hasManuallySetPurpose) {
+      return;
+    }
+    const derivedPurpose = deriveCallPurpose({
+      followupCallRecommended,
+      followupCallPurpose: normalizedFollowupCallPurpose,
+      lastQuoteSummary: trimmedLastQuoteSummary,
+    });
+    setCallPurpose(derivedPurpose);
+  }, [
+    followupCallRecommended,
+    normalizedFollowupCallPurpose,
+    hasManuallySetPurpose,
+    trimmedLastQuoteSummary,
+  ]);
+
+  useEffect(() => {
+    if (hasManuallySetTone) {
+      return;
+    }
+    if (normalizedFollowupCallTone) {
+      setCallTone(normalizedFollowupCallTone);
+      return;
+    }
+    setCallTone(CALL_TONE_DEFAULT);
+  }, [normalizedFollowupCallTone, hasManuallySetTone]);
+
   const resetLocalState = () => {
     setScriptResult(null);
     setErrorMessage(null);
-    setCallPurpose(defaultCallPurpose);
-    setCallTone(CALL_TONE_DEFAULT);
+    setCallPurpose(
+      deriveCallPurpose({
+        followupCallRecommended,
+        followupCallPurpose: normalizedFollowupCallPurpose,
+        lastQuoteSummary: trimmedLastQuoteSummary,
+      }),
+    );
+    setCallTone(normalizedFollowupCallTone ?? CALL_TONE_DEFAULT);
+    setHasManuallySetPurpose(false);
+    setHasManuallySetTone(false);
     resetCopyFeedback();
   };
 
@@ -316,6 +401,14 @@ export default function AskBobCallAssistPanel({
             {callScriptSummary && (
               <p className="text-sm text-slate-300">{callScriptSummary}</p>
             )}
+            {followupCallRecommended && normalizedFollowupCallPurpose && (
+              <p className="text-xs text-emerald-200">
+                AskBob follow-up suggests calling for: {normalizedFollowupCallPurpose}
+              </p>
+            )}
+            {followupCallRecommended && normalizedFollowupCallTone && (
+              <p className="text-xs text-slate-400">Suggested tone: {normalizedFollowupCallTone}</p>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <HbButton
@@ -364,7 +457,10 @@ export default function AskBobCallAssistPanel({
               Call purpose
               <select
                 value={callPurpose}
-                onChange={(event) => setCallPurpose(event.target.value as AskBobCallPurpose)}
+                onChange={(event) => {
+                  setCallPurpose(event.target.value as AskBobCallPurpose);
+                  setHasManuallySetPurpose(true);
+                }}
                 className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100"
               >
                 {CALL_PURPOSE_OPTIONS.map((option) => (
@@ -379,7 +475,10 @@ export default function AskBobCallAssistPanel({
               <input
                 type="text"
                 value={callTone}
-                onChange={(event) => setCallTone(event.target.value)}
+                onChange={(event) => {
+                  setCallTone(event.target.value);
+                  setHasManuallySetTone(true);
+                }}
                 className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100"
                 placeholder="friendly and clear"
               />

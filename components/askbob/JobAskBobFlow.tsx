@@ -21,6 +21,7 @@ import {
 import type {
   AskBobDiagnoseSnapshotPayload,
   AskBobFollowupSnapshotPayload,
+  AskBobJobFollowupResult,
   AskBobMaterialsSnapshotPayload,
   AskBobQuoteSnapshotPayload,
 } from "@/lib/domain/askbob/types";
@@ -136,6 +137,15 @@ export default function JobAskBobFlow({
 
   const [followupSummary, setFollowupSummary] = useState<string | null>(followupSummaryInitialValue);
   const [quoteSummary, setQuoteSummary] = useState<string | null>(quoteSummaryInitialValue);
+  const [followupCallRecommended, setFollowupCallRecommended] = useState(
+    Boolean(initialFollowupSnapshot?.callRecommended),
+  );
+  const [followupCallPurpose, setFollowupCallPurpose] = useState(
+    initialFollowupSnapshot?.callPurpose ?? null,
+  );
+  const [followupCallTone, setFollowupCallTone] = useState(
+    initialFollowupSnapshot?.callTone ?? null,
+  );
   const [callScriptSummary, setCallScriptSummary] = useState<string | null>(null);
   const [diagnoseCollapsed, setDiagnoseCollapsed] = useState(false);
   const [materialsCollapsed, setMaterialsCollapsed] = useState(false);
@@ -280,6 +290,21 @@ export default function JobAskBobFlow({
     maybeAutoCollapseSteps();
   };
 
+  const handleFollowupResult = useCallback(
+    (result: AskBobJobFollowupResult | null) => {
+      if (!result) {
+        setFollowupCallRecommended(false);
+        setFollowupCallPurpose(null);
+        setFollowupCallTone(null);
+        return;
+      }
+      setFollowupCallRecommended(Boolean(result.callRecommended));
+      setFollowupCallPurpose(result.callPurpose ?? null);
+      setFollowupCallTone(result.callTone ?? null);
+    },
+    [],
+  );
+
   const resetCallScriptState = () => {
     setCallScriptSummary(null);
     setCallScriptCollapsed(false);
@@ -315,9 +340,21 @@ export default function JobAskBobFlow({
   };
 
   const handleFollowupReset = () => {
+    handleFollowupResult(null);
     setFollowupDone(false);
     setFollowupResetToken((value) => value + 1);
     handleSchedulerReset();
+  };
+
+  const handleJumpToCallAssist = () => {
+    console.log("[askbob-followup-to-call-assist-flow]", {
+      workspaceId,
+      userId,
+      jobId,
+      hasCallRecommendation: followupCallRecommended,
+    });
+    setCallScriptCollapsed(false);
+    scrollToSection("askbob-call-script");
   };
 
   const handleAskBobAppointmentScheduled = (info: {
@@ -396,6 +433,7 @@ export default function JobAskBobFlow({
           <JobAskBobFollowupPanel
             workspaceId={workspaceId}
             jobId={jobId}
+            userId={userId}
             customerId={customerId ?? null}
             jobTitle={normalizedJobTitle}
             jobDescription={jobDescription ?? null}
@@ -415,6 +453,8 @@ export default function JobAskBobFlow({
             askBobAppointmentScheduled={sessionAskBobAppointment ?? undefined}
             onAskBobAppointmentScheduled={handleAskBobAppointmentScheduled}
             onFollowupSummaryUpdate={setFollowupSummary}
+            onFollowupResult={handleFollowupResult}
+            onJumpToCallAssist={handleJumpToCallAssist}
           />
         </AskBobSection>
         <AskBobSection id="askbob-scheduler">
@@ -455,6 +495,9 @@ export default function JobAskBobFlow({
             materialsSummary={materialsSummary}
             lastQuoteSummary={lastQuoteSummary ?? null}
             followupSummary={followupSummary}
+            followupCallRecommended={followupCallRecommended}
+            followupCallPurpose={followupCallPurpose}
+            followupCallTone={followupCallTone}
             callScriptSummary={callScriptSummary}
             onCallScriptSummaryChange={setCallScriptSummary}
             onStartCallWithScript={handleStartCallWithScript}

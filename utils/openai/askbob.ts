@@ -123,10 +123,11 @@ const FOLLOWUP_INSTRUCTIONS = [
   "Keep the tone professional, neutral, and polite; avoid pushy sales language and guilt-tripping phrases. Frame actions with phrases like \"It would be reasonable to...\" or \"Consider...\" instead of commanding language.",
   "Use the provided status signals (quote status, last message, visits, invoices, and diagnostics) when you build the rationale, and mention the key signals that led to the recommendation.",
   "Provide a short rationale and a numbered list of steps the technician can follow. Include any follow-up context, such as whether the quote is outstanding or a visit is scheduled.",
+  "Decide explicitly if a phone call is the right next step. When a call is appropriate, set callRecommended to true, describe the goal in callPurpose (e.g., \"Explain quote and get a decision\"), and describe the tone in callTone (e.g., \"friendly and confident\"). If a call is not needed, set callRecommended to false and leave callPurpose and callTone null. Optionally provide callUrgencyLabel (one or two words) to describe how urgent the call should feel.",
   SAFETY_GUARDRAILS,
   COST_GUARDRAILS,
   SCOPE_LIMIT_GUARDRAILS,
-  "Review the follow-up context and respond with strict JSON matching the keys: recommendedAction (short required string), rationale (short paragraph), steps (array of { label, detail? }), shouldSendMessage (boolean), shouldScheduleVisit (boolean), shouldCall (boolean), shouldWait (boolean), suggestedChannel (optional 'sms' | 'email' | 'phone'), suggestedDelayDays (optional number), riskNotes (optional string), and modelLatencyMs (number).",
+  "Review the follow-up context and respond with strict JSON matching the keys: recommendedAction (short required string), rationale (short paragraph), steps (array of { label, detail? }), shouldSendMessage (boolean), shouldScheduleVisit (boolean), shouldCall (boolean), shouldWait (boolean), suggestedChannel (optional 'sms' | 'email' | 'phone'), suggestedDelayDays (optional number), riskNotes (optional string), callRecommended (boolean), callPurpose (optional string), callTone (optional string), callUrgencyLabel (optional string), and modelLatencyMs (number).",
 ].join(" ");
 
 const SCHEDULE_INSTRUCTIONS = [
@@ -818,6 +819,10 @@ export async function callAskBobJobFollowup(
         : undefined;
     const suggestedDelayDays = normalizeNumber(payload.suggestedDelayDays);
     const riskNotes = normalizeNullableString(payload.riskNotes);
+    const callRecommended = parseBooleanFlag(payload.callRecommended);
+    const callPurpose = normalizeNullableString(payload.callPurpose);
+    const callTone = normalizeNullableString(payload.callTone);
+    const callUrgencyLabel = normalizeNullableString(payload.callUrgencyLabel);
 
     const latencyMs = Date.now() - modelRequestStart;
     console.log("[askbob-model-call]", {
@@ -841,6 +846,10 @@ export async function callAskBobJobFollowup(
       suggestedChannel,
       suggestedDelayDays,
       riskNotes,
+      callRecommended,
+      callPurpose,
+      callTone,
+      callUrgencyLabel,
       modelLatencyMs: latencyMs,
       rawModelOutput: typeof messageContent === "string" ? messageContent.trim() : null,
     };

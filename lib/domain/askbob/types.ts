@@ -50,6 +50,10 @@ export interface AskBobFollowupSnapshotPayload {
   suggestedChannel?: AskBobJobFollowupResult["suggestedChannel"];
   suggestedDelayDays?: number | null;
   riskNotes?: string | null;
+  callRecommended?: boolean;
+  callPurpose?: string | null;
+  callTone?: string | null;
+  callUrgencyLabel?: string | null;
   modelLatencyMs?: number | null;
 }
 
@@ -339,6 +343,10 @@ export interface AskBobJobFollowupResult {
   suggestedChannel?: "sms" | "email" | "phone" | null;
   suggestedDelayDays?: number | null;
   riskNotes?: string | null;
+  callRecommended?: boolean;
+  callPurpose?: string | null;
+  callTone?: string | null;
+  callUrgencyLabel?: string | null;
   modelLatencyMs: number;
   rawModelOutput?: unknown;
 }
