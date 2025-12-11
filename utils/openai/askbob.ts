@@ -7,6 +7,8 @@ import type {
   AskBobJobFollowupResult,
   AskBobJobScheduleInput,
   AskBobJobScheduleResult,
+  AskBobJobCallScriptInput,
+  AskBobJobCallScriptResult,
   AskBobSchedulerSlot,
   AskBobUrgencyLevel,
   AskBobLineExplanation,
@@ -137,6 +139,17 @@ const SCHEDULE_INSTRUCTIONS = [
   SCOPE_LIMIT_GUARDRAILS,
 ].join(" ");
 
+const CALL_SCRIPT_INSTRUCTIONS = [
+  ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
+  "You are AskBob, the expert service technician call assistant for HandyBob. Draft a concise, customer-friendly phone script tailored to the requested purpose (intake, scheduling, or follow-up).",
+  "Avoid promising exact pricing or guaranteed availability, remind the caller to confirm contact information and their preferred follow-up method, and frame every sentence as a helpful guideline rather than a contract.",
+  "Respond with JSON only (no surrounding prose) containing: scriptBody (the full script the technician can read, with paragraphs or line breaks), openingLine (a short intro that sets the tone), closingLine (a wrap-up that restates next steps), keyPoints (array of short checklist items describing the most critical talking points), and suggestedDurationMinutes (optional number of minutes).",
+  "Use the provided job context, diagnosis, materials, quote, and follow-up summaries, and adopt the requested call tone.",
+  SAFETY_GUARDRAILS,
+  COST_GUARDRAILS,
+  SCOPE_LIMIT_GUARDRAILS,
+].join(" ");
+
 const MESSAGE_DRAFT_INSTRUCTIONS = [
   ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
   "You are AskBob, a technician assistant for HandyBob. Respond with a JSON object only (no surrounding prose) containing the keys: body (required, a brief customer-facing message), suggestedChannel (optional, 'sms' or 'email'), and summary (optional, a short explanation of the messaging goal). Keep the tone professional and respectful, and avoid emojis, slang, and excessive exclamation points.",
@@ -208,6 +221,12 @@ type CallAskBobJobFollowupResult = {
 
 type CallAskBobJobScheduleResult = {
   result: AskBobJobScheduleResult;
+  latencyMs: number;
+  modelName: string;
+};
+
+type CallAskBobJobCallScriptResult = {
+  result: AskBobJobCallScriptResult;
   latencyMs: number;
   modelName: string;
 };
@@ -1024,6 +1043,130 @@ export async function callAskBobJobSchedule(
       task: "job.schedule",
       errorMessage: truncatedError,
     });
+    throw error;
+  }
+}
+
+export async function callAskBobJobCallScript(
+  input: AskBobJobCallScriptInput,
+): Promise<CallAskBobJobCallScriptResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured for AskBob.");
+  }
+
+  const { context } = input;
+  const contextParts = [
+    `workspaceId=${context.workspaceId}`,
+    `userId=${context.userId}`,
+    context.jobId ? `jobId=${context.jobId}` : null,
+    context.customerId ? `customerId=${context.customerId}` : null,
+    context.quoteId ? `quoteId=${context.quoteId}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const contextBlocks: string[] = [];
+  const addContextBlock = (label: string, value?: string | null) => {
+    if (!value) {
+      return;
+    }
+    const trimmed = value.trim();
+    if (!trimmed.length) {
+      return;
+    }
+    contextBlocks.push(`${label}:\n${trimmed}`);
+  };
+  addContextBlock("Job title", input.jobTitle);
+  addContextBlock("Job description", input.jobDescription);
+  addContextBlock("AskBob diagnosis summary", input.diagnosisSummary);
+  addContextBlock("AskBob materials summary", input.materialsSummary);
+  addContextBlock("AskBob quote summary", input.lastQuoteSummary);
+  addContextBlock("AskBob follow-up summary", input.followupSummary);
+  const contextBlock = contextBlocks.length ? contextBlocks.join("\n\n") : null;
+  const extraDetailsBlock =
+    input.extraDetails && input.extraDetails.trim().length
+      ? `Additional context:\n${input.extraDetails.trim()}`
+      : null;
+  const messageParts = [
+    `Context: ${contextParts}`,
+    contextBlock,
+    `Call purpose: ${input.callPurpose}`,
+    input.callTone ? `Tone: ${input.callTone}` : null,
+    extraDetailsBlock,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join("\n\n");
+
+  const openai = new OpenAI({ apiKey });
+  const modelRequestStart = Date.now();
+  let modelName = DEFAULT_MODEL;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: "system", content: CALL_SCRIPT_INSTRUCTIONS },
+        { role: "user", content: messageParts },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    modelName = completion.model ?? DEFAULT_MODEL;
+    const messageContent = completion.choices?.[0]?.message?.content;
+    const payload = extractModelPayload(messageContent, {
+      workspaceId: context.workspaceId,
+      model: modelName,
+    });
+
+    const scriptBodyRaw = payload.scriptBody;
+    const scriptBody = typeof scriptBodyRaw === "string" ? scriptBodyRaw.trim() : "";
+    const openingLineCandidate = payload.openingLine;
+    const closingLineCandidate = payload.closingLine;
+    const openingLine = typeof openingLineCandidate === "string" ? openingLineCandidate.trim() : "";
+    const closingLine = typeof closingLineCandidate === "string" ? closingLineCandidate.trim() : "";
+    const keyPoints = ensureStringArray(payload.keyPoints);
+    const suggestedDurationMinutes = normalizeNumber(payload.suggestedDurationMinutes);
+
+    const latencyMs = Date.now() - modelRequestStart;
+    console.log("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: true,
+      task: "job.call_script",
+    });
+
+    const result: AskBobJobCallScriptResult = {
+      scriptBody,
+      openingLine,
+      closingLine,
+      keyPoints,
+      suggestedDurationMinutes,
+      modelLatencyMs: latencyMs,
+      rawModelOutput: typeof messageContent === "string" ? messageContent.trim() : null,
+    };
+
+    return { result, latencyMs, modelName };
+  } catch (error) {
+    const latencyMs = Date.now() - modelRequestStart;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: context.workspaceId,
+      userId: context.userId,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: false,
+      task: "job.call_script",
+      errorMessage: truncatedError,
+    });
+
     throw error;
   }
 }

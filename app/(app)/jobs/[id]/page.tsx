@@ -9,7 +9,7 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
-import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
+import { formatCurrency, formatFriendlyDateTime } from "@/utils/timeline/formatters";
 import {
   getJobAskBobHudSummary,
   getJobAskBobSnapshotsForJob,
@@ -330,6 +330,17 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
   const lastQuoteCreatedAtFriendly = lastQuoteCreatedAt
     ? formatFriendlyDateTime(lastQuoteCreatedAt, "")
     : null;
+  let lastQuoteSummary: string | null = null;
+  if (latestQuote) {
+    const summaryParts = ["Latest quote"];
+    if (latestQuote.total != null) {
+      summaryParts.push(`total ${formatCurrency(latestQuote.total)}`);
+    }
+    if (lastQuoteCreatedAtFriendly) {
+      summaryParts.push(lastQuoteCreatedAtFriendly);
+    }
+    lastQuoteSummary = summaryParts.join(" · ");
+  }
   if (!quotesError) {
     const aiCount = quotes.reduce(
       (count, quote) => (quote.smart_quote_used ? count + 1 : count),
@@ -454,24 +465,25 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
         customerName={customerName}
         description={job.description_raw}
       />
-      <JobAskBobFlow
-        workspaceId={workspace.id}
-        jobId={job.id}
-        customerId={customerId ?? null}
-        jobDescription={job.description_raw ?? null}
-        jobTitle={askBobJobTitle}
-        askBobLastTaskLabel={askBobLastTaskLabel}
-        askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
-        askBobLastUsedAtIso={askBobLastUsedAtIso}
-        askBobRunsSummary={askBobRunsSummary}
-        initialLastQuoteId={lastQuoteId ?? null}
-        lastQuoteCreatedAt={lastQuoteCreatedAt ?? null}
-        lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? null}
-        initialDiagnoseSnapshot={diagnoseSnapshot ?? undefined}
-        initialMaterialsSnapshot={materialsSnapshot ?? undefined}
-        initialQuoteSnapshot={quoteSnapshot ?? undefined}
-        initialFollowupSnapshot={followupSnapshot ?? undefined}
-      />
+        <JobAskBobFlow
+          workspaceId={workspace.id}
+          jobId={job.id}
+          customerId={customerId ?? null}
+          jobDescription={job.description_raw ?? null}
+          jobTitle={askBobJobTitle}
+          askBobLastTaskLabel={askBobLastTaskLabel}
+          askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
+          askBobLastUsedAtIso={askBobLastUsedAtIso}
+          askBobRunsSummary={askBobRunsSummary}
+          initialLastQuoteId={lastQuoteId ?? null}
+          lastQuoteCreatedAt={lastQuoteCreatedAt ?? null}
+          lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? null}
+          initialDiagnoseSnapshot={diagnoseSnapshot ?? undefined}
+          initialMaterialsSnapshot={materialsSnapshot ?? undefined}
+          initialQuoteSnapshot={quoteSnapshot ?? undefined}
+          initialFollowupSnapshot={followupSnapshot ?? undefined}
+          lastQuoteSummary={lastQuoteSummary}
+        />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">
           <div>

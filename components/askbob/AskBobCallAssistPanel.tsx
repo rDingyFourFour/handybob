@@ -1,0 +1,274 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+import HbButton from "@/components/ui/hb-button";
+import HbCard from "@/components/ui/hb-card";
+import { AskBobCallPurpose } from "@/lib/domain/askbob/types";
+import { runAskBobCallScriptAction } from "@/app/(app)/askbob/call-script-actions";
+
+type AskBobCallAssistPanelProps = {
+  stepNumber: number;
+  workspaceId: string;
+  jobId: string;
+  customerId?: string | null;
+  jobTitle?: string | null;
+  jobDescription?: string | null;
+  diagnosisSummary?: string | null;
+  materialsSummary?: string | null;
+  lastQuoteSummary?: string | null;
+  followupSummary?: string | null;
+  stepCompleted?: boolean;
+  stepCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  callScriptSummary?: string | null;
+  onCallScriptSummaryChange?: (summary: string | null) => void;
+};
+
+type ScriptResult = {
+  scriptBody: string;
+  openingLine: string;
+  closingLine: string;
+  keyPoints: string[];
+  suggestedDurationMinutes?: number | null;
+};
+
+const CALL_TONE_DEFAULT = "friendly and clear";
+const CALL_PURPOSE_OPTIONS: { value: AskBobCallPurpose; label: string }[] = [
+  { value: "intake", label: "Intake call" },
+  { value: "scheduling", label: "Scheduling call" },
+  { value: "followup", label: "Follow-up call" },
+];
+
+export default function AskBobCallAssistPanel({
+  stepNumber,
+  workspaceId,
+  jobId,
+  customerId,
+  jobTitle,
+  jobDescription,
+  diagnosisSummary,
+  materialsSummary,
+  lastQuoteSummary,
+  followupSummary,
+  stepCompleted = false,
+  stepCollapsed = false,
+  onToggleCollapse,
+  callScriptSummary,
+  onCallScriptSummaryChange,
+}: AskBobCallAssistPanelProps) {
+  const defaultCallPurpose: AskBobCallPurpose = lastQuoteSummary ? "followup" : "intake";
+  const [callPurpose, setCallPurpose] = useState<AskBobCallPurpose>(defaultCallPurpose);
+  const [callTone, setCallTone] = useState(CALL_TONE_DEFAULT);
+  const [scriptResult, setScriptResult] = useState<ScriptResult | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!callScriptSummary) {
+      setScriptResult(null);
+      setErrorMessage(null);
+    }
+  }, [callScriptSummary]);
+
+  const resetLocalState = () => {
+    setScriptResult(null);
+    setErrorMessage(null);
+    setCallPurpose(defaultCallPurpose);
+    setCallTone(CALL_TONE_DEFAULT);
+  };
+
+  const handleReset = () => {
+    resetLocalState();
+    onCallScriptSummaryChange?.(null);
+  };
+
+  const handleGenerate = async () => {
+    if (isGenerating) {
+      return;
+    }
+    setIsGenerating(true);
+    setErrorMessage(null);
+    try {
+      const result = await runAskBobCallScriptAction({
+        workspaceId,
+        jobId,
+        customerId: customerId ?? null,
+        jobTitle: jobTitle ?? null,
+        jobDescription: jobDescription ?? null,
+        diagnosisSummary: diagnosisSummary ?? null,
+        materialsSummary: materialsSummary ?? null,
+        lastQuoteSummary: lastQuoteSummary ?? null,
+        followupSummary: followupSummary ?? null,
+        callPurpose,
+        callTone,
+        extraDetails: null,
+      });
+
+      if (!result.ok) {
+        setErrorMessage(result.error);
+        return;
+      }
+
+      const newScript: ScriptResult = {
+        scriptBody: result.scriptBody,
+        openingLine: result.openingLine,
+        closingLine: result.closingLine,
+        keyPoints: result.keyPoints,
+        suggestedDurationMinutes: result.suggestedDurationMinutes ?? null,
+      };
+      setScriptResult(newScript);
+
+      const summaryParts = [
+        `${callPurpose.charAt(0).toUpperCase() + callPurpose.slice(1)} call script`,
+        result.keyPoints.length
+          ? `${result.keyPoints.length} key point${result.keyPoints.length === 1 ? "" : "s"}`
+          : null,
+        lastQuoteSummary ? `for ${lastQuoteSummary}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      onCallScriptSummaryChange?.(summaryParts || "Call script ready");
+    } catch (error) {
+      console.error("[askbob-call-script-client] generation failed", error);
+      setErrorMessage("AskBob could not generate a call script right now. Please try again in a moment.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const hasScript = Boolean(scriptResult);
+  const toggleLabel = stepCollapsed ? "Show step" : "Hide step";
+
+  return (
+    <HbCard className="space-y-4">
+      <div className="space-y-1">
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob call assistant</p>
+        <div className="flex flex-wrap items-center gap-2 justify-between">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <h2 className="hb-heading-3 text-xl font-semibold">
+                Step {stepNumber} · Prepare a phone call with AskBob
+              </h2>
+              {stepCompleted && (
+                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
+                  Done
+                </span>
+              )}
+            </div>
+            {callScriptSummary && (
+              <p className="text-sm text-slate-300">{callScriptSummary}</p>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <HbButton
+              variant="ghost"
+              size="sm"
+              className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
+              onClick={onToggleCollapse}
+            >
+              {toggleLabel}
+            </HbButton>
+            <HbButton
+              variant="ghost"
+              size="sm"
+              className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
+              onClick={handleReset}
+              disabled={!hasScript}
+            >
+              Reset this step
+            </HbButton>
+          </div>
+        </div>
+        <p className="text-sm text-slate-300">
+          AskBob drafts a professional call script using the job context and your chosen tone.
+        </p>
+      </div>
+      {!stepCollapsed && (
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-1 text-xs uppercase tracking-[0.3em] text-slate-500">
+              Call purpose
+              <select
+                value={callPurpose}
+                onChange={(event) => setCallPurpose(event.target.value as AskBobCallPurpose)}
+                className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              >
+                {CALL_PURPOSE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs uppercase tracking-[0.3em] text-slate-500">
+              Call tone
+              <input
+                type="text"
+                value={callTone}
+                onChange={(event) => setCallTone(event.target.value)}
+                className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                placeholder="friendly and clear"
+              />
+            </label>
+          </div>
+          {lastQuoteSummary && (
+            <p className="text-xs text-slate-500">
+              Quote context: {lastQuoteSummary}
+            </p>
+          )}
+          <div className="space-y-3">
+            <HbButton
+              variant="primary"
+              size="md"
+              onClick={handleGenerate}
+              disabled={isGenerating}
+            >
+              {isGenerating ? "Generating call script…" : "Generate call script with AskBob"}
+            </HbButton>
+            {errorMessage && <p className="text-xs text-rose-400">{errorMessage}</p>}
+          </div>
+          {hasScript ? (
+            <div className="space-y-3 border-t border-slate-800 pt-3 text-sm text-slate-300">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Suggested call script</p>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Opening line</p>
+                  <p className="text-sm text-slate-100">{scriptResult?.openingLine}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Script body</p>
+                  <p className="text-sm text-slate-200 whitespace-pre-line">{scriptResult?.scriptBody}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Closing line</p>
+                  <p className="text-sm text-slate-100">{scriptResult?.closingLine}</p>
+                </div>
+                {scriptResult?.keyPoints.length ? (
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Key points to hit</p>
+                    <ul className="list-disc list-inside space-y-1 text-sm text-slate-200">
+                      {scriptResult.keyPoints.map((point, index) => (
+                        <li key={`${point}-${index}`}>{point}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {scriptResult?.suggestedDurationMinutes ? (
+                  <p className="text-xs text-slate-400">
+                    Expected call duration: ~{scriptResult.suggestedDurationMinutes} minute
+                    {scriptResult.suggestedDurationMinutes === 1 ? "" : "s"}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">
+              Call script not yet generated. Click the button above once you’re ready for AskBob to draft a script.
+            </p>
+          )}
+        </div>
+      )}
+    </HbCard>
+  );
+}

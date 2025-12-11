@@ -25,6 +25,13 @@ export default function JobAskBobContainer({
 }: JobAskBobContainerProps) {
   const flowReminder =
     "Step 1 intake ran when this job was created; continue through Steps 2–5 to keep refining the scope.";
+  const parseStepNumber = (label: string) => {
+    const match = label.match(/Step\s+(\d+)/i);
+    return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+  };
+  const sortedStepStatusItems = [...stepStatusItems].sort(
+    (a, b) => parseStepNumber(a.label) - parseStepNumber(b.label),
+  );
 
   return (
     <HbCard className="space-y-6">
@@ -43,7 +50,7 @@ export default function JobAskBobContainer({
         />
       </div>
       <div className="space-y-1 rounded-2xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-xs text-slate-400">
-        {stepStatusItems.map((step) => (
+        {sortedStepStatusItems.map((step) => (
           <div key={step.label} className="flex items-center justify-between">
             <span className="text-slate-200">{step.label}</span>
             <span

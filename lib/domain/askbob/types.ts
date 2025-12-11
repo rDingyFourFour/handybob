@@ -10,7 +10,8 @@ export type AskBobTask =
   | "quote.explain"
   | "materials.explain"
   | "job.followup"
-  | "job.schedule";
+  | "job.schedule"
+  | "job.call_script";
 
 export type AskBobJobTaskSnapshotTask =
   | "job.diagnose"
@@ -398,6 +399,33 @@ export interface AskBobJobScheduleResult {
   rawModelOutput?: unknown;
 }
 
+export type AskBobCallPurpose = "intake" | "scheduling" | "followup";
+
+export interface AskBobJobCallScriptInput {
+  task: "job.call_script";
+  context: AskBobTaskContextWithJob;
+  customerId?: string | null;
+  jobTitle?: string | null;
+  jobDescription?: string | null;
+  diagnosisSummary?: string | null;
+  materialsSummary?: string | null;
+  lastQuoteSummary?: string | null;
+  followupSummary?: string | null;
+  callPurpose: AskBobCallPurpose;
+  callTone?: string | null;
+  extraDetails?: string | null;
+}
+
+export interface AskBobJobCallScriptResult {
+  scriptBody: string;
+  openingLine: string;
+  closingLine: string;
+  keyPoints: string[];
+  suggestedDurationMinutes?: number | null;
+  modelLatencyMs: number;
+  rawModelOutput?: unknown;
+}
+
 export interface AskBobMaterialItemResult {
   name: string;
   sku?: string | null;
@@ -424,7 +452,8 @@ export type AskBobTaskInput =
   | AskBobQuoteExplainInput
   | AskBobMaterialsExplainInput
   | AskBobJobFollowupInput
-  | AskBobJobScheduleInput;
+  | AskBobJobScheduleInput
+  | AskBobJobCallScriptInput;
 export type AskBobTaskResult =
   | AskBobJobDiagnoseResult
   | AskBobMessageDraftResult
@@ -433,7 +462,8 @@ export type AskBobTaskResult =
   | AskBobQuoteExplainResult
   | AskBobMaterialsExplainResult
   | AskBobJobFollowupResult
-  | AskBobJobScheduleResult;
+  | AskBobJobScheduleResult
+  | AskBobJobCallScriptResult;
 
 // Zod schemas for validation
 

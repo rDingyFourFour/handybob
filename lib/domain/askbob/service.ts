@@ -4,6 +4,8 @@ import { z } from "zod";
 import {
   AskBobContext,
   AskBobDiagnoseSnapshotPayload,
+  AskBobJobCallScriptInput,
+  AskBobJobCallScriptResult,
   AskBobJobFollowupInput,
   AskBobJobFollowupResult,
   AskBobJobScheduleInput,
@@ -43,6 +45,7 @@ import {
   callAskBobMaterialsGenerate,
   callAskBobJobFollowup,
   callAskBobJobSchedule,
+  callAskBobJobCallScript,
 } from "@/utils/openai/askbob";
 
 type DbClient = SupabaseClient<Database>;
@@ -112,6 +115,10 @@ export async function runAskBobTask(
 
   if (input.task === "job.schedule") {
     return runAskBobJobScheduleTask(input);
+  }
+
+  if (input.task === "job.call_script") {
+    return runAskBobJobCallScriptTask(supabase, input);
   }
 
   if (input.task === "materials.explain") {
@@ -476,6 +483,69 @@ export async function runAskBobJobScheduleTask(
       userId,
       jobId: jobId ?? null,
       errorMessage: truncatedError,
+    });
+    throw error;
+  }
+}
+
+async function runAskBobJobCallScriptTask(
+  _supabase: DbClient,
+  input: AskBobJobCallScriptInput
+): Promise<AskBobJobCallScriptResult> {
+  const { context } = input;
+  const workspaceId = context.workspaceId;
+  const userId = context.userId;
+  const jobId = context.jobId ?? null;
+  const normalizedInput: AskBobJobCallScriptInput = {
+    ...input,
+    jobTitle: input.jobTitle?.trim() ?? null,
+    jobDescription: input.jobDescription?.trim() ?? null,
+    diagnosisSummary: input.diagnosisSummary?.trim() ?? null,
+    materialsSummary: input.materialsSummary?.trim() ?? null,
+    lastQuoteSummary: input.lastQuoteSummary?.trim() ?? null,
+    followupSummary: input.followupSummary?.trim() ?? null,
+    callTone: input.callTone?.trim() ?? null,
+    extraDetails: input.extraDetails?.trim() ?? null,
+  };
+
+  console.log("[askbob-call-script-request]", {
+    workspaceId,
+    userId,
+    jobId,
+    hasCustomerId: Boolean(context.customerId),
+    hasJobTitle: Boolean(normalizedInput.jobTitle),
+    hasDiagnosisSummary: Boolean(normalizedInput.diagnosisSummary),
+    hasMaterialsSummary: Boolean(normalizedInput.materialsSummary),
+    hasLastQuoteSummary: Boolean(normalizedInput.lastQuoteSummary),
+    hasFollowupSummary: Boolean(normalizedInput.followupSummary),
+    callPurpose: normalizedInput.callPurpose,
+    callTone: normalizedInput.callTone ?? null,
+  });
+
+  try {
+    const modelResult = await callAskBobJobCallScript(normalizedInput);
+    const result = modelResult.result;
+    console.log("[askbob-call-script-success]", {
+      workspaceId,
+      userId,
+      jobId,
+      modelLatencyMs: result.modelLatencyMs,
+      scriptLength: result.scriptBody.length,
+      keyPointsCount: result.keyPoints.length,
+      callPurpose: normalizedInput.callPurpose,
+    });
+
+    return result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+    console.error("[askbob-call-script-failure]", {
+      workspaceId,
+      userId,
+      jobId,
+      errorMessage: truncatedError,
+      callPurpose: normalizedInput.callPurpose,
     });
     throw error;
   }
