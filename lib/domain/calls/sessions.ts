@@ -9,6 +9,7 @@ export type CreateCallSessionForJobQuoteParams = {
   fromNumber: string;
   toNumber: string;
   quoteId?: string | null;
+  scriptBody?: string | null;
 };
 
 export type CallSessionRow = {
@@ -18,7 +19,13 @@ export type CallSessionRow = {
 export async function createCallSessionForJobQuote(
   params: CreateCallSessionForJobQuoteParams
 ): Promise<CallSessionRow> {
-  const { supabase, workspaceId, userId, jobId, customerId, fromNumber, toNumber } = params;
+  const { supabase, workspaceId, userId, jobId, customerId, fromNumber, toNumber, scriptBody } =
+    params;
+  const normalizedScriptBody = scriptBody?.trim();
+  const askBobSummary =
+    normalizedScriptBody && normalizedScriptBody.length
+      ? `AskBob call script: ${normalizedScriptBody}`
+      : null;
   const payload = {
     workspace_id: workspaceId,
     user_id: userId,
@@ -30,6 +37,7 @@ export async function createCallSessionForJobQuote(
     status: "pending",
     started_at: new Date().toISOString(),
     duration_seconds: 0,
+    summary: askBobSummary,
   };
 
   const { data, error } = await supabase

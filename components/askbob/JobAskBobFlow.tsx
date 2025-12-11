@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import AskBobSection from "@/components/askbob/AskBobSection";
 import AskBobMaterialsPanel, { type MaterialsSummaryContext } from "@/components/askbob/AskBobMaterialsPanel";
 import AskBobQuotePanel from "@/components/askbob/AskBobQuotePanel";
 import AskBobSchedulerPanel from "@/components/askbob/AskBobSchedulerPanel";
-import AskBobCallAssistPanel from "@/components/askbob/AskBobCallAssistPanel";
+import AskBobCallAssistPanel, {
+  type StartCallWithScriptPayload,
+} from "@/components/askbob/AskBobCallAssistPanel";
 import JobAskBobFollowupPanel from "@/components/askbob/JobAskBobFollowupPanel";
 import JobAskBobPanel, { type JobDiagnosisContext } from "@/components/askbob/JobAskBobPanel";
 import JobAskBobContainer from "@/components/askbob/JobAskBobContainer";
@@ -27,9 +30,36 @@ import {
   buildQuoteSummaryFromSnapshot,
 } from "@/lib/domain/askbob/summary";
 
+const MAX_SCRIPT_QUERY_LENGTH = 4000;
+
+export function buildAskBobCallAssistUrl(params: {
+  jobId: string;
+  customerId?: string | null;
+  origin: string;
+  scriptBody: string;
+  scriptSummary?: string | null;
+}) {
+  const { jobId, customerId, origin, scriptBody, scriptSummary } = params;
+  const scriptValue = scriptBody.trim().slice(0, MAX_SCRIPT_QUERY_LENGTH);
+  const query = new URLSearchParams();
+  query.set("jobId", jobId);
+  if (customerId) {
+    query.set("customerId", customerId);
+  }
+  query.set("origin", origin);
+  if (scriptValue) {
+    query.set("scriptBody", scriptValue);
+  }
+  if (scriptSummary) {
+    query.set("scriptSummary", scriptSummary);
+  }
+  return `/calls/new?${query.toString()}`;
+}
+
 type JobAskBobFlowProps = {
   workspaceId: string;
   jobId: string;
+  userId: string;
   customerId?: string | null;
   customerDisplayName?: string | null;
   customerPhoneNumber?: string | null;
@@ -58,6 +88,7 @@ type SessionQuote = {
 export default function JobAskBobFlow({
   workspaceId,
   jobId,
+  userId,
   customerId,
   customerDisplayName,
   customerPhoneNumber,
@@ -150,6 +181,35 @@ export default function JobAskBobFlow({
 
   const promptSeed = jobDescription ?? "";
   const normalizedJobTitle = jobTitle?.trim() ?? "";
+  const router = useRouter();
+  const callScriptOrigin = "askbob-call-assist";
+
+  const handleStartCallWithScript = useCallback(
+    (payload: StartCallWithScriptPayload) => {
+      const resolvedCustomerId = payload.customerId ?? customerId ?? null;
+      const scriptValue = payload.scriptBody?.trim() ?? "";
+      const url = buildAskBobCallAssistUrl({
+        jobId,
+        customerId: resolvedCustomerId,
+        origin: callScriptOrigin,
+        scriptBody: scriptValue,
+        scriptSummary: payload.scriptSummary,
+      });
+
+      console.log("[askbob-call-assist-call-route]", {
+        workspaceId,
+        userId,
+        jobId,
+        customerId: resolvedCustomerId,
+        hasScriptBody: Boolean(scriptValue),
+        scriptLength: scriptValue.length,
+        origin: callScriptOrigin,
+      });
+
+      router.push(url);
+    },
+    [callScriptOrigin, customerId, jobId, router, userId, workspaceId],
+  );
 
   const scrollToSection = (sectionId: string) => {
     if (typeof document === "undefined") {
@@ -384,11 +444,12 @@ export default function JobAskBobFlow({
             stepCollapsed={callScriptCollapsed}
             onToggleCollapse={() => setCallScriptCollapsed((value) => !value)}
             workspaceId={workspaceId}
-          jobId={jobId}
-          customerId={customerId ?? null}
-          customerDisplayName={customerDisplayName ?? null}
-          customerPhoneNumber={customerPhoneNumber ?? null}
-          jobTitle={normalizedJobTitle || null}
+            userId={userId}
+            jobId={jobId}
+            customerId={customerId ?? null}
+            customerDisplayName={customerDisplayName ?? null}
+            customerPhoneNumber={customerPhoneNumber ?? null}
+            jobTitle={normalizedJobTitle || null}
             jobDescription={jobDescription ?? null}
             diagnosisSummary={diagnosisSummary}
             materialsSummary={materialsSummary}
@@ -396,6 +457,7 @@ export default function JobAskBobFlow({
             followupSummary={followupSummary}
             callScriptSummary={callScriptSummary}
             onCallScriptSummaryChange={setCallScriptSummary}
+            onStartCallWithScript={handleStartCallWithScript}
           />
         </AskBobSection>
       </div>

@@ -21,6 +21,8 @@ import { TimelineEvent } from "@/types/ai";
  *
  * The returned object is safe to JSON.stringify and send to the OpenAI Responses API.
  */
+const ASKBOB_SCRIPT_PREFIX = "AskBob call script:";
+
 export async function buildJobTimelinePayload(jobId: string, workspaceId: string) {
   const supabase = await createServerClient();
 
@@ -110,15 +112,28 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
     })
   );
 
-  calls.forEach((call) =>
+  calls.forEach((call) => {
+    const callSummary = (call.ai_summary || call.summary || "").trim();
+    const isAskBobScript = callSummary.startsWith(ASKBOB_SCRIPT_PREFIX);
+    const detailSegments: string[] = [];
+    if (callSummary) {
+      detailSegments.push(`Summary: ${truncate(callSummary, 200)}`);
+    }
+    if (call.transcript) {
+      detailSegments.push(`Transcript: ${truncate(call.transcript, 200)}`);
+    }
+    if (isAskBobScript) {
+      detailSegments.push("AskBob script");
+    }
+    const detail = detailSegments.length ? detailSegments.join(" ") : null;
     events.push({
       type: "call",
       timestamp: call.started_at,
       title: `${call.direction === "inbound" ? "Inbound" : "Outbound"} call`,
-      detail: `Summary: ${truncate(call.ai_summary || call.summary, 200)} Transcript: ${truncate(call.transcript, 200)}`,
+      detail,
       status: call.status,
-    })
-  );
+    });
+  });
 
   appointments.forEach((appt) =>
     events.push({

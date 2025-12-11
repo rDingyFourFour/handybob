@@ -135,6 +135,19 @@ export async function createCallWorkspaceAction(formData: FormData) {
     }
   }
 
+  const rawScriptBody = formData.get("scriptBody");
+  const scriptBodyCandidate =
+    typeof rawScriptBody === "string" && rawScriptBody.trim()
+      ? rawScriptBody.trim()
+      : null;
+  const scriptBody = scriptBodyCandidate
+    ? scriptBodyCandidate.slice(0, 4000)
+    : null;
+
+  const rawCustomerId = formData.get("customerId");
+  const customerIdForCall =
+    typeof rawCustomerId === "string" ? normalizeCandidate(rawCustomerId) : null;
+
   try {
     console.log("[calls/new/action] call endpoints", {
       workspaceId: workspace.id,
@@ -148,10 +161,11 @@ export async function createCallWorkspaceAction(formData: FormData) {
       workspaceId: workspace.id,
       userId: user.id,
       jobId,
-      customerId: jobRow?.customer_id ?? null,
+      customerId: jobRow?.customer_id ?? customerIdForCall ?? null,
       fromNumber,
       toNumber,
       quoteId,
+      scriptBody,
     });
 
     console.log("[calls/new/action] Created call session", {

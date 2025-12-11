@@ -29,6 +29,13 @@ function normalizeCandidate(value?: string | null) {
   return trimmed && trimmed.length > 0 ? trimmed : null;
 }
 
+function resolveSingleParam(value?: string | string[] | undefined) {
+  if (!value) {
+    return null;
+  }
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export default async function CallsNewPage({
   searchParams: searchParamsPromise,
 }: {
@@ -37,12 +44,27 @@ export default async function CallsNewPage({
   const searchParams = await searchParamsPromise;
   const rawJobId = searchParams?.jobId;
   const rawQuoteId = searchParams?.quoteId;
+  const rawOrigin = searchParams?.origin;
+  const rawScriptBody = searchParams?.scriptBody;
+  const rawScriptSummary = searchParams?.scriptSummary;
+  const rawCustomerId = searchParams?.customerId;
   const jobIdParam = Array.isArray(rawJobId) ? rawJobId[0] : rawJobId ?? null;
   const quoteIdParam = Array.isArray(rawQuoteId) ? rawQuoteId[0] : rawQuoteId ?? null;
   const jobId = jobIdParam ? jobIdParam.trim() : null;
   const quoteId = quoteIdParam ? quoteIdParam.trim() : null;
   const hasJobId = Boolean(jobId);
   const debugJobId = jobId ?? jobIdParam ?? "none";
+  const originParam = resolveSingleParam(rawOrigin);
+  const scriptBodyQueryParam = resolveSingleParam(rawScriptBody);
+  const scriptSummaryQueryParam = resolveSingleParam(rawScriptSummary);
+  const customerIdQueryParam = resolveSingleParam(rawCustomerId);
+  const jobIdForForm = jobId;
+  let quoteIdForForm = quoteId ?? null;
+  const scriptBodyForForm = scriptBodyQueryParam?.trim() ?? null;
+  const scriptSummaryForForm = scriptSummaryQueryParam?.trim() ?? null;
+  const customerIdForForm = customerIdQueryParam?.trim() ?? null;
+  const showAskBobScriptHint =
+    originParam === "askbob-call-assist" && Boolean(scriptBodyForForm);
 
   const supabase = await createServerClient();
   const {
@@ -76,6 +98,19 @@ export default async function CallsNewPage({
     } catch (error) {
       console.error("[calls/new] Workspace phone query failed:", error);
     }
+  }
+
+  if (workspace && showAskBobScriptHint) {
+    console.log("[calls-compose-from-askbob-call-assist]", {
+      workspaceId: workspace.id,
+      userId: user.id,
+      jobId,
+      customerId: customerIdForForm,
+      scriptLength: scriptBodyForForm?.length ?? 0,
+      origin: originParam,
+      hasQuoteContext: Boolean(quoteIdForForm),
+      hasFollowupContext: false,
+    });
   }
 
   let newCallJob: CallsJobSummary | null = null;
@@ -143,8 +178,7 @@ export default async function CallsNewPage({
     ? `Quote ${quoteId.slice(0, 8)}…`
     : null;
 
-  const jobIdForForm = jobId;
-  const quoteIdForForm = quoteId ?? newCallQuote?.id ?? null;
+  quoteIdForForm = quoteId ?? newCallQuote?.id ?? null;
   const jobReferenceLabel = jobLabel ?? "this job";
   const workspaceFromNumber = normalizeCandidate(workspaceBusinessPhone);
   const displayFromNumber = workspaceFromNumber ?? "Not yet configured";
@@ -177,7 +211,18 @@ export default async function CallsNewPage({
           {jobLabel && <p>This new call will be linked to job {jobLabel}.</p>}
           {newCallJobWarning && (
             <p className="text-xs text-amber-200">{newCallJobWarning}</p>
+    )}
+      {showAskBobScriptHint && (
+        <div className="rounded-2xl border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-200">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob call script</p>
+          <p className="text-sm text-slate-400">
+            This script was drafted by AskBob for this job. Review and adjust before calling.
+          </p>
+          {scriptSummaryForForm && (
+            <p className="text-xs text-slate-400 mt-2">Summary: {scriptSummaryForForm}</p>
           )}
+        </div>
+      )}
           {quoteLabel && <p>Quote: {quoteLabel}</p>}
           {newCallQuoteWarning && (
             <p className="text-xs text-amber-200">{newCallQuoteWarning}</p>
@@ -218,6 +263,26 @@ export default async function CallsNewPage({
           <form action={createCallWorkspaceAction} className="space-y-4">
             {jobIdForForm && <input type="hidden" name="jobId" value={jobIdForForm} />}
             {quoteIdForForm && <input type="hidden" name="quoteId" value={quoteIdForForm} />}
+            {customerIdForForm && (
+              <input type="hidden" name="customerId" value={customerIdForForm} />
+            )}
+            {originParam && <input type="hidden" name="origin" value={originParam} />}
+            {showAskBobScriptHint && (
+              <label className="space-y-2 text-sm text-slate-200">
+                <span className="text-xs uppercase tracking-[0.3em] text-slate-500">Call script</span>
+                <textarea
+                  name="scriptBody"
+                  rows={6}
+                  defaultValue={scriptBodyForForm ?? ""}
+                  className="w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 focus:border-slate-600 focus:outline-none"
+                  placeholder="Paste or review your AskBob script before launching the call workspace."
+                />
+                <p className="text-[11px] text-slate-400">
+                  Review and update this script as needed, and we’ll use it as the call notes when the
+                  workspace opens.
+                </p>
+              </label>
+            )}
             <HbButton className="w-full" type="submit">
               Create call workspace
             </HbButton>

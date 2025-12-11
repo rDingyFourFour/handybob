@@ -25,6 +25,8 @@ type Props = {
   loadError: boolean;
 };
 
+const ASKBOB_SCRIPT_LABEL = "AskBob";
+
 export default function JobRecentActivityCardClient({ events, loadError }: Props) {
   const [expanded, setExpanded] = useState(false);
   const displayedEvents = expanded ? events : events.slice(0, MAX_COLLAPSED_EVENTS);
@@ -60,6 +62,8 @@ export default function JobRecentActivityCardClient({ events, loadError }: Props
           {displayedEvents.map((event, index) => {
             const label = EVENT_LABELS[event.type] ?? event.type;
             const timestampLabel = formatFriendlyDateTime(event.timestamp, "—");
+            const eventDetail = event.detail ?? "";
+            const isAskBobScript = eventDetail.includes("AskBob script");
             return (
               <div
                 key={`${event.type}-${event.timestamp ?? "none"}-${index}`}
@@ -70,6 +74,11 @@ export default function JobRecentActivityCardClient({ events, loadError }: Props
                     <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] font-semibold">
                       {label}
                     </span>
+                    {isAskBobScript && (
+                      <span className="rounded-full border border-emerald-400/60 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.35em] text-emerald-200">
+                        {ASKBOB_SCRIPT_LABEL}
+                      </span>
+                    )}
                     {event.status && <span>{event.status}</span>}
                   </div>
                   <p className="font-semibold text-slate-100">{event.title}</p>

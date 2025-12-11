@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     setupFiles: ["tests/setup/supabaseEnv.ts"],
     globals: true,
-    environment: "node",
+    environment: "happy-dom",
     alias: {
       "@": path.resolve(__dirname, "."),
     },

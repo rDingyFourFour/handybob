@@ -7,6 +7,15 @@ import HbCard from "@/components/ui/hb-card";
 import { AskBobCallPurpose } from "@/lib/domain/askbob/types";
 import { runAskBobCallScriptAction } from "@/app/(app)/askbob/call-script-actions";
 
+export type StartCallWithScriptPayload = {
+  jobId: string;
+  customerId?: string | null;
+  customerDisplayName?: string | null;
+  customerPhone: string;
+  scriptBody: string;
+  scriptSummary?: string | null;
+};
+
 type AskBobCallAssistPanelProps = {
   stepNumber: number;
   workspaceId: string;
@@ -25,6 +34,8 @@ type AskBobCallAssistPanelProps = {
   onToggleCollapse?: () => void;
   callScriptSummary?: string | null;
   onCallScriptSummaryChange?: (summary: string | null) => void;
+  userId?: string | null;
+  onStartCallWithScript?: (payload: StartCallWithScriptPayload) => void;
 };
 
 type ScriptResult = {
@@ -60,6 +71,8 @@ export default function AskBobCallAssistPanel({
   onToggleCollapse,
   callScriptSummary,
   onCallScriptSummaryChange,
+  userId,
+  onStartCallWithScript,
 }: AskBobCallAssistPanelProps) {
   const defaultCallPurpose: AskBobCallPurpose = lastQuoteSummary ? "followup" : "intake";
   const effectiveCustomerName = customerDisplayName?.trim()
@@ -216,6 +229,10 @@ export default function AskBobCallAssistPanel({
   const buildKeyPointsClipboardText = () =>
     keyPointsForCopy.map((point) => `- ${point}`).join("\n");
 
+  const fullScriptClipboardText = buildFullScriptClipboardText();
+  const canLaunchCall =
+    Boolean(fullScriptClipboardText && effectiveCustomerPhone && onStartCallWithScript);
+
   const handleCopyFullScript = async () => {
     if (!scriptResult) {
       return;
@@ -252,6 +269,29 @@ export default function AskBobCallAssistPanel({
     } catch {
       // ignore clipboard failures
     }
+  };
+
+  const handleStartCall = () => {
+    if (!canLaunchCall || !fullScriptClipboardText) {
+      return;
+    }
+    console.log("[askbob-call-assist-call-click]", {
+      workspaceId,
+      userId: userId ?? null,
+      jobId,
+      hasScript: Boolean(scriptResult),
+      hasCustomerPhone: Boolean(effectiveCustomerPhone),
+      callPurpose,
+      callTone,
+    });
+    onStartCallWithScript?.({
+      jobId,
+      customerId,
+      customerDisplayName,
+      customerPhone: effectiveCustomerPhone,
+      scriptBody: fullScriptClipboardText,
+      scriptSummary: callScriptSummary ?? null,
+    });
   };
 
   return (
@@ -381,6 +421,17 @@ export default function AskBobCallAssistPanel({
                     onClick={handleCopyKeyPoints}
                   >
                     Copy key points
+                  </HbButton>
+                )}
+                {canLaunchCall && (
+                  <HbButton
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={handleStartCall}
+                    disabled={isGenerating}
+                  >
+                    Start call with this script
                   </HbButton>
                 )}
               </div>
