@@ -375,6 +375,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
 
   const customerName = customer?.name ?? null;
   const customerId = customer?.id ?? job.customer_id ?? null;
+  const customerPhoneNumber = customer?.phone ?? null;
 
   const displayJobTitle = job.title ?? "Untitled job";
   const askBobJobTitle = job.title?.trim() ?? "";
@@ -469,6 +470,8 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           workspaceId={workspace.id}
           jobId={job.id}
           customerId={customerId ?? null}
+          customerDisplayName={customerName ?? null}
+          customerPhoneNumber={customerPhoneNumber ?? null}
           jobDescription={job.description_raw ?? null}
           jobTitle={askBobJobTitle}
           askBobLastTaskLabel={askBobLastTaskLabel}

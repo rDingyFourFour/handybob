@@ -31,6 +31,8 @@ type JobAskBobFlowProps = {
   workspaceId: string;
   jobId: string;
   customerId?: string | null;
+  customerDisplayName?: string | null;
+  customerPhoneNumber?: string | null;
   jobDescription?: string | null;
   jobTitle?: string | null;
   askBobLastTaskLabel?: string | null;
@@ -57,6 +59,8 @@ export default function JobAskBobFlow({
   workspaceId,
   jobId,
   customerId,
+  customerDisplayName,
+  customerPhoneNumber,
   jobDescription,
   jobTitle,
   askBobLastTaskLabel,
@@ -380,9 +384,11 @@ export default function JobAskBobFlow({
             stepCollapsed={callScriptCollapsed}
             onToggleCollapse={() => setCallScriptCollapsed((value) => !value)}
             workspaceId={workspaceId}
-            jobId={jobId}
-            customerId={customerId ?? null}
-            jobTitle={normalizedJobTitle || null}
+          jobId={jobId}
+          customerId={customerId ?? null}
+          customerDisplayName={customerDisplayName ?? null}
+          customerPhoneNumber={customerPhoneNumber ?? null}
+          jobTitle={normalizedJobTitle || null}
             jobDescription={jobDescription ?? null}
             diagnosisSummary={diagnosisSummary}
             materialsSummary={materialsSummary}

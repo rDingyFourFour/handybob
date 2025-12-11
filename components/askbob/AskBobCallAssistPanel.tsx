@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
@@ -12,6 +12,8 @@ type AskBobCallAssistPanelProps = {
   workspaceId: string;
   jobId: string;
   customerId?: string | null;
+  customerDisplayName?: string | null;
+  customerPhoneNumber?: string | null;
   jobTitle?: string | null;
   jobDescription?: string | null;
   diagnosisSummary?: string | null;
@@ -45,6 +47,8 @@ export default function AskBobCallAssistPanel({
   workspaceId,
   jobId,
   customerId,
+  customerDisplayName,
+  customerPhoneNumber,
   jobTitle,
   jobDescription,
   diagnosisSummary,
@@ -58,24 +62,70 @@ export default function AskBobCallAssistPanel({
   onCallScriptSummaryChange,
 }: AskBobCallAssistPanelProps) {
   const defaultCallPurpose: AskBobCallPurpose = lastQuoteSummary ? "followup" : "intake";
+  const effectiveCustomerName = customerDisplayName?.trim()
+    ? customerDisplayName.trim()
+    : null;
+  const effectiveCustomerPhone = customerPhoneNumber?.trim()
+    ? customerPhoneNumber.trim()
+    : null;
+  const readyToCallLabel =
+    effectiveCustomerName && effectiveCustomerPhone
+      ? `Ready to call: ${effectiveCustomerName} at ${effectiveCustomerPhone}`
+      : effectiveCustomerName
+      ? `Ready to call: ${effectiveCustomerName}`
+      : effectiveCustomerPhone
+      ? `Ready to call: ${effectiveCustomerPhone}`
+      : null;
+  const hasReadyCallInfo = Boolean(readyToCallLabel);
   const [callPurpose, setCallPurpose] = useState<AskBobCallPurpose>(defaultCallPurpose);
   const [callTone, setCallTone] = useState(CALL_TONE_DEFAULT);
   const [scriptResult, setScriptResult] = useState<ScriptResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [copyFeedbackMessage, setCopyFeedbackMessage] = useState<string | null>(null);
+  const resetCopyFeedback = useCallback(() => {
+    if (copyFeedbackTimeoutRef.current) {
+      clearTimeout(copyFeedbackTimeoutRef.current);
+      copyFeedbackTimeoutRef.current = null;
+    }
+    setCopyFeedbackMessage(null);
+  }, []);
+  const triggerCopyFeedback = useCallback((message: string) => {
+    if (copyFeedbackTimeoutRef.current) {
+      clearTimeout(copyFeedbackTimeoutRef.current);
+      copyFeedbackTimeoutRef.current = null;
+    }
+    setCopyFeedbackMessage(message);
+    if (typeof window === "undefined") {
+      return;
+    }
+    copyFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setCopyFeedbackMessage(null);
+      copyFeedbackTimeoutRef.current = null;
+    }, 2000);
+  }, []);
 
   useEffect(() => {
     if (!callScriptSummary) {
       setScriptResult(null);
       setErrorMessage(null);
+      resetCopyFeedback();
     }
-  }, [callScriptSummary]);
+  }, [callScriptSummary, resetCopyFeedback]);
+
+  useEffect(() => {
+    return () => {
+      resetCopyFeedback();
+    };
+  }, [resetCopyFeedback]);
 
   const resetLocalState = () => {
     setScriptResult(null);
     setErrorMessage(null);
     setCallPurpose(defaultCallPurpose);
     setCallTone(CALL_TONE_DEFAULT);
+    resetCopyFeedback();
   };
 
   const handleReset = () => {
@@ -87,6 +137,7 @@ export default function AskBobCallAssistPanel({
     if (isGenerating) {
       return;
     }
+    resetCopyFeedback();
     setIsGenerating(true);
     setErrorMessage(null);
     try {
@@ -138,7 +189,70 @@ export default function AskBobCallAssistPanel({
   };
 
   const hasScript = Boolean(scriptResult);
+  const rawKeyPoints = scriptResult?.keyPoints ?? [];
+  const keyPointsForCopy = rawKeyPoints
+    .map((point) => point?.trim() ?? "")
+    .filter(Boolean);
+  const hasKeyPoints = keyPointsForCopy.length > 0;
   const toggleLabel = stepCollapsed ? "Show step" : "Hide step";
+
+  const buildFullScriptClipboardText = (): string => {
+    if (!scriptResult) {
+      return "";
+    }
+    const parts: string[] = [];
+    if (scriptResult.openingLine) {
+      parts.push(scriptResult.openingLine);
+    }
+    if (scriptResult.scriptBody) {
+      parts.push(scriptResult.scriptBody);
+    }
+    if (scriptResult.closingLine) {
+      parts.push(scriptResult.closingLine);
+    }
+    return parts.join("\n\n").trim();
+  };
+
+  const buildKeyPointsClipboardText = () =>
+    keyPointsForCopy.map((point) => `- ${point}`).join("\n");
+
+  const handleCopyFullScript = async () => {
+    if (!scriptResult) {
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      return;
+    }
+    const text = buildFullScriptClipboardText();
+    if (!text) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      triggerCopyFeedback("Copied full script");
+    } catch {
+      // ignore clipboard failures
+    }
+  };
+
+  const handleCopyKeyPoints = async () => {
+    if (!hasKeyPoints) {
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      return;
+    }
+    const text = buildKeyPointsClipboardText();
+    if (!text) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      triggerCopyFeedback("Copied key points");
+    } catch {
+      // ignore clipboard failures
+    }
+  };
 
   return (
     <HbCard className="space-y-4">
@@ -156,6 +270,9 @@ export default function AskBobCallAssistPanel({
                 </span>
               )}
             </div>
+            {readyToCallLabel && (
+              <p className="text-xs text-slate-400">{readyToCallLabel}</p>
+            )}
             {callScriptSummary && (
               <p className="text-sm text-slate-300">{callScriptSummary}</p>
             )}
@@ -186,6 +303,22 @@ export default function AskBobCallAssistPanel({
       </div>
       {!stepCollapsed && (
         <div className="space-y-4">
+          {hasReadyCallInfo && (
+            <div className="space-y-1 rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-sm text-slate-200">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Call info</p>
+              <div className="space-y-0.5">
+                {effectiveCustomerName && (
+                  <p className="text-sm text-slate-100">{effectiveCustomerName}</p>
+                )}
+                {effectiveCustomerPhone && (
+                  <p className="text-sm text-slate-100">{effectiveCustomerPhone}</p>
+                )}
+              </div>
+              <p className="text-xs text-slate-400">
+                Use this info with the script below when you place the call.
+              </p>
+            </div>
+          )}
           <div className="grid gap-3 md:grid-cols-2">
             <label className="space-y-1 text-xs uppercase tracking-[0.3em] text-slate-500">
               Call purpose
@@ -231,6 +364,29 @@ export default function AskBobCallAssistPanel({
           {hasScript ? (
             <div className="space-y-3 border-t border-slate-800 pt-3 text-sm text-slate-300">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Suggested call script</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <HbButton
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleCopyFullScript}
+                >
+                  Copy full script
+                </HbButton>
+                {hasKeyPoints && (
+                  <HbButton
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleCopyKeyPoints}
+                  >
+                    Copy key points
+                  </HbButton>
+                )}
+              </div>
+              {copyFeedbackMessage && (
+                <p className="text-xs text-emerald-400">{copyFeedbackMessage}</p>
+              )}
               <div className="space-y-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Opening line</p>
