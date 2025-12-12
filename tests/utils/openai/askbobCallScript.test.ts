@@ -71,7 +71,12 @@ describe("callAskBobJobCallScript", () => {
     );
     expect(logSpy).toHaveBeenCalledTimes(1);
     expect(logSpy.mock.calls[0][1]).toEqual(
-      expect.objectContaining({ hasPersonaStyle: false, personaStyle: null }),
+      expect.objectContaining({
+        hasPersonaStyle: false,
+        personaStyle: null,
+        hasCallIntents: false,
+        callIntentsCount: 0,
+      }),
     );
 
     logSpy.mockRestore();
@@ -97,7 +102,42 @@ describe("callAskBobJobCallScript", () => {
     );
     expect(logSpy).toHaveBeenCalledTimes(1);
     expect(logSpy.mock.calls[0][1]).toEqual(
-      expect.objectContaining({ hasPersonaStyle: true, personaStyle: "direct_concise" }),
+      expect.objectContaining({
+        hasPersonaStyle: true,
+        personaStyle: "direct_concise",
+        hasCallIntents: false,
+        callIntentsCount: 0,
+      }),
+    );
+
+    logSpy.mockRestore();
+  });
+
+  it("includes primary call goals when intents are provided", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    __mockCreate.mockResolvedValueOnce({
+      model: "gpt-4.1",
+      choices: [{ message: { content: "```json\n" + JSON.stringify(scriptPayload) + "\n```" } }],
+    });
+
+    await callAskBobJobCallScript(
+      buildInput({
+        callIntents: ["quote_followup", "schedule_visit"],
+      }),
+    );
+
+    const completionCall = __mockCreate.mock.calls[0][0];
+    const userMessage = completionCall.messages[1].content;
+    expect(userMessage).toContain("Primary call goals:");
+    expect(userMessage).toContain("Follow up on a quote, review status, and guide the customer toward a decision.");
+    expect(userMessage).toContain("Book or adjust an in-person visit, confirm timing, and clarify logistics.");
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(logSpy.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        hasCallIntents: true,
+        callIntentsCount: 2,
+      }),
     );
 
     logSpy.mockRestore();

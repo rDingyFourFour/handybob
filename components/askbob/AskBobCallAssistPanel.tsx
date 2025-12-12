@@ -6,9 +6,12 @@ import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import {
   AskBobCallPurpose,
+  ASKBOB_CALL_INTENT_LABELS,
+  ASKBOB_CALL_INTENTS,
   ASKBOB_CALL_PERSONA_DEFAULT,
   ASKBOB_CALL_PERSONA_LABELS,
   ASKBOB_CALL_PERSONA_STYLES,
+  type AskBobCallIntent,
   type AskBobCallPersonaStyle,
 } from "@/lib/domain/askbob/types";
 import { runAskBobCallScriptAction } from "@/app/(app)/askbob/call-script-actions";
@@ -38,6 +41,8 @@ type AskBobCallAssistPanelProps = {
   followupCallRecommended?: boolean;
   followupCallPurpose?: string | null;
   followupCallTone?: string | null;
+  followupCallIntents?: AskBobCallIntent[] | null;
+  followupCallIntentsToken?: number;
   stepCompleted?: boolean;
   stepCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -76,6 +81,25 @@ const CALL_PURPOSE_KEYWORDS: [RegExp, AskBobCallPurpose][] = [
   [/follow(?:-| )?up|quote|decision|approval|check[- ]?in/i, "followup"],
   [/intake|intro|initial|new customer/i, "intake"],
 ];
+
+const CALL_INTENT_OPTIONS: { value: AskBobCallIntent; label: string }[] =
+  ASKBOB_CALL_INTENTS.map((value) => ({
+    value,
+    label: ASKBOB_CALL_INTENT_LABELS[value],
+  }));
+
+function getCallIntentsForPurpose(purpose: AskBobCallPurpose): AskBobCallIntent[] {
+  switch (purpose) {
+    case "intake":
+      return ["intake_information"];
+    case "scheduling":
+      return ["schedule_visit"];
+    case "followup":
+      return ["quote_followup"];
+    default:
+      return ["general_checkin"];
+  }
+}
 
 function guessCallPurposeCategory(
   followupPurpose: string | null,
@@ -120,6 +144,8 @@ export default function AskBobCallAssistPanel({
   followupCallRecommended,
   followupCallPurpose,
   followupCallTone,
+  followupCallIntents,
+  followupCallIntentsToken,
   stepCompleted = false,
   stepCollapsed = false,
   onToggleCollapse,
@@ -154,8 +180,12 @@ export default function AskBobCallAssistPanel({
           : null;
   const hasReadyCallInfo = Boolean(readyToCallLabel);
   const [callPurpose, setCallPurpose] = useState<AskBobCallPurpose>(initialCallPurpose);
+  const [callIntents, setCallIntents] = useState<AskBobCallIntent[]>(() =>
+    getCallIntentsForPurpose(initialCallPurpose),
+  );
   const [callTone, setCallTone] = useState<string>(normalizedFollowupCallTone ?? CALL_TONE_DEFAULT);
   const [hasManuallySetPurpose, setHasManuallySetPurpose] = useState(false);
+  const [hasManuallySetCallIntents, setHasManuallySetCallIntents] = useState(false);
   const [hasManuallySetTone, setHasManuallySetTone] = useState(false);
   const [callPersonaStyle, setCallPersonaStyle] = useState<AskBobCallPersonaStyle>(
     ASKBOB_CALL_PERSONA_DEFAULT,
@@ -166,6 +196,7 @@ export default function AskBobCallAssistPanel({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastHandledResetTokenRef = useRef<number | null>(null);
+  const lastFollowupCallIntentsTokenRef = useRef<number | null>(null);
   const [copyFeedbackMessage, setCopyFeedbackMessage] = useState<string | null>(null);
   const resetCopyFeedback = useCallback(() => {
     if (copyFeedbackTimeoutRef.current) {
@@ -209,7 +240,33 @@ export default function AskBobCallAssistPanel({
     lastHandledResetTokenRef.current = resetToken;
     setCallPersonaStyle(ASKBOB_CALL_PERSONA_DEFAULT);
     setHasPersonaSelection(false);
+    const resetPurpose = deriveCallPurpose({
+      followupCallRecommended,
+      followupCallPurpose: normalizedFollowupCallPurpose,
+      lastQuoteSummary: trimmedLastQuoteSummary,
+    });
+    setCallIntents(getCallIntentsForPurpose(resetPurpose));
+    setHasManuallySetCallIntents(false);
   }, [resetToken]);
+
+  useEffect(() => {
+    if (
+      followupCallIntentsToken === undefined ||
+      !followupCallIntents ||
+      !followupCallIntents.length
+    ) {
+      return;
+    }
+    if (lastFollowupCallIntentsTokenRef.current === followupCallIntentsToken) {
+      return;
+    }
+    lastFollowupCallIntentsTokenRef.current = followupCallIntentsToken;
+    if (hasManuallySetCallIntents) {
+      return;
+    }
+    setCallIntents(followupCallIntents);
+    setHasManuallySetCallIntents(false);
+  }, [followupCallIntents, followupCallIntentsToken, hasManuallySetCallIntents]);
 
   useEffect(() => {
     return () => {
@@ -245,28 +302,47 @@ export default function AskBobCallAssistPanel({
     setCallTone(CALL_TONE_DEFAULT);
   }, [normalizedFollowupCallTone, hasManuallySetTone]);
 
+  useEffect(() => {
+    if (hasManuallySetCallIntents) {
+      return;
+    }
+    setCallIntents(getCallIntentsForPurpose(callPurpose));
+  }, [callPurpose, hasManuallySetCallIntents]);
+
   const resetLocalState = () => {
     setScriptResult(null);
     setErrorMessage(null);
-    setCallPurpose(
-      deriveCallPurpose({
-        followupCallRecommended,
-        followupCallPurpose: normalizedFollowupCallPurpose,
-        lastQuoteSummary: trimmedLastQuoteSummary,
-      }),
-    );
+    const resetPurpose = deriveCallPurpose({
+      followupCallRecommended,
+      followupCallPurpose: normalizedFollowupCallPurpose,
+      lastQuoteSummary: trimmedLastQuoteSummary,
+    });
+    setCallPurpose(resetPurpose);
+    setCallIntents(getCallIntentsForPurpose(resetPurpose));
     setCallTone(normalizedFollowupCallTone ?? CALL_TONE_DEFAULT);
     setHasManuallySetPurpose(false);
     setHasManuallySetTone(false);
     resetCopyFeedback();
     setCallPersonaStyle(ASKBOB_CALL_PERSONA_DEFAULT);
     setHasPersonaSelection(false);
+    setHasManuallySetCallIntents(false);
     onCallScriptPersonaChange?.(null);
   };
 
   const handleReset = () => {
     resetLocalState();
     onCallScriptSummaryChange?.(null);
+  };
+
+  const handleToggleCallIntent = (intent: AskBobCallIntent) => {
+    setCallIntents((previous) => {
+      const alreadySelected = previous.includes(intent);
+      const nextIntents = alreadySelected
+        ? previous.filter((value) => value !== intent)
+        : [...previous, intent];
+      return nextIntents;
+    });
+    setHasManuallySetCallIntents(true);
   };
 
   const handleGenerate = async () => {
@@ -276,6 +352,11 @@ export default function AskBobCallAssistPanel({
     resetCopyFeedback();
     setIsGenerating(true);
     setErrorMessage(null);
+    if (!callIntents.length) {
+      setErrorMessage("Choose at least one call goal before generating a script.");
+      setIsGenerating(false);
+      return;
+    }
     const personaStyleForPayload = hasPersonaSelection ? callPersonaStyle : undefined;
     try {
       const result = await runAskBobCallScriptAction({
@@ -291,6 +372,7 @@ export default function AskBobCallAssistPanel({
         callPurpose,
         callTone,
         callPersonaStyle: personaStyleForPayload,
+        callIntents,
         extraDetails: null,
       });
 
@@ -543,6 +625,32 @@ export default function AskBobCallAssistPanel({
               ))}
             </select>
           </label>
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call goals</p>
+            <div className="flex flex-wrap gap-2">
+              {CALL_INTENT_OPTIONS.map((option) => {
+                const selected = callIntents.includes(option.value);
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.3em] transition ${
+                      selected
+                        ? "border-emerald-500 bg-emerald-500/20 text-emerald-200"
+                        : "border-slate-800 bg-slate-950 text-slate-200"
+                    }`}
+                    aria-pressed={selected}
+                    onClick={() => handleToggleCallIntent(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-slate-400">
+              Pick one or more call goals so AskBob can structure the script around them.
+            </p>
+          </div>
           {lastQuoteSummary && (
             <p className="text-xs text-slate-500">
               Quote context: {lastQuoteSummary}
@@ -565,6 +673,11 @@ export default function AskBobCallAssistPanel({
               <p className="text-xs text-slate-400">
                 Tone: {ASKBOB_CALL_PERSONA_LABELS[callPersonaStyle]}
               </p>
+              {callIntents.length ? (
+                <p className="text-xs text-slate-400">
+                  Call goals: {callIntents.map((intent) => ASKBOB_CALL_INTENT_LABELS[intent]).join("; ")}
+                </p>
+              ) : null}
               <div className="flex flex-wrap items-center gap-2">
                 <HbButton
                   type="button"

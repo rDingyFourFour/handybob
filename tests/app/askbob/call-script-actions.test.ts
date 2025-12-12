@@ -89,4 +89,39 @@ describe("runAskBobCallScriptAction", () => {
 
     logSpy.mockRestore();
   });
+
+  it("sanitizes call intents, logs counts, and forwards them to AskBob", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const response = await runAskBobCallScriptAction({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      customerId: "customer-1",
+      callPurpose: "followup",
+      callTone: "friendly and clear",
+      callIntents: ["quote_followup", "quote_followup", "schedule_visit"],
+    });
+
+    expect(response.ok).toBe(true);
+    expect(mockRunAskBobTask).toHaveBeenCalledTimes(1);
+    const taskInput = mockRunAskBobTask.mock.calls[0][1];
+    expect(taskInput.callIntents).toEqual(["quote_followup", "schedule_visit"]);
+
+    expect(logSpy.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        hasCallIntents: true,
+        callIntentsCount: 2,
+        callIntents: ["quote_followup", "schedule_visit"],
+      }),
+    );
+    expect(logSpy.mock.calls[1][1]).toEqual(
+      expect.objectContaining({
+        hasCallIntents: true,
+        callIntentsCount: 2,
+        callIntents: ["quote_followup", "schedule_visit"],
+      }),
+    );
+
+    logSpy.mockRestore();
+  });
 });

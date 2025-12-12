@@ -91,6 +91,8 @@ describe("JobAskBobFlow wiring", () => {
       followupCallRecommended: true,
       followupCallPurpose: "Explain quote",
       followupCallTone: "friendly and confident",
+      followupCallIntents: null,
+      followupCallIntentsToken: 0,
     });
     expect(typeof capturedPanelProps?.onStartCallWithScript).toBe("function");
   });

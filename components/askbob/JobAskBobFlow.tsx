@@ -21,6 +21,7 @@ import {
 } from "@/lib/domain/quotes/materials-askbob-adapter";
 import type {
   AskBobAfterCallSnapshotPayload,
+  AskBobCallIntent,
   AskBobCallPersonaStyle,
   AskBobDiagnoseSnapshotPayload,
   AskBobFollowupSnapshotPayload,
@@ -36,6 +37,46 @@ import {
 } from "@/lib/domain/askbob/summary";
 
 const MAX_SCRIPT_QUERY_LENGTH = 4000;
+
+const FOLLOWUP_CALL_INTENT_HINTS: { pattern: RegExp; intents: AskBobCallIntent[] }[] = [
+  {
+    pattern: /quote|decision|approval|proposal|estimate|scope/i,
+    intents: ["quote_followup"],
+  },
+  {
+    pattern: /invoice|payment|bill|balance|recover/i,
+    intents: ["invoice_followup"],
+  },
+  {
+    pattern: /schedule|visit|appointment|book|resched|confirm/i,
+    intents: ["schedule_visit"],
+  },
+  {
+    pattern: /intake|details|intro|new customer|diagnos/i,
+    intents: ["intake_information"],
+  },
+  {
+    pattern: /check[- ]?in|update|touch[- ]?base|relationship|follow[- ]?up/i,
+    intents: ["general_checkin"],
+  },
+];
+
+function mapFollowupCallPurposeToCallIntents(callPurpose?: string | null): AskBobCallIntent[] {
+  if (!callPurpose?.trim()) {
+    return ["general_checkin"];
+  }
+  const normalized = callPurpose.trim();
+  const matchedIntents = new Set<AskBobCallIntent>();
+  for (const hint of FOLLOWUP_CALL_INTENT_HINTS) {
+    if (hint.pattern.test(normalized)) {
+      hint.intents.forEach((intent) => matchedIntents.add(intent));
+    }
+  }
+  if (!matchedIntents.size) {
+    return ["general_checkin"];
+  }
+  return Array.from(matchedIntents);
+}
 
 export function buildAskBobCallAssistUrl(params: {
   jobId: string;
@@ -160,6 +201,14 @@ export default function JobAskBobFlow({
   );
   const [callScriptSummary, setCallScriptSummary] = useState<string | null>(null);
   const [callScriptPersona, setCallScriptPersona] = useState<AskBobCallPersonaStyle | null>(null);
+  const [
+    callScriptFollowupCallIntents,
+    setCallScriptFollowupCallIntents,
+  ] = useState<AskBobCallIntent[] | null>(null);
+  const [
+    callScriptFollowupCallIntentsToken,
+    setCallScriptFollowupCallIntentsToken,
+  ] = useState(0);
   const [diagnoseCollapsed, setDiagnoseCollapsed] = useState(false);
   const [materialsCollapsed, setMaterialsCollapsed] = useState(false);
   const [quoteCollapsed, setQuoteCollapsed] = useState(false);
@@ -401,6 +450,14 @@ export default function JobAskBobFlow({
       jobId,
       hasCallRecommendation: followupCallRecommended,
     });
+    const trimmedFollowupCallPurpose = followupCallPurpose?.trim() ?? null;
+    if (trimmedFollowupCallPurpose) {
+      const mappedIntents = mapFollowupCallPurposeToCallIntents(trimmedFollowupCallPurpose);
+      if (mappedIntents.length) {
+        setCallScriptFollowupCallIntents(mappedIntents);
+        setCallScriptFollowupCallIntentsToken((value) => value + 1);
+      }
+    }
     setCallScriptCollapsed(false);
     scrollToSection("askbob-call-script");
   };
@@ -438,24 +495,6 @@ export default function JobAskBobFlow({
             stepCompleted={diagnosisDone}
             stepCollapsed={diagnoseCollapsed}
             onToggleStepCollapsed={() => setDiagnoseCollapsed((value) => !value)}
-          />
-        </AskBobSection>
-        <AskBobSection id="askbob-after-call">
-          <JobAskBobAfterCallPanel
-            workspaceId={workspaceId}
-            jobId={jobId}
-            jobTitle={normalizedJobTitle}
-            jobDescription={jobDescription ?? null}
-            latestCallLabel={latestCallLabel ?? null}
-            hasCall={Boolean(hasLatestCall ?? latestCallLabel)}
-            stepCompleted={afterCallDone}
-            resetToken={afterCallResetToken}
-            onReset={handleAfterCallReset}
-            stepCollapsed={afterCallCollapsed}
-            onToggleStepCollapsed={() => setAfterCallCollapsed((value) => !value)}
-            initialAfterCallSnapshot={initialAfterCallSnapshot ?? undefined}
-            onAfterCallSummaryChange={handleAfterCallSummaryChange}
-            callHistoryHint={callHistoryHint ?? null}
           />
         </AskBobSection>
         <AskBobSection id="askbob-materials">
@@ -565,11 +604,31 @@ export default function JobAskBobFlow({
             followupCallRecommended={followupCallRecommended}
             followupCallPurpose={followupCallPurpose}
             followupCallTone={followupCallTone}
+            followupCallIntents={callScriptFollowupCallIntents}
+            followupCallIntentsToken={callScriptFollowupCallIntentsToken}
             resetToken={callScriptResetToken}
             onCallScriptPersonaChange={setCallScriptPersona}
             callScriptSummary={callScriptSummary}
             onCallScriptSummaryChange={setCallScriptSummary}
             onStartCallWithScript={handleStartCallWithScript}
+          />
+        </AskBobSection>
+        <AskBobSection id="askbob-after-call">
+          <JobAskBobAfterCallPanel
+            workspaceId={workspaceId}
+            jobId={jobId}
+            jobTitle={normalizedJobTitle}
+            jobDescription={jobDescription ?? null}
+            latestCallLabel={latestCallLabel ?? null}
+            hasCall={Boolean(hasLatestCall ?? latestCallLabel)}
+            stepCompleted={afterCallDone}
+            resetToken={afterCallResetToken}
+            onReset={handleAfterCallReset}
+            stepCollapsed={afterCallCollapsed}
+            onToggleStepCollapsed={() => setAfterCallCollapsed((value) => !value)}
+            initialAfterCallSnapshot={initialAfterCallSnapshot ?? undefined}
+            onAfterCallSummaryChange={handleAfterCallSummaryChange}
+            callHistoryHint={callHistoryHint ?? null}
           />
         </AskBobSection>
       </div>

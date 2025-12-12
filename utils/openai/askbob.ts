@@ -2,6 +2,7 @@
 
 import OpenAI from "openai";
 import { buildCallHistoryPromptSections } from "@/lib/domain/askbob/callHistory";
+import { ASKBOB_CALL_INTENT_DESCRIPTIONS } from "@/lib/domain/askbob/types";
 import type {
   AskBobContext,
   AskBobJobFollowupInput,
@@ -30,6 +31,7 @@ import type {
   AskBobQuoteMaterialLineResult,
   AskBobResponseData,
   SuggestedMessageChannel,
+  AskBobCallIntent,
   AskBobCallPersonaStyle,
 } from "@/lib/domain/askbob/types";
 
@@ -149,6 +151,7 @@ const SCHEDULE_INSTRUCTIONS = [
 const CALL_SCRIPT_INSTRUCTIONS = [
   ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
   "You are AskBob, the expert service technician call assistant for HandyBob. Draft a concise, customer-friendly phone script tailored to the requested purpose (intake, scheduling, or follow-up).",
+  "Structure the script around the provided call goals. When more than one goal is listed, organize the dialogue into distinct phases, using headings or explicit transitions to guide the technician through each intent in order.",
   "Avoid promising exact pricing or guaranteed availability, remind the caller to confirm contact information and their preferred follow-up method, and frame every sentence as a helpful guideline rather than a contract.",
   "Respond with JSON only (no surrounding prose) containing: scriptBody (the full script the technician can read, with paragraphs or line breaks), openingLine (a short intro that sets the tone), closingLine (a wrap-up that restates next steps), keyPoints (array of short checklist items describing the most critical talking points), and suggestedDurationMinutes (optional number of minutes).",
   "Use the provided job context, diagnosis, materials, quote, and follow-up summaries, and adopt the requested call tone.",
@@ -173,6 +176,16 @@ function getCallPersonaDescription(persona?: AskBobCallPersonaStyle | null) {
     return CALL_PERSONA_DESCRIPTIONS[persona];
   }
   return DEFAULT_CALL_PERSONA_DESCRIPTION;
+}
+
+function buildCallIntentsSection(callIntents?: AskBobCallIntent[] | null) {
+  if (!callIntents || !callIntents.length) {
+    return null;
+  }
+  const lines = callIntents
+    .map((intent) => ASKBOB_CALL_INTENT_DESCRIPTIONS[intent] ?? intent)
+    .map((description) => `- ${description}`);
+  return `Primary call goals:\n${lines.join("\n")}`;
 }
 
 const AFTER_CALL_INSTRUCTIONS = [
@@ -1287,6 +1300,8 @@ export async function callAskBobJobCallScript(
   }
 
   const { context } = input;
+  const callIntentsCount = input.callIntents?.length ?? 0;
+  const hasCallIntents = callIntentsCount > 0;
   const contextParts = [
     `workspaceId=${context.workspaceId}`,
     `userId=${context.userId}`,
@@ -1320,9 +1335,11 @@ export async function callAskBobJobCallScript(
     input.extraDetails && input.extraDetails.trim().length
       ? `Additional context:\n${input.extraDetails.trim()}`
       : null;
+  const callIntentsSection = buildCallIntentsSection(input.callIntents ?? null);
   const messageParts = [
     `Context: ${contextParts}`,
     contextBlock,
+    callIntentsSection,
     `Call purpose: ${input.callPurpose}`,
     input.callTone ? `Tone: ${input.callTone}` : null,
     extraDetailsBlock,
@@ -1373,6 +1390,8 @@ export async function callAskBobJobCallScript(
       task: "job.call_script",
       hasPersonaStyle,
       personaStyle,
+      hasCallIntents,
+      callIntentsCount,
     });
 
     const result: AskBobJobCallScriptResult = {
@@ -1403,6 +1422,8 @@ export async function callAskBobJobCallScript(
       errorMessage: truncatedError,
       hasPersonaStyle,
       personaStyle,
+      hasCallIntents,
+      callIntentsCount,
     });
 
     throw error;

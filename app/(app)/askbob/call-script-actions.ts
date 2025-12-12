@@ -4,6 +4,7 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { runAskBobTask } from "@/lib/domain/askbob/service";
 import {
+  ASKBOB_CALL_INTENTS,
   ASKBOB_CALL_PERSONA_STYLES,
   AskBobJobCallScriptInput,
   AskBobJobCallScriptResult,
@@ -31,6 +32,15 @@ const callScriptPayloadSchema = z.object({
   callPurpose: z.enum(["intake", "scheduling", "followup"]),
   callTone: z.string().optional().nullable().transform(normalizeOptionalString),
   extraDetails: z.string().optional().nullable().transform(normalizeOptionalString),
+  callIntents: z
+    .array(z.enum(ASKBOB_CALL_INTENTS))
+    .optional()
+    .transform((value) => {
+      if (!value || !value.length) {
+        return undefined;
+      }
+      return Array.from(new Set(value));
+    }),
   callPersonaStyle: z.enum(ASKBOB_CALL_PERSONA_STYLES).optional().nullable(),
 });
 
@@ -114,6 +124,9 @@ export async function runAskBobCallScriptAction(
     callTone: parsed.callTone ?? null,
     hasPersonaStyle,
     personaStyle,
+    hasCallIntents: Boolean(parsed.callIntents?.length),
+    callIntentsCount: parsed.callIntents?.length ?? 0,
+    callIntents: parsed.callIntents ?? [],
   });
 
   const taskInput: AskBobJobCallScriptInput = {
@@ -135,6 +148,7 @@ export async function runAskBobCallScriptAction(
     callTone: parsed.callTone,
     callPersonaStyle: parsed.callPersonaStyle ?? null,
     extraDetails: parsed.extraDetails,
+    callIntents: parsed.callIntents ?? null,
   };
 
   try {
@@ -149,6 +163,9 @@ export async function runAskBobCallScriptAction(
       callPurpose: parsed.callPurpose,
       hasPersonaStyle,
       personaStyle,
+      hasCallIntents: Boolean(parsed.callIntents?.length),
+      callIntentsCount: parsed.callIntents?.length ?? 0,
+      callIntents: parsed.callIntents ?? [],
     });
 
     return {
@@ -172,6 +189,9 @@ export async function runAskBobCallScriptAction(
       callPurpose: parsed.callPurpose,
       hasPersonaStyle,
       personaStyle,
+      hasCallIntents: Boolean(parsed.callIntents?.length),
+      callIntentsCount: parsed.callIntents?.length ?? 0,
+      callIntents: parsed.callIntents ?? [],
     });
     return {
       ok: false,

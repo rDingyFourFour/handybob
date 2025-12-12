@@ -571,6 +571,10 @@ async function runAskBobJobCallScriptTask(
   const workspaceId = context.workspaceId;
   const userId = context.userId;
   const jobId = context.jobId ?? null;
+  const normalizedCallIntents = Array.isArray(input.callIntents) && input.callIntents.length
+    ? Array.from(new Set(input.callIntents))
+    : undefined;
+
   const normalizedInput: AskBobJobCallScriptInput = {
     ...input,
     jobTitle: input.jobTitle?.trim() ?? null,
@@ -582,9 +586,12 @@ async function runAskBobJobCallScriptTask(
     callTone: input.callTone?.trim() ?? null,
     callPersonaStyle: input.callPersonaStyle ?? null,
     extraDetails: input.extraDetails?.trim() ?? null,
+    callIntents: normalizedCallIntents ?? null,
   };
   const hasPersonaStyle = Boolean(normalizedInput.callPersonaStyle);
   const personaStyle = normalizedInput.callPersonaStyle ?? null;
+  const hasCallIntents = Boolean(normalizedInput.callIntents?.length);
+  const callIntentsCount = normalizedInput.callIntents?.length ?? 0;
 
   console.log("[askbob-call-script-request]", {
     workspaceId,
@@ -600,6 +607,8 @@ async function runAskBobJobCallScriptTask(
     callTone: normalizedInput.callTone ?? null,
     hasPersonaStyle,
     personaStyle,
+    hasCallIntents,
+    callIntentsCount,
   });
 
   try {
@@ -615,9 +624,14 @@ async function runAskBobJobCallScriptTask(
       callPurpose: normalizedInput.callPurpose,
       hasPersonaStyle,
       personaStyle,
+      hasCallIntents,
+      callIntentsCount,
     });
 
-    return result;
+    return {
+      ...result,
+      callIntents: normalizedInput.callIntents ?? null,
+    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const truncatedError =
@@ -630,6 +644,8 @@ async function runAskBobJobCallScriptTask(
       callPurpose: normalizedInput.callPurpose,
       hasPersonaStyle,
       personaStyle,
+      hasCallIntents,
+      callIntentsCount,
     });
     throw error;
   }

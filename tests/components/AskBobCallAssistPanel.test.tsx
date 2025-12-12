@@ -27,6 +27,12 @@ function findButton(container: HTMLElement, text: string) {
   );
 }
 
+function findCallGoalButton(container: HTMLElement, label: string) {
+  return Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+    button.textContent?.trim() === label,
+  );
+}
+
 describe("AskBobCallAssistPanel", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
@@ -86,6 +92,7 @@ describe("AskBobCallAssistPanel", () => {
     expect(mockRunAction).toHaveBeenCalledTimes(1);
     const actionPayload = mockRunAction.mock.calls[0][0];
     expect(actionPayload.callPersonaStyle).toBeUndefined();
+    expect(actionPayload.callIntents).toEqual(["quote_followup"]);
 
     const startButton = findButton(container, "Start call with this script");
     expect(startButton).toBeTruthy();
@@ -137,6 +144,105 @@ describe("AskBobCallAssistPanel", () => {
       "AskBob follow-up suggests calling for: Explain quote and get a decision",
     );
     expect(container.textContent).toContain("Suggested tone: friendly and confident");
+  });
+
+  it("lets technicians select multiple call goals and resets them", async () => {
+    await act(async () => {
+      root?.render(
+        <AskBobCallAssistPanel
+          stepNumber={7}
+          workspaceId="workspace-1"
+          userId="user-1"
+          jobId="job-1"
+          customerId="customer-1"
+          customerDisplayName="Customer Name"
+          customerPhoneNumber="+1555000000"
+          jobTitle="Fix sink"
+          jobDescription="Description"
+          diagnosisSummary="Diagnosis"
+          materialsSummary="Materials"
+          lastQuoteSummary="Quote #1"
+          followupSummary="Follow-up"
+          followupCallRecommended
+          followupCallPurpose="Explain quote and get a decision"
+          followupCallTone="friendly and confident"
+          onToggleCollapse={vi.fn()}
+          onCallScriptSummaryChange={vi.fn()}
+          stepCollapsed={false}
+          stepCompleted={false}
+          onCallScriptPersonaChange={vi.fn()}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const quoteButton = findCallGoalButton(container, "Follow up on a quote");
+    const scheduleButton = findCallGoalButton(container, "Schedule or confirm a visit");
+    expect(quoteButton).toBeTruthy();
+    expect(scheduleButton).toBeTruthy();
+    expect(quoteButton?.getAttribute("aria-pressed")).toBe("true");
+    expect(scheduleButton?.getAttribute("aria-pressed")).toBe("false");
+
+    await act(async () => {
+      scheduleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(scheduleButton?.getAttribute("aria-pressed")).toBe("true");
+
+    const generateButton = findButton(container, "Generate call script");
+    await act(async () => {
+      generateButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const actionPayload = mockRunAction.mock.calls[0][0];
+    expect(actionPayload.callIntents).toEqual(["quote_followup", "schedule_visit"]);
+
+    const resetButton = findButton(container, "Reset this step");
+    await act(async () => {
+      resetButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(scheduleButton?.getAttribute("aria-pressed")).toBe("false");
+    expect(quoteButton?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("requires at least one call goal before generating a script", async () => {
+    await act(async () => {
+      root?.render(
+        <AskBobCallAssistPanel
+          stepNumber={7}
+          workspaceId="workspace-1"
+          userId="user-1"
+          jobId="job-1"
+          customerId="customer-1"
+          customerDisplayName="Customer Name"
+          customerPhoneNumber="+1555000000"
+          jobTitle="Fix sink"
+          jobDescription="Description"
+          diagnosisSummary="Diagnosis"
+          materialsSummary="Materials"
+          lastQuoteSummary="Quote #1"
+          followupSummary="Follow-up"
+          onToggleCollapse={vi.fn()}
+          onCallScriptSummaryChange={vi.fn()}
+          stepCollapsed={false}
+          stepCompleted={false}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const quoteButton = findCallGoalButton(container, "Follow up on a quote");
+    await act(async () => {
+      quoteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const generateButton = findButton(container, "Generate call script");
+    await act(async () => {
+      generateButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(mockRunAction).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Choose at least one call goal before generating a script.");
   });
 
   it("lets technicians pick a persona, includes it in the payload, and resets the selection", async () => {

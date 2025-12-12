@@ -459,6 +459,32 @@ export interface AskBobJobScheduleResult {
 
 export type AskBobCallPurpose = "intake" | "scheduling" | "followup";
 
+export const ASKBOB_CALL_INTENTS = [
+  "intake_information",
+  "schedule_visit",
+  "quote_followup",
+  "invoice_followup",
+  "general_checkin",
+] as const;
+export type AskBobCallIntent = (typeof ASKBOB_CALL_INTENTS)[number];
+
+export const ASKBOB_CALL_INTENT_LABELS: Record<AskBobCallIntent, string> = {
+  intake_information: "Gather more job info",
+  schedule_visit: "Schedule or confirm a visit",
+  quote_followup: "Follow up on a quote",
+  invoice_followup: "Follow up on an invoice or payment",
+  general_checkin: "General check-in",
+};
+
+export const ASKBOB_CALL_INTENT_DESCRIPTIONS: Record<AskBobCallIntent, string> = {
+  intake_information:
+    "Gather or verify scope, customer needs, and site details for a new or existing job.",
+  schedule_visit: "Book or adjust an in-person visit, confirm timing, and clarify logistics.",
+  quote_followup: "Follow up on a quote, review status, and guide the customer toward a decision.",
+  invoice_followup: "Discuss invoicing, payment updates, or outstanding balances professionally.",
+  general_checkin: "Have a light, relationship-focused check-in without heavy sales pressure.",
+};
+
 export const ASKBOB_CALL_PERSONA_STYLES = [
   "friendly_warm",
   "direct_concise",
@@ -488,6 +514,7 @@ export interface AskBobJobCallScriptInput {
   callTone?: string | null;
   callPersonaStyle?: AskBobCallPersonaStyle | null;
   extraDetails?: string | null;
+  callIntents?: AskBobCallIntent[] | null;
 }
 
 export interface AskBobJobCallScriptResult {
@@ -496,6 +523,7 @@ export interface AskBobJobCallScriptResult {
   closingLine: string;
   keyPoints: string[];
   suggestedDurationMinutes?: number | null;
+  callIntents?: AskBobCallIntent[] | null;
   modelLatencyMs: number;
   rawModelOutput?: unknown;
 }
