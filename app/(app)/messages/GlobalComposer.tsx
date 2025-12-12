@@ -30,6 +30,16 @@ type GlobalComposerProps = {
   initialBodyKey?: string | null;
 };
 
+type CachedAskBobDraft = {
+  body: string;
+  createdAtIso: string;
+  origin: string;
+  jobId?: string | null;
+  customerId?: string | null;
+};
+
+const DRAFT_KEY_TTL_MS = 1000 * 60 * 30;
+const DRAFT_KEY_HINT_TEXT = "AskBob’s draft couldn’t be loaded. You can still write a message here.";
 export default function GlobalComposer({
   workspaceId,
   customers,
@@ -65,12 +75,23 @@ export default function GlobalComposer({
   const customerSelectId = useId();
   const jobSelectId = useId();
   const bodyTextareaId = useId();
+  const [draftKeyHintReason, setDraftKeyHintReason] = useState<string | null>(null);
+  const draftKeyHydrationRef = useRef<{ key: string | null; attempted: boolean }>({
+    key: null,
+    attempted: false,
+  });
+  const setDraftKeyHint = (value: string | null) => {
+    startTransition(() => {
+      setDraftKeyHintReason(value);
+    });
+  };
 
   const hasInitialBody = initialBodyValue.length > 0;
   const prefillUsed = Boolean(initialCustomerForState || initialJobForState || hasInitialBody);
   const prefillLoggedRef = useRef(false);
   const showAskBobFollowupHint =
     initialOrigin === "askbob-followup" && initialBodyValue.length > 0;
+  const showDraftKeyHint = Boolean(draftKeyHintReason);
 
   useEffect(() => {
     if (!prefillUsed || prefillLoggedRef.current) {
@@ -159,10 +180,44 @@ export default function GlobalComposer({
   };
 
   useEffect(() => {
-    if (!open || initialBodyValue.length > 0 || !initialBodyKey) {
+    if (!open) {
+      draftKeyHydrationRef.current = { key: null, attempted: false };
+      setDraftKeyHint(null);
       return;
     }
-    if (messageBody.trim().length > 0) {
+    if (!initialBodyKey) {
+      draftKeyHydrationRef.current = { key: null, attempted: false };
+      setDraftKeyHint(null);
+      return;
+    }
+    if (
+      draftKeyHydrationRef.current.key === initialBodyKey &&
+      draftKeyHydrationRef.current.attempted
+    ) {
+      return;
+    }
+    draftKeyHydrationRef.current = { key: initialBodyKey, attempted: true };
+    const logBase = {
+      origin: initialOrigin ?? null,
+      hasDraftKey: true,
+      draftKeyPrefix: initialBodyKey.slice(0, 8),
+    };
+    const clearStoredDraft = () => {
+      try {
+        window.sessionStorage.removeItem(initialBodyKey);
+      } catch (error) {
+        console.error("[messages-global-composer] could not clear cached draft", error);
+      }
+    };
+    if (messageBody.trim().length > 0 || initialBodyValue.length > 0) {
+      if (typeof window !== "undefined") {
+        clearStoredDraft();
+      }
+      console.log("[messages-compose-draftkey-cache-miss]", {
+        ...logBase,
+        reason: "skipped_overwrite",
+      });
+      setDraftKeyHint(null);
       return;
     }
     if (typeof window === "undefined") {
@@ -174,18 +229,71 @@ export default function GlobalComposer({
     } catch (error) {
       console.error("[messages-global-composer] could not read cached draft", error);
     }
-    if (storedDraft && storedDraft.trim().length) {
-      const normalizedDraft = storedDraft.trim();
-      startTransition(() => {
-        setMessageBody(normalizedDraft);
+    if (!storedDraft) {
+      console.log("[messages-compose-draftkey-cache-miss]", {
+        ...logBase,
+        reason: "not_found",
       });
+      setDraftKeyHint("not_found");
+      return;
     }
+    let payload: CachedAskBobDraft | null = null;
     try {
-      window.sessionStorage.removeItem(initialBodyKey);
-    } catch (error) {
-      console.error("[messages-global-composer] could not clear cached draft", error);
+      payload = JSON.parse(storedDraft);
+    } catch {
+      clearStoredDraft();
+      console.log("[messages-compose-draftkey-cache-miss]", {
+        ...logBase,
+        reason: "parse_error",
+      });
+      setDraftKeyHint("parse_error");
+      return;
     }
-  }, [initialBodyKey, initialBodyValue, messageBody, open, startTransition]);
+    if (!payload || typeof payload.body !== "string" || typeof payload.createdAtIso !== "string") {
+      clearStoredDraft();
+      console.log("[messages-compose-draftkey-cache-miss]", {
+        ...logBase,
+        reason: "invalid_payload",
+      });
+      setDraftKeyHint("invalid_payload");
+      return;
+    }
+    const createdAt = Date.parse(payload.createdAtIso);
+    if (Number.isNaN(createdAt)) {
+      clearStoredDraft();
+      console.log("[messages-compose-draftkey-cache-miss]", {
+        ...logBase,
+        reason: "invalid_payload",
+      });
+      setDraftKeyHint("invalid_payload");
+      return;
+    }
+    if (Date.now() - createdAt > DRAFT_KEY_TTL_MS) {
+      clearStoredDraft();
+      console.log("[messages-compose-draftkey-cache-miss]", {
+        ...logBase,
+        reason: "expired",
+      });
+      setDraftKeyHint("expired");
+      return;
+    }
+    clearStoredDraft();
+    console.log("[messages-compose-draftkey-cache-hit]", {
+      ...logBase,
+      bodyLength: payload.body.length,
+    });
+    startTransition(() => {
+      setMessageBody(payload.body);
+    });
+    setDraftKeyHint(null);
+  }, [
+    initialBodyKey,
+    initialBodyValue,
+    initialOrigin,
+    messageBody,
+    open,
+    startTransition,
+  ]);
 
   if (!open) {
     return null;
@@ -283,6 +391,9 @@ export default function GlobalComposer({
                 <p className="text-xs text-slate-400">
                   AskBob drafted this follow-up guidance—review and edit it before sending.
                 </p>
+              )}
+              {showDraftKeyHint && (
+                <p className="text-xs text-slate-400">{DRAFT_KEY_HINT_TEXT}</p>
               )}
             </div>
             {errorMessage && <p className="text-xs text-rose-400">{errorMessage}</p>}

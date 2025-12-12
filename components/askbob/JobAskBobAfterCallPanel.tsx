@@ -174,7 +174,14 @@ export default function JobAskBobAfterCallPanel({
     }
     const key = `askbob-after-call-draft-${jobId}-${Date.now()}`;
     try {
-      window.sessionStorage.setItem(key, body);
+      const payload = {
+        body,
+        createdAtIso: new Date().toISOString(),
+        origin: "askbob-after-call",
+        jobId,
+        customerId,
+      };
+      window.sessionStorage.setItem(key, JSON.stringify(payload));
       return key;
     } catch (error) {
       console.error("[askbob-after-call-panel] failed to cache draft", error);
