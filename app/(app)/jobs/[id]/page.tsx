@@ -23,6 +23,12 @@ import {
 import JobAskBobFlow from "@/components/askbob/JobAskBobFlow";
 import JobQuotesCard from "@/components/jobs/JobQuotesCard";
 import JobRecentActivityCard from "@/components/jobs/JobRecentActivityCard";
+import {
+  loadCallHistoryForJob,
+  computeCallSummarySignals,
+  describeCallOutcome,
+  type CallSummarySignals,
+} from "@/lib/domain/askbob/callHistory";
 
 type JobRecord = {
   id: string;
@@ -138,6 +144,31 @@ function buildCallLabel(call: LatestCallRecord | null): string | null {
     return "Most recent call";
   }
   return parts.join(" · ");
+}
+
+function buildCallHistoryHint(signals: CallSummarySignals): string {
+  const attemptPlural = signals.totalAttempts === 1 ? "attempt" : "attempts";
+  const parts = [
+    `${signals.totalAttempts} ${attemptPlural}`,
+    `${signals.answeredCount} answered`,
+    `${signals.voicemailCount} voicemail`,
+  ];
+  const outcomeLabel = describeCallOutcome(signals.lastOutcome);
+  if (outcomeLabel) {
+    parts.push(`last outcome ${outcomeLabel}`);
+  }
+  if (signals.lastAttemptAt) {
+    const friendlyLastAttempt = formatFriendlyDateTime(signals.lastAttemptAt, "");
+    if (friendlyLastAttempt) {
+      parts.push(`last attempt ${friendlyLastAttempt}`);
+    }
+  }
+  const windowLabel =
+    signals.bestGuessRetryWindow && signals.bestGuessRetryWindow.trim()
+      ? `Best retry window: ${signals.bestGuessRetryWindow}`
+      : null;
+  const baseHint = parts.join(" · ");
+  return [baseHint, windowLabel].filter(Boolean).join(" · ");
 }
 
 function friendlyCallOutcome(call: LatestCallRecord): string | null {
@@ -435,24 +466,18 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
   const quoteHref = `/quotes/new?${quoteParams.toString()}`;
   const scheduleVisitHref = `/appointments/new?jobId=${job.id}`;
 
-  let latestCall: LatestCallRecord | null = null;
+  let callHistory: LatestCallRecord[] = [];
   try {
-    const { data, error } = await supabase
-      .from<LatestCallRecord>("calls")
-      .select("id, job_id, workspace_id, created_at, started_at, duration_seconds, status, outcome, direction")
-      .eq("workspace_id", workspace.id)
-      .eq("job_id", job.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) {
-      console.error("[job-detail] Latest call lookup failed", error);
-    } else {
-      latestCall = data ?? null;
-    }
+    callHistory = await loadCallHistoryForJob(supabase, workspace.id, job.id, { limit: 25 });
   } catch (error) {
-    console.error("[job-detail] Latest call query failed", error);
+    console.error("[job-detail] Failed to load call history", error);
   }
+  const latestCall = callHistory[0] ?? null;
+  const callSummarySignals = computeCallSummarySignals(callHistory);
+  const callHistoryHint =
+    callSummarySignals.totalAttempts > 0
+      ? buildCallHistoryHint(callSummarySignals)
+      : null;
 
   const quoteCandidate = quotes.find((quote) => quote.id === callScriptQuoteId) ?? null;
   const quoteCreatedAt = quoteCandidate?.created_at ?? null;
@@ -535,6 +560,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           lastQuoteSummary={lastQuoteSummary}
           latestCallLabel={latestCallLabelText}
           hasLatestCall={Boolean(latestCall)}
+          callHistoryHint={callHistoryHint}
         />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">

@@ -4,6 +4,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 import AskBobCallAssistPanel from "@/components/askbob/AskBobCallAssistPanel";
 import { runAskBobCallScriptAction } from "@/app/(app)/askbob/call-script-actions";
+import { ASKBOB_CALL_PERSONA_DEFAULT } from "@/lib/domain/askbob/types";
 
 vi.mock("@/app/(app)/askbob/call-script-actions", () => ({
   runAskBobCallScriptAction: vi.fn(),
@@ -81,6 +82,10 @@ describe("AskBobCallAssistPanel", () => {
     await act(async () => {
       generateButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    expect(mockRunAction).toHaveBeenCalledTimes(1);
+    expect(mockRunAction).toHaveBeenCalledTimes(1);
+    const actionPayload = mockRunAction.mock.calls[0][0];
+    expect(actionPayload.callPersonaStyle).toBeUndefined();
 
     const startButton = findButton(container, "Start call with this script");
     expect(startButton).toBeTruthy();
@@ -132,5 +137,66 @@ describe("AskBobCallAssistPanel", () => {
       "AskBob follow-up suggests calling for: Explain quote and get a decision",
     );
     expect(container.textContent).toContain("Suggested tone: friendly and confident");
+  });
+
+  it("lets technicians pick a persona, includes it in the payload, and resets the selection", async () => {
+    const personaChangeSpy = vi.fn();
+
+    await act(async () => {
+      root?.render(
+        <AskBobCallAssistPanel
+          stepNumber={7}
+          workspaceId="workspace-1"
+          userId="user-1"
+          jobId="job-1"
+          customerId="customer-1"
+          customerDisplayName="Customer Name"
+          customerPhoneNumber="+1555000000"
+          jobTitle="Fix sink"
+          jobDescription="Description"
+          diagnosisSummary="Diagnosis"
+          materialsSummary="Materials"
+          lastQuoteSummary="Quote #1"
+          followupSummary="Follow-up"
+          onToggleCollapse={vi.fn()}
+          onCallScriptSummaryChange={vi.fn()}
+          onCallScriptPersonaChange={personaChangeSpy}
+          stepCollapsed={false}
+          stepCompleted={false}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const personaSelect = container.querySelector<HTMLSelectElement>(
+      'select[name="callPersonaStyle"]',
+    );
+    expect(personaSelect).toBeTruthy();
+
+    await act(async () => {
+      if (!personaSelect) {
+        throw new Error("Persona select missing");
+      }
+      personaSelect.value = "direct_concise";
+      personaSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(personaSelect?.value).toBe("direct_concise");
+
+    const generateButton = findButton(container, "Generate call script");
+    expect(generateButton).toBeTruthy();
+    await act(async () => {
+      generateButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const actionPayload = mockRunAction.mock.calls[0][0];
+    expect(actionPayload.callPersonaStyle).toBe("direct_concise");
+    expect(personaChangeSpy).toHaveBeenCalledWith("direct_concise");
+
+    const resetButton = findButton(container, "Reset this step");
+    await act(async () => {
+      resetButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(personaChangeSpy).toHaveBeenLastCalledWith(null);
   });
 });

@@ -580,8 +580,11 @@ async function runAskBobJobCallScriptTask(
     lastQuoteSummary: input.lastQuoteSummary?.trim() ?? null,
     followupSummary: input.followupSummary?.trim() ?? null,
     callTone: input.callTone?.trim() ?? null,
+    callPersonaStyle: input.callPersonaStyle ?? null,
     extraDetails: input.extraDetails?.trim() ?? null,
   };
+  const hasPersonaStyle = Boolean(normalizedInput.callPersonaStyle);
+  const personaStyle = normalizedInput.callPersonaStyle ?? null;
 
   console.log("[askbob-call-script-request]", {
     workspaceId,
@@ -595,6 +598,8 @@ async function runAskBobJobCallScriptTask(
     hasFollowupSummary: Boolean(normalizedInput.followupSummary),
     callPurpose: normalizedInput.callPurpose,
     callTone: normalizedInput.callTone ?? null,
+    hasPersonaStyle,
+    personaStyle,
   });
 
   try {
@@ -608,6 +613,8 @@ async function runAskBobJobCallScriptTask(
       scriptLength: result.scriptBody.length,
       keyPointsCount: result.keyPoints.length,
       callPurpose: normalizedInput.callPurpose,
+      hasPersonaStyle,
+      personaStyle,
     });
 
     return result;
@@ -621,6 +628,8 @@ async function runAskBobJobCallScriptTask(
       jobId,
       errorMessage: truncatedError,
       callPurpose: normalizedInput.callPurpose,
+      hasPersonaStyle,
+      personaStyle,
     });
     throw error;
   }

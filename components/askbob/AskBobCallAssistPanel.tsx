@@ -4,7 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
-import { AskBobCallPurpose } from "@/lib/domain/askbob/types";
+import {
+  AskBobCallPurpose,
+  ASKBOB_CALL_PERSONA_DEFAULT,
+  ASKBOB_CALL_PERSONA_LABELS,
+  ASKBOB_CALL_PERSONA_STYLES,
+  type AskBobCallPersonaStyle,
+} from "@/lib/domain/askbob/types";
 import { runAskBobCallScriptAction } from "@/app/(app)/askbob/call-script-actions";
 
 export type StartCallWithScriptPayload = {
@@ -37,6 +43,8 @@ type AskBobCallAssistPanelProps = {
   onToggleCollapse?: () => void;
   callScriptSummary?: string | null;
   onCallScriptSummaryChange?: (summary: string | null) => void;
+  resetToken?: number;
+  onCallScriptPersonaChange?: (persona: AskBobCallPersonaStyle | null) => void;
   userId?: string | null;
   onStartCallWithScript?: (payload: StartCallWithScriptPayload) => void;
   onScrollIntoView?: () => void;
@@ -56,6 +64,12 @@ const CALL_PURPOSE_OPTIONS: { value: AskBobCallPurpose; label: string }[] = [
   { value: "scheduling", label: "Scheduling call" },
   { value: "followup", label: "Follow-up call" },
 ];
+
+const CALL_PERSONA_OPTIONS: { value: AskBobCallPersonaStyle; label: string }[] =
+  ASKBOB_CALL_PERSONA_STYLES.map((value) => ({
+    value,
+    label: ASKBOB_CALL_PERSONA_LABELS[value],
+  }));
 
 const CALL_PURPOSE_KEYWORDS: [RegExp, AskBobCallPurpose][] = [
   [/schedule|visit|appointment|book/i, "scheduling"],
@@ -111,6 +125,8 @@ export default function AskBobCallAssistPanel({
   onToggleCollapse,
   callScriptSummary,
   onCallScriptSummaryChange,
+  resetToken,
+  onCallScriptPersonaChange,
   userId,
   onStartCallWithScript,
 }: AskBobCallAssistPanelProps) {
@@ -141,10 +157,15 @@ export default function AskBobCallAssistPanel({
   const [callTone, setCallTone] = useState<string>(normalizedFollowupCallTone ?? CALL_TONE_DEFAULT);
   const [hasManuallySetPurpose, setHasManuallySetPurpose] = useState(false);
   const [hasManuallySetTone, setHasManuallySetTone] = useState(false);
+  const [callPersonaStyle, setCallPersonaStyle] = useState<AskBobCallPersonaStyle>(
+    ASKBOB_CALL_PERSONA_DEFAULT,
+  );
+  const [hasPersonaSelection, setHasPersonaSelection] = useState(false);
   const [scriptResult, setScriptResult] = useState<ScriptResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastHandledResetTokenRef = useRef<number | null>(null);
   const [copyFeedbackMessage, setCopyFeedbackMessage] = useState<string | null>(null);
   const resetCopyFeedback = useCallback(() => {
     if (copyFeedbackTimeoutRef.current) {
@@ -173,8 +194,22 @@ export default function AskBobCallAssistPanel({
       setScriptResult(null);
       setErrorMessage(null);
       resetCopyFeedback();
+      setCallPersonaStyle(ASKBOB_CALL_PERSONA_DEFAULT);
+      setHasPersonaSelection(false);
     }
   }, [callScriptSummary, resetCopyFeedback]);
+
+  useEffect(() => {
+    if (resetToken === undefined) {
+      return;
+    }
+    if (lastHandledResetTokenRef.current === resetToken) {
+      return;
+    }
+    lastHandledResetTokenRef.current = resetToken;
+    setCallPersonaStyle(ASKBOB_CALL_PERSONA_DEFAULT);
+    setHasPersonaSelection(false);
+  }, [resetToken]);
 
   useEffect(() => {
     return () => {
@@ -224,6 +259,9 @@ export default function AskBobCallAssistPanel({
     setHasManuallySetPurpose(false);
     setHasManuallySetTone(false);
     resetCopyFeedback();
+    setCallPersonaStyle(ASKBOB_CALL_PERSONA_DEFAULT);
+    setHasPersonaSelection(false);
+    onCallScriptPersonaChange?.(null);
   };
 
   const handleReset = () => {
@@ -238,6 +276,7 @@ export default function AskBobCallAssistPanel({
     resetCopyFeedback();
     setIsGenerating(true);
     setErrorMessage(null);
+    const personaStyleForPayload = hasPersonaSelection ? callPersonaStyle : undefined;
     try {
       const result = await runAskBobCallScriptAction({
         workspaceId,
@@ -251,6 +290,7 @@ export default function AskBobCallAssistPanel({
         followupSummary: followupSummary ?? null,
         callPurpose,
         callTone,
+        callPersonaStyle: personaStyleForPayload,
         extraDetails: null,
       });
 
@@ -267,6 +307,7 @@ export default function AskBobCallAssistPanel({
         suggestedDurationMinutes: result.suggestedDurationMinutes ?? null,
       };
       setScriptResult(newScript);
+      onCallScriptPersonaChange?.(personaStyleForPayload ?? null);
 
       const summaryParts = [
         `${callPurpose.charAt(0).toUpperCase() + callPurpose.slice(1)} call script`,
@@ -484,6 +525,24 @@ export default function AskBobCallAssistPanel({
               />
             </label>
           </div>
+          <label className="space-y-1 text-xs uppercase tracking-[0.3em] text-slate-500">
+            Call style
+            <select
+              name="callPersonaStyle"
+              value={callPersonaStyle}
+              onChange={(event) => {
+                setCallPersonaStyle(event.target.value as AskBobCallPersonaStyle);
+                setHasPersonaSelection(true);
+              }}
+              className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+            >
+              {CALL_PERSONA_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           {lastQuoteSummary && (
             <p className="text-xs text-slate-500">
               Quote context: {lastQuoteSummary}
@@ -503,6 +562,9 @@ export default function AskBobCallAssistPanel({
           {hasScript ? (
             <div className="space-y-3 border-t border-slate-800 pt-3 text-sm text-slate-300">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Suggested call script</p>
+              <p className="text-xs text-slate-400">
+                Tone: {ASKBOB_CALL_PERSONA_LABELS[callPersonaStyle]}
+              </p>
               <div className="flex flex-wrap items-center gap-2">
                 <HbButton
                   type="button"

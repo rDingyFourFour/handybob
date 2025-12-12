@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { CallSummarySignals } from "./callHistory";
 
 // AskBob tasks are processed through a shared routing surface; future tasks might include
 // "message.draft", "quote.generate", "materials.estimate", "followup.plan", etc.
@@ -333,6 +334,7 @@ export interface AskBobJobFollowupInput {
   notesSummary?: string | null;
   hasQuoteContextForFollowup?: boolean;
   hasAskBobAppointment?: boolean;
+  callSummarySignals?: CallSummarySignals | null;
 }
 
 export interface AskBobJobFollowupResult {
@@ -373,6 +375,7 @@ export interface AskBobJobAfterCallInput {
   phoneNumber?: string | null;
   existingCallSummary?: string | null;
   recentJobSignals?: string | null;
+  callSummarySignals?: CallSummarySignals | null;
 }
 
 export interface AskBobJobAfterCallResult {
@@ -456,6 +459,21 @@ export interface AskBobJobScheduleResult {
 
 export type AskBobCallPurpose = "intake" | "scheduling" | "followup";
 
+export const ASKBOB_CALL_PERSONA_STYLES = [
+  "friendly_warm",
+  "direct_concise",
+  "professional_formal",
+  "reassuring_supportive",
+] as const;
+export type AskBobCallPersonaStyle = (typeof ASKBOB_CALL_PERSONA_STYLES)[number];
+export const ASKBOB_CALL_PERSONA_LABELS: Record<AskBobCallPersonaStyle, string> = {
+  friendly_warm: "Friendly and warm",
+  direct_concise: "Direct and concise",
+  professional_formal: "Professional and formal",
+  reassuring_supportive: "Reassuring and supportive",
+};
+export const ASKBOB_CALL_PERSONA_DEFAULT: AskBobCallPersonaStyle = "friendly_warm";
+
 export interface AskBobJobCallScriptInput {
   task: "job.call_script";
   context: AskBobTaskContextWithJob;
@@ -468,6 +486,7 @@ export interface AskBobJobCallScriptInput {
   followupSummary?: string | null;
   callPurpose: AskBobCallPurpose;
   callTone?: string | null;
+  callPersonaStyle?: AskBobCallPersonaStyle | null;
   extraDetails?: string | null;
 }
 
@@ -571,3 +590,5 @@ export const askBobResponseDataSchema = z.object({
 
 export type AskBobRequestInputSchema = z.infer<typeof askBobRequestInputSchema>;
 export type AskBobResponseDataSchema = z.infer<typeof askBobResponseDataSchema>;
+
+export type { CallSummarySignals } from "./callHistory";

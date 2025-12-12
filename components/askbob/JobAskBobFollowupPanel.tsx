@@ -50,6 +50,7 @@ type JobAskBobFollowupPanelProps = {
   }) => void;
   onFollowupSummaryUpdate?: (summary: string | null) => void;
   onJumpToCallAssist?: () => void;
+  callHistoryHint?: string | null;
 };
 
 export default function JobAskBobFollowupPanel({
@@ -76,6 +77,7 @@ export default function JobAskBobFollowupPanel({
   onFollowupSummaryUpdate,
   onFollowupResult,
   onJumpToCallAssist,
+  callHistoryHint,
 }: JobAskBobFollowupPanelProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -474,6 +476,9 @@ export default function JobAskBobFollowupPanel({
             AskBob summarizes the job’s status, quotes, calls, messages, and appointments to suggest a next step. Use it as a guide and
             rely on your judgment before you act.
           </p>
+          {callHistoryHint && (
+            <p className="text-xs text-slate-400">Call history: {callHistoryHint}</p>
+          )}
           {showQuoteContextLine && quoteDetailsHref && (
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
               <p className="m-0 text-xs text-slate-300">{quoteContextLabel}</p>

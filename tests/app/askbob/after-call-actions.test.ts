@@ -99,6 +99,11 @@ describe("runAskBobJobAfterCallAction", () => {
       callId: "call-1",
       callOutcome: "answered",
     });
+    expect(taskInput.callSummarySignals).toMatchObject({
+      totalAttempts: 1,
+      answeredCount: 1,
+      voicemailCount: 0,
+    });
     expect(response.result).toEqual(taskResult);
   });
 });

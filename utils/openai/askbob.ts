@@ -1,6 +1,7 @@
 "use server";
 
 import OpenAI from "openai";
+import { buildCallHistoryPromptSections } from "@/lib/domain/askbob/callHistory";
 import type {
   AskBobContext,
   AskBobJobFollowupInput,
@@ -29,6 +30,7 @@ import type {
   AskBobQuoteMaterialLineResult,
   AskBobResponseData,
   SuggestedMessageChannel,
+  AskBobCallPersonaStyle,
 } from "@/lib/domain/askbob/types";
 
 const SAFETY_GUARDRAILS =
@@ -125,6 +127,7 @@ const FOLLOWUP_INSTRUCTIONS = [
   "You are AskBob, the HandyBob follow-up advisor. Recommend practical next steps for the job while keeping the customer experience calm and respectful.",
   "Keep the tone professional, neutral, and polite; avoid pushy sales language and guilt-tripping phrases. Frame actions with phrases like \"It would be reasonable to...\" or \"Consider...\" instead of commanding language.",
   "Use the provided status signals (quote status, last message, visits, invoices, and diagnostics) when you build the rationale, and mention the key signals that led to the recommendation.",
+  "Always refer to the call history and best retry window provided below when you recommend outreach channel or timing.",
   "Provide a short rationale and a numbered list of steps the technician can follow. Include any follow-up context, such as whether the quote is outstanding or a visit is scheduled.",
   "Decide explicitly if a phone call is the right next step. When a call is appropriate, set callRecommended to true, describe the goal in callPurpose (e.g., \"Explain quote and get a decision\"), and describe the tone in callTone (e.g., \"friendly and confident\"). If a call is not needed, set callRecommended to false and leave callPurpose and callTone null. Optionally provide callUrgencyLabel (one or two words) to describe how urgent the call should feel.",
   SAFETY_GUARDRAILS,
@@ -149,15 +152,34 @@ const CALL_SCRIPT_INSTRUCTIONS = [
   "Avoid promising exact pricing or guaranteed availability, remind the caller to confirm contact information and their preferred follow-up method, and frame every sentence as a helpful guideline rather than a contract.",
   "Respond with JSON only (no surrounding prose) containing: scriptBody (the full script the technician can read, with paragraphs or line breaks), openingLine (a short intro that sets the tone), closingLine (a wrap-up that restates next steps), keyPoints (array of short checklist items describing the most critical talking points), and suggestedDurationMinutes (optional number of minutes).",
   "Use the provided job context, diagnosis, materials, quote, and follow-up summaries, and adopt the requested call tone.",
+  "Respect the Persona / tone guidance described in the context block and mold the wording to match that style while staying professional.",
   SAFETY_GUARDRAILS,
   COST_GUARDRAILS,
   SCOPE_LIMIT_GUARDRAILS,
 ].join(" ");
 
+const CALL_PERSONA_DESCRIPTIONS: Record<AskBobCallPersonaStyle, string> = {
+  friendly_warm: "Speak in a friendly, warm tone that feels personable, reassuring, and upbeat without sounding unprofessional.",
+  direct_concise: "Speak in a clear, direct, concise tone that respects the customer's time and focuses on key facts.",
+  professional_formal: "Speak in a professional, courteous, and slightly formal tone that conveys confidence and reliability.",
+  reassuring_supportive: "Speak in a calm, supportive tone that reduces anxiety and builds trust while explaining next steps.",
+};
+
+const DEFAULT_CALL_PERSONA_DESCRIPTION =
+  "Speak in a friendly, professional tone that stays helpful, concise, and respectful while keeping the script clearly actionable.";
+
+function getCallPersonaDescription(persona?: AskBobCallPersonaStyle | null) {
+  if (persona && CALL_PERSONA_DESCRIPTIONS[persona]) {
+    return CALL_PERSONA_DESCRIPTIONS[persona];
+  }
+  return DEFAULT_CALL_PERSONA_DESCRIPTION;
+}
+
 const AFTER_CALL_INSTRUCTIONS = [
   ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
   "You are AskBob, the HandyBob after-call summarizer. Study the useful context and recent call details, then respond with a strict JSON object only (no surrounding prose) containing the keys: afterCallSummary (a short recap of what happened on the call), recommendedActionLabel (the best next move), recommendedActionSteps (array of short follow-up steps), suggestedChannel (sms, phone, email, or none), draftMessageBody (optional SMS/email draft), urgencyLevel (low, normal, or high), notesForTech (optional extra guidance), and modelLatencyMs (number).",
   "Keep the tone professional, safety-focused, and realistic; emphasize clear next steps such as confirming details over SMS, scheduling another visit, calling back, or closing the loop without over-promising service or payments. If discussing payments or scope, mention caution/safety and avoid unauthorized commitments.",
+  "Factor in the available call history and best retry window when you recommend the outreach channel or timing after this call.",
   "recommendedActionSteps should be 3-5 concise bullets and start with actionable verbs; when draftMessageBody is provided, tailor it to the suggested channel with polite, businesslike language. If no outreach is needed, set suggestedChannel to none and leave draftMessageBody empty.",
   SAFETY_GUARDRAILS,
   COST_GUARDRAILS,
@@ -762,10 +784,14 @@ export async function callAskBobJobFollowup(
     hasQuoteContextForFollowup: input.hasQuoteContextForFollowup ?? false,
   };
 
+  const callHistorySections = buildCallHistoryPromptSections(input.callSummarySignals ?? null);
+
   const messageParts = [
     `Context: ${contextParts}`,
     jobTitleLine,
     `Follow-up context:\n${JSON.stringify(followupContext, null, 2)}`,
+    callHistorySections.callHistoryLine,
+    callHistorySections.bestRetryWindowLine,
     input.notesSummary ? `Notes: ${input.notesSummary}` : null,
   ]
     .filter((part): part is string => Boolean(part))
@@ -968,12 +994,15 @@ export async function callAskBobJobAfterCall(
     input.extraDetails && input.extraDetails.trim().length
       ? `Additional guidance:\n${input.extraDetails.trim()}`
       : null;
+  const callHistorySections = buildCallHistoryPromptSections(input.callSummarySignals ?? null);
 
   const messageParts = [
     `Context: ${contextParts}`,
     jobTitleLine,
     jobDescriptionBlock,
     callContextBlock,
+    callHistorySections.callHistoryLine,
+    callHistorySections.bestRetryWindowLine,
     signalsBlock,
     extraDetailsBlock,
   ]
@@ -1285,6 +1314,7 @@ export async function callAskBobJobCallScript(
   addContextBlock("AskBob materials summary", input.materialsSummary);
   addContextBlock("AskBob quote summary", input.lastQuoteSummary);
   addContextBlock("AskBob follow-up summary", input.followupSummary);
+  addContextBlock("Persona / tone", getCallPersonaDescription(input.callPersonaStyle ?? null));
   const contextBlock = contextBlocks.length ? contextBlocks.join("\n\n") : null;
   const extraDetailsBlock =
     input.extraDetails && input.extraDetails.trim().length
@@ -1303,6 +1333,8 @@ export async function callAskBobJobCallScript(
   const openai = new OpenAI({ apiKey });
   const modelRequestStart = Date.now();
   let modelName = DEFAULT_MODEL;
+  const hasPersonaStyle = Boolean(input.callPersonaStyle);
+  const personaStyle = input.callPersonaStyle ?? null;
 
   try {
     const completion = await openai.chat.completions.create({
@@ -1339,6 +1371,8 @@ export async function callAskBobJobCallScript(
       latencyMs,
       success: true,
       task: "job.call_script",
+      hasPersonaStyle,
+      personaStyle,
     });
 
     const result: AskBobJobCallScriptResult = {
@@ -1367,6 +1401,8 @@ export async function callAskBobJobCallScript(
       success: false,
       task: "job.call_script",
       errorMessage: truncatedError,
+      hasPersonaStyle,
+      personaStyle,
     });
 
     throw error;

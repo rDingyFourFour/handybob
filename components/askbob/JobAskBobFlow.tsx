@@ -21,12 +21,14 @@ import {
 } from "@/lib/domain/quotes/materials-askbob-adapter";
 import type {
   AskBobAfterCallSnapshotPayload,
+  AskBobCallPersonaStyle,
   AskBobDiagnoseSnapshotPayload,
   AskBobFollowupSnapshotPayload,
   AskBobJobFollowupResult,
   AskBobMaterialsSnapshotPayload,
   AskBobQuoteSnapshotPayload,
 } from "@/lib/domain/askbob/types";
+import { ASKBOB_CALL_PERSONA_DEFAULT, ASKBOB_CALL_PERSONA_LABELS } from "@/lib/domain/askbob/types";
 import {
   buildDiagnosisSummary,
   buildFollowupSummaryFromSnapshot,
@@ -83,6 +85,7 @@ type JobAskBobFlowProps = {
   lastQuoteSummary?: string | null;
   latestCallLabel?: string | null;
   hasLatestCall?: boolean;
+  callHistoryHint?: string | null;
 };
 
 type SessionQuote = {
@@ -115,6 +118,7 @@ export default function JobAskBobFlow({
   lastQuoteSummary,
   latestCallLabel,
   hasLatestCall,
+  callHistoryHint,
 }: JobAskBobFlowProps) {
   const diagnosisSummaryInitialValue = initialDiagnoseSnapshot
     ? buildDiagnosisSummary(initialDiagnoseSnapshot.response)
@@ -155,6 +159,7 @@ export default function JobAskBobFlow({
     initialFollowupSnapshot?.callTone ?? null,
   );
   const [callScriptSummary, setCallScriptSummary] = useState<string | null>(null);
+  const [callScriptPersona, setCallScriptPersona] = useState<AskBobCallPersonaStyle | null>(null);
   const [diagnoseCollapsed, setDiagnoseCollapsed] = useState(false);
   const [materialsCollapsed, setMaterialsCollapsed] = useState(false);
   const [quoteCollapsed, setQuoteCollapsed] = useState(false);
@@ -172,6 +177,7 @@ export default function JobAskBobFlow({
   const [schedulerDone, setSchedulerDone] = useState(false);
   const [schedulerCollapsed, setSchedulerCollapsed] = useState(false);
   const [callScriptCollapsed, setCallScriptCollapsed] = useState(false);
+  const [callScriptResetToken, setCallScriptResetToken] = useState(0);
   const [schedulerResetToken, setSchedulerResetToken] = useState(0);
   const [afterCallSummary, setAfterCallSummary] = useState<string | null>(
     initialAfterCallSnapshot?.afterCallSummary ?? null,
@@ -192,6 +198,16 @@ export default function JobAskBobFlow({
     Boolean(effectiveLastQuote?.quoteId) || hasQuoteSnapshotContext;
   const quoteDone = Boolean(sessionQuote);
   const callScriptDone = Boolean(callScriptSummary);
+  const callScriptBaseLabel = "Step 7 Prepare a phone call with AskBob";
+  const callScriptHint =
+    callScriptDone &&
+    callScriptPersona &&
+    callScriptPersona !== ASKBOB_CALL_PERSONA_DEFAULT
+      ? `Call script ready (${ASKBOB_CALL_PERSONA_LABELS[callScriptPersona]})`
+      : null;
+  const callScriptStepLabel = callScriptHint
+    ? `${callScriptBaseLabel} · ${callScriptHint}`
+    : callScriptBaseLabel;
   const afterCallDone = Boolean(afterCallSummary);
   const stepStatusItems = [
     { label: "Step 1 Intake", done: true },
@@ -200,7 +216,7 @@ export default function JobAskBobFlow({
     { label: "Step 4 Quote suggestion", done: quoteDone },
     { label: "Step 5 Follow-up guidance", done: followupDone },
     { label: "Step 6 Schedule visit", done: schedulerDone },
-    { label: "Step 7 Prepare a phone call with AskBob", done: callScriptDone },
+    { label: callScriptStepLabel, done: callScriptDone },
     { label: "Step 8 · After the call summary", done: afterCallDone },
   ];
 
@@ -331,6 +347,8 @@ export default function JobAskBobFlow({
   const resetCallScriptState = () => {
     setCallScriptSummary(null);
     setCallScriptCollapsed(false);
+    setCallScriptPersona(null);
+    setCallScriptResetToken((value) => value + 1);
   };
 
   const handleSchedulerReset = () => {
@@ -437,6 +455,7 @@ export default function JobAskBobFlow({
             onToggleStepCollapsed={() => setAfterCallCollapsed((value) => !value)}
             initialAfterCallSnapshot={initialAfterCallSnapshot ?? undefined}
             onAfterCallSummaryChange={handleAfterCallSummaryChange}
+            callHistoryHint={callHistoryHint ?? null}
           />
         </AskBobSection>
         <AskBobSection id="askbob-materials">
@@ -502,6 +521,7 @@ export default function JobAskBobFlow({
             onFollowupSummaryUpdate={setFollowupSummary}
             onFollowupResult={handleFollowupResult}
             onJumpToCallAssist={handleJumpToCallAssist}
+            callHistoryHint={callHistoryHint ?? null}
           />
         </AskBobSection>
         <AskBobSection id="askbob-scheduler">
@@ -545,6 +565,8 @@ export default function JobAskBobFlow({
             followupCallRecommended={followupCallRecommended}
             followupCallPurpose={followupCallPurpose}
             followupCallTone={followupCallTone}
+            resetToken={callScriptResetToken}
+            onCallScriptPersonaChange={setCallScriptPersona}
             callScriptSummary={callScriptSummary}
             onCallScriptSummaryChange={setCallScriptSummary}
             onStartCallWithScript={handleStartCallWithScript}

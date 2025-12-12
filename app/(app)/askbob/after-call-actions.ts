@@ -5,6 +5,11 @@ import { z } from "zod";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { runAskBobTask } from "@/lib/domain/askbob/service";
+import {
+  loadCallHistoryForJob,
+  computeCallSummarySignals,
+} from "@/lib/domain/askbob/callHistory";
+import type { CallHistoryRecord } from "@/lib/domain/askbob/callHistory";
 import type { AskBobJobAfterCallInput, AskBobJobAfterCallResult } from "@/lib/domain/askbob/types";
 import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
 
@@ -121,6 +126,14 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
     callOutcome,
   });
 
+  let callHistoryRecords: CallHistoryRecord[] = [];
+  try {
+    callHistoryRecords = await loadCallHistoryForJob(supabase, workspace.id, job.id);
+  } catch (error) {
+    console.error("[askbob-after-call-ui] failed to load call history signals", error);
+  }
+  const callSummarySignals = computeCallSummarySignals(callHistoryRecords);
+
   const afterCallInput: AskBobJobAfterCallInput = {
     task: "job.after_call",
     context: {
@@ -141,6 +154,7 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
     phoneNumber,
     existingCallSummary,
     recentJobSignals,
+    callSummarySignals,
   };
 
   try {

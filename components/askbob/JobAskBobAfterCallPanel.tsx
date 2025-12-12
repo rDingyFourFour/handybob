@@ -24,6 +24,7 @@ type JobAskBobAfterCallPanelProps = {
   onReset?: () => void;
   initialAfterCallSnapshot?: AskBobAfterCallSnapshotPayload | null;
   onAfterCallSummaryChange?: (summary: string | null) => void;
+  callHistoryHint?: string | null;
 };
 
 const summaryFromSnapshot = (snapshot?: AskBobAfterCallSnapshotPayload | null): AskBobJobAfterCallResult | null => {
@@ -57,6 +58,7 @@ export default function JobAskBobAfterCallPanel({
   onReset,
   initialAfterCallSnapshot,
   onAfterCallSummaryChange,
+  callHistoryHint,
 }: JobAskBobAfterCallPanelProps) {
   const [result, setResult] = useState<AskBobJobAfterCallResult | null>(() =>
     summaryFromSnapshot(initialAfterCallSnapshot),
@@ -201,6 +203,9 @@ export default function JobAskBobAfterCallPanel({
             <p className="text-sm text-slate-400">
               AskBob will summarize your most recent call, highlight what happened, and recommend the best next move.
             </p>
+            {callHistoryHint && (
+              <p className="text-xs text-slate-400">Call history: {callHistoryHint}</p>
+            )}
             <p className="text-xs text-slate-500">{contextUsedText}</p>
             <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
               {callLabelText}

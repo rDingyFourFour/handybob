@@ -3,7 +3,11 @@
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { runAskBobTask } from "@/lib/domain/askbob/service";
-import { AskBobJobCallScriptInput, AskBobJobCallScriptResult } from "@/lib/domain/askbob/types";
+import {
+  ASKBOB_CALL_PERSONA_STYLES,
+  AskBobJobCallScriptInput,
+  AskBobJobCallScriptResult,
+} from "@/lib/domain/askbob/types";
 import { z } from "zod";
 
 const normalizeOptionalString = (value?: string | null) => {
@@ -27,6 +31,7 @@ const callScriptPayloadSchema = z.object({
   callPurpose: z.enum(["intake", "scheduling", "followup"]),
   callTone: z.string().optional().nullable().transform(normalizeOptionalString),
   extraDetails: z.string().optional().nullable().transform(normalizeOptionalString),
+  callPersonaStyle: z.enum(ASKBOB_CALL_PERSONA_STYLES).optional().nullable(),
 });
 
 type CallScriptRequestPayload = z.infer<typeof callScriptPayloadSchema>;
@@ -54,6 +59,8 @@ export async function runAskBobCallScriptAction(
   payload: CallScriptRequestPayload,
 ): Promise<AskBobCallScriptActionResult> {
   const parsed = callScriptPayloadSchema.parse(payload);
+  const hasPersonaStyle = Boolean(parsed.callPersonaStyle);
+  const personaStyle = parsed.callPersonaStyle ?? null;
 
   const supabase = await createServerClient();
   const { workspace, user } = await getCurrentWorkspace({ supabase });
@@ -105,6 +112,8 @@ export async function runAskBobCallScriptAction(
     hasFollowupSummary,
     callPurpose: parsed.callPurpose,
     callTone: parsed.callTone ?? null,
+    hasPersonaStyle,
+    personaStyle,
   });
 
   const taskInput: AskBobJobCallScriptInput = {
@@ -124,6 +133,7 @@ export async function runAskBobCallScriptAction(
     followupSummary: parsed.followupSummary,
     callPurpose: parsed.callPurpose,
     callTone: parsed.callTone,
+    callPersonaStyle: parsed.callPersonaStyle ?? null,
     extraDetails: parsed.extraDetails,
   };
 
@@ -137,6 +147,8 @@ export async function runAskBobCallScriptAction(
       scriptLength: taskResult.scriptBody.length,
       keyPointsCount: taskResult.keyPoints.length,
       callPurpose: parsed.callPurpose,
+      hasPersonaStyle,
+      personaStyle,
     });
 
     return {
@@ -158,6 +170,8 @@ export async function runAskBobCallScriptAction(
       jobId: job.id,
       errorMessage: truncatedError,
       callPurpose: parsed.callPurpose,
+      hasPersonaStyle,
+      personaStyle,
     });
     return {
       ok: false,

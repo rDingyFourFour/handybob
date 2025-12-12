@@ -3,6 +3,11 @@
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { runAskBobTask } from "@/lib/domain/askbob/service";
+import type { CallHistoryRecord } from "@/lib/domain/askbob/callHistory";
+import {
+  loadCallHistoryForJob,
+  computeCallSummarySignals,
+} from "@/lib/domain/askbob/callHistory";
 import { AskBobJobFollowupInput } from "@/lib/domain/askbob/types";
 import { computeFollowupDueInfo, FollowupDueStatus } from "@/lib/domain/communications/followupRecommendations";
 import { z } from "zod";
@@ -84,14 +89,15 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
     return { ok: false, error: "job_not_found" };
   }
 
-  const [callRes, messageRes, quoteRes, invoiceRes, appointmentRes] = await Promise.all([
-    supabase
-      .from("calls")
-      .select("id, started_at")
-      .eq("workspace_id", workspace.id)
-      .eq("job_id", job.id)
-      .order("started_at", { ascending: false })
-      .limit(1),
+  let callHistoryRecords: CallHistoryRecord[] = [];
+  try {
+    callHistoryRecords = await loadCallHistoryForJob(supabase, workspace.id, job.id);
+  } catch (error) {
+    console.error("[askbob-job-followup-ui] failed to load call history signals", error);
+  }
+  const callSummarySignals = computeCallSummarySignals(callHistoryRecords);
+
+  const [messageRes, quoteRes, invoiceRes, appointmentRes] = await Promise.all([
     supabase
       .from("messages")
       .select("id, created_at, sent_at")
@@ -122,7 +128,7 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
       .limit(20),
   ]);
 
-  const latestCall = callRes.data?.[0] ?? null;
+  const latestCall = callHistoryRecords[0] ?? null;
   const latestMessage = messageRes.data?.[0] ?? null;
   const quotesList = quoteRes.data ?? [];
   const latestQuote = quotesList.find((quote) => Boolean(quote.created_at)) ?? null;
@@ -132,7 +138,7 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
     null;
   const appointments = appointmentRes.data ?? [];
 
-  const lastCallAt = latestCall?.started_at ?? null;
+  const lastCallAt = latestCall?.started_at ?? latestCall?.created_at ?? null;
   const lastMessageAt = latestMessage?.sent_at ?? latestMessage?.created_at ?? null;
   const lastQuoteAt = latestQuote?.created_at ?? null;
   const lastInvoiceDueAt = latestInvoice?.due_at ?? null;
@@ -203,6 +209,7 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
     hasOpenQuote,
     hasUnpaidInvoice,
     notesSummary,
+    callSummarySignals,
     hasQuoteContextForFollowup,
     hasAskBobAppointment,
   };
