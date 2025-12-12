@@ -169,6 +169,10 @@ export default async function MessagesPage({
     typeof normalizedDraftBody === "string" && normalizedDraftBody.trim()
       ? normalizedDraftBody.trim()
       : null;
+  const rawDraftKeyParam = resolvedSearchParams?.draftKey ?? resolvedSearchParams?.draft_key;
+  const normalizedDraftKey = Array.isArray(rawDraftKeyParam)
+    ? rawDraftKeyParam[0] ?? null
+    : rawDraftKeyParam ?? null;
   const isAskBobFollowupDraft =
     composeOpen && origin === "askbob-followup" && Boolean(initialDraftBody);
   const messageFilterSubtitle =
@@ -537,6 +541,7 @@ export default async function MessagesPage({
       hasCustomerId: Boolean(initialCustomerId),
       hasJobId: Boolean(initialJobId),
       origin,
+      hasDraftKey: Boolean(normalizedDraftKey),
     });
     if (origin === "askbob") {
       console.log("[messages-compose-from-askbob-entry]", {
@@ -606,6 +611,7 @@ export default async function MessagesPage({
               initialComposerOpen={composeOpen}
               initialComposerOrigin={origin}
               initialComposerBody={initialDraftBody}
+              initialComposerBodyKey={normalizedDraftKey}
             />
             <HbButton as="a" href="/messages" variant="ghost" size="sm">
               Back to messages

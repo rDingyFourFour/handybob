@@ -3,9 +3,16 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockRunAction = vi.fn();
+const mockRouterPush = vi.fn();
 
 vi.mock("@/app/(app)/askbob/after-call-actions", () => ({
   runAskBobJobAfterCallAction: (...args: unknown[]) => mockRunAction(...args),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: mockRouterPush,
+  }),
 }));
 
 import JobAskBobAfterCallPanel from "@/components/askbob/JobAskBobAfterCallPanel";
@@ -19,6 +26,7 @@ describe("JobAskBobAfterCallPanel", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     mockRunAction.mockReset();
+    mockRouterPush.mockReset();
   });
 
   afterEach(() => {

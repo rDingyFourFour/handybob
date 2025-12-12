@@ -15,6 +15,7 @@ type MessagesHeaderActionsProps = {
   initialComposerOpen?: boolean;
   initialComposerOrigin?: string | null;
   initialComposerBody?: string | null;
+  initialComposerBodyKey?: string | null;
 };
 
 export default function MessagesHeaderActions({
@@ -26,6 +27,7 @@ export default function MessagesHeaderActions({
   initialComposerOpen,
   initialComposerOrigin,
   initialComposerBody,
+  initialComposerBodyKey,
 }: MessagesHeaderActionsProps) {
   const [isGlobalComposerOpen, setIsGlobalComposerOpen] = useState(
     Boolean(initialComposerOpen),
@@ -57,6 +59,7 @@ export default function MessagesHeaderActions({
         initialJobId={initialJobId}
         initialBody={initialComposerBody}
         initialOrigin={initialComposerOrigin}
+        initialBodyKey={initialComposerBodyKey}
         open={isGlobalComposerOpen}
         onClose={handleClose}
       />

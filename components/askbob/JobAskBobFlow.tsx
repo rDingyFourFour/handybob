@@ -621,6 +621,7 @@ export default function JobAskBobFlow({
             jobDescription={jobDescription ?? null}
             latestCallLabel={latestCallLabel ?? null}
             hasCall={Boolean(hasLatestCall ?? latestCallLabel)}
+            customerId={customerId ?? null}
             stepCompleted={afterCallDone}
             resetToken={afterCallResetToken}
             onReset={handleAfterCallReset}

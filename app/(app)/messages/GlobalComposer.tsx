@@ -27,6 +27,7 @@ type GlobalComposerProps = {
   initialOrigin?: string | null;
   open: boolean;
   onClose?: () => void;
+  initialBodyKey?: string | null;
 };
 
 export default function GlobalComposer({
@@ -39,6 +40,7 @@ export default function GlobalComposer({
   initialOrigin,
   open,
   onClose,
+  initialBodyKey,
 }: GlobalComposerProps) {
   const hasValidInitialCustomer =
     typeof initialCustomerId === "string" &&
@@ -155,6 +157,35 @@ export default function GlobalComposer({
       event.currentTarget.form?.requestSubmit();
     }
   };
+
+  useEffect(() => {
+    if (!open || initialBodyValue.length > 0 || !initialBodyKey) {
+      return;
+    }
+    if (messageBody.trim().length > 0) {
+      return;
+    }
+    if (typeof window === "undefined") {
+      return;
+    }
+    let storedDraft: string | null = null;
+    try {
+      storedDraft = window.sessionStorage.getItem(initialBodyKey);
+    } catch (error) {
+      console.error("[messages-global-composer] could not read cached draft", error);
+    }
+    if (storedDraft && storedDraft.trim().length) {
+      const normalizedDraft = storedDraft.trim();
+      startTransition(() => {
+        setMessageBody(normalizedDraft);
+      });
+    }
+    try {
+      window.sessionStorage.removeItem(initialBodyKey);
+    } catch (error) {
+      console.error("[messages-global-composer] could not clear cached draft", error);
+    }
+  }, [initialBodyKey, initialBodyValue, messageBody, open, startTransition]);
 
   if (!open) {
     return null;

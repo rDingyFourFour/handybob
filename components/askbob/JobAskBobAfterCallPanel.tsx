@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
@@ -25,6 +26,7 @@ type JobAskBobAfterCallPanelProps = {
   initialAfterCallSnapshot?: AskBobAfterCallSnapshotPayload | null;
   onAfterCallSummaryChange?: (summary: string | null) => void;
   callHistoryHint?: string | null;
+  customerId?: string | null;
 };
 
 const summaryFromSnapshot = (snapshot?: AskBobAfterCallSnapshotPayload | null): AskBobJobAfterCallResult | null => {
@@ -59,6 +61,7 @@ export default function JobAskBobAfterCallPanel({
   initialAfterCallSnapshot,
   onAfterCallSummaryChange,
   callHistoryHint,
+  customerId,
 }: JobAskBobAfterCallPanelProps) {
   const [result, setResult] = useState<AskBobJobAfterCallResult | null>(() =>
     summaryFromSnapshot(initialAfterCallSnapshot),
@@ -67,6 +70,7 @@ export default function JobAskBobAfterCallPanel({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
   const hasResetEffectRun = useRef(false);
+  const router = useRouter();
 
   useEffect(() => {
     onAfterCallSummaryChange?.(result?.afterCallSummary ?? null);
@@ -164,6 +168,46 @@ export default function JobAskBobAfterCallPanel({
       ? result.suggestedChannel.toUpperCase()
       : "No outreach needed";
 
+  const storeDraftForComposer = (body: string) => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    const key = `askbob-after-call-draft-${jobId}-${Date.now()}`;
+    try {
+      window.sessionStorage.setItem(key, body);
+      return key;
+    } catch (error) {
+      console.error("[askbob-after-call-panel] failed to cache draft", error);
+      return null;
+    }
+  };
+
+  const handleOpenMessagesComposer = () => {
+    if (!result?.draftMessageBody) {
+      return;
+    }
+    const draftKey = storeDraftForComposer(result.draftMessageBody);
+    const params = new URLSearchParams({
+      compose: "1",
+      origin: "askbob-after-call",
+      jobId,
+    });
+    if (customerId) {
+      params.set("customerId", customerId);
+    }
+    if (draftKey) {
+      params.set("draftKey", draftKey);
+    }
+    console.log("[askbob-after-call-open-messages]", {
+      workspaceId,
+      jobId,
+      customerId: customerId ?? null,
+      hasCall,
+      draftLength: result.draftMessageBody.length,
+    });
+    router.push(`/messages?${params.toString()}`);
+  };
+
   return (
     <HbCard className="space-y-4">
       <div>
@@ -252,7 +296,7 @@ export default function JobAskBobAfterCallPanel({
                   <p className="text-xs text-slate-400">Notes for tech: {result.notesForTech}</p>
                 )}
                 {result.draftMessageBody && (
-                  <div className="space-y-2">
+                  <div className="space-y-2 min-w-0">
                     <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-500">
                       <span>Draft message</span>
                       <button
@@ -263,13 +307,24 @@ export default function JobAskBobAfterCallPanel({
                         {copyStatus === "copied" ? "Copied" : "Copy"}
                       </button>
                     </div>
-                    <pre className="rounded-lg border border-slate-800 bg-slate-900/50 p-3 text-sm leading-relaxed text-slate-200">
+                    <pre
+                      className="w-full rounded-lg border border-slate-800 bg-slate-900/50 p-3 text-sm leading-relaxed text-slate-200 whitespace-pre-wrap break-words max-w-full"
+                      style={{ overflowWrap: "anywhere" }}
+                    >
                       {result.draftMessageBody}
                     </pre>
+                    <HbButton
+                      size="sm"
+                      variant="secondary"
+                      className="w-full"
+                      onClick={handleOpenMessagesComposer}
+                    >
+                      Open composer with this draft
+                    </HbButton>
                   </div>
                 )}
-              </div>
-            )}
+            </div>
+          )}
           </>
         )}
       </div>
