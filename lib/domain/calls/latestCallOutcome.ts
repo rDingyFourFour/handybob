@@ -46,6 +46,7 @@ export type LatestCallOutcomeForJob = {
   outcomeCode: CallOutcomeCode | null;
   outcomeNotes: string | null;
   isAskBobAssisted: boolean;
+  displayLabel?: string | null;
 };
 
 export function normalizeCallOutcomeNotes(
@@ -239,13 +240,17 @@ export async function getLatestCallOutcomeForJob(
         ? (data.outcome_code as CallOutcomeCode)
         : null;
     const resolvedOutcomeCode = rawOutcomeCode ?? legacyOutcomeCode ?? null;
-    return {
+    const normalizedOutcome: LatestCallOutcomeForJob = {
       callId: data.id,
       occurredAt,
       reachedCustomer: hasReachedCustomerColumn ? data.reached_customer ?? null : null,
       outcomeCode: resolvedOutcomeCode,
       outcomeNotes: hasOutcomeNotesColumn ? normalizeCallOutcomeNotes(data.outcome_notes) : null,
       isAskBobAssisted: isAskBobScriptSummary(summary),
+    };
+    return {
+      ...normalizedOutcome,
+      displayLabel: formatLatestCallOutcomeReference(normalizedOutcome),
     };
   } catch (error) {
     console.error("[latest-call-outcome] Unexpected error fetching outcome", {

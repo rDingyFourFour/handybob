@@ -326,6 +326,14 @@ describe("AskBobCallAssistPanel", () => {
           followupSummary="Follow-up"
           followupCallRecommended
           latestCallOutcomeLabel={latestLabel}
+          latestCallOutcome={{
+            callId: "call-1",
+            occurredAt: "2025-01-01T10:00:00Z",
+            reachedCustomer: true,
+            outcomeCode: "reached_needs_followup",
+            outcomeNotes: null,
+            isAskBobAssisted: false,
+          }}
           onToggleCollapse={vi.fn()}
           onCallScriptSummaryChange={vi.fn()}
           stepCollapsed={false}
@@ -344,5 +352,9 @@ describe("AskBobCallAssistPanel", () => {
 
     const actionPayload = mockRunAction.mock.calls[0][0];
     expect(actionPayload.extraDetails).toBe(`Latest call outcome: ${latestLabel}`);
+    expect(actionPayload.latestCallOutcome).toMatchObject({
+      callId: "call-1",
+      outcomeCode: "reached_needs_followup",
+    });
   });
 });

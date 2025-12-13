@@ -514,6 +514,8 @@ export interface AskBobJobCallScriptInput {
   materialsSummary?: string | null;
   lastQuoteSummary?: string | null;
   followupSummary?: string | null;
+  latestCallOutcome?: LatestCallOutcomeForJob | null;
+  latestCallOutcomeContext?: string | null;
   callPurpose: AskBobCallPurpose;
   callTone?: string | null;
   callPersonaStyle?: AskBobCallPersonaStyle | null;

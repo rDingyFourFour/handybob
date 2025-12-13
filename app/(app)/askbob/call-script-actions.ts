@@ -9,6 +9,7 @@ import {
   AskBobJobCallScriptInput,
   AskBobJobCallScriptResult,
 } from "@/lib/domain/askbob/types";
+import { buildCallOutcomePromptContext } from "@/lib/domain/calls/latestCallOutcome";
 import { z } from "zod";
 
 const normalizeOptionalString = (value?: string | null) => {
@@ -29,6 +30,18 @@ const callScriptPayloadSchema = z.object({
   materialsSummary: z.string().optional().nullable().transform(normalizeOptionalString),
   lastQuoteSummary: z.string().optional().nullable().transform(normalizeOptionalString),
   followupSummary: z.string().optional().nullable().transform(normalizeOptionalString),
+  latestCallOutcome: z
+    .object({
+      callId: z.string().min(1),
+      occurredAt: z.string().optional().nullable(),
+      reachedCustomer: z.boolean().nullable(),
+      outcomeCode: z.string().nullable(),
+      outcomeNotes: z.string().nullable(),
+      isAskBobAssisted: z.boolean(),
+      displayLabel: z.string().optional().nullable(),
+    })
+    .optional()
+    .nullable(),
   callPurpose: z.enum(["intake", "scheduling", "followup"]),
   callTone: z.string().optional().nullable().transform(normalizeOptionalString),
   extraDetails: z.string().optional().nullable().transform(normalizeOptionalString),
@@ -110,6 +123,18 @@ export async function runAskBobCallScriptAction(
   const hasMaterialsSummary = Boolean(parsed.materialsSummary);
   const hasLastQuoteSummary = Boolean(parsed.lastQuoteSummary);
   const hasFollowupSummary = Boolean(parsed.followupSummary);
+  const latestCallOutcomeContext =
+    parsed.latestCallOutcome && buildCallOutcomePromptContext(parsed.latestCallOutcome);
+  const extraDetailsParts: string[] = [];
+  if (parsed.extraDetails) {
+    extraDetailsParts.push(parsed.extraDetails);
+  }
+  if (latestCallOutcomeContext) {
+    extraDetailsParts.push(latestCallOutcomeContext);
+  }
+  const combinedExtraDetails = extraDetailsParts.length
+    ? extraDetailsParts.join("\n\n")
+    : null;
 
   console.log("[askbob-call-script-ui-request]", {
     workspaceId: workspace.id,
@@ -147,8 +172,10 @@ export async function runAskBobCallScriptAction(
     callPurpose: parsed.callPurpose,
     callTone: parsed.callTone,
     callPersonaStyle: parsed.callPersonaStyle ?? null,
-    extraDetails: parsed.extraDetails,
+    extraDetails: combinedExtraDetails,
     callIntents: parsed.callIntents ?? null,
+    latestCallOutcome: parsed.latestCallOutcome ?? null,
+    latestCallOutcomeContext: latestCallOutcomeContext ?? null,
   };
 
   try {

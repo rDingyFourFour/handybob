@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { handleTwilioVoiceEvent } from "@/lib/domain/calls";
 import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
-import { getLatestCallOutcomeForJob } from "@/lib/domain/calls/latestCallOutcome";
+import {
+  formatLatestCallOutcomeReference,
+  getLatestCallOutcomeForJob,
+} from "@/lib/domain/calls/latestCallOutcome";
 
 describe("handleTwilioVoiceEvent", () => {
   it("returns TwiML that instructs recording", async () => {
@@ -98,6 +101,15 @@ describe("getLatestCallOutcomeForJob", () => {
       "job-legacy",
     );
 
+    const expectedLabel = formatLatestCallOutcomeReference({
+      callId: "legacy-call",
+      occurredAt: createdDate,
+      reachedCustomer: null,
+      outcomeCode: null,
+      outcomeNotes: null,
+      isAskBobAssisted: false,
+    });
+
     expect(result).toEqual({
       callId: "legacy-call",
       occurredAt: createdDate,
@@ -105,6 +117,7 @@ describe("getLatestCallOutcomeForJob", () => {
       outcomeCode: null,
       outcomeNotes: null,
       isAskBobAssisted: false,
+      displayLabel: expectedLabel,
     });
     expect(warnSpy).toHaveBeenCalledWith(
       "[latest-call-outcome] Outcome columns not found; using legacy fields",

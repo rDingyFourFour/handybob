@@ -11,12 +11,21 @@ vi.mock("next/navigation", () => ({
 }));
 
 let capturedPanelProps: Record<string, unknown> | null = null;
+let capturedFollowupProps: Record<string, unknown> | null = null;
 
 vi.mock("@/components/askbob/AskBobCallAssistPanel", () => ({
   __esModule: true,
   default: (props: Record<string, unknown>) => {
     capturedPanelProps = props;
     return <div data-testid="mock-call-assist" />;
+  },
+}));
+
+vi.mock("@/components/askbob/JobAskBobFollowupPanel", () => ({
+  __esModule: true,
+  default: (props: Record<string, unknown>) => {
+    capturedFollowupProps = props;
+    return <div data-testid="mock-followup" />;
   },
 }));
 
@@ -29,6 +38,7 @@ describe("JobAskBobFlow wiring", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     capturedPanelProps = null;
+    capturedFollowupProps = null;
     pushMock.mockClear();
   });
 
@@ -135,7 +145,7 @@ describe("JobAskBobFlow wiring", () => {
             callTone: "friendly and confident",
           }}
           lastQuoteSummary={null}
-          initialLatestCallOutcome={{
+          latestCallOutcome={{
             callId: "call-1",
             occurredAt: "2025-01-01T10:00:00Z",
             reachedCustomer: true,
@@ -149,5 +159,10 @@ describe("JobAskBobFlow wiring", () => {
     });
 
     expect(capturedPanelProps?.latestCallOutcomeLabel).toContain("Needs follow-up");
+    expect(capturedFollowupProps?.latestCallOutcome).toMatchObject({
+      callId: "call-1",
+      outcomeCode: "reached_needs_followup",
+    });
+    expect(capturedFollowupProps?.stepCompleted).toBe(false);
   });
 });

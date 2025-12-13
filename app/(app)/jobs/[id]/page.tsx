@@ -492,9 +492,9 @@ export default async function JobDetailPage(props: {
       ? buildCallHistoryHint(callSummarySignals)
       : null;
 
-  let initialLatestCallOutcome = null;
+  let latestCallOutcome = null;
   try {
-    initialLatestCallOutcome = await getLatestCallOutcomeForJob(supabase, workspace.id, job.id);
+    latestCallOutcome = await getLatestCallOutcomeForJob(supabase, workspace.id, job.id);
   } catch (error) {
     console.error("[job-detail] Failed to load latest call outcome", {
       workspaceId: workspace.id,
@@ -585,7 +585,7 @@ export default async function JobDetailPage(props: {
             latestCallLabel={latestCallLabelText}
             hasLatestCall={Boolean(latestCall)}
             callHistoryHint={callHistoryHint}
-            initialLatestCallOutcome={initialLatestCallOutcome}
+            latestCallOutcome={latestCallOutcome}
             afterCallCacheKey={afterCallCacheKey ?? undefined}
             afterCallCacheCallId={afterCallCallId ?? undefined}
           />

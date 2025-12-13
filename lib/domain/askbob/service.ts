@@ -587,6 +587,8 @@ async function runAskBobJobCallScriptTask(
     callPersonaStyle: input.callPersonaStyle ?? null,
     extraDetails: input.extraDetails?.trim() ?? null,
     callIntents: normalizedCallIntents ?? null,
+    latestCallOutcome: input.latestCallOutcome ?? null,
+    latestCallOutcomeContext: input.latestCallOutcomeContext?.trim() ?? null,
   };
   const hasPersonaStyle = Boolean(normalizedInput.callPersonaStyle);
   const personaStyle = normalizedInput.callPersonaStyle ?? null;
@@ -603,6 +605,8 @@ async function runAskBobJobCallScriptTask(
     hasMaterialsSummary: Boolean(normalizedInput.materialsSummary),
     hasLastQuoteSummary: Boolean(normalizedInput.lastQuoteSummary),
     hasFollowupSummary: Boolean(normalizedInput.followupSummary),
+    hasLatestCallOutcome: Boolean(normalizedInput.latestCallOutcome),
+    hasLatestCallOutcomeContext: Boolean(normalizedInput.latestCallOutcomeContext),
     callPurpose: normalizedInput.callPurpose,
     callTone: normalizedInput.callTone ?? null,
     hasPersonaStyle,

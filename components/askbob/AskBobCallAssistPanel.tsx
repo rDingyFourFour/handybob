@@ -14,6 +14,7 @@ import {
   type AskBobCallIntent,
   type AskBobCallPersonaStyle,
 } from "@/lib/domain/askbob/types";
+import type { LatestCallOutcomeForJob } from "@/lib/domain/calls/latestCallOutcome";
 import { runAskBobCallScriptAction } from "@/app/(app)/askbob/call-script-actions";
 
 export type StartCallWithScriptPayload = {
@@ -54,6 +55,7 @@ type AskBobCallAssistPanelProps = {
   userId?: string | null;
   onStartCallWithScript?: (payload: StartCallWithScriptPayload) => void;
   latestCallOutcomeLabel?: string | null;
+  latestCallOutcome?: LatestCallOutcomeForJob | null;
 };
 
 type ScriptResult = {
@@ -156,6 +158,7 @@ export default function AskBobCallAssistPanel({
   onCallScriptPersonaChange,
   userId,
   onStartCallWithScript,
+  latestCallOutcome,
   latestCallOutcomeLabel,
 }: AskBobCallAssistPanelProps) {
   const normalizedFollowupCallPurpose = followupCallPurpose?.trim() ?? null;
@@ -376,6 +379,7 @@ export default function AskBobCallAssistPanel({
         materialsSummary: materialsSummary ?? null,
         lastQuoteSummary: lastQuoteSummary ?? null,
         followupSummary: followupSummary ?? null,
+        latestCallOutcome: latestCallOutcome ?? null,
         callPurpose,
         callTone,
         callPersonaStyle: personaStyleForPayload,

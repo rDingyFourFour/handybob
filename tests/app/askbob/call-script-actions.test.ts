@@ -124,4 +124,27 @@ describe("runAskBobCallScriptAction", () => {
 
     logSpy.mockRestore();
   });
+
+  it("passes the latest call outcome context when available", async () => {
+    const response = await runAskBobCallScriptAction({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      callPurpose: "followup",
+      callTone: "friendly and clear",
+      latestCallOutcome: {
+        callId: "call-42",
+        occurredAt: "2025-01-10T09:00:00Z",
+        reachedCustomer: true,
+        outcomeCode: "reached_scheduled",
+        outcomeNotes: "Left a reminder",
+        isAskBobAssisted: false,
+        displayLabel: "Reached · Scheduled · 2025-01-10 09:00",
+      },
+    });
+
+    expect(response.ok).toBe(true);
+    const taskInput = mockRunAskBobTask.mock.calls[0][1];
+    expect(taskInput.latestCallOutcome).toMatchObject({ callId: "call-42" });
+    expect(taskInput.latestCallOutcomeContext).toContain("Latest call outcome:");
+  });
 });

@@ -105,7 +105,7 @@ describe("callAskBobJobFollowup", () => {
     );
 
     const userMessage = __mockCreate.mock.calls[0][0].messages[1].content;
-    expect(userMessage).toContain("Call outcome context:");
+    expect(userMessage).toContain("Latest call outcome:");
     expect(userMessage).toContain("Reached customer: yes");
     expect(userMessage).toContain("Appointment scheduled: no");
     expect(userMessage).toContain("Voicemail left: no");
@@ -126,6 +126,6 @@ describe("callAskBobJobFollowup", () => {
     await callAskBobJobFollowup(baseInput());
 
     const userMessage = __mockCreate.mock.calls[0][0].messages[1].content;
-    expect(userMessage).not.toContain("Call outcome context:");
+    expect(userMessage).not.toContain("Latest call outcome:");
   });
 });

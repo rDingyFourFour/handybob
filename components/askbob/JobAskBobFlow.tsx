@@ -134,7 +134,7 @@ type JobAskBobFlowProps = {
   latestCallLabel?: string | null;
   hasLatestCall?: boolean;
   callHistoryHint?: string | null;
-  initialLatestCallOutcome?: LatestCallOutcomeForJob | null;
+  latestCallOutcome?: LatestCallOutcomeForJob | null;
   callSessionLatestCallOutcome?: LatestCallOutcomeForJob | null;
   afterCallCacheKey?: string | null;
   afterCallCacheCallId?: string | null;
@@ -171,7 +171,7 @@ export default function JobAskBobFlow({
   latestCallLabel,
   hasLatestCall,
   callHistoryHint,
-  initialLatestCallOutcome,
+  latestCallOutcome,
   callSessionLatestCallOutcome,
   afterCallCacheKey,
   afterCallCacheCallId,
@@ -302,10 +302,14 @@ export default function JobAskBobFlow({
     });
   }, [afterCallCacheCallId, afterCallCacheKey, initialAfterCallSnapshot, jobId]);
   const resolvedAfterCallSnapshot = initialAfterCallSnapshot ?? hydratedAfterCallSnapshot ?? null;
-  const latestCallOutcome = callSessionLatestCallOutcome ?? initialLatestCallOutcome ?? null;
-  const latestCallOutcomeHint = latestCallOutcome ? formatLatestCallOutcomeHint(latestCallOutcome) : null;
-  const latestCallOutcomeReference = latestCallOutcome
-    ? formatLatestCallOutcomeReference(latestCallOutcome)
+  const resolvedLatestCallOutcome =
+    callSessionLatestCallOutcome ?? latestCallOutcome ?? null;
+  const latestCallOutcomeHint = resolvedLatestCallOutcome
+    ? formatLatestCallOutcomeHint(resolvedLatestCallOutcome)
+    : null;
+  const latestCallOutcomeReference = resolvedLatestCallOutcome
+    ? resolvedLatestCallOutcome.displayLabel ??
+      formatLatestCallOutcomeReference(resolvedLatestCallOutcome)
     : null;
 
   const serverQuoteCandidate = initialLastQuoteId
@@ -643,7 +647,7 @@ export default function JobAskBobFlow({
             onFollowupResult={handleFollowupResult}
             onJumpToCallAssist={handleJumpToCallAssist}
             callHistoryHint={callHistoryHint ?? null}
-            latestCallOutcome={latestCallOutcome}
+            latestCallOutcome={resolvedLatestCallOutcome}
             latestCallOutcomeHint={latestCallOutcomeHint}
           />
         </AskBobSection>
@@ -695,6 +699,7 @@ export default function JobAskBobFlow({
             callScriptSummary={callScriptSummary}
             onCallScriptSummaryChange={setCallScriptSummary}
             onStartCallWithScript={handleStartCallWithScript}
+            latestCallOutcome={resolvedLatestCallOutcome}
             latestCallOutcomeLabel={latestCallOutcomeReference}
           />
         </AskBobSection>

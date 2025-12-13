@@ -806,6 +806,7 @@ export async function callAskBobJobFollowup(
   const callOutcomeContext =
     input.latestCallOutcomeContext?.trim() ||
     buildCallOutcomePromptContext(latestCallOutcome);
+  const latestCallOutcomeLabel = latestCallOutcome?.displayLabel ?? null;
 
   const callHistorySections = buildCallHistoryPromptSections(input.callSummarySignals ?? null);
 
@@ -813,7 +814,8 @@ export async function callAskBobJobFollowup(
     `Context: ${contextParts}`,
     jobTitleLine,
     `Follow-up context:\n${JSON.stringify(followupContext, null, 2)}`,
-    callOutcomeContext ? `Call outcome context:\n${callOutcomeContext}` : null,
+    callOutcomeContext ?? null,
+    latestCallOutcomeLabel ? `Latest call outcome label: ${latestCallOutcomeLabel}` : null,
     callHistorySections.callHistoryLine,
     callHistorySections.bestRetryWindowLine,
     input.notesSummary ? `Notes: ${input.notesSummary}` : null,
@@ -1375,6 +1377,7 @@ export async function callAskBobJobCallScript(
   addContextBlock("AskBob materials summary", input.materialsSummary);
   addContextBlock("AskBob quote summary", input.lastQuoteSummary);
   addContextBlock("AskBob follow-up summary", input.followupSummary);
+  addContextBlock("Latest call outcome", input.latestCallOutcomeContext);
   addContextBlock("Persona / tone", getCallPersonaDescription(input.callPersonaStyle ?? null));
   const contextBlock = contextBlocks.length ? contextBlocks.join("\n\n") : null;
   const extraDetailsBlock =

@@ -39,6 +39,7 @@ const jobFollowupPayloadSchema = z.object({
       outcomeCode: z.string().nullable(),
       outcomeNotes: z.string().nullable(),
       isAskBobAssisted: z.boolean(),
+      displayLabel: z.string().optional().nullable(),
     })
     .optional()
     .nullable(),
