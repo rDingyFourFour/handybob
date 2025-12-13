@@ -6,8 +6,11 @@ import { useActionState } from "react";
 import HbButton from "@/components/ui/hb-button";
 import {
   CALL_OUTCOME_CODE_OPTIONS,
+  CallOutcome,
   CallOutcomeCode,
   getCallOutcomeCodeMetadata,
+  getCallOutcomeMetadata,
+  mapOutcomeCodeToLegacyOutcome,
 } from "@/lib/domain/communications/callOutcomes";
 import { SaveCallOutcomeResponse, saveCallOutcomeAction } from "../actions/saveCallOutcome";
 import { readAndClearCallOutcomePrefill } from "@/utils/askbob/callOutcomePrefillCache";
@@ -27,6 +30,7 @@ type SavedOutcome = {
   outcomeCode: CallOutcomeCode | null;
   notes: string | null;
   recordedAt: string | null;
+  legacyOutcome: CallOutcome | null;
 };
 
 type CallOutcomeCaptureCardProps = {
@@ -36,8 +40,17 @@ type CallOutcomeCaptureCardProps = {
   initialReachedCustomer: boolean | null;
   initialNotes: string | null;
   initialRecordedAt: string | null;
+  initialLegacyOutcome?: CallOutcome | null;
   hasAskBobScriptHint: boolean;
+  actionStateOverride?: ActionStateTuple;
+  jobId?: string | null;
 };
+
+type ActionStateTuple = [
+  SaveCallOutcomeResponse | null,
+  (formData: FormData) => unknown,
+  boolean,
+];
 
 function formatRecordedAtLabel(value: string | null) {
   if (!value) {
@@ -73,17 +86,22 @@ export default function CallOutcomeCaptureCard({
   initialReachedCustomer,
   initialNotes,
   initialRecordedAt,
+  initialLegacyOutcome,
+  jobId,
   hasAskBobScriptHint,
+  actionStateOverride,
 }: CallOutcomeCaptureCardProps) {
   const hasExistingOutcome =
     Boolean(initialRecordedAt) ||
     Boolean(initialOutcomeCode) ||
-    Boolean(initialNotes?.trim());
+    Boolean(initialNotes?.trim()) ||
+    Boolean(initialLegacyOutcome);
   const [savedOutcome, setSavedOutcome] = useState<SavedOutcome>(() => ({
     reachedCustomer: initialReachedCustomer,
     outcomeCode: initialOutcomeCode,
     notes: initialNotes,
     recordedAt: initialRecordedAt,
+    legacyOutcome: initialLegacyOutcome ?? null,
   }));
   const [isEditing, setIsEditing] = useState(!hasExistingOutcome);
   const [prefillRecord] = useState(() => {
@@ -121,10 +139,12 @@ export default function CallOutcomeCaptureCard({
   const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
   const lastActionStateRef = useRef<SaveCallOutcomeResponse | null>(null);
 
-  const [actionState, formAction, pending] = useActionState<SaveCallOutcomeResponse, FormData>(
+  const hookTuple = useActionState<SaveCallOutcomeResponse, FormData>(
     saveCallOutcomeAction,
     null,
   );
+  const actionStateTuple = actionStateOverride ?? hookTuple;
+  const [actionState, formAction, pending] = actionStateTuple;
 
   useEffect(() => {
     if (!actionState || actionState === lastActionStateRef.current) {
@@ -146,6 +166,7 @@ export default function CallOutcomeCaptureCard({
           outcomeCode: actionState.outcomeCode,
           notes: actionState.notes,
           recordedAt: actionState.recordedAtIso,
+          legacyOutcome: mapOutcomeCodeToLegacyOutcome(actionState.outcomeCode ?? null),
         });
         setIsEditing(false);
       });
@@ -174,9 +195,21 @@ export default function CallOutcomeCaptureCard({
     }
   }, [isEditing, savedOutcome]);
 
-  const recordedLabel = useMemo(() => formatRecordedAtLabel(savedOutcome.recordedAt), [savedOutcome.recordedAt]);
+  const recordedLabel = useMemo(() => {
+    if (savedOutcome.recordedAt) {
+      return formatRecordedAtLabel(savedOutcome.recordedAt);
+    }
+    if (savedOutcome.legacyOutcome) {
+      return "Recorded with legacy outcome data.";
+    }
+    return null;
+  }, [savedOutcome.recordedAt, savedOutcome.legacyOutcome]);
 
-  const hasRecordedOutcome = Boolean(savedOutcome.recordedAt);
+  const hasRecordedOutcome =
+    Boolean(savedOutcome.recordedAt) ||
+    Boolean(savedOutcome.outcomeCode) ||
+    Boolean(savedOutcome.legacyOutcome) ||
+    Boolean(savedOutcome.notes?.trim());
 
   const notesPreview = useMemo(() => {
     if (!savedOutcome.notes) {
@@ -195,7 +228,9 @@ export default function CallOutcomeCaptureCard({
     ? "No"
     : "Not sure";
 
-  const outcomeLabel = getCallOutcomeCodeMetadata(savedOutcome.outcomeCode).label;
+  const outcomeMetadata = getCallOutcomeCodeMetadata(savedOutcome.outcomeCode);
+  const legacyOutcomeMetadata = getCallOutcomeMetadata(savedOutcome.legacyOutcome);
+  const outcomeLabel = outcomeMetadata.value ? outcomeMetadata.label : legacyOutcomeMetadata.label;
   const markDirty = () => {
     dirtyRef.current = true;
     setConfirmationMessage(null);
@@ -257,9 +292,10 @@ export default function CallOutcomeCaptureCard({
       )}
 
       {isEditing && (
-        <form action={formAction} className="space-y-4" method="post">
-          <input type="hidden" name="callId" value={callId} />
-          <input type="hidden" name="workspaceId" value={workspaceId} />
+      <form action={formAction} className="space-y-4">
+        <input type="hidden" name="callId" value={callId} />
+        <input type="hidden" name="workspaceId" value={workspaceId} />
+        <input type="hidden" name="jobId" value={jobId ?? ""} />
           <input
             type="hidden"
             name="reachedCustomer"

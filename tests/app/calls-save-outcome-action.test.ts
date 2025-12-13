@@ -4,6 +4,7 @@ import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 
 const createServerClientMock = vi.fn();
 const mockGetCurrentWorkspace = vi.fn();
+const mockRevalidatePath = vi.fn();
 
 vi.mock("@/utils/supabase/server", () => ({
   createServerClient: () => createServerClientMock(),
@@ -11,6 +12,10 @@ vi.mock("@/utils/supabase/server", () => ({
 
 vi.mock("@/lib/domain/workspaces", () => ({
   getCurrentWorkspace: () => mockGetCurrentWorkspace(),
+}));
+
+vi.mock("next/cache", () => ({
+  revalidatePath: (...args: unknown[]) => mockRevalidatePath(...args),
 }));
 
 import { saveCallOutcomeAction } from "@/app/(app)/calls/actions/saveCallOutcome";
@@ -25,6 +30,7 @@ describe("saveCallOutcomeAction", () => {
       workspace: { id: "workspace-1" },
       user: { id: "user-1" },
     });
+    mockRevalidatePath.mockReset();
   });
 
   it("persists normalized values for a valid request", async () => {
@@ -93,5 +99,35 @@ describe("saveCallOutcomeAction", () => {
       error: "Call not found",
       code: "call_not_found",
     });
+  });
+
+  it("revalidates the job route when jobId is supplied", async () => {
+    const callRow = { id: "call-1", workspace_id: "workspace-1" };
+    supabaseState.responses.calls = { data: [callRow], error: null };
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const formData = new FormData();
+    formData.append("callId", "call-1");
+    formData.append("workspaceId", "workspace-1");
+    formData.append("jobId", "job-1");
+    formData.append("reachedCustomer", "true");
+    formData.append("outcomeCode", "reached_scheduled");
+
+    const result = await saveCallOutcomeAction(formData);
+
+    expect(result.ok).toBe(true);
+    expect(mockRevalidatePath).toHaveBeenCalledTimes(2);
+    expect(mockRevalidatePath).toHaveBeenNthCalledWith(1, "/calls/call-1");
+    expect(mockRevalidatePath).toHaveBeenNthCalledWith(2, "/jobs/job-1");
+    expect(logSpy).toHaveBeenCalledWith(
+      "[calls-outcome-ui-success]",
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        callId: "call-1",
+        hasJobId: true,
+      }),
+    );
+
+    logSpy.mockRestore();
   });
 });

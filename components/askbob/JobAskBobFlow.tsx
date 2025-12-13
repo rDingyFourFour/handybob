@@ -242,9 +242,6 @@ export default function JobAskBobFlow({
   const [callScriptCollapsed, setCallScriptCollapsed] = useState(false);
   const [callScriptResetToken, setCallScriptResetToken] = useState(0);
   const [schedulerResetToken, setSchedulerResetToken] = useState(0);
-  const [afterCallSummary, setAfterCallSummary] = useState<string | null>(
-    initialAfterCallSnapshot?.afterCallSummary ?? null,
-  );
   const [afterCallCollapsed, setAfterCallCollapsed] = useState(false);
   const [afterCallResetToken, setAfterCallResetToken] = useState(0);
   const [hydratedAfterCallSnapshot, setHydratedAfterCallSnapshot] =
@@ -293,14 +290,14 @@ export default function JobAskBobFlow({
       });
       return;
     }
-    console.log("[askbob-after-call-job-hydrate-hit]", {
+    const logPayload = {
       jobId,
       callId: payload.callId,
-      cacheKey: afterCallCacheKey,
-    });
+      cacheKey,
+    };
     startTransition(() => {
       setHydratedAfterCallSnapshot(payload.result);
-      setAfterCallSummary(payload.result.afterCallSummary);
+      console.log("[askbob-after-call-job-hydrate-hit]", logPayload);
     });
   }, [afterCallCacheCallId, afterCallCacheKey, initialAfterCallSnapshot, jobId]);
   const resolvedAfterCallSnapshot = initialAfterCallSnapshot ?? hydratedAfterCallSnapshot ?? null;
@@ -455,7 +452,6 @@ export default function JobAskBobFlow({
 
   const handleAfterCallSummaryChange = (summary: string | null) => {
     const normalized = summary?.trim() ?? null;
-    setAfterCallSummary(normalized);
     if (normalized) {
       maybeAutoCollapseSteps();
     }
@@ -521,7 +517,6 @@ export default function JobAskBobFlow({
   };
 
   const handleAfterCallReset = () => {
-    setAfterCallSummary(null);
     setAfterCallResetToken((value) => value + 1);
     setAfterCallCollapsed(false);
   };

@@ -22,5 +22,12 @@ export default async function JobRecentActivityCard({ jobId, workspaceId }: Prop
     loadError = true;
   }
 
-  return <JobRecentActivityCardClient events={events} loadError={loadError} />;
+  return (
+    <JobRecentActivityCardClient
+      events={events}
+      loadError={loadError}
+      workspaceId={workspaceId}
+      jobId={jobId}
+    />
+  );
 }

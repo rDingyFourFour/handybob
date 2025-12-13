@@ -18,6 +18,8 @@ export type TimelineEvent = {
   detail?: string | null;
   status?: string | null;
   askBobScript?: boolean;
+  callId?: string | null;
+  hasOutcomeSuffix?: boolean;
 };
 
 export type JobTimelinePayload = {

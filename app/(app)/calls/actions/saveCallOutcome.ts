@@ -65,6 +65,18 @@ const callOutcomeSchema = z.object({
     z.enum(CALL_OUTCOME_CODE_VALUES).nullable(),
   ),
   notes: z.string().max(NOTES_MAX_LENGTH).optional().nullable(),
+  jobId: z
+    .preprocess((value) => {
+      if (value === null || value === undefined) {
+        return null;
+      }
+      if (typeof value !== "string") {
+        return null;
+      }
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }, z.string().min(1).nullable())
+    .optional(),
 });
 
 function normalizeOutcomeNotes(value: string | null): string | null {
@@ -88,6 +100,7 @@ export async function saveCallOutcomeAction(
     reachedCustomer: formData.get("reachedCustomer"),
     outcomeCode: formData.get("outcomeCode"),
     notes: typeof formData.get("notes") === "string" ? formData.get("notes") : null,
+    jobId: formData.get("jobId"),
   });
 
   const normalizedNotes = normalizeOutcomeNotes(parsed.notes);
@@ -188,9 +201,23 @@ export async function saveCallOutcomeAction(
     });
   }
 
+  if (parsed.jobId) {
+    try {
+      revalidatePath(`/jobs/${parsed.jobId}`);
+    } catch (error) {
+      console.warn("[calls-outcome-ui-revalidate-failure]", {
+        callId: parsed.callId,
+        workspaceId: workspace.id,
+        jobId: parsed.jobId,
+        error,
+      });
+    }
+  }
+
   console.log("[calls-outcome-ui-success]", {
     workspaceId: workspace.id,
     callId: parsed.callId,
+    hasJobId: Boolean(parsed.jobId),
     reachedCustomer: parsed.reachedCustomer,
     outcomeCode: parsed.outcomeCode,
   });

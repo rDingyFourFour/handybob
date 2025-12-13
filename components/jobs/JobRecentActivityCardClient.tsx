@@ -23,11 +23,18 @@ const MAX_COLLAPSED_EVENTS = 3;
 type Props = {
   events: TimelineEvent[];
   loadError: boolean;
+  workspaceId: string;
+  jobId: string;
 };
 
 const ASKBOB_SCRIPT_LABEL = "AskBob";
 
-export default function JobRecentActivityCardClient({ events, loadError }: Props) {
+export default function JobRecentActivityCardClient({
+  events,
+  loadError,
+  workspaceId,
+  jobId,
+}: Props) {
   const [expanded, setExpanded] = useState(false);
   const displayedEvents = expanded ? events : events.slice(0, MAX_COLLAPSED_EVENTS);
   const hasMoreEvents = events.length > MAX_COLLAPSED_EVENTS;
@@ -63,6 +70,15 @@ export default function JobRecentActivityCardClient({ events, loadError }: Props
             const label = EVENT_LABELS[event.type] ?? event.type;
             const timestampLabel = formatFriendlyDateTime(event.timestamp, "—");
             const isAskBobScript = Boolean(event.askBobScript);
+            if (event.type === "call" && event.hasOutcomeSuffix) {
+              console.log("[job-recent-activity-call-outcome-visible]", {
+                workspaceId,
+                jobId,
+                callId: event.callId ?? null,
+                hasAskBobScript: Boolean(event.askBobScript),
+                hasOutcomeSuffix: true,
+              });
+            }
             return (
               <div
                 key={`${event.type}-${event.timestamp ?? "none"}-${index}`}

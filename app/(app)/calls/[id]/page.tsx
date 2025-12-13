@@ -14,6 +14,7 @@ import {
   deriveFollowupRecommendation,
   type FollowupRecommendation,
 } from "@/lib/domain/communications/followupRecommendations";
+import { normalizeCallOutcome } from "@/lib/domain/communications/callOutcomes";
 import type { CallOutcomeCode } from "@/lib/domain/communications/callOutcomes";
 import { findMatchingFollowupMessage } from "@/lib/domain/communications/followupMessages";
 import { markFollowupDoneAction } from "../actions/markFollowupDone";
@@ -239,6 +240,19 @@ export default async function CallSessionPage({
     isAskBobScriptSummary(callSummaryRow) || isAskBobScriptSummary(call.ai_summary ?? null);
 
   const jobId = call.job_id ?? null;
+  const hasExistingOutcome =
+    Boolean(call.outcome_recorded_at) ||
+    Boolean(call.outcome_code) ||
+    Boolean(call.outcome_notes?.trim());
+  if (hasExistingOutcome) {
+    console.log("[calls-session-outcome-visible]", {
+      workspaceId: workspace.id,
+      jobId,
+      callId: call.id,
+      hasAskBobScript: Boolean(askBobScriptBody),
+      hasLegacyOutcome: Boolean(call.outcome),
+    });
+  }
 
   let job: JobSummary | null = null;
   if (jobId) {
@@ -608,7 +622,9 @@ export default async function CallSessionPage({
               initialReachedCustomer={call.reached_customer}
               initialNotes={call.outcome_notes}
               initialRecordedAt={call.outcome_recorded_at}
+              initialLegacyOutcome={normalizeCallOutcome(call.outcome)}
               hasAskBobScriptHint={hasAskBobScriptHint}
+              jobId={jobId}
             />
 
             {call && job && callScriptQuoteCandidate && (

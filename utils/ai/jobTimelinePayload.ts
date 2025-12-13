@@ -2,7 +2,10 @@
 
 import { createServerClient } from "@/utils/supabase/server";
 import { TimelineEvent } from "@/types/ai";
-import { getCallOutcomeCodeMetadata } from "@/lib/domain/communications/callOutcomes";
+import {
+  getCallOutcomeCodeMetadata,
+  getCallOutcomeMetadata,
+} from "@/lib/domain/communications/callOutcomes";
 import { getAskBobCallScriptBody } from "@/lib/domain/askbob/constants";
 
 // Central timeline normaliser for AI prompts:
@@ -62,7 +65,7 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
     supabase
     .from("calls")
     .select(
-      "direction, status, started_at, duration_seconds, summary, ai_summary, transcript, reached_customer, outcome_code, outcome_recorded_at",
+      "id, direction, status, started_at, duration_seconds, summary, ai_summary, transcript, reached_customer, outcome_code, outcome_recorded_at, outcome",
     )
       .eq("job_id", jobId)
       .eq("workspace_id", workspaceId)
@@ -123,18 +126,25 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
     if (call.transcript) {
       detailSegments.push(`Transcript: ${truncate(call.transcript, 200)}`);
     }
-    const outcomeSegments: string[] = [];
-    if (call.outcome_code) {
-      const outcomeMetadata = getCallOutcomeCodeMetadata(call.outcome_code);
-      outcomeSegments.push(`Outcome: ${outcomeMetadata.label}`);
+    const detailBase = detailSegments.length ? detailSegments.join(" ") : null;
+    const detailSegmentsSuffix: string[] = [];
+    let hasOutcomeSuffix = false;
+    const outcomeMetadata = getCallOutcomeCodeMetadata(call.outcome_code);
+    const legacyMetadata = getCallOutcomeMetadata(call.outcome);
+    const outcomeLabel =
+      outcomeMetadata.value || legacyMetadata.value ? (outcomeMetadata.value ? outcomeMetadata.label : legacyMetadata.label) : null;
+    if (outcomeLabel) {
+      detailSegmentsSuffix.push(`Outcome: ${outcomeLabel}`);
+      hasOutcomeSuffix = true;
     }
     if (call.reached_customer === true) {
-      outcomeSegments.push("Reached: yes");
+      detailSegmentsSuffix.push("Reached: yes");
+      hasOutcomeSuffix = true;
     } else if (call.reached_customer === false) {
-      outcomeSegments.push("Reached: no");
+      detailSegmentsSuffix.push("Reached: no");
+      hasOutcomeSuffix = true;
     }
-    const detailBase = detailSegments.length ? detailSegments.join(" ") : null;
-    const detailSuffix = outcomeSegments.length ? outcomeSegments.join(" · ") : null;
+    const detailSuffix = detailSegmentsSuffix.length ? detailSegmentsSuffix.join(" · ") : null;
     const detail =
       detailBase && detailSuffix
         ? `${detailBase} · ${detailSuffix}`
@@ -146,6 +156,8 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
       detail,
       status: call.status,
       askBobScript: Boolean(getAskBobCallScriptBody(call.ai_summary ?? null, call.summary ?? null)),
+      callId: call.id ?? null,
+      hasOutcomeSuffix,
     });
   });
 

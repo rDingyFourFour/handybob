@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { SaveCallOutcomeResponse } from "@/app/(app)/calls/actions/saveCallOutcome";
 import CallOutcomeCaptureCard from "@/app/(app)/calls/[id]/CallOutcomeCaptureCard";
 
 describe("CallOutcomeCaptureCard prefill behavior", () => {
@@ -24,7 +25,12 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
     vi.restoreAllMocks();
   });
 
-  function renderCard(callId = "call-prefill") {
+  function renderCard(
+    callId = "call-prefill",
+    options?: {
+      actionStateOverride?: [SaveCallOutcomeResponse | null, (formData: FormData) => unknown, boolean];
+    },
+  ) {
     if (!root) {
       throw new Error("missing root");
     }
@@ -38,6 +44,7 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
           initialNotes={null}
           initialRecordedAt={null}
           hasAskBobScriptHint={false}
+          {...(options ?? {})}
         />,
       );
     });
@@ -135,5 +142,41 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
     expect(spy).toHaveBeenCalledWith("[calls-outcome-prefill-cache-miss]", {
       callId: "call-prefill-miss",
     });
+  });
+
+  it("transitions to recorded view after a successful save", async () => {
+    const successResponse: SaveCallOutcomeResponse = {
+      ok: true,
+      callId: "call-save",
+      reachedCustomer: true,
+      outcomeCode: "reached_scheduled",
+      notes: "Followed up",
+      recordedAtIso: "2025-01-01T12:00:00Z",
+    };
+    renderCard("call-save", { actionStateOverride: [null, async () => {}, false] });
+    await flushReactUpdates();
+
+    expect(container.textContent).not.toContain("Outcome recorded");
+
+    act(() => {
+      root?.render(
+        <CallOutcomeCaptureCard
+          callId="call-save"
+          workspaceId="workspace-1"
+          initialOutcomeCode={null}
+          initialReachedCustomer={null}
+          initialNotes={null}
+          initialRecordedAt={null}
+          hasAskBobScriptHint={false}
+          actionStateOverride={[successResponse, async () => {}, false]}
+        />,
+      );
+    });
+
+    await flushReactUpdates();
+
+    expect(container.textContent).toContain("Outcome recorded");
+    expect(container.textContent).toContain("Saved just now");
+    expect(container.textContent).toContain("Outcome: Reached · Scheduled");
   });
 });
