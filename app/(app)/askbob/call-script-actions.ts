@@ -82,6 +82,7 @@ export async function runAskBobCallScriptAction(
   payload: CallScriptRequestPayload,
 ): Promise<AskBobCallScriptActionResult> {
   const parsed = callScriptPayloadSchema.parse(payload);
+  const latestCallOutcome = parsed.latestCallOutcome ?? null;
   const hasPersonaStyle = Boolean(parsed.callPersonaStyle);
   const personaStyle = parsed.callPersonaStyle ?? null;
 
@@ -124,7 +125,7 @@ export async function runAskBobCallScriptAction(
   const hasLastQuoteSummary = Boolean(parsed.lastQuoteSummary);
   const hasFollowupSummary = Boolean(parsed.followupSummary);
   const latestCallOutcomeContext =
-    parsed.latestCallOutcome && buildCallOutcomePromptContext(parsed.latestCallOutcome);
+    latestCallOutcome && buildCallOutcomePromptContext(latestCallOutcome);
   const extraDetailsParts: string[] = [];
   if (parsed.extraDetails) {
     extraDetailsParts.push(parsed.extraDetails);
@@ -135,6 +136,8 @@ export async function runAskBobCallScriptAction(
   const combinedExtraDetails = extraDetailsParts.length
     ? extraDetailsParts.join("\n\n")
     : null;
+  const hasLatestCallOutcome = Boolean(latestCallOutcome);
+  const hasLatestCallOutcomeCode = Boolean(latestCallOutcome?.outcomeCode);
 
   console.log("[askbob-call-script-ui-request]", {
     workspaceId: workspace.id,
@@ -152,6 +155,9 @@ export async function runAskBobCallScriptAction(
     hasCallIntents: Boolean(parsed.callIntents?.length),
     callIntentsCount: parsed.callIntents?.length ?? 0,
     callIntents: parsed.callIntents ?? [],
+    hasLatestCallOutcome,
+    hasLatestCallOutcomeCode,
+    outcomeCode: latestCallOutcome?.outcomeCode ?? null,
   });
 
   const taskInput: AskBobJobCallScriptInput = {
@@ -193,6 +199,8 @@ export async function runAskBobCallScriptAction(
       hasCallIntents: Boolean(parsed.callIntents?.length),
       callIntentsCount: parsed.callIntents?.length ?? 0,
       callIntents: parsed.callIntents ?? [],
+      hasLatestCallOutcome,
+      hasLatestCallOutcomeCode,
     });
 
     return {
@@ -219,6 +227,8 @@ export async function runAskBobCallScriptAction(
       hasCallIntents: Boolean(parsed.callIntents?.length),
       callIntentsCount: parsed.callIntents?.length ?? 0,
       callIntents: parsed.callIntents ?? [],
+      hasLatestCallOutcome,
+      hasLatestCallOutcomeCode,
     });
     return {
       ok: false,

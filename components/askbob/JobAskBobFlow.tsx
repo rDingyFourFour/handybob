@@ -36,7 +36,10 @@ import type {
 } from "@/lib/domain/askbob/types";
 import { ASKBOB_CALL_PERSONA_DEFAULT, ASKBOB_CALL_PERSONA_LABELS } from "@/lib/domain/askbob/types";
 import { cacheAskBobCallContext } from "@/utils/askbob/callContextCache";
-import { readAndClearAskBobAfterCallResult } from "@/utils/askbob/afterCallCache";
+import {
+  AfterCallCacheReadReason,
+  readAndClearAskBobAfterCallResult,
+} from "@/utils/askbob/afterCallCache";
 import {
   buildDiagnosisSummary,
   buildFollowupSummaryFromSnapshot,
@@ -44,6 +47,9 @@ import {
 } from "@/lib/domain/askbob/summary";
 
 const MAX_SCRIPT_QUERY_LENGTH = 4000;
+
+const AFTER_CALL_HYDRATION_HINT =
+  "AskBob couldn’t restore the last after-call draft. Generate a new summary to continue.";
 
 const FOLLOWUP_CALL_INTENT_HINTS: { pattern: RegExp; intents: AskBobCallIntent[] }[] = [
   {
@@ -247,7 +253,9 @@ export default function JobAskBobFlow({
   const [afterCallResetToken, setAfterCallResetToken] = useState(0);
   const [hydratedAfterCallSnapshot, setHydratedAfterCallSnapshot] =
     useState<AskBobAfterCallSnapshotPayload | null>(null);
+  const [afterCallHydrationHint, setAfterCallHydrationHint] = useState<string | null>(null);
   const afterCallCacheAttemptedRef = useRef(false);
+  const afterCallHydrationEventSentRef = useRef(false);
   const afterCallCacheKeyRef = useRef(afterCallCacheKey);
   const afterCallCacheCallIdRef = useRef(afterCallCacheCallId);
   useEffect(() => {
@@ -269,13 +277,44 @@ export default function JobAskBobFlow({
       });
       return;
     }
-    const payload = readAndClearAskBobAfterCallResult(cacheKey);
+    const sendHydrationEvent = (
+      outcome: "hit" | "miss",
+      missReason?: AfterCallCacheReadReason,
+    ) => {
+      if (afterCallHydrationEventSentRef.current) {
+        return;
+      }
+      afterCallHydrationEventSentRef.current = true;
+      const payload: Record<string, unknown> & {
+        workspaceId: string;
+        jobId: string;
+        hasAfterCallKey: boolean;
+        hasCallId: boolean;
+        outcome: "hit" | "miss";
+        missReason?: AfterCallCacheReadReason;
+      } = {
+        workspaceId,
+        jobId,
+        hasAfterCallKey: Boolean(cacheKey),
+        hasCallId: Boolean(cacheCallId),
+        outcome,
+      };
+      if (outcome === "miss") {
+        payload.missReason = missReason ?? "no_cache_entry";
+      }
+      console.log("[askbob-after-call-job-hydrate]", payload);
+    };
+    const { payload, reason } = readAndClearAskBobAfterCallResult(cacheKey);
     if (!payload) {
+      startTransition(() => {
+        setAfterCallHydrationHint(AFTER_CALL_HYDRATION_HINT);
+      });
+      sendHydrationEvent("miss", reason ?? "no_cache_entry");
       console.log("[askbob-after-call-job-hydrate-miss]", {
         jobId,
         callId: cacheCallId ?? null,
         cacheKey,
-        reason: "not_found",
+        reason: reason ?? "not_found",
       });
       return;
     }
@@ -283,24 +322,36 @@ export default function JobAskBobFlow({
       payload.jobId !== jobId ||
       (afterCallCacheCallId && payload.callId !== afterCallCacheCallId)
     ) {
+      startTransition(() => {
+        setAfterCallHydrationHint(AFTER_CALL_HYDRATION_HINT);
+      });
+      sendHydrationEvent("miss", "wrong_shape");
       console.log("[askbob-after-call-job-hydrate-miss]", {
         jobId,
-      callId: cacheCallId ?? null,
-      cacheKey,
+        callId: cacheCallId ?? null,
+        cacheKey,
         reason: "mismatch",
       });
       return;
     }
+    sendHydrationEvent("hit");
     const logPayload = {
       jobId,
       callId: payload.callId,
       cacheKey,
     };
     startTransition(() => {
+      setAfterCallHydrationHint(null);
       setHydratedAfterCallSnapshot(payload.result);
       console.log("[askbob-after-call-job-hydrate-hit]", logPayload);
     });
-  }, [afterCallCacheCallId, afterCallCacheKey, initialAfterCallSnapshot, jobId]);
+  }, [
+    afterCallCacheCallId,
+    afterCallCacheKey,
+    initialAfterCallSnapshot,
+    jobId,
+    workspaceId,
+  ]);
   const resolvedAfterCallSnapshot = initialAfterCallSnapshot ?? hydratedAfterCallSnapshot ?? null;
   const resolvedLatestCallOutcome =
     callSessionLatestCallOutcome ?? latestCallOutcome ?? null;
@@ -722,6 +773,7 @@ export default function JobAskBobFlow({
             callHistoryHint={callHistoryHint ?? null}
             latestCallOutcomeHint={latestCallOutcomeHint}
             latestCallOutcomeReference={latestCallOutcomeReference}
+            afterCallHydrationHint={afterCallHydrationHint}
           />
         </AskBobSection>
       </div>

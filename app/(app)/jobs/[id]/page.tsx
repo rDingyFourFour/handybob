@@ -217,13 +217,23 @@ function normalizeParam(value?: string | string[] | null) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function onlyStringParam(value?: string | string[] | null) {
+  if (typeof value === "string") {
+    return value;
+  }
+  return null;
+}
+
 export default async function JobDetailPage(props: {
   params: Promise<{ id: string }>;
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: Promise<Record<string, string | string[] | undefined> | null>;
 }) {
   const { id } = await props.params;
-  const afterCallCacheKey = normalizeParam(props.searchParams?.afterCallKey ?? null);
-  const afterCallCallId = normalizeParam(props.searchParams?.callId ?? null);
+  // searchParams is delivered as a Promise in this route, so await it before using any fields.
+  const searchParams: Record<string, string | string[] | undefined> =
+    (await props.searchParams) ?? {};
+  const afterCallCacheKey = normalizeParam(onlyStringParam(searchParams.afterCallKey ?? null));
+  const afterCallCallId = normalizeParam(onlyStringParam(searchParams.callId ?? null));
 
   if (!id || !id.trim()) {
     notFound();

@@ -147,4 +147,40 @@ describe("runAskBobCallScriptAction", () => {
     expect(taskInput.latestCallOutcome).toMatchObject({ callId: "call-42" });
     expect(taskInput.latestCallOutcomeContext).toContain("Latest call outcome:");
   });
+
+  it("logs the latest call outcome flags when an outcome is provided", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await runAskBobCallScriptAction({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      callPurpose: "followup",
+      callTone: "friendly and clear",
+      latestCallOutcome: {
+        callId: "call-42",
+        occurredAt: "2025-01-10T09:00:00Z",
+        reachedCustomer: true,
+        outcomeCode: "reached_scheduled",
+        outcomeNotes: "Left a reminder",
+        isAskBobAssisted: false,
+        displayLabel: "Reached · Scheduled · 2025-01-10 09:00",
+      },
+    });
+
+    const requestLog = logSpy.mock.calls.find((call) => call[0] === "[askbob-call-script-ui-request]");
+    expect(requestLog?.[1]).toEqual(
+      expect.objectContaining({
+        hasLatestCallOutcome: true,
+        hasLatestCallOutcomeCode: true,
+      }),
+    );
+    const successLog = logSpy.mock.calls.find((call) => call[0] === "[askbob-call-script-ui-success]");
+    expect(successLog?.[1]).toEqual(
+      expect.objectContaining({
+        hasLatestCallOutcome: true,
+        hasLatestCallOutcomeCode: true,
+      }),
+    );
+
+    logSpy.mockRestore();
+  });
 });

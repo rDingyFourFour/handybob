@@ -120,7 +120,7 @@ function isVoicemailLeft(code: CallOutcomeCode | null) {
 
 export function formatLatestCallOutcomeHint(outcome: LatestCallOutcomeForJob): string {
   const metadata = getCallOutcomeCodeMetadata(outcome.outcomeCode);
-  const whenLabel = formatFriendlyDateTime(outcome.occurredAt, "");
+  const whenLabel = formatLatestCallOutcomeDateLabel(outcome.occurredAt);
   const baseLabel = metadata.label;
   const parts = [`Latest call outcome: ${baseLabel}`];
   if (whenLabel) {

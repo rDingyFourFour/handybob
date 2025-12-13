@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { handleTwilioVoiceEvent } from "@/lib/domain/calls";
 import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 import {
+  formatLatestCallOutcomeHint,
   formatLatestCallOutcomeReference,
   getLatestCallOutcomeForJob,
 } from "@/lib/domain/calls/latestCallOutcome";
@@ -124,5 +125,20 @@ describe("getLatestCallOutcomeForJob", () => {
       { workspaceId: "workspace-legacy", jobId: "job-legacy" },
     );
     warnSpy.mockRestore();
+  });
+});
+
+describe("formatLatestCallOutcomeHint", () => {
+  it("renders a deterministic, UTC-based hint with the outcome label and timestamp", () => {
+    const hint = formatLatestCallOutcomeHint({
+      callId: "call-1",
+      occurredAt: "2025-01-10T09:00:00Z",
+      reachedCustomer: true,
+      outcomeCode: "reached_scheduled",
+      outcomeNotes: null,
+      isAskBobAssisted: false,
+    });
+
+    expect(hint).toBe("Latest call outcome: Reached · Scheduled · 2025-01-10 09:00");
   });
 });

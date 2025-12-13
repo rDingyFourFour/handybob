@@ -25,6 +25,18 @@ function safeParse(value: string) {
   }
 }
 
+export type AfterCallCacheReadReason =
+  | "no_cache_entry"
+  | "expired"
+  | "parse_error"
+  | "wrong_shape"
+  | "missing_required_fields";
+
+export type AfterCallCacheReadResult = {
+  payload: AskBobAfterCallCachePayload | null;
+  reason: AfterCallCacheReadReason | null;
+};
+
 export function cacheAskBobAfterCallResult(
   jobId: string,
   callId: string,
@@ -48,17 +60,19 @@ export function cacheAskBobAfterCallResult(
   return key;
 }
 
-export function readAndClearAskBobAfterCallResult(key: string | null | undefined) {
+export function readAndClearAskBobAfterCallResult(
+  key: string | null | undefined,
+): AfterCallCacheReadResult {
   if (!key) {
-    return null;
+    return { payload: null, reason: "no_cache_entry" };
   }
   if (AFTER_CALL_CACHE.has(key)) {
     const cached = AFTER_CALL_CACHE.get(key) ?? null;
     AFTER_CALL_CACHE.delete(key);
-    return cached;
+    return { payload: cached, reason: null };
   }
   if (typeof window === "undefined") {
-    return null;
+    return { payload: null, reason: "no_cache_entry" };
   }
   let raw: string | null = null;
   try {
@@ -67,7 +81,7 @@ export function readAndClearAskBobAfterCallResult(key: string | null | undefined
     console.error("[askbob-after-call-cache] failed to read cached payload", error);
   }
   if (!raw) {
-    return null;
+    return { payload: null, reason: "no_cache_entry" };
   }
   try {
     window.sessionStorage.removeItem(key);
@@ -75,13 +89,24 @@ export function readAndClearAskBobAfterCallResult(key: string | null | undefined
     console.error("[askbob-after-call-cache] failed to clear cached payload", error);
   }
   const parsed = safeParse(raw);
-  if (!parsed || typeof parsed !== "object") {
-    return null;
+  if (parsed === null) {
+    return { payload: null, reason: "parse_error" };
+  }
+  if (typeof parsed !== "object") {
+    return { payload: null, reason: "wrong_shape" };
   }
   const payload = parsed as AskBobAfterCallCachePayload;
+  if (
+    !payload.jobId ||
+    !payload.callId ||
+    !payload.result ||
+    !payload.createdAtIso
+  ) {
+    return { payload: null, reason: "missing_required_fields" };
+  }
   const createdAt = Date.parse(payload.createdAtIso);
   if (Number.isNaN(createdAt) || Date.now() - createdAt > AFTER_CALL_CACHE_TTL_MS) {
-    return null;
+    return { payload: null, reason: "expired" };
   }
-  return payload;
+  return { payload, reason: null };
 }

@@ -1,8 +1,11 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { JobAskBobAfterCallPanelProps } from "@/components/askbob/JobAskBobAfterCallPanel";
+
+const AFTER_CALL_HYDRATION_HINT =
+  "AskBob couldn’t restore the last after-call draft. Generate a new summary to continue.";
 
 function stubComponent({ children }: { children?: ReactNode }) {
   return <div>{children ?? null}</div>;
@@ -85,8 +88,8 @@ describe("JobAskBobFlow after-call cache hydration", () => {
     logSpy.mockRestore();
   });
 
-  function flushReactUpdates(iterations = 5) {
-    return act(async () => {
+  async function flushReactUpdates(iterations = 5) {
+    await act(async () => {
       await Promise.resolve();
       for (let i = 0; i < iterations; i += 1) {
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -94,24 +97,8 @@ describe("JobAskBobFlow after-call cache hydration", () => {
     });
   }
 
-  it("hydrates the after-call snapshot when cache hits", async () => {
-    readAndClearMock.mockReturnValue({
-      jobId: "job-1",
-      callId: "call-1",
-      result: {
-        afterCallSummary: "Cached summary",
-        recommendedActionLabel: "Next move",
-        recommendedActionSteps: ["Step one"],
-        suggestedChannel: "sms",
-        draftMessageBody: "Hey",
-        urgencyLevel: "normal",
-        notesForTech: null,
-        modelLatencyMs: 10,
-      },
-      createdAtIso: new Date().toISOString(),
-    });
-
-    await act(async () => {
+  const renderFlow = async () =>
+    act(async () => {
       root?.render(
         <JobAskBobFlow
           workspaceId="workspace-1"
@@ -146,18 +133,110 @@ describe("JobAskBobFlow after-call cache hydration", () => {
       );
     });
 
+  const findConsoleLogs = (label: string) =>
+    logSpy.mock.calls.filter(([name]) => name === label);
+
+  it("hydrates the after-call snapshot when the cache hits", async () => {
+    readAndClearMock.mockReturnValue({
+      payload: {
+        jobId: "job-1",
+        callId: "call-1",
+        result: {
+          afterCallSummary: "Cached summary",
+          recommendedActionLabel: "Next move",
+          recommendedActionSteps: ["Step one"],
+          suggestedChannel: "sms",
+          draftMessageBody: "Hey",
+          urgencyLevel: "normal",
+          notesForTech: null,
+          modelLatencyMs: 10,
+        },
+        createdAtIso: new Date().toISOString(),
+      },
+      reason: null,
+    });
+
+    await renderFlow();
     await flushReactUpdates(20);
 
     expect(readAndClearMock).toHaveBeenCalledWith("cache-1");
-    const hydratedPanelProps = recordedPanelProps.find(
-      (props) => props.initialAfterCallSnapshot?.afterCallSummary === "Cached summary",
-    );
-    expect(hydratedPanelProps?.initialAfterCallSnapshot).toMatchObject({
-      afterCallSummary: "Cached summary",
+    const hydrationLogs = findConsoleLogs("[askbob-after-call-job-hydrate]");
+    expect(hydrationLogs).toHaveLength(1);
+    expect(hydrationLogs[0][1]).toMatchObject({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      hasAfterCallKey: true,
+      hasCallId: true,
+      outcome: "hit",
     });
-    expect(logSpy).toHaveBeenCalledWith(
-      "[askbob-after-call-job-hydrate-hit]",
-      expect.objectContaining({ cacheKey: "cache-1", callId: "call-1" }),
-    );
+    expect(hydrationLogs[0][1]).not.toHaveProperty("missReason");
+    expect(findConsoleLogs("[askbob-after-call-job-hydrate-hit]")).toHaveLength(1);
+    const panelProps = recordedPanelProps.at(-1) ?? null;
+    expect(panelProps?.initialAfterCallSnapshot?.afterCallSummary).toBe("Cached summary");
+    expect(panelProps?.afterCallHydrationHint).toBeNull();
+  });
+
+  it("logs an expired miss reason and shows the hint", async () => {
+    readAndClearMock.mockReturnValue({
+      payload: null,
+      reason: "expired",
+    });
+
+    await renderFlow();
+    await flushReactUpdates(20);
+
+    const hydrationLogs = findConsoleLogs("[askbob-after-call-job-hydrate]");
+    expect(hydrationLogs).toHaveLength(1);
+    expect(hydrationLogs[0][1]).toMatchObject({
+      outcome: "miss",
+      missReason: "expired",
+    });
+    expect(findConsoleLogs("[askbob-after-call-job-hydrate-hit]")).toHaveLength(0);
+    const missLogs = findConsoleLogs("[askbob-after-call-job-hydrate-miss]");
+    expect(missLogs).toHaveLength(1);
+    expect(missLogs[0][1]).toMatchObject({
+      reason: "expired",
+    });
+    const panelProps = recordedPanelProps.at(-1) ?? null;
+    expect(panelProps?.afterCallHydrationHint).toBe(AFTER_CALL_HYDRATION_HINT);
+  });
+
+  it("logs a wrong_shape miss when the cache payload mismatches", async () => {
+    readAndClearMock.mockReturnValue({
+      payload: {
+        jobId: "job-other",
+        callId: "call-other",
+        result: {
+          afterCallSummary: "Other summary",
+          recommendedActionLabel: "Other move",
+          recommendedActionSteps: ["Step two"],
+          suggestedChannel: "phone",
+          draftMessageBody: "Hello",
+          urgencyLevel: "normal",
+          notesForTech: null,
+          modelLatencyMs: 12,
+        },
+        createdAtIso: new Date().toISOString(),
+      },
+      reason: null,
+    });
+
+    await renderFlow();
+    await flushReactUpdates(20);
+
+    const hydrationLogs = findConsoleLogs("[askbob-after-call-job-hydrate]");
+    expect(hydrationLogs).toHaveLength(1);
+    expect(hydrationLogs[0][1]).toMatchObject({
+      outcome: "miss",
+      missReason: "wrong_shape",
+    });
+    expect(findConsoleLogs("[askbob-after-call-job-hydrate-hit]")).toHaveLength(0);
+    const missLogs = findConsoleLogs("[askbob-after-call-job-hydrate-miss]");
+    expect(missLogs).toHaveLength(1);
+    expect(missLogs[0][1]).toMatchObject({
+      reason: "mismatch",
+    });
+    const panelProps = recordedPanelProps.at(-1) ?? null;
+    expect(panelProps?.afterCallHydrationHint).toBe(AFTER_CALL_HYDRATION_HINT);
   });
 });
