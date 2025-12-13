@@ -12,11 +12,8 @@ import {
   getCallOutcomeMetadata,
   mapOutcomeCodeToLegacyOutcome,
 } from "@/lib/domain/communications/callOutcomes";
-import {
-  CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
-  SaveCallOutcomeResponse,
-  saveCallOutcomeAction,
-} from "../actions/saveCallOutcome";
+import { CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE } from "@/utils/calls/callOutcomeMessages";
+import { SaveCallOutcomeResponse, saveCallOutcomeAction } from "../actions/saveCallOutcome";
 import { readAndClearCallOutcomePrefill } from "@/utils/askbob/callOutcomePrefillCache";
 
 const NOTES_MAX_LENGTH = 1000;

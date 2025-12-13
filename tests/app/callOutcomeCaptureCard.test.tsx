@@ -2,7 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE } from "@/app/(app)/calls/actions/saveCallOutcome";
+import { CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE } from "@/utils/calls/callOutcomeMessages";
 import type { SaveCallOutcomeResponse } from "@/app/(app)/calls/actions/saveCallOutcome";
 import CallOutcomeCaptureCard from "@/app/(app)/calls/[id]/CallOutcomeCaptureCard";
 

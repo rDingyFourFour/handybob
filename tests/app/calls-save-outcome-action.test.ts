@@ -19,7 +19,8 @@ vi.mock("next/cache", () => ({
   revalidatePath: (...args: unknown[]) => mockRevalidatePath(...args),
 }));
 
-import { CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE, saveCallOutcomeAction } from "@/app/(app)/calls/actions/saveCallOutcome";
+import { CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE } from "@/utils/calls/callOutcomeMessages";
+import { saveCallOutcomeAction } from "@/app/(app)/calls/actions/saveCallOutcome";
 import { resetCallOutcomeSchemaMismatchSentinelForTests } from "@/utils/calls/callOutcomeSchemaMismatchSentinel";
 
 describe("saveCallOutcomeAction", () => {

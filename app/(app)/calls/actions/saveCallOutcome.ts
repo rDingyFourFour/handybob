@@ -14,13 +14,11 @@ import {
   hasCallOutcomeSchemaMismatchSentinelFired,
   markCallOutcomeSchemaMismatchSentinelAsFired,
 } from "@/utils/calls/callOutcomeSchemaMismatchSentinel";
+import { CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE } from "@/utils/calls/callOutcomeMessages";
 
 const NOTES_MAX_LENGTH = 1000;
 const CALL_OUTCOME_CONSTRAINT_CODE = "23514";
 const CALL_OUTCOME_CONSTRAINT_VERIFIER_RPC = "get_call_outcome_constraint_definitions";
-const SCHEMA_OUT_OF_DATE_MESSAGE =
-  "Outcome couldn’t be saved because the database schema is out of date. Please apply the latest migrations.";
-export const CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE = SCHEMA_OUT_OF_DATE_MESSAGE;
 const ALLOWED_OUTCOME_CODES = new Set(CALL_OUTCOME_CODE_VALUES);
 type ServerSupabaseClient = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -425,7 +423,7 @@ export async function saveCallOutcomeAction(
       await ensureSchemaVerification(supabase, normalizedOutcomeCode);
       return {
         ok: false,
-        error: SCHEMA_OUT_OF_DATE_MESSAGE,
+        error: CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
         code: "schema_out_of_date",
       };
     }
