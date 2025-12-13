@@ -117,4 +117,23 @@ describe("runAskBobJobAfterCallAction", () => {
     });
     expect(response.result).toEqual(taskResult);
   });
+
+  it("errors when the job is missing", async () => {
+    supabaseState.responses.jobs = { data: [], error: null };
+    const response = await runAskBobJobAfterCallAction({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+    });
+    expect(response).toEqual({ ok: false, code: "job_not_found" });
+    expect(runAskBobTaskMock).not.toHaveBeenCalled();
+  });
+
+  it("errors when the workspace does not match", async () => {
+    const response = await runAskBobJobAfterCallAction({
+      workspaceId: "workspace-other",
+      jobId: "job-1",
+    });
+    expect(response).toEqual({ ok: false, code: "wrong_workspace" });
+    expect(runAskBobTaskMock).not.toHaveBeenCalled();
+  });
 });

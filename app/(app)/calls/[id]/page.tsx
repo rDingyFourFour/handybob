@@ -18,6 +18,7 @@ import type { CallOutcomeCode } from "@/lib/domain/communications/callOutcomes";
 import { findMatchingFollowupMessage } from "@/lib/domain/communications/followupMessages";
 import { markFollowupDoneAction } from "../actions/markFollowupDone";
 import AskBobCallContextStrip from "./AskBobCallContextStrip";
+import AskBobAfterCallCard from "./AskBobAfterCallCard";
 import CallOutcomeCaptureCard from "./CallOutcomeCaptureCard";
 import {
   getAskBobCallScriptBody,
@@ -446,6 +447,7 @@ export default async function CallSessionPage({
       : null;
   const customerName = customer?.name ?? null;
   const customerPhone = customer?.phone ?? null;
+  const customerId = customer?.id ?? null;
   const customerFirstName = customerName ? customerName.split(" ")[0] : null;
 
   return (
@@ -578,6 +580,24 @@ export default async function CallSessionPage({
                 jobId={job?.id ?? jobId}
                 scriptBody={askBobScriptBody}
                 scriptSummary={askBobScriptSource}
+              />
+            )}
+
+            {jobId && customerId && (
+              <AskBobAfterCallCard
+                callId={call.id}
+                workspaceId={workspace.id}
+                jobId={jobId}
+                customerId={customerId}
+                hasAskBobScriptBody={Boolean(askBobScriptBody)}
+                callNotes={latestPhoneMessageBody ?? null}
+                hasHumanNotes={Boolean(latestPhoneMessageBody)}
+                hasOutcomeSaved={
+                  Boolean(call.outcome_recorded_at) ||
+                  Boolean(call.outcome_code) ||
+                  Boolean(call.outcome_notes?.trim())
+                }
+                hasOutcomeNotes={Boolean(call.outcome_notes?.trim())}
               />
             )}
 

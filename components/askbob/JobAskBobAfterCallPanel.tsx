@@ -10,8 +10,9 @@ import type {
   AskBobJobAfterCallResult,
 } from "@/lib/domain/askbob/types";
 import { runAskBobJobAfterCallAction } from "@/app/(app)/askbob/after-call-actions";
+import { cacheAskBobMessageDraft } from "@/utils/askbob/messageDraftCache";
 
-type JobAskBobAfterCallPanelProps = {
+export type JobAskBobAfterCallPanelProps = {
   workspaceId: string;
   jobId: string;
   jobTitle?: string | null;
@@ -170,32 +171,15 @@ export default function JobAskBobAfterCallPanel({
       ? result.suggestedChannel.toUpperCase()
       : "No outreach needed";
 
-  const storeDraftForComposer = (body: string) => {
-    if (typeof window === "undefined") {
-      return null;
-    }
-    const key = `askbob-after-call-draft-${jobId}-${Date.now()}`;
-    try {
-      const payload = {
-        body,
-        createdAtIso: new Date().toISOString(),
-        origin: "askbob-after-call",
-        jobId,
-        customerId,
-      };
-      window.sessionStorage.setItem(key, JSON.stringify(payload));
-      return key;
-    } catch (error) {
-      console.error("[askbob-after-call-panel] failed to cache draft", error);
-      return null;
-    }
-  };
-
   const handleOpenMessagesComposer = () => {
     if (!result?.draftMessageBody) {
       return;
     }
-    const draftKey = storeDraftForComposer(result.draftMessageBody);
+    const draftKey = cacheAskBobMessageDraft({
+      body: result.draftMessageBody,
+      jobId,
+      customerId,
+    });
     const params = new URLSearchParams({
       compose: "1",
       origin: "askbob-after-call",

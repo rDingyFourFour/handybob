@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import AskBobSection from "@/components/askbob/AskBobSection";
@@ -35,6 +35,7 @@ import type {
 } from "@/lib/domain/askbob/types";
 import { ASKBOB_CALL_PERSONA_DEFAULT, ASKBOB_CALL_PERSONA_LABELS } from "@/lib/domain/askbob/types";
 import { cacheAskBobCallContext } from "@/utils/askbob/callContextCache";
+import { readAndClearAskBobAfterCallResult } from "@/utils/askbob/afterCallCache";
 import {
   buildDiagnosisSummary,
   buildFollowupSummaryFromSnapshot,
@@ -134,6 +135,8 @@ type JobAskBobFlowProps = {
   callHistoryHint?: string | null;
   initialLatestCallOutcome?: LatestCallOutcomeForJob | null;
   callSessionLatestCallOutcome?: LatestCallOutcomeForJob | null;
+  afterCallCacheKey?: string | null;
+  afterCallCacheCallId?: string | null;
 };
 
 type SessionQuote = {
@@ -169,6 +172,8 @@ export default function JobAskBobFlow({
   callHistoryHint,
   initialLatestCallOutcome,
   callSessionLatestCallOutcome,
+  afterCallCacheKey,
+  afterCallCacheCallId,
 }: JobAskBobFlowProps) {
   const diagnosisSummaryInitialValue = initialDiagnoseSnapshot
     ? buildDiagnosisSummary(initialDiagnoseSnapshot.response)
@@ -242,6 +247,63 @@ export default function JobAskBobFlow({
   );
   const [afterCallCollapsed, setAfterCallCollapsed] = useState(false);
   const [afterCallResetToken, setAfterCallResetToken] = useState(0);
+  const [hydratedAfterCallSnapshot, setHydratedAfterCallSnapshot] =
+    useState<AskBobAfterCallSnapshotPayload | null>(null);
+  const afterCallCacheAttemptedRef = useRef(false);
+  const afterCallCacheKeyRef = useRef(afterCallCacheKey);
+  const afterCallCacheCallIdRef = useRef(afterCallCacheCallId);
+  useEffect(() => {
+    if (afterCallCacheAttemptedRef.current) {
+      return;
+    }
+    afterCallCacheAttemptedRef.current = true;
+    const cacheKey = afterCallCacheKeyRef.current;
+    const cacheCallId = afterCallCacheCallIdRef.current;
+    if (!cacheKey) {
+      return;
+    }
+    if (initialAfterCallSnapshot) {
+      console.log("[askbob-after-call-job-hydrate-miss]", {
+        jobId,
+        callId: cacheCallId ?? null,
+        cacheKey,
+        reason: "snapshot_present",
+      });
+      return;
+    }
+    const payload = readAndClearAskBobAfterCallResult(cacheKey);
+    if (!payload) {
+      console.log("[askbob-after-call-job-hydrate-miss]", {
+        jobId,
+        callId: cacheCallId ?? null,
+        cacheKey,
+        reason: "not_found",
+      });
+      return;
+    }
+    if (
+      payload.jobId !== jobId ||
+      (afterCallCacheCallId && payload.callId !== afterCallCacheCallId)
+    ) {
+      console.log("[askbob-after-call-job-hydrate-miss]", {
+        jobId,
+      callId: cacheCallId ?? null,
+      cacheKey,
+        reason: "mismatch",
+      });
+      return;
+    }
+    console.log("[askbob-after-call-job-hydrate-hit]", {
+      jobId,
+      callId: payload.callId,
+      cacheKey: afterCallCacheKey,
+    });
+    startTransition(() => {
+      setHydratedAfterCallSnapshot(payload.result);
+      setAfterCallSummary(payload.result.afterCallSummary);
+    });
+  }, [afterCallCacheCallId, afterCallCacheKey, initialAfterCallSnapshot, jobId]);
+  const resolvedAfterCallSnapshot = initialAfterCallSnapshot ?? hydratedAfterCallSnapshot ?? null;
   const latestCallOutcome = callSessionLatestCallOutcome ?? initialLatestCallOutcome ?? null;
   const latestCallOutcomeHint = latestCallOutcome ? formatLatestCallOutcomeHint(latestCallOutcome) : null;
 
@@ -268,7 +330,7 @@ export default function JobAskBobFlow({
   const callScriptStepLabel = callScriptHint
     ? `${callScriptBaseLabel} · ${callScriptHint}`
     : callScriptBaseLabel;
-  const afterCallDone = Boolean(afterCallSummary);
+  const afterCallDone = Boolean(resolvedAfterCallSnapshot?.afterCallSummary);
   const stepStatusItems = [
     { label: "Step 1 Intake", done: true },
     { label: "Step 2 Diagnose", done: diagnosisDone },
@@ -637,24 +699,24 @@ export default function JobAskBobFlow({
           />
         </AskBobSection>
         <AskBobSection id="askbob-after-call">
-          <JobAskBobAfterCallPanel
-            workspaceId={workspaceId}
-            jobId={jobId}
-            jobTitle={normalizedJobTitle}
-            jobDescription={jobDescription ?? null}
-            latestCallLabel={latestCallLabel ?? null}
-            hasCall={Boolean(hasLatestCall ?? latestCallLabel)}
-            customerId={customerId ?? null}
-            stepCompleted={afterCallDone}
-            resetToken={afterCallResetToken}
-            onReset={handleAfterCallReset}
-            stepCollapsed={afterCallCollapsed}
-            onToggleStepCollapsed={() => setAfterCallCollapsed((value) => !value)}
-            initialAfterCallSnapshot={initialAfterCallSnapshot ?? undefined}
-            onAfterCallSummaryChange={handleAfterCallSummaryChange}
-            callHistoryHint={callHistoryHint ?? null}
-            latestCallOutcomeHint={latestCallOutcomeHint}
-          />
+            <JobAskBobAfterCallPanel
+              workspaceId={workspaceId}
+              jobId={jobId}
+              jobTitle={normalizedJobTitle}
+              jobDescription={jobDescription ?? null}
+              latestCallLabel={latestCallLabel ?? null}
+              hasCall={Boolean(hasLatestCall ?? latestCallLabel)}
+              customerId={customerId ?? null}
+              stepCompleted={afterCallDone}
+              resetToken={afterCallResetToken}
+              onReset={handleAfterCallReset}
+              stepCollapsed={afterCallCollapsed}
+              onToggleStepCollapsed={() => setAfterCallCollapsed((value) => !value)}
+              initialAfterCallSnapshot={resolvedAfterCallSnapshot ?? undefined}
+              onAfterCallSummaryChange={handleAfterCallSummaryChange}
+              callHistoryHint={callHistoryHint ?? null}
+              latestCallOutcomeHint={latestCallOutcomeHint}
+            />
         </AskBobSection>
       </div>
     </div>

@@ -210,8 +210,20 @@ function startOfToday(date?: Date) {
   return base;
 }
 
-export default async function JobDetailPage(props: { params: Promise<{ id: string }> }) {
+function normalizeParam(value?: string | string[] | null) {
+  if (!value) {
+    return null;
+  }
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function JobDetailPage(props: {
+  params: Promise<{ id: string }>;
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const { id } = await props.params;
+  const afterCallCacheKey = normalizeParam(props.searchParams?.afterCallKey ?? null);
+  const afterCallCallId = normalizeParam(props.searchParams?.callId ?? null);
 
   if (!id || !id.trim()) {
     notFound();
@@ -549,32 +561,34 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
         customerName={customerName}
         description={job.description_raw}
       />
-        <JobAskBobFlow
-          workspaceId={workspace.id}
-          jobId={job.id}
-          customerId={customerId ?? null}
-          customerDisplayName={customerName ?? null}
-          customerPhoneNumber={customerPhoneNumber ?? null}
-          jobDescription={job.description_raw ?? null}
-          jobTitle={askBobJobTitle}
-          askBobLastTaskLabel={askBobLastTaskLabel}
-          askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
-          askBobLastUsedAtIso={askBobLastUsedAtIso}
-          askBobRunsSummary={askBobRunsSummary}
-          initialLastQuoteId={lastQuoteId ?? null}
-          lastQuoteCreatedAt={lastQuoteCreatedAt ?? null}
-          lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? null}
-          initialDiagnoseSnapshot={diagnoseSnapshot ?? undefined}
-          initialMaterialsSnapshot={materialsSnapshot ?? undefined}
-          initialQuoteSnapshot={quoteSnapshot ?? undefined}
-          initialFollowupSnapshot={followupSnapshot ?? undefined}
-          initialAfterCallSnapshot={afterCallSnapshot ?? undefined}
-          lastQuoteSummary={lastQuoteSummary}
-          latestCallLabel={latestCallLabelText}
-          hasLatestCall={Boolean(latestCall)}
-          callHistoryHint={callHistoryHint}
-          initialLatestCallOutcome={initialLatestCallOutcome}
-        />
+          <JobAskBobFlow
+            workspaceId={workspace.id}
+            jobId={job.id}
+            customerId={customerId ?? null}
+            customerDisplayName={customerName ?? null}
+            customerPhoneNumber={customerPhoneNumber ?? null}
+            jobDescription={job.description_raw ?? null}
+            jobTitle={askBobJobTitle}
+            askBobLastTaskLabel={askBobLastTaskLabel}
+            askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
+            askBobLastUsedAtIso={askBobLastUsedAtIso}
+            askBobRunsSummary={askBobRunsSummary}
+            initialLastQuoteId={lastQuoteId ?? null}
+            lastQuoteCreatedAt={lastQuoteCreatedAt ?? null}
+            lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? null}
+            initialDiagnoseSnapshot={diagnoseSnapshot ?? undefined}
+            initialMaterialsSnapshot={materialsSnapshot ?? undefined}
+            initialQuoteSnapshot={quoteSnapshot ?? undefined}
+            initialFollowupSnapshot={followupSnapshot ?? undefined}
+            initialAfterCallSnapshot={afterCallSnapshot ?? undefined}
+            lastQuoteSummary={lastQuoteSummary}
+            latestCallLabel={latestCallLabelText}
+            hasLatestCall={Boolean(latestCall)}
+            callHistoryHint={callHistoryHint}
+            initialLatestCallOutcome={initialLatestCallOutcome}
+            afterCallCacheKey={afterCallCacheKey ?? undefined}
+            afterCallCacheCallId={afterCallCallId ?? undefined}
+          />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
