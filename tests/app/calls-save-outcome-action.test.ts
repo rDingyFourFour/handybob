@@ -66,6 +66,22 @@ describe("saveCallOutcomeAction", () => {
     );
   });
 
+  it("treats an empty outcome code as null", async () => {
+    const callRow = { id: "call-3", workspace_id: "workspace-1" };
+    supabaseState.responses.calls = { data: [callRow], error: null };
+
+    const formData = new FormData();
+    formData.append("callId", "call-3");
+    formData.append("workspaceId", "workspace-1");
+    formData.append("outcomeCode", ""); // empty string should clear the field
+
+    const result = await saveCallOutcomeAction(formData);
+
+    expect(result.ok).toBe(true);
+    const updatePayload = supabaseState.queries.calls.update.mock.calls[0]?.[0];
+    expect(updatePayload?.outcome_code).toBe(null);
+  });
+
   it("returns wrong_workspace when the call belongs to another workspace", async () => {
     const callRow = { id: "call-2", workspace_id: "workspace-2" };
     supabaseState.responses.calls = { data: [callRow], error: null };
@@ -82,6 +98,33 @@ describe("saveCallOutcomeAction", () => {
       error: "Wrong workspace",
       code: "wrong_workspace",
     });
+  });
+
+  it("returns invalid_outcome_code for disallowed values without touching the DB", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const formData = new FormData();
+    formData.append("callId", "call-4");
+    formData.append("workspaceId", "workspace-1");
+    formData.append("outcomeCode", "invalid_choice");
+
+    const result = await saveCallOutcomeAction(formData);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Invalid outcome code",
+      code: "invalid_outcome_code",
+    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[calls-outcome-invalid-code]",
+      expect.objectContaining({
+        outcomeCodeRaw: "invalid_choice",
+        wasEmptyString: false,
+      }),
+    );
+    expect(supabaseState.queries.calls).toBeUndefined();
+
+    warnSpy.mockRestore();
   });
 
   it("returns call_not_found when the call is missing", async () => {
@@ -129,5 +172,23 @@ describe("saveCallOutcomeAction", () => {
     );
 
     logSpy.mockRestore();
+  });
+
+  it("returns invalid_form_data when invoked without FormData", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await saveCallOutcomeAction(null);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Invalid form data",
+      code: "invalid_form_data",
+    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[calls-save-outcome-invalid-formdata]",
+      expect.objectContaining({ hint: "null" }),
+    );
+
+    warnSpy.mockRestore();
   });
 });

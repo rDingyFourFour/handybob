@@ -33,6 +33,12 @@ type SavedOutcome = {
   legacyOutcome: CallOutcome | null;
 };
 
+type ActionStateTuple = [
+  SaveCallOutcomeResponse | null,
+  (formData: FormData | null | undefined) => unknown,
+  boolean,
+];
+
 type CallOutcomeCaptureCardProps = {
   callId: string;
   workspaceId: string;
@@ -46,11 +52,12 @@ type CallOutcomeCaptureCardProps = {
   jobId?: string | null;
 };
 
-type ActionStateTuple = [
-  SaveCallOutcomeResponse | null,
-  (formData: FormData) => unknown,
-  boolean,
-];
+export async function callOutcomeCaptureFormAction(
+  _prevState: SaveCallOutcomeResponse | null,
+  formData?: FormData | null,
+): Promise<SaveCallOutcomeResponse> {
+  return saveCallOutcomeAction(formData ?? null);
+}
 
 function formatRecordedAtLabel(value: string | null) {
   if (!value) {
@@ -139,8 +146,8 @@ export default function CallOutcomeCaptureCard({
   const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
   const lastActionStateRef = useRef<SaveCallOutcomeResponse | null>(null);
 
-  const hookTuple = useActionState<SaveCallOutcomeResponse, FormData>(
-    saveCallOutcomeAction,
+  const hookTuple = useActionState<SaveCallOutcomeResponse, FormData | null | undefined>(
+    callOutcomeCaptureFormAction,
     null,
   );
   const actionStateTuple = actionStateOverride ?? hookTuple;

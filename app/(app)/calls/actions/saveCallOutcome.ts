@@ -12,6 +12,7 @@ import {
 } from "@/lib/domain/communications/callOutcomes";
 
 const NOTES_MAX_LENGTH = 1000;
+const ALLOWED_OUTCOME_CODES = new Set(CALL_OUTCOME_CODE_VALUES);
 
 type SaveCallOutcomeSuccess = {
   ok: true;
@@ -30,7 +31,9 @@ type SaveCallOutcomeFailure = {
     | "wrong_workspace"
     | "call_query_error"
     | "call_update_error"
-    | "workspace_context_unavailable";
+    | "workspace_context_unavailable"
+    | "invalid_form_data"
+    | "invalid_outcome_code";
 };
 
 export type SaveCallOutcomeResponse = SaveCallOutcomeSuccess | SaveCallOutcomeFailure;
@@ -92,13 +95,59 @@ function normalizeOutcomeNotes(value: string | null): string | null {
 }
 
 export async function saveCallOutcomeAction(
-  formData: FormData,
+  formData: FormData | null | undefined,
 ): Promise<SaveCallOutcomeResponse> {
+  if (!(formData instanceof FormData)) {
+    const typeLabel =
+      formData === null
+        ? "null"
+        : formData === undefined
+        ? "undefined"
+        : formData.constructor?.name ?? typeof formData;
+    console.warn("[calls-save-outcome-invalid-formdata]", { hint: typeLabel });
+    return { ok: false, error: "Invalid form data", code: "invalid_form_data" };
+  }
+
+  const callIdRawValue = formData.get("callId");
+  const workspaceIdRawValue = formData.get("workspaceId");
+  const rawOutcomeCodeEntry = formData.get("outcomeCode");
+  const rawOutcomeCodeString =
+    typeof rawOutcomeCodeEntry === "string"
+      ? rawOutcomeCodeEntry
+      : rawOutcomeCodeEntry === null || rawOutcomeCodeEntry === undefined
+      ? ""
+      : String(rawOutcomeCodeEntry);
+  const trimmedOutcomeCodeRaw = rawOutcomeCodeString.trim();
+  const normalizedOutcomeCode =
+    trimmedOutcomeCodeRaw === "" ? null : trimmedOutcomeCodeRaw;
+  const wasEmptyString = rawOutcomeCodeString === "";
+
+  if (
+    normalizedOutcomeCode &&
+    !ALLOWED_OUTCOME_CODES.has(normalizedOutcomeCode as CallOutcomeCode)
+  ) {
+    console.warn("[calls-outcome-invalid-code]", {
+      callId: typeof callIdRawValue === "string"
+        ? callIdRawValue
+        : callIdRawValue === null || callIdRawValue === undefined
+        ? null
+        : String(callIdRawValue),
+      workspaceId: typeof workspaceIdRawValue === "string"
+        ? workspaceIdRawValue
+        : workspaceIdRawValue === null || workspaceIdRawValue === undefined
+        ? null
+        : String(workspaceIdRawValue),
+      outcomeCodeRaw: trimmedOutcomeCodeRaw,
+      wasEmptyString,
+    });
+    return { ok: false, error: "Invalid outcome code", code: "invalid_outcome_code" };
+  }
+
   const parsed = callOutcomeSchema.parse({
     callId: formData.get("callId"),
     workspaceId: formData.get("workspaceId"),
     reachedCustomer: formData.get("reachedCustomer"),
-    outcomeCode: formData.get("outcomeCode"),
+    outcomeCode: normalizedOutcomeCode,
     notes: typeof formData.get("notes") === "string" ? formData.get("notes") : null,
     jobId: formData.get("jobId"),
   });
@@ -125,6 +174,8 @@ export async function saveCallOutcomeAction(
     console.error("[calls-outcome-ui-failure] workspace context unavailable", {
       callId: parsed.callId,
       workspaceId: parsed.workspaceId,
+      outcomeCodeSent: parsed.outcomeCode,
+      outcomeCodeRaw: trimmedOutcomeCodeRaw,
     });
     return { ok: false, error: "Workspace unavailable", code: "workspace_context_unavailable" };
   }
@@ -140,6 +191,8 @@ export async function saveCallOutcomeAction(
       callId: parsed.callId,
       workspaceId: workspace.id,
       error: callError,
+      outcomeCodeSent: parsed.outcomeCode,
+      outcomeCodeRaw: trimmedOutcomeCodeRaw,
     });
     return { ok: false, error: "Failed to load call", code: "call_query_error" };
   }
@@ -148,6 +201,8 @@ export async function saveCallOutcomeAction(
     console.warn("[calls-outcome-ui-failure] Call not found", {
       callId: parsed.callId,
       workspaceId: workspace.id,
+      outcomeCodeSent: parsed.outcomeCode,
+      outcomeCodeRaw: trimmedOutcomeCodeRaw,
     });
     return { ok: false, error: "Call not found", code: "call_not_found" };
   }
@@ -157,6 +212,8 @@ export async function saveCallOutcomeAction(
       callId: parsed.callId,
       workspaceId: workspace.id,
       callWorkspaceId: callRow.workspace_id,
+      outcomeCodeSent: parsed.outcomeCode,
+      outcomeCodeRaw: trimmedOutcomeCodeRaw,
     });
     return { ok: false, error: "Wrong workspace", code: "wrong_workspace" };
   }
@@ -187,6 +244,8 @@ export async function saveCallOutcomeAction(
       callId: parsed.callId,
       workspaceId: workspace.id,
       error: updateError,
+      outcomeCodeSent: parsed.outcomeCode,
+      outcomeCodeRaw: trimmedOutcomeCodeRaw,
     });
     return { ok: false, error: "Unable to save outcome", code: "call_update_error" };
   }

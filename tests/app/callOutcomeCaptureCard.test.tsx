@@ -27,9 +27,13 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
 
   function renderCard(
     callId = "call-prefill",
-    options?: {
-      actionStateOverride?: [SaveCallOutcomeResponse | null, (formData: FormData) => unknown, boolean];
-    },
+  options?: {
+    actionStateOverride?: [
+      SaveCallOutcomeResponse | null,
+      (formData: FormData | null | undefined) => unknown,
+      boolean,
+    ];
+  },
   ) {
     if (!root) {
       throw new Error("missing root");
