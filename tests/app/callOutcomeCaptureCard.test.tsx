@@ -2,8 +2,14 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE } from "@/app/(app)/calls/actions/saveCallOutcome";
 import type { SaveCallOutcomeResponse } from "@/app/(app)/calls/actions/saveCallOutcome";
 import CallOutcomeCaptureCard from "@/app/(app)/calls/[id]/CallOutcomeCaptureCard";
+
+// Manual smoke checklist:
+// 1. On a real call session page, expand the outcome capture card and choose a reached/no-answer option.
+// 2. Select a valid outcome code, add optional notes, save, and wait for the confirmation toast.
+// 3. Refresh or revisit the call row and verify "Outcome: …" and "Reached: …" appear in recent activity/timeline.
 
 describe("CallOutcomeCaptureCard prefill behavior", () => {
   let container: HTMLDivElement;
@@ -182,5 +188,117 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
     expect(container.textContent).toContain("Outcome recorded");
     expect(container.textContent).toContain("Saved just now");
     expect(container.textContent).toContain("Outcome: Reached · Scheduled");
+  });
+
+  it("runs the form action with the expected FormData and shows the recorded state", async () => {
+    const successResponse: SaveCallOutcomeResponse = {
+      ok: true,
+      callId: "call-integration",
+      reachedCustomer: true,
+      outcomeCode: "reached_needs_followup",
+      notes: "Followed up in detail",
+      recordedAtIso: "2025-01-01T12:00:00Z",
+    };
+    const formAction = vi.fn(async (formData: FormData | null | undefined) => {
+      expect(formData).toBeInstanceOf(FormData);
+      return successResponse;
+    });
+
+    renderCard("call-integration", { actionStateOverride: [null, formAction, false] });
+    await flushReactUpdates();
+
+    const reachedButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Reached",
+    );
+    act(() => {
+      reachedButton?.click();
+    });
+    await flushReactUpdates();
+
+    const select = container.querySelector<HTMLSelectElement>("select[name='outcomeCode']");
+    act(() => {
+      if (select) {
+        select.value = "reached_needs_followup";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    await flushReactUpdates();
+    expect(select?.value).toBe("reached_needs_followup");
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea[name='notes']");
+    act(() => {
+      if (textarea) {
+        textarea.value = "Followed up in detail";
+        textarea.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    await flushReactUpdates();
+    expect(textarea?.value).toBe("Followed up in detail");
+
+    const formElement = container.querySelector<HTMLFormElement>("form");
+    expect(formElement).toBeTruthy();
+    const callIdInput = formElement!.querySelector<HTMLInputElement>("input[name='callId']");
+    expect(callIdInput?.value).toBe("call-integration");
+    const workspaceIdInput = formElement!.querySelector<HTMLInputElement>("input[name='workspaceId']");
+    expect(workspaceIdInput?.value).toBe("workspace-1");
+    const reachedCustomerInput = formElement!.querySelector<HTMLInputElement>(
+      "input[name='reachedCustomer']",
+    );
+    expect(reachedCustomerInput?.value).toBe("true");
+    await act(async () => {
+      await formAction(new FormData(formElement!));
+    });
+    expect(formAction).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      root?.render(
+        <CallOutcomeCaptureCard
+          callId="call-integration"
+          workspaceId="workspace-1"
+          initialOutcomeCode={null}
+          initialReachedCustomer={null}
+          initialNotes={null}
+          initialRecordedAt={null}
+          hasAskBobScriptHint={false}
+          actionStateOverride={[successResponse, formAction, false]}
+        />,
+      );
+    });
+    await flushReactUpdates();
+
+    expect(container.textContent).toContain("Outcome recorded");
+    expect(container.textContent).toContain("Saved just now");
+    expect(container.textContent).toContain("Outcome: Reached · Needs follow-up");
+  });
+
+  it("shows the schema-out-of-date prompt when the action fails with schema_out_of_date", async () => {
+    const failureResponse: SaveCallOutcomeResponse = {
+      ok: false,
+      error: "Unable to save outcome",
+      code: "schema_out_of_date",
+    };
+    const formAction = vi.fn(async () => failureResponse);
+    renderCard("call-schema", { actionStateOverride: [null, formAction, false] });
+    await flushReactUpdates();
+
+    act(() => {
+      root?.render(
+        <CallOutcomeCaptureCard
+          callId="call-schema"
+          workspaceId="workspace-1"
+          initialOutcomeCode={null}
+          initialReachedCustomer={null}
+          initialNotes={null}
+          initialRecordedAt={null}
+          hasAskBobScriptHint={false}
+          actionStateOverride={[failureResponse, formAction, false]}
+        />,
+      );
+    });
+    await flushReactUpdates();
+
+    expect(container.textContent).toContain(
+      CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
+    );
   });
 });

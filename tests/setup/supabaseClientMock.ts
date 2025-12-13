@@ -32,15 +32,30 @@ export type SupabaseMockState = {
     from: ReturnType<typeof vi.fn>;
   };
   queries: Record<string, SupabaseQuery>;
-  responses: Record<string, SupabaseQueryResponse>;
+  responses: Record<string, SupabaseQueryResponse | SupabaseQueryResponse[]>;
   limitErrors: Partial<Record<string, Error>>;
 };
 
-function ensureResponse(state: SupabaseMockState, table: string) {
-  if (!state.responses[table]) {
-    state.responses[table] = { data: [], error: null };
+function ensureResponse(state: SupabaseMockState, table: string): SupabaseQueryResponse {
+  const response = state.responses[table];
+  if (!response) {
+    const fallback = { data: [], error: null };
+    state.responses[table] = fallback;
+    return fallback;
   }
-  return state.responses[table];
+  if (Array.isArray(response)) {
+    if (!response.length) {
+      const fallback = { data: [], error: null };
+      state.responses[table] = fallback;
+      return fallback;
+    }
+    const next = response.shift()!;
+    if (!response.length) {
+      state.responses[table] = { data: [], error: null };
+    }
+    return next;
+  }
+  return response;
 }
 
 function createQuery(table: string, state: SupabaseMockState): SupabaseQuery {
@@ -93,11 +108,13 @@ function createQuery(table: string, state: SupabaseMockState): SupabaseQuery {
  * custom responses/error conditions.
  */
 export function setupSupabaseMock(
-  initialResponses: Record<string, SupabaseQueryResponse> = {}
+  initialResponses: Record<string, SupabaseQueryResponse | SupabaseQueryResponse[]> = {}
 ): SupabaseMockState {
-  const responses: Record<string, SupabaseQueryResponse> = {};
+  const responses: Record<string, SupabaseQueryResponse | SupabaseQueryResponse[]> = {};
   for (const [table, response] of Object.entries(initialResponses)) {
-    responses[table] = { ...response };
+    responses[table] = Array.isArray(response)
+      ? response.map((entry) => ({ ...entry }))
+      : { ...response };
   }
 
   const state: SupabaseMockState = {

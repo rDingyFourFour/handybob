@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
+import { CALL_OUTCOME_CODE_VALUES } from "@/lib/domain/communications/callOutcomes";
 
 const createServerClientMock = vi.fn();
 const mockGetCurrentWorkspace = vi.fn();
@@ -18,12 +19,14 @@ vi.mock("next/cache", () => ({
   revalidatePath: (...args: unknown[]) => mockRevalidatePath(...args),
 }));
 
-import { saveCallOutcomeAction } from "@/app/(app)/calls/actions/saveCallOutcome";
+import { CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE, saveCallOutcomeAction } from "@/app/(app)/calls/actions/saveCallOutcome";
+import { resetCallOutcomeSchemaMismatchSentinelForTests } from "@/utils/calls/callOutcomeSchemaMismatchSentinel";
 
 describe("saveCallOutcomeAction", () => {
   let supabaseState = setupSupabaseMock();
 
   beforeEach(() => {
+    resetCallOutcomeSchemaMismatchSentinelForTests();
     supabaseState = setupSupabaseMock();
     createServerClientMock.mockReturnValue(supabaseState.supabase);
     mockGetCurrentWorkspace.mockResolvedValue({
@@ -66,6 +69,22 @@ describe("saveCallOutcomeAction", () => {
     );
   });
 
+  it.each(CALL_OUTCOME_CODE_VALUES)("persists outcome code %s", async (outcomeCode) => {
+    const callRow = { id: `call-${outcomeCode}`, workspace_id: "workspace-1" };
+    supabaseState.responses.calls = { data: [callRow], error: null };
+
+    const formData = new FormData();
+    formData.append("callId", callRow.id);
+    formData.append("workspaceId", "workspace-1");
+    formData.append("outcomeCode", outcomeCode);
+
+    const result = await saveCallOutcomeAction(formData);
+
+    expect(result.ok).toBe(true);
+    const updatePayload = supabaseState.queries.calls.update.mock.calls[0]?.[0];
+    expect(updatePayload?.outcome_code).toBe(outcomeCode);
+  });
+
   it("treats an empty outcome code as null", async () => {
     const callRow = { id: "call-3", workspace_id: "workspace-1" };
     supabaseState.responses.calls = { data: [callRow], error: null };
@@ -74,6 +93,21 @@ describe("saveCallOutcomeAction", () => {
     formData.append("callId", "call-3");
     formData.append("workspaceId", "workspace-1");
     formData.append("outcomeCode", ""); // empty string should clear the field
+
+    const result = await saveCallOutcomeAction(formData);
+
+    expect(result.ok).toBe(true);
+    const updatePayload = supabaseState.queries.calls.update.mock.calls[0]?.[0];
+    expect(updatePayload?.outcome_code).toBe(null);
+  });
+
+  it("treats a missing outcome code field as null", async () => {
+    const callRow = { id: "call-missing-outcome", workspace_id: "workspace-1" };
+    supabaseState.responses.calls = { data: [callRow], error: null };
+
+    const formData = new FormData();
+    formData.append("callId", "call-missing-outcome");
+    formData.append("workspaceId", "workspace-1");
 
     const result = await saveCallOutcomeAction(formData);
 
@@ -125,6 +159,96 @@ describe("saveCallOutcomeAction", () => {
     expect(supabaseState.queries.calls).toBeUndefined();
 
     warnSpy.mockRestore();
+  });
+
+  it("returns schema_out_of_date when Postgres rejects an allowed outcome code", async () => {
+    const callRow = { id: "call-with-constraint", workspace_id: "workspace-1" };
+    supabaseState.responses.calls = [
+      { data: [callRow], error: null },
+      {
+        data: null,
+        error: { code: "23514", message: "calls_outcome_code_check violation" },
+      },
+    ];
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const formData = new FormData();
+    formData.append("callId", "call-with-constraint");
+    formData.append("workspaceId", "workspace-1");
+    formData.append("outcomeCode", "reached_needs_followup");
+
+    const result = await saveCallOutcomeAction(formData);
+
+    expect(result).toEqual({
+      ok: false,
+      error: CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
+      code: "schema_out_of_date",
+    });
+    expect(errorSpy).toHaveBeenNthCalledWith(
+      1,
+      "[calls-outcome-db-constraint-violation]",
+      expect.objectContaining({
+        constraint: "calls_outcome_code_check",
+        outcomeCodeSent: "reached_needs_followup",
+      }),
+    );
+    expect(errorSpy).toHaveBeenNthCalledWith(
+      2,
+      "[calls-outcome-schema-mismatch]",
+      expect.objectContaining({
+        outcomeCodeSent: "reached_needs_followup",
+        actionHint: expect.stringContaining("20260101000000_align_call_outcome_vocab.sql"),
+      }),
+    );
+
+    errorSpy.mockRestore();
+  });
+
+  it("emits the schema mismatch sentinel only once across repeated violations", async () => {
+    const callRow = { id: "call-repeated", workspace_id: "workspace-1" };
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const buildResponses = () => [
+      { data: [callRow], error: null },
+      {
+        data: null,
+        error: { code: "23514", message: "calls_outcome_code_check violation" },
+      },
+    ];
+    const formDataFactory = () => {
+      const formData = new FormData();
+      formData.append("callId", "call-repeated");
+      formData.append("workspaceId", "workspace-1");
+      formData.append("outcomeCode", "reached_needs_followup");
+      return formData;
+    };
+
+    await (async () => {
+      supabaseState.responses.calls = buildResponses();
+      expect(await saveCallOutcomeAction(formDataFactory())).toEqual({
+        ok: false,
+        error: CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
+        code: "schema_out_of_date",
+      });
+    })();
+    await (async () => {
+      supabaseState.responses.calls = buildResponses();
+      expect(await saveCallOutcomeAction(formDataFactory())).toEqual({
+        ok: false,
+        error: CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
+        code: "schema_out_of_date",
+      });
+    })();
+
+    const sentinelCalls = errorSpy.mock.calls.filter(
+      (call) => call[0] === "[calls-outcome-schema-mismatch]",
+    );
+    expect(sentinelCalls).toHaveLength(1);
+    const dbViolationCalls = errorSpy.mock.calls.filter(
+      (call) => call[0] === "[calls-outcome-db-constraint-violation]",
+    );
+    expect(dbViolationCalls).toHaveLength(2);
+
+    errorSpy.mockRestore();
   });
 
   it("returns call_not_found when the call is missing", async () => {

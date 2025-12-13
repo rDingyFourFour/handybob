@@ -10,9 +10,23 @@ import {
   CallOutcomeCode,
   mapOutcomeCodeToLegacyOutcome,
 } from "@/lib/domain/communications/callOutcomes";
+import {
+  hasCallOutcomeSchemaMismatchSentinelFired,
+  markCallOutcomeSchemaMismatchSentinelAsFired,
+} from "@/utils/calls/callOutcomeSchemaMismatchSentinel";
 
 const NOTES_MAX_LENGTH = 1000;
+const CALL_OUTCOME_CONSTRAINT_CODE = "23514";
+const CALL_OUTCOME_CONSTRAINT_VERIFIER_RPC = "get_call_outcome_constraint_definitions";
+const SCHEMA_OUT_OF_DATE_MESSAGE =
+  "Outcome couldn’t be saved because the database schema is out of date. Please apply the latest migrations.";
+export const CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE = SCHEMA_OUT_OF_DATE_MESSAGE;
 const ALLOWED_OUTCOME_CODES = new Set(CALL_OUTCOME_CODE_VALUES);
+type ServerSupabaseClient = Awaited<ReturnType<typeof createServerClient>>;
+
+type SchemaVerificationStatus = "unknown" | "verified_ok" | "verified_mismatch" | "unsupported";
+let schemaVerificationStatus: SchemaVerificationStatus = "unknown";
+let schemaVerificationPromise: Promise<SchemaVerificationStatus> | null = null;
 
 type SaveCallOutcomeSuccess = {
   ok: true;
@@ -33,7 +47,8 @@ type SaveCallOutcomeFailure = {
     | "call_update_error"
     | "workspace_context_unavailable"
     | "invalid_form_data"
-    | "invalid_outcome_code";
+    | "invalid_outcome_code"
+    | "schema_out_of_date";
 };
 
 export type SaveCallOutcomeResponse = SaveCallOutcomeSuccess | SaveCallOutcomeFailure;
@@ -81,6 +96,148 @@ const callOutcomeSchema = z.object({
     }, z.string().min(1).nullable())
     .optional(),
 });
+
+type CallOutcomeConstraintDefinitionRow = {
+  constraint_name: string | null;
+  constraint_def: string | null;
+};
+
+function parseConstraintValues(definition?: string | null): string[] | null {
+  if (!definition) {
+    return null;
+  }
+  const match = definition.match(/IN\s*\(([^)]+)\)/);
+  if (!match?.[1]) {
+    return null;
+  }
+  return match[1]
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => {
+      if (value.startsWith("'") && value.endsWith("'") && value.length >= 2) {
+        return value.slice(1, -1);
+      }
+      return value;
+    });
+}
+
+function parseConstraintNameFromError(error: unknown): string | null {
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+  const detail = (error as { details?: unknown }).details;
+  const message = (error as { message?: unknown }).message;
+  const candidate =
+    typeof detail === "string" ? detail : typeof message === "string" ? message : null;
+  if (!candidate) {
+    return null;
+  }
+  const match = candidate.match(/calls_outcome_[a-z_]+_check/);
+  return match?.[0] ?? null;
+}
+
+function logSchemaMismatchSentinel(context: {
+  workspaceId: string;
+  callId: string;
+  outcomeCodeSent: string | null;
+  outcomeCodeRaw: string;
+  constraint: string | null;
+  error: unknown;
+}) {
+  if (hasCallOutcomeSchemaMismatchSentinelFired()) {
+    return;
+  }
+  const errorObject = context.error as { code?: unknown; message?: unknown };
+  console.error("[calls-outcome-schema-mismatch]", {
+    workspaceId: context.workspaceId,
+    callId: context.callId,
+    outcomeCodeSent: context.outcomeCodeSent,
+    outcomeCodeRaw: context.outcomeCodeRaw,
+    constraint: context.constraint,
+    errorCode: typeof errorObject.code === "string" ? errorObject.code : null,
+    errorMessage: typeof errorObject.message === "string" ? errorObject.message : null,
+    actionHint:
+      "Run Supabase migrations on the target project; expected 20260101000000_align_call_outcome_vocab.sql applied.",
+  });
+  markCallOutcomeSchemaMismatchSentinelAsFired();
+}
+
+function mapVerificationStatusToResult(status: SchemaVerificationStatus) {
+  if (status === "verified_ok") return "ok";
+  if (status === "verified_mismatch") return "mismatch";
+  return "unsupported";
+}
+
+async function runSchemaVerification(
+  supabase: ServerSupabaseClient,
+  outcomeCode: string | null,
+): Promise<SchemaVerificationStatus> {
+  try {
+    const { data, error } = await supabase.rpc(
+      CALL_OUTCOME_CONSTRAINT_VERIFIER_RPC,
+    );
+    let status: SchemaVerificationStatus = "unsupported";
+    let constraintName: string | null = null;
+    if (!error && Array.isArray(data) && data.length) {
+      const codeConstraint = data.find(
+        (entry): entry is CallOutcomeConstraintDefinitionRow =>
+          entry?.constraint_name === "calls_outcome_code_check",
+      );
+      constraintName = codeConstraint?.constraint_name ?? null;
+      const parsed = parseConstraintValues(codeConstraint?.constraint_def);
+      if (parsed) {
+        const expectedSet = new Set(CALL_OUTCOME_CODE_VALUES);
+        const actualSet = new Set(parsed);
+        const matches =
+          expectedSet.size === actualSet.size &&
+          CALL_OUTCOME_CODE_VALUES.every((value) => actualSet.has(value));
+        status = matches ? "verified_ok" : "verified_mismatch";
+      }
+    }
+    console.log("[calls-outcome-schema-verification]", {
+      outcomeCode,
+      constraint: constraintName,
+      result: mapVerificationStatusToResult(status),
+      node_env: process.env.NODE_ENV ?? "unknown",
+    });
+    return status;
+  } catch {
+    console.log("[calls-outcome-schema-verification]", {
+      outcomeCode,
+      constraint: null,
+      result: "unsupported",
+      node_env: process.env.NODE_ENV ?? "unknown",
+    });
+    return "unsupported";
+  }
+}
+
+async function ensureSchemaVerification(
+  supabase: ServerSupabaseClient,
+  outcomeCode: string | null,
+): Promise<SchemaVerificationStatus> {
+  if (schemaVerificationStatus !== "unknown") {
+    return schemaVerificationStatus;
+  }
+  if (!schemaVerificationPromise) {
+    schemaVerificationPromise = (async () => {
+      const result = await runSchemaVerification(supabase, outcomeCode);
+      schemaVerificationStatus = result;
+      schemaVerificationPromise = null;
+      return result;
+    })();
+  }
+  return schemaVerificationPromise;
+}
+
+function isCallOutcomeConstraintViolation(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const candidate = (error as { code?: unknown }).code;
+  return typeof candidate === "string" && candidate === CALL_OUTCOME_CONSTRAINT_CODE;
+}
 
 function normalizeOutcomeNotes(value: string | null): string | null {
   if (!value) {
@@ -240,13 +397,39 @@ export async function saveCallOutcomeAction(
     .maybeSingle();
 
   if (updateError || !updateData?.id) {
-    console.error("[calls-outcome-ui-failure] Failed to persist outcome", {
+    const persistenceContext = {
       callId: parsed.callId,
       workspaceId: workspace.id,
-      error: updateError,
       outcomeCodeSent: parsed.outcomeCode,
       outcomeCodeRaw: trimmedOutcomeCodeRaw,
-    });
+      error: updateError ?? "missing_update_payload",
+    };
+    if (
+      isCallOutcomeConstraintViolation(updateError) &&
+      normalizedOutcomeCode &&
+      ALLOWED_OUTCOME_CODES.has(normalizedOutcomeCode as CallOutcomeCode)
+    ) {
+      const constraintName = parseConstraintNameFromError(updateError);
+      console.error("[calls-outcome-db-constraint-violation]", {
+        ...persistenceContext,
+        constraint: constraintName,
+      });
+      logSchemaMismatchSentinel({
+        workspaceId: workspace.id,
+        callId: parsed.callId,
+        outcomeCodeSent: parsed.outcomeCode,
+        outcomeCodeRaw: trimmedOutcomeCodeRaw,
+        constraint: constraintName,
+        error: updateError,
+      });
+      await ensureSchemaVerification(supabase, normalizedOutcomeCode);
+      return {
+        ok: false,
+        error: SCHEMA_OUT_OF_DATE_MESSAGE,
+        code: "schema_out_of_date",
+      };
+    }
+    console.error("[calls-outcome-ui-failure] Failed to persist outcome", persistenceContext);
     return { ok: false, error: "Unable to save outcome", code: "call_update_error" };
   }
 

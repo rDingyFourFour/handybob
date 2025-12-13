@@ -12,7 +12,11 @@ import {
   getCallOutcomeMetadata,
   mapOutcomeCodeToLegacyOutcome,
 } from "@/lib/domain/communications/callOutcomes";
-import { SaveCallOutcomeResponse, saveCallOutcomeAction } from "../actions/saveCallOutcome";
+import {
+  CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
+  SaveCallOutcomeResponse,
+  saveCallOutcomeAction,
+} from "../actions/saveCallOutcome";
 import { readAndClearCallOutcomePrefill } from "@/utils/askbob/callOutcomePrefillCache";
 
 const NOTES_MAX_LENGTH = 1000;
@@ -152,6 +156,10 @@ export default function CallOutcomeCaptureCard({
   );
   const actionStateTuple = actionStateOverride ?? hookTuple;
   const [actionState, formAction, pending] = actionStateTuple;
+  const actionErrorMessage =
+    actionState?.code === "schema_out_of_date"
+      ? CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE
+      : actionState?.error ?? null;
 
   useEffect(() => {
     if (!actionState || actionState === lastActionStateRef.current) {
@@ -386,8 +394,8 @@ export default function CallOutcomeCaptureCard({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm text-slate-400">
               {pending ? "Saving…" : "We’ll store the reach, outcome, and notes when you save."}
-              {actionState?.ok === false && actionState.error && (
-                <p className="text-xs text-amber-400">{actionState.error}</p>
+              {actionState?.ok === false && actionErrorMessage && (
+                <p className="text-xs text-amber-400">{actionErrorMessage}</p>
               )}
             </div>
             <div className="flex items-center gap-2">

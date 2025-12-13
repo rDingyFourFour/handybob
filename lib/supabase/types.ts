@@ -101,7 +101,13 @@ export interface Database {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      get_call_outcome_constraint_definitions: {
+        Args: Record<string, never>;
+        Returns: {
+          constraint_name: string | null;
+          constraint_def: string | null;
+        }[];
+      };
     };
     Enums: {
       [_ in never]: never;
