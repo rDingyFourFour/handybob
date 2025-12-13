@@ -49,6 +49,7 @@ describe("JobAskBobAfterCallPanel", () => {
           hasCall={false}
           stepCollapsed={false}
           onToggleStepCollapsed={vi.fn()}
+          latestCallOutcomeReference={null}
         />,
       );
       await Promise.resolve();
@@ -90,6 +91,8 @@ describe("JobAskBobAfterCallPanel", () => {
           stepCollapsed={false}
           onToggleStepCollapsed={vi.fn()}
           onAfterCallSummaryChange={summaryChange}
+          latestCallOutcomeHint="Latest call outcome: Reached · Needs follow-up"
+          latestCallOutcomeReference="Reached · needs follow-up · 2025-01-01 10:00"
         />,
       );
       await Promise.resolve();
@@ -113,5 +116,8 @@ describe("JobAskBobAfterCallPanel", () => {
     expect(container.textContent).toContain("Recommended next move");
     expect(container.textContent).toContain("Send prep details");
     expect(summaryChange).toHaveBeenCalledWith("Spoke with the customer");
+    expect(container.textContent).toContain(
+      "Previous outcome: Reached · needs follow-up · 2025-01-01 10:00",
+    );
   });
 });

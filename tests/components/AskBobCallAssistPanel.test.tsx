@@ -304,4 +304,45 @@ describe("AskBobCallAssistPanel", () => {
     });
     expect(personaChangeSpy).toHaveBeenLastCalledWith(null);
   });
+
+  it("shows the latest call outcome and sends it along with the request", async () => {
+    const latestLabel = "Needs follow-up · reached · 2025-01-01 10:00";
+
+    await act(async () => {
+      root?.render(
+        <AskBobCallAssistPanel
+          stepNumber={7}
+          workspaceId="workspace-1"
+          userId="user-1"
+          jobId="job-1"
+          customerId="customer-1"
+          customerDisplayName="Customer Name"
+          customerPhoneNumber="+1555000000"
+          jobTitle="Fix sink"
+          jobDescription="Description"
+          diagnosisSummary="Diagnosis"
+          materialsSummary="Materials"
+          lastQuoteSummary="Quote #1"
+          followupSummary="Follow-up"
+          followupCallRecommended
+          latestCallOutcomeLabel={latestLabel}
+          onToggleCollapse={vi.fn()}
+          onCallScriptSummaryChange={vi.fn()}
+          stepCollapsed={false}
+          stepCompleted={false}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain(`Latest call outcome: ${latestLabel}`);
+
+    const generateButton = findButton(container, "Generate call script");
+    await act(async () => {
+      generateButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const actionPayload = mockRunAction.mock.calls[0][0];
+    expect(actionPayload.extraDetails).toBe(`Latest call outcome: ${latestLabel}`);
+  });
 });

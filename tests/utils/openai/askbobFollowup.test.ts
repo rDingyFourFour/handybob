@@ -110,4 +110,22 @@ describe("callAskBobJobFollowup", () => {
     expect(userMessage).toContain("Appointment scheduled: no");
     expect(userMessage).toContain("Voicemail left: no");
   });
+
+  it("omits the latest call outcome block when none is provided", async () => {
+    __mockCreate.mockResolvedValueOnce({
+      model: "gpt-4",
+      choices: [
+        {
+          message: {
+            content: "```json\n" + JSON.stringify(sampleResult) + "\n```",
+          },
+        },
+      ],
+    });
+
+    await callAskBobJobFollowup(baseInput());
+
+    const userMessage = __mockCreate.mock.calls[0][0].messages[1].content;
+    expect(userMessage).not.toContain("Call outcome context:");
+  });
 });

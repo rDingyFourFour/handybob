@@ -17,6 +17,7 @@ import JobAskBobContainer from "@/components/askbob/JobAskBobContainer";
 import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
 import {
   formatLatestCallOutcomeHint,
+  formatLatestCallOutcomeReference,
   type LatestCallOutcomeForJob,
 } from "@/lib/domain/calls/latestCallOutcome";
 import {
@@ -303,6 +304,9 @@ export default function JobAskBobFlow({
   const resolvedAfterCallSnapshot = initialAfterCallSnapshot ?? hydratedAfterCallSnapshot ?? null;
   const latestCallOutcome = callSessionLatestCallOutcome ?? initialLatestCallOutcome ?? null;
   const latestCallOutcomeHint = latestCallOutcome ? formatLatestCallOutcomeHint(latestCallOutcome) : null;
+  const latestCallOutcomeReference = latestCallOutcome
+    ? formatLatestCallOutcomeReference(latestCallOutcome)
+    : null;
 
   const serverQuoteCandidate = initialLastQuoteId
     ? {
@@ -691,27 +695,29 @@ export default function JobAskBobFlow({
             callScriptSummary={callScriptSummary}
             onCallScriptSummaryChange={setCallScriptSummary}
             onStartCallWithScript={handleStartCallWithScript}
+            latestCallOutcomeLabel={latestCallOutcomeReference}
           />
         </AskBobSection>
         <AskBobSection id="askbob-after-call">
-            <JobAskBobAfterCallPanel
-              workspaceId={workspaceId}
-              jobId={jobId}
-              jobTitle={normalizedJobTitle}
-              jobDescription={jobDescription ?? null}
-              latestCallLabel={latestCallLabel ?? null}
-              hasCall={Boolean(hasLatestCall ?? latestCallLabel)}
-              customerId={customerId ?? null}
-              stepCompleted={afterCallDone}
-              resetToken={afterCallResetToken}
-              onReset={handleAfterCallReset}
-              stepCollapsed={afterCallCollapsed}
-              onToggleStepCollapsed={() => setAfterCallCollapsed((value) => !value)}
-              initialAfterCallSnapshot={resolvedAfterCallSnapshot ?? undefined}
-              onAfterCallSummaryChange={handleAfterCallSummaryChange}
-              callHistoryHint={callHistoryHint ?? null}
-              latestCallOutcomeHint={latestCallOutcomeHint}
-            />
+          <JobAskBobAfterCallPanel
+            workspaceId={workspaceId}
+            jobId={jobId}
+            jobTitle={normalizedJobTitle}
+            jobDescription={jobDescription ?? null}
+            latestCallLabel={latestCallLabel ?? null}
+            hasCall={Boolean(hasLatestCall ?? latestCallLabel)}
+            customerId={customerId ?? null}
+            stepCompleted={afterCallDone}
+            resetToken={afterCallResetToken}
+            onReset={handleAfterCallReset}
+            stepCollapsed={afterCallCollapsed}
+            onToggleStepCollapsed={() => setAfterCallCollapsed((value) => !value)}
+            initialAfterCallSnapshot={resolvedAfterCallSnapshot ?? undefined}
+            onAfterCallSummaryChange={handleAfterCallSummaryChange}
+            callHistoryHint={callHistoryHint ?? null}
+            latestCallOutcomeHint={latestCallOutcomeHint}
+            latestCallOutcomeReference={latestCallOutcomeReference}
+          />
         </AskBobSection>
       </div>
     </div>

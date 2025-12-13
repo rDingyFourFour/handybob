@@ -801,6 +801,8 @@ export async function callAskBobJobFollowup(
     hasQuoteContextForFollowup: input.hasQuoteContextForFollowup ?? false,
   };
   const latestCallOutcome = input.latestCallOutcome ?? null;
+  const hasLatestCallOutcome = Boolean(latestCallOutcome);
+  const hasLatestCallOutcomeCode = Boolean(latestCallOutcome?.outcomeCode);
   const callOutcomeContext =
     input.latestCallOutcomeContext?.trim() ||
     buildCallOutcomePromptContext(latestCallOutcome);
@@ -829,7 +831,8 @@ export async function callAskBobJobFollowup(
     hasUnpaidInvoice: input.hasUnpaidInvoice,
     promptLength: messageParts.length,
     hasQuoteContextForFollowup: Boolean(input.hasQuoteContextForFollowup),
-    hasLatestCallOutcome: Boolean(latestCallOutcome),
+    hasLatestCallOutcome,
+    hasLatestCallOutcomeCode,
     outcomeCode: latestCallOutcome?.outcomeCode ?? null,
   });
 
@@ -933,6 +936,8 @@ export async function callAskBobJobFollowup(
       shouldScheduleVisit,
       shouldCall,
       shouldWait,
+      hasLatestCallOutcome,
+      hasLatestCallOutcomeCode,
     });
 
     return {

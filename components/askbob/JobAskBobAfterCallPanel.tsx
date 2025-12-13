@@ -29,6 +29,7 @@ export type JobAskBobAfterCallPanelProps = {
   callHistoryHint?: string | null;
   latestCallOutcomeHint?: string | null;
   customerId?: string | null;
+  latestCallOutcomeReference?: string | null;
 };
 
 const summaryFromSnapshot = (snapshot?: AskBobAfterCallSnapshotPayload | null): AskBobJobAfterCallResult | null => {
@@ -64,6 +65,7 @@ export default function JobAskBobAfterCallPanel({
   onAfterCallSummaryChange,
   callHistoryHint,
   latestCallOutcomeHint,
+  latestCallOutcomeReference,
   customerId,
 }: JobAskBobAfterCallPanelProps) {
   const [result, setResult] = useState<AskBobJobAfterCallResult | null>(() =>
@@ -246,6 +248,9 @@ export default function JobAskBobAfterCallPanel({
             <p className="text-xs text-slate-500">{contextUsedText}</p>
             {latestCallOutcomeHint && (
               <p className="text-xs text-slate-400">{latestCallOutcomeHint}</p>
+            )}
+            {latestCallOutcomeReference && (
+              <p className="text-xs text-slate-400">Previous outcome: {latestCallOutcomeReference}</p>
             )}
             <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
               {callLabelText}

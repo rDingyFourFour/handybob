@@ -93,7 +93,61 @@ describe("JobAskBobFlow wiring", () => {
       followupCallTone: "friendly and confident",
       followupCallIntents: null,
       followupCallIntentsToken: 0,
+      latestCallOutcomeLabel: null,
     });
     expect(typeof capturedPanelProps?.onStartCallWithScript).toBe("function");
+  });
+
+  it("provides the latest call outcome label when an outcome is available", async () => {
+    const { default: JobAskBobFlow } = await import("@/components/askbob/JobAskBobFlow");
+    await act(async () => {
+      root?.render(
+        <JobAskBobFlow
+          workspaceId="workspace-1"
+          userId="user-1"
+          jobId="job-1"
+          customerId="customer-1"
+          customerDisplayName="Customer"
+          customerPhoneNumber="+15551234567"
+          jobDescription="desc"
+          jobTitle="title"
+          askBobLastTaskLabel={null}
+          askBobLastUsedAtDisplay={null}
+          askBobLastUsedAtIso={null}
+          askBobRunsSummary={null}
+          initialLastQuoteId={null}
+          lastQuoteCreatedAt={null}
+          lastQuoteCreatedAtFriendly={null}
+          initialDiagnoseSnapshot={null}
+          initialMaterialsSnapshot={null}
+          initialQuoteSnapshot={null}
+          initialFollowupSnapshot={{
+            recommendedAction: "Call to check in",
+            rationale: "Need an update",
+            steps: [],
+            shouldSendMessage: false,
+            shouldScheduleVisit: false,
+            shouldCall: true,
+            shouldWait: false,
+            modelLatencyMs: 0,
+            callRecommended: true,
+            callPurpose: "Explain quote",
+            callTone: "friendly and confident",
+          }}
+          lastQuoteSummary={null}
+          initialLatestCallOutcome={{
+            callId: "call-1",
+            occurredAt: "2025-01-01T10:00:00Z",
+            reachedCustomer: true,
+            outcomeCode: "reached_needs_followup",
+            outcomeNotes: null,
+            isAskBobAssisted: false,
+          }}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    expect(capturedPanelProps?.latestCallOutcomeLabel).toContain("Needs follow-up");
   });
 });

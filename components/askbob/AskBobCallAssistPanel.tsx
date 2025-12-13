@@ -53,7 +53,7 @@ type AskBobCallAssistPanelProps = {
   onCallScriptPersonaChange?: (persona: AskBobCallPersonaStyle | null) => void;
   userId?: string | null;
   onStartCallWithScript?: (payload: StartCallWithScriptPayload) => void;
-  onScrollIntoView?: () => void;
+  latestCallOutcomeLabel?: string | null;
 };
 
 type ScriptResult = {
@@ -156,6 +156,7 @@ export default function AskBobCallAssistPanel({
   onCallScriptPersonaChange,
   userId,
   onStartCallWithScript,
+  latestCallOutcomeLabel,
 }: AskBobCallAssistPanelProps) {
   const normalizedFollowupCallPurpose = followupCallPurpose?.trim() ?? null;
   const normalizedFollowupCallTone = followupCallTone?.trim() ?? null;
@@ -379,7 +380,9 @@ export default function AskBobCallAssistPanel({
         callTone,
         callPersonaStyle: personaStyleForPayload,
         callIntents,
-        extraDetails: null,
+        extraDetails: latestCallOutcomeLabel
+          ? `Latest call outcome: ${latestCallOutcomeLabel}`
+          : null,
       });
 
       if (!result.ok) {
@@ -566,6 +569,9 @@ export default function AskBobCallAssistPanel({
       </div>
       {!stepCollapsed && (
         <div className="space-y-4">
+          {latestCallOutcomeLabel && (
+            <p className="text-xs text-slate-400">Latest call outcome: {latestCallOutcomeLabel}</p>
+          )}
           {hasReadyCallInfo && (
             <div className="space-y-1 rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-sm text-slate-200">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Call info</p>

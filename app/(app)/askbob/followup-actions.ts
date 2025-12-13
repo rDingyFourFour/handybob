@@ -72,6 +72,8 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
   const latestCallOutcomeContext =
     parsed.latestCallOutcomeContext?.trim() ||
     buildCallOutcomePromptContext(latestCallOutcome);
+  const hasLatestCallOutcome = Boolean(latestCallOutcome);
+  const hasLatestCallOutcomeCode = Boolean(latestCallOutcome?.outcomeCode);
 
   const supabase = await createServerClient();
   const { workspace, user } = await getCurrentWorkspace({ supabase });
@@ -197,7 +199,8 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
     hasMaterialsContextForFollowup,
     hasQuoteContextForFollowup,
     hasAskBobAppointment,
-    hasLatestCallOutcome: Boolean(latestCallOutcome),
+    hasLatestCallOutcome,
+    hasLatestCallOutcomeCode,
     outcomeCode: latestCallOutcome?.outcomeCode ?? null,
   });
 
@@ -252,6 +255,8 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
       hasMaterialsContextForFollowup,
       hasQuoteContextForFollowup,
       hasAskBobAppointment,
+      hasLatestCallOutcome,
+      hasLatestCallOutcomeCode,
     });
     return { ok: true, jobId: job.id, followup: result };
   } catch (error) {
