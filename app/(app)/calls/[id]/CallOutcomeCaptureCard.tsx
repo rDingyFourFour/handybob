@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { useActionState } from "react";
 
 import HbButton from "@/components/ui/hb-button";
@@ -10,6 +10,7 @@ import {
   getCallOutcomeCodeMetadata,
 } from "@/lib/domain/communications/callOutcomes";
 import { SaveCallOutcomeResponse, saveCallOutcomeAction } from "../actions/saveCallOutcome";
+import { readAndClearCallOutcomePrefill } from "@/utils/askbob/callOutcomePrefillCache";
 
 const NOTES_MAX_LENGTH = 1000;
 
@@ -18,6 +19,8 @@ const REACH_OPTIONS: Array<{ value: boolean | null; label: string }> = [
   { value: false, label: "No answer" },
   { value: null, label: "Not sure" },
 ];
+
+const PREFILL_CACHE_LOGGED = new Set<string>();
 
 type SavedOutcome = {
   reachedCustomer: boolean | null;
@@ -72,22 +75,51 @@ export default function CallOutcomeCaptureCard({
   initialRecordedAt,
   hasAskBobScriptHint,
 }: CallOutcomeCaptureCardProps) {
+  const hasExistingOutcome =
+    Boolean(initialRecordedAt) ||
+    Boolean(initialOutcomeCode) ||
+    Boolean(initialNotes?.trim());
   const [savedOutcome, setSavedOutcome] = useState<SavedOutcome>(() => ({
     reachedCustomer: initialReachedCustomer,
     outcomeCode: initialOutcomeCode,
     notes: initialNotes,
     recordedAt: initialRecordedAt,
   }));
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(!hasExistingOutcome);
+  const [prefillRecord] = useState(() => {
+    if (hasExistingOutcome || typeof window === "undefined") {
+      return { payload: null, status: null };
+    }
+    const payload = readAndClearCallOutcomePrefill(callId);
+    const hasPayload =
+      payload &&
+      (payload.reachedCustomer !== undefined ||
+        payload.outcomeCode ||
+        payload.notes);
+    const status = hasPayload ? "hit" : "miss";
+    if (status && !PREFILL_CACHE_LOGGED.has(callId)) {
+      console.log(`[calls-outcome-prefill-cache-${status}]`, { callId });
+      PREFILL_CACHE_LOGGED.add(callId);
+    }
+    return {
+      payload: hasPayload ? payload : null,
+      status,
+    };
+  });
   const [editingState, setEditingState] = useState<{
     reachedCustomer: boolean | null;
     outcomeCode: CallOutcomeCode | null;
     notes: string;
-  }>({
-    reachedCustomer: initialReachedCustomer,
-    outcomeCode: initialOutcomeCode,
-    notes: initialNotes ?? "",
+  }>(() => {
+    return {
+      reachedCustomer: prefillRecord.payload?.reachedCustomer ?? initialReachedCustomer,
+      outcomeCode: prefillRecord.payload?.outcomeCode ?? initialOutcomeCode,
+      notes: prefillRecord.payload?.notes ?? initialNotes ?? "",
+    };
   });
+  const dirtyRef = useRef(false);
+  const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
+  const lastActionStateRef = useRef<SaveCallOutcomeResponse | null>(null);
 
   const [actionState, formAction, pending] = useActionState<SaveCallOutcomeResponse, FormData>(
     saveCallOutcomeAction,
@@ -95,8 +127,20 @@ export default function CallOutcomeCaptureCard({
   );
 
   useEffect(() => {
-    if (actionState?.ok) {
+    if (!actionState || actionState === lastActionStateRef.current) {
+      return;
+    }
+    lastActionStateRef.current = actionState;
+    const notesLength = actionState.notes?.length ?? 0;
+    if (actionState.ok) {
+      console.log("[calls-outcome-save-success]", {
+        callId,
+        reachedCustomer: actionState.reachedCustomer,
+        outcomeCode: actionState.outcomeCode,
+        notesLength,
+      });
       startTransition(() => {
+        setConfirmationMessage("Saved just now");
         setSavedOutcome({
           reachedCustomer: actionState.reachedCustomer,
           outcomeCode: actionState.outcomeCode,
@@ -105,11 +149,21 @@ export default function CallOutcomeCaptureCard({
         });
         setIsEditing(false);
       });
+    } else {
+      console.log("[calls-outcome-save-failure]", {
+        callId,
+        reachedCustomer: actionState.reachedCustomer ?? null,
+        outcomeCode: actionState.outcomeCode ?? null,
+        notesLength,
+        error: actionState.error,
+        code: actionState.code,
+      });
     }
-  }, [actionState]);
+  }, [actionState, callId]);
 
   useEffect(() => {
     if (!isEditing) {
+      dirtyRef.current = false;
       startTransition(() => {
         setEditingState({
           reachedCustomer: savedOutcome.reachedCustomer,
@@ -142,8 +196,17 @@ export default function CallOutcomeCaptureCard({
     : "Not sure";
 
   const outcomeLabel = getCallOutcomeCodeMetadata(savedOutcome.outcomeCode).label;
-
+  const markDirty = () => {
+    dirtyRef.current = true;
+    setConfirmationMessage(null);
+  };
+  const beginEditing = () => {
+    dirtyRef.current = false;
+    setConfirmationMessage(null);
+    setIsEditing(true);
+  };
   const handleReachSelection = (value: boolean | null) => {
+    markDirty();
     setEditingState((prev) => ({ ...prev, reachedCustomer: value }));
   };
 
@@ -163,30 +226,33 @@ export default function CallOutcomeCaptureCard({
       {!isEditing && (
         <div className="space-y-2">
           {hasRecordedOutcome ? (
-            <div className="space-y-2 text-sm text-slate-200">
-              <p className="font-semibold text-slate-100">Outcome recorded</p>
-              <div className="flex flex-wrap gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
-                <span>Reached: {reachedLabel}</span>
-                <span>Outcome: {outcomeLabel}</span>
+              <div className="space-y-2 text-sm text-slate-200">
+                <p className="font-semibold text-slate-100">Outcome recorded</p>
+                <div className="flex flex-wrap gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
+                  <span>Reached: {reachedLabel}</span>
+                  <span>Outcome: {outcomeLabel}</span>
+                </div>
+                {notesPreview && (
+                  <p className="text-sm text-slate-300">Notes: {notesPreview}</p>
+                )}
+                {confirmationMessage && (
+                  <p className="text-xs text-emerald-300">{confirmationMessage}</p>
+                )}
+                {recordedLabel && <p className="text-xs text-slate-400">{recordedLabel}</p>}
               </div>
-              {notesPreview && (
-                <p className="text-sm text-slate-300">Notes: {notesPreview}</p>
-              )}
-              {recordedLabel && <p className="text-xs text-slate-400">{recordedLabel}</p>}
-            </div>
           ) : (
             <p className="text-sm text-slate-400">Outcome not recorded yet.</p>
           )}
-          <div className="text-right">
-            <HbButton
-              type="button"
-              variant="primary"
-              size="sm"
-              onClick={() => setIsEditing(true)}
-            >
-              {hasRecordedOutcome ? "Edit outcome" : "Record outcome"}
-            </HbButton>
-          </div>
+            <div className="text-right">
+              <HbButton
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={beginEditing}
+              >
+                {hasRecordedOutcome ? "Edit outcome" : "Record outcome"}
+              </HbButton>
+            </div>
         </div>
       )}
 
@@ -235,12 +301,14 @@ export default function CallOutcomeCaptureCard({
               <select
                 name="outcomeCode"
                 value={editingState.outcomeCode ?? ""}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markDirty();
                   setEditingState((prev) => ({
                     ...prev,
                     outcomeCode: (event.target.value as CallOutcomeCode) || null,
-                  }))
-                }
+                  }));
+                }}
+                data-editing-outcome-code={editingState.outcomeCode ?? ""}
                 className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 focus:border-slate-600 focus:outline-none"
               >
                 <option value="">Select outcome…</option>
@@ -258,9 +326,11 @@ export default function CallOutcomeCaptureCard({
                 name="notes"
                 rows={3}
                 value={editingState.notes}
-                onChange={(event) =>
-                  setEditingState((prev) => ({ ...prev, notes: event.target.value }))
-                }
+                onChange={(event) => {
+                  markDirty();
+                  setEditingState((prev) => ({ ...prev, notes: event.target.value }));
+                }}
+                data-editing-notes={editingState.notes}
                 className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 focus:border-slate-600 focus:outline-none"
                 maxLength={NOTES_MAX_LENGTH}
               />
@@ -281,7 +351,11 @@ export default function CallOutcomeCaptureCard({
               <button
                 type="button"
                 className="text-sm font-semibold text-slate-200"
-                onClick={() => setIsEditing(false)}
+                onClick={() => {
+                  dirtyRef.current = false;
+                  setConfirmationMessage(null);
+                  setIsEditing(false);
+                }}
                 disabled={pending}
               >
                 Cancel

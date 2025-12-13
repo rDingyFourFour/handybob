@@ -3,7 +3,7 @@
 import { createServerClient } from "@/utils/supabase/server";
 import { TimelineEvent } from "@/types/ai";
 import { getCallOutcomeCodeMetadata } from "@/lib/domain/communications/callOutcomes";
-import { isAskBobScriptSummary } from "@/lib/domain/askbob/constants";
+import { getAskBobCallScriptBody } from "@/lib/domain/askbob/constants";
 
 // Central timeline normaliser for AI prompts:
 // - Used by job AI summary, next actions, and follow-up helpers.
@@ -115,44 +115,37 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
   );
 
   calls.forEach((call) => {
-    const callSummary = (call.ai_summary || call.summary || "").trim();
-    const isAskBobScript = isAskBobScriptSummary(callSummary);
+    const callSummarySource = call.ai_summary?.trim() || call.summary?.trim() || null;
     const detailSegments: string[] = [];
-    if (callSummary) {
-      detailSegments.push(`Summary: ${truncate(callSummary, 200)}`);
+    if (callSummarySource) {
+      detailSegments.push(`Summary: ${truncate(callSummarySource, 200)}`);
     }
     if (call.transcript) {
       detailSegments.push(`Transcript: ${truncate(call.transcript, 200)}`);
     }
-    if (isAskBobScript) {
-      detailSegments.push("AskBob script");
+    const outcomeSegments: string[] = [];
+    if (call.outcome_code) {
+      const outcomeMetadata = getCallOutcomeCodeMetadata(call.outcome_code);
+      outcomeSegments.push(`Outcome: ${outcomeMetadata.label}`);
     }
-    if (call.outcome_recorded_at) {
-      const outcomeMetadata = getCallOutcomeCodeMetadata(call.outcome_code ?? null);
-      const reachSegments: string[] = [];
-      if (call.reached_customer === true) {
-        reachSegments.push("Reached: yes");
-      } else if (call.reached_customer === false) {
-        reachSegments.push("Reached: no");
-      }
-      const outcomeSegments: string[] = [];
-      if (outcomeMetadata.value) {
-        outcomeSegments.push(`Outcome: ${outcomeMetadata.label}`);
-      }
-      if (reachSegments.length) {
-        outcomeSegments.push(reachSegments.join(" · "));
-      }
-      if (outcomeSegments.length) {
-        detailSegments.push(outcomeSegments.join(" · "));
-      }
+    if (call.reached_customer === true) {
+      outcomeSegments.push("Reached: yes");
+    } else if (call.reached_customer === false) {
+      outcomeSegments.push("Reached: no");
     }
-    const detail = detailSegments.length ? detailSegments.join(" ") : null;
+    const detailBase = detailSegments.length ? detailSegments.join(" ") : null;
+    const detailSuffix = outcomeSegments.length ? outcomeSegments.join(" · ") : null;
+    const detail =
+      detailBase && detailSuffix
+        ? `${detailBase} · ${detailSuffix}`
+        : detailBase || detailSuffix || null;
     events.push({
       type: "call",
       timestamp: call.started_at,
       title: `${call.direction === "inbound" ? "Inbound" : "Outbound"} call`,
       detail,
       status: call.status,
+      askBobScript: Boolean(getAskBobCallScriptBody(call.ai_summary ?? null, call.summary ?? null)),
     });
   });
 

@@ -67,6 +67,42 @@ export function normalizeCallOutcomeNotes(
   return `${capped}…`;
 }
 
+function mapLegacyCallOutcomeToCode(outcome?: string | null): CallOutcomeCode | null {
+  if (!outcome) {
+    return null;
+  }
+  const normalized = outcome.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized.includes("scheduled")) {
+    return "reached_scheduled";
+  }
+  if (normalized.includes("declined")) {
+    return "reached_declined";
+  }
+  if (
+    normalized === "reached" ||
+    normalized === "connected" ||
+    normalized.includes("connected_not_ready")
+  ) {
+    return "reached_needs_followup";
+  }
+  if (normalized.includes("voicemail")) {
+    return "no_answer_left_voicemail";
+  }
+  if (normalized === "no_answer" || normalized === "missed" || normalized.includes("no_answer")) {
+    return "no_answer_no_voicemail";
+  }
+  if (normalized === "wrong_number") {
+    return "wrong_number";
+  }
+  if (normalized === "other") {
+    return "other";
+  }
+  return null;
+}
+
 function describeBoolean(value: boolean | null) {
   if (value === true) return "yes";
   if (value === false) return "no";
@@ -173,13 +209,17 @@ export async function getLatestCallOutcomeForJob(
     const hasOutcomeCodeColumn = Object.prototype.hasOwnProperty.call(data, "outcome_code");
     const hasOutcomeNotesColumn = Object.prototype.hasOwnProperty.call(data, "outcome_notes");
     const summary = data.ai_summary ?? data.summary ?? null;
+    const legacyOutcomeCode = mapLegacyCallOutcomeToCode(data.outcome);
+    const rawOutcomeCode =
+      hasOutcomeCodeColumn && data.outcome_code
+        ? (data.outcome_code as CallOutcomeCode)
+        : null;
+    const resolvedOutcomeCode = rawOutcomeCode ?? legacyOutcomeCode ?? null;
     return {
       callId: data.id,
       occurredAt,
       reachedCustomer: hasReachedCustomerColumn ? data.reached_customer ?? null : null,
-      outcomeCode: hasOutcomeCodeColumn
-        ? ((data.outcome_code as CallOutcomeCode) ?? null)
-        : null,
+      outcomeCode: resolvedOutcomeCode,
       outcomeNotes: hasOutcomeNotesColumn ? normalizeCallOutcomeNotes(data.outcome_notes) : null,
       isAskBobAssisted: isAskBobScriptSummary(summary),
     };

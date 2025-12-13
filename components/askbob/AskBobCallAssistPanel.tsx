@@ -23,6 +23,7 @@ export type StartCallWithScriptPayload = {
   customerPhone: string;
   scriptBody: string;
   scriptSummary?: string | null;
+  callIntents?: AskBobCallIntent[] | null;
 };
 
 type AskBobCallAssistPanelProps = {
@@ -247,7 +248,12 @@ export default function AskBobCallAssistPanel({
     });
     setCallIntents(getCallIntentsForPurpose(resetPurpose));
     setHasManuallySetCallIntents(false);
-  }, [resetToken]);
+  }, [
+    resetToken,
+    followupCallRecommended,
+    normalizedFollowupCallPurpose,
+    trimmedLastQuoteSummary,
+  ]);
 
   useEffect(() => {
     if (
@@ -499,6 +505,7 @@ export default function AskBobCallAssistPanel({
       customerPhone: effectiveCustomerPhone,
       scriptBody: fullScriptClipboardText,
       scriptSummary: callScriptSummary ?? null,
+      callIntents,
     });
   };
 

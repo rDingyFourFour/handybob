@@ -1,0 +1,139 @@
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import CallOutcomeCaptureCard from "@/app/(app)/calls/[id]/CallOutcomeCaptureCard";
+
+describe("CallOutcomeCaptureCard prefill behavior", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    window.sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    if (root) {
+      root.unmount();
+      root = null;
+    }
+    container.remove();
+    vi.restoreAllMocks();
+  });
+
+  function renderCard(callId = "call-prefill") {
+    if (!root) {
+      throw new Error("missing root");
+    }
+    act(() => {
+      root?.render(
+        <CallOutcomeCaptureCard
+          callId={callId}
+          workspaceId="workspace-1"
+          initialOutcomeCode={null}
+          initialReachedCustomer={null}
+          initialNotes={null}
+          initialRecordedAt={null}
+          hasAskBobScriptHint={false}
+        />,
+      );
+    });
+  }
+
+  async function flushReactUpdates(iterations = 5) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+    for (let i = 0; i < iterations; i += 1) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+
+  it("does not use cache when the outcome is already recorded", async () => {
+    window.sessionStorage.setItem(
+      "askbob-call-outcome-prefill-call-prefill-existing",
+      JSON.stringify({ outcomeCode: "reached_needs_followup" }),
+    );
+
+    if (!root) {
+      throw new Error("missing root");
+    }
+    act(() => {
+      root?.render(
+        <CallOutcomeCaptureCard
+          callId="call-prefill-existing"
+          workspaceId="workspace-1"
+          initialOutcomeCode="reached_needs_followup"
+          initialReachedCustomer={true}
+          initialNotes="Existing outcome"
+          initialRecordedAt={new Date().toISOString()}
+          hasAskBobScriptHint={false}
+        />,
+      );
+    });
+    await flushReactUpdates();
+
+    const markup = container.innerHTML;
+    expect(markup).toContain("Outcome recorded");
+    expect(
+      window.sessionStorage.getItem("askbob-call-outcome-prefill-call-prefill-existing"),
+    ).not.toBe(null);
+  });
+
+  it("prefills from cache once and clears the entry", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    window.sessionStorage.setItem(
+      "askbob-call-outcome-prefill-call-prefill-hit",
+      JSON.stringify({
+        outcomeCode: "reached_needs_followup",
+        reachedCustomer: true,
+        notes: "Follow up soon",
+      }),
+    );
+
+    renderCard("call-prefill-hit");
+    await flushReactUpdates();
+
+    const select = container.querySelector<HTMLSelectElement>("select[name='outcomeCode']");
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea[name='notes']");
+    const selectedOption =
+      select?.querySelector<HTMLOptionElement>("option[selected]") ??
+      select?.options[select?.selectedIndex ?? 0];
+    const selectedValue = selectedOption?.value ?? "";
+    expect(selectedValue).toBe("reached_needs_followup");
+    expect(textarea?.dataset.editingNotes ?? "").toBe("Follow up soon");
+    expect(
+      window.sessionStorage.getItem("askbob-call-outcome-prefill-call-prefill-hit"),
+    ).toBeNull();
+    expect(spy).toHaveBeenCalledWith("[calls-outcome-prefill-cache-hit]", {
+      callId: "call-prefill-hit",
+    });
+  });
+
+  it("logs cache miss and leaves the form blank when no data exists", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    renderCard("call-prefill-miss");
+    await flushReactUpdates();
+
+    const select = container.querySelector<HTMLSelectElement>("select[name='outcomeCode']");
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea[name='notes']");
+    const selectedOption =
+      select?.querySelector<HTMLOptionElement>("option[selected]") ??
+      select?.options[select?.selectedIndex ?? 0];
+    const selectedValue = selectedOption?.value ?? "";
+    expect(selectedValue).toBe("");
+    expect(textarea?.dataset.editingNotes ?? "").toBe("");
+    expect(spy).toHaveBeenCalledWith("[calls-outcome-prefill-cache-miss]", {
+      callId: "call-prefill-miss",
+    });
+  });
+});

@@ -62,8 +62,7 @@ export default function JobRecentActivityCardClient({ events, loadError }: Props
           {displayedEvents.map((event, index) => {
             const label = EVENT_LABELS[event.type] ?? event.type;
             const timestampLabel = formatFriendlyDateTime(event.timestamp, "—");
-            const eventDetail = event.detail ?? "";
-            const isAskBobScript = eventDetail.includes("AskBob script");
+            const isAskBobScript = Boolean(event.askBobScript);
             return (
               <div
                 key={`${event.type}-${event.timestamp ?? "none"}-${index}`}

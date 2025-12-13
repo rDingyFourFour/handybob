@@ -4,7 +4,6 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 import AskBobCallAssistPanel from "@/components/askbob/AskBobCallAssistPanel";
 import { runAskBobCallScriptAction } from "@/app/(app)/askbob/call-script-actions";
-import { ASKBOB_CALL_PERSONA_DEFAULT } from "@/lib/domain/askbob/types";
 
 vi.mock("@/app/(app)/askbob/call-script-actions", () => ({
   runAskBobCallScriptAction: vi.fn(),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import AskBobSection from "@/components/askbob/AskBobSection";
@@ -34,6 +34,7 @@ import type {
   AskBobQuoteSnapshotPayload,
 } from "@/lib/domain/askbob/types";
 import { ASKBOB_CALL_PERSONA_DEFAULT, ASKBOB_CALL_PERSONA_LABELS } from "@/lib/domain/askbob/types";
+import { cacheAskBobCallContext } from "@/utils/askbob/callContextCache";
 import {
   buildDiagnosisSummary,
   buildFollowupSummaryFromSnapshot,
@@ -288,6 +289,8 @@ export default function JobAskBobFlow({
     (payload: StartCallWithScriptPayload) => {
       const resolvedCustomerId = payload.customerId ?? customerId ?? null;
       const scriptValue = payload.scriptBody?.trim() ?? "";
+      const scriptSummary = payload.scriptSummary ?? null;
+      const contextIntents = payload.callIntents ?? null;
       const url = buildAskBobCallAssistUrl({
         jobId,
         customerId: resolvedCustomerId,
@@ -295,6 +298,14 @@ export default function JobAskBobFlow({
         scriptBody: scriptValue,
         scriptSummary: payload.scriptSummary,
       });
+
+      if (scriptValue) {
+        cacheAskBobCallContext(jobId, {
+          scriptBody: scriptValue,
+          scriptSummary,
+          intents: contextIntents,
+        });
+      }
 
       console.log("[askbob-call-assist-call-route]", {
         workspaceId,

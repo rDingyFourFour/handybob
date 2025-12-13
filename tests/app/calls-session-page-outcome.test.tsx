@@ -51,8 +51,8 @@ describe("CallSessionPage outcome card", () => {
 
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-1" }) });
     const markup = renderToStaticMarkup(element);
-    expect(markup).toContain("Outcome not recorded yet.");
-    expect(markup).toContain("Record outcome");
+    expect(markup).toContain("Reached customer");
+    expect(markup).toContain("Save outcome");
   });
 
   it("renders the edited summary when an outcome exists", async () => {
@@ -82,5 +82,57 @@ describe("CallSessionPage outcome card", () => {
     expect(markup).toContain("Reached: Yes");
     expect(markup).toContain("Outcome: Reached · Scheduled");
     expect(markup).toContain("Edit outcome");
+  });
+
+  it("shows the AskBob call strip when appropriate", async () => {
+    supabaseState.responses.calls = {
+      data: [
+        {
+          id: "call-3",
+          workspace_id: "workspace-1",
+          created_at: new Date().toISOString(),
+          job_id: null,
+          from_number: "+15550001111",
+          to_number: "+15550002222",
+          outcome: null,
+          outcome_notes: null,
+          outcome_recorded_at: null,
+          outcome_code: null,
+          reached_customer: null,
+          summary: "AskBob call script: Hi customer, follow up",
+        },
+      ],
+      error: null,
+    };
+
+    const element = await CallSessionPage({ params: Promise.resolve({ id: "call-3" }) });
+    const markup = renderToStaticMarkup(element);
+    expect(markup).toContain("Prepared call script for this job");
+  });
+
+  it("does not render the AskBob call strip without the script", async () => {
+    supabaseState.responses.calls = {
+      data: [
+        {
+          id: "call-4",
+          workspace_id: "workspace-1",
+          created_at: new Date().toISOString(),
+          job_id: null,
+          from_number: "+15550003333",
+          to_number: "+15550004444",
+          outcome: null,
+          outcome_notes: null,
+          outcome_recorded_at: null,
+          outcome_code: null,
+          reached_customer: null,
+          summary: null,
+        },
+      ],
+      error: null,
+    };
+
+    const element = await CallSessionPage({ params: Promise.resolve({ id: "call-4" }) });
+    const markup = renderToStaticMarkup(element);
+    expect(markup).not.toContain("Prepared call script for this job");
   });
 });

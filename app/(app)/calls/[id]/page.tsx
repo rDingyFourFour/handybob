@@ -17,8 +17,13 @@ import {
 import type { CallOutcomeCode } from "@/lib/domain/communications/callOutcomes";
 import { findMatchingFollowupMessage } from "@/lib/domain/communications/followupMessages";
 import { markFollowupDoneAction } from "../actions/markFollowupDone";
+import AskBobCallContextStrip from "./AskBobCallContextStrip";
 import CallOutcomeCaptureCard from "./CallOutcomeCaptureCard";
-import { isAskBobScriptSummary } from "@/lib/domain/askbob/constants";
+import {
+  getAskBobCallScriptBody,
+  getAskBobCallScriptSource,
+  isAskBobScriptSummary,
+} from "@/lib/domain/askbob/constants";
 
 type CallRecord = {
   id: string;
@@ -33,6 +38,7 @@ type CallRecord = {
   outcome_code: string | null;
   reached_customer: boolean | null;
   summary: string | null;
+  ai_summary?: string | null;
 };
 
 const CALL_FROM_PLACEHOLDER = "workspace-default";
@@ -189,7 +195,7 @@ export default async function CallSessionPage({
   } = await supabase
     .from<CallRecord>("calls")
     .select(
-      "id, workspace_id, created_at, job_id, from_number, to_number, outcome, outcome_notes, outcome_recorded_at, outcome_code, reached_customer, summary"
+      "id, workspace_id, created_at, job_id, from_number, to_number, outcome, outcome_notes, outcome_recorded_at, outcome_code, reached_customer, summary, ai_summary"
     )
     .eq("workspace_id", workspace.id)
     .eq("id", id)
@@ -225,7 +231,11 @@ export default async function CallSessionPage({
     !call.from_number?.trim() || call.from_number === CALL_FROM_PLACEHOLDER;
   const toNeedsConfig = !call.to_number?.trim() || call.to_number === CALL_TO_PLACEHOLDER;
   const callSummaryRow = call.summary?.trim() ?? null;
-  const hasAskBobScriptHint = isAskBobScriptSummary(callSummaryRow);
+  const askBobScriptSource = getAskBobCallScriptSource(call.ai_summary ?? null, callSummaryRow);
+  const askBobScriptBody = getAskBobCallScriptBody(call.ai_summary ?? null, callSummaryRow);
+  const isAskBobCallContext = Boolean(askBobScriptBody);
+  const hasAskBobScriptHint =
+    isAskBobScriptSummary(callSummaryRow) || isAskBobScriptSummary(call.ai_summary ?? null);
 
   const jobId = call.job_id ?? null;
 
@@ -561,6 +571,15 @@ export default async function CallSessionPage({
                 </p>
               )}
             </div>
+
+            {isAskBobCallContext && (
+              <AskBobCallContextStrip
+                callId={call.id}
+                jobId={job?.id ?? jobId}
+                scriptBody={askBobScriptBody}
+                scriptSummary={askBobScriptSource}
+              />
+            )}
 
             <CallOutcomeCaptureCard
               callId={call.id}
