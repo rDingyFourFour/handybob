@@ -14,17 +14,27 @@ import {
   hasCallOutcomeSchemaMismatchSentinelFired,
   markCallOutcomeSchemaMismatchSentinelAsFired,
 } from "@/utils/calls/callOutcomeSchemaMismatchSentinel";
+import {
+  logCallOutcomeSchemaReadinessSentinel,
+  type SchemaReadinessReason,
+} from "@/utils/calls/callOutcomeSchemaReadinessSentinel";
 import { CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE } from "@/utils/calls/callOutcomeMessages";
 
 const NOTES_MAX_LENGTH = 1000;
 const CALL_OUTCOME_CONSTRAINT_CODE = "23514";
 const CALL_OUTCOME_CONSTRAINT_VERIFIER_RPC = "get_call_outcome_constraint_definitions";
+const CALL_OUTCOME_SCHEMA_READINESS_RPC = "get_call_outcome_schema_readiness";
+const DB_CONSTRAINT_ERROR_MESSAGE = "Saved failed, please try again";
 const ALLOWED_OUTCOME_CODES = new Set(CALL_OUTCOME_CODE_VALUES);
 type ServerSupabaseClient = Awaited<ReturnType<typeof createServerClient>>;
 
 type SchemaVerificationStatus = "unknown" | "verified_ok" | "verified_mismatch" | "unsupported";
 let schemaVerificationStatus: SchemaVerificationStatus = "unknown";
 let schemaVerificationPromise: Promise<SchemaVerificationStatus> | null = null;
+
+type SchemaReadinessStatus = "unknown" | "ready" | "missing_columns" | "missing_constraint" | "unsupported";
+let schemaReadinessStatus: SchemaReadinessStatus = "unknown";
+let schemaReadinessPromise: Promise<SchemaReadinessStatus> | null = null;
 
 type SaveCallOutcomeSuccess = {
   ok: true;
@@ -46,7 +56,8 @@ type SaveCallOutcomeFailure = {
     | "workspace_context_unavailable"
     | "invalid_form_data"
     | "invalid_outcome_code"
-    | "schema_out_of_date";
+    | "schema_not_applied"
+    | "db_constraint_rejects_value";
 };
 
 export type SaveCallOutcomeResponse = SaveCallOutcomeSuccess | SaveCallOutcomeFailure;
@@ -133,6 +144,70 @@ function parseConstraintNameFromError(error: unknown): string | null {
   }
   const match = candidate.match(/calls_outcome_[a-z_]+_check/);
   return match?.[0] ?? null;
+}
+
+function mapSchemaReadinessStatusToReason(status: SchemaReadinessStatus): SchemaReadinessReason {
+  if (status === "missing_columns") return "missing_columns";
+  if (status === "missing_constraint") return "missing_constraint";
+  return "unsupported";
+}
+
+async function runSchemaReadinessCheck(
+  supabase: ServerSupabaseClient,
+): Promise<SchemaReadinessStatus> {
+  try {
+    const { data, error } = await supabase.rpc(CALL_OUTCOME_SCHEMA_READINESS_RPC);
+    let status: SchemaReadinessStatus = "missing_constraint";
+    let columnsPresent = false;
+    let constraintPresent = false;
+    if (!error && Array.isArray(data) && data.length) {
+      const row = data[0] as { columns_present?: boolean; constraint_present?: boolean } | null;
+      columnsPresent = Boolean(row?.columns_present);
+      constraintPresent = Boolean(row?.constraint_present);
+      if (columnsPresent && constraintPresent) {
+        status = "ready";
+      } else if (!columnsPresent) {
+        status = "missing_columns";
+      } else {
+        status = "missing_constraint";
+      }
+    }
+    console.log("[calls-outcome-schema-readiness]", {
+      columnsPresent,
+      constraintPresent,
+      result: status,
+      node_env: process.env.NODE_ENV ?? "unknown",
+    });
+    return status;
+  } catch (error) {
+    console.log("[calls-outcome-schema-readiness]", {
+      columnsPresent: false,
+      constraintPresent: false,
+      result: "unsupported",
+      node_env: process.env.NODE_ENV ?? "unknown",
+      error,
+    });
+    return "unsupported";
+  }
+}
+
+async function ensureSchemaReadiness(
+  supabase: ServerSupabaseClient,
+): Promise<SchemaReadinessStatus> {
+  if (schemaReadinessStatus === "ready") {
+    return "ready";
+  }
+  if (!schemaReadinessPromise) {
+    schemaReadinessPromise = (async () => {
+      const result = await runSchemaReadinessCheck(supabase);
+      if (result === "ready") {
+        schemaReadinessStatus = "ready";
+      }
+      schemaReadinessPromise = null;
+      return result;
+    })();
+  }
+  return schemaReadinessPromise;
 }
 
 function logSchemaMismatchSentinel(context: {
@@ -379,6 +454,22 @@ export async function saveCallOutcomeAction(
   const recordedBy = shouldRecordOutcome ? userId : null;
   const legacyOutcome = mapOutcomeCodeToLegacyOutcome(parsed.outcomeCode);
 
+  if (shouldRecordOutcome) {
+    const readinessStatus = await ensureSchemaReadiness(supabase);
+    if (readinessStatus !== "ready") {
+      logCallOutcomeSchemaReadinessSentinel({
+        workspaceId: workspace.id,
+        callId: parsed.callId,
+        reason: mapSchemaReadinessStatusToReason(readinessStatus),
+      });
+      return {
+        ok: false,
+        error: CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
+        code: "schema_not_applied",
+      };
+    }
+  }
+
   const { data: updateData, error: updateError } = await supabase
     .from("calls")
     .update({
@@ -423,8 +514,8 @@ export async function saveCallOutcomeAction(
       await ensureSchemaVerification(supabase, normalizedOutcomeCode);
       return {
         ok: false,
-        error: CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
-        code: "schema_out_of_date",
+        error: DB_CONSTRAINT_ERROR_MESSAGE,
+        code: "db_constraint_rejects_value",
       };
     }
     console.error("[calls-outcome-ui-failure] Failed to persist outcome", persistenceContext);
@@ -470,4 +561,14 @@ export async function saveCallOutcomeAction(
     notes: normalizedNotes,
     recordedAtIso,
   };
+}
+
+export async function resetCallOutcomeSchemaStateForTests(): Promise<void> {
+  if (process.env.NODE_ENV !== "test") {
+    return;
+  }
+  schemaVerificationStatus = "unknown";
+  schemaVerificationPromise = null;
+  schemaReadinessStatus = "unknown";
+  schemaReadinessPromise = null;
 }

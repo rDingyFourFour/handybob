@@ -30,9 +30,11 @@ export type SupabaseQuery = {
 export type SupabaseMockState = {
   supabase: {
     from: ReturnType<typeof vi.fn>;
+    rpc: ReturnType<typeof vi.fn>;
   };
   queries: Record<string, SupabaseQuery>;
   responses: Record<string, SupabaseQueryResponse | SupabaseQueryResponse[]>;
+  rpcResponses: Record<string, SupabaseQueryResponse | SupabaseQueryResponse[]>;
   limitErrors: Partial<Record<string, Error>>;
 };
 
@@ -102,6 +104,31 @@ function createQuery(table: string, state: SupabaseMockState): SupabaseQuery {
   return query;
 }
 
+function ensureRpcResponse(
+  state: SupabaseMockState,
+  functionName: string,
+): SupabaseQueryResponse {
+  const response = state.rpcResponses[functionName];
+  if (!response) {
+    const fallback = { data: [], error: null };
+    state.rpcResponses[functionName] = fallback;
+    return fallback;
+  }
+  if (Array.isArray(response)) {
+    if (!response.length) {
+      const fallback = { data: [], error: null };
+      state.rpcResponses[functionName] = fallback;
+      return fallback;
+    }
+    const next = response.shift()!;
+    if (!response.length) {
+      state.rpcResponses[functionName] = { data: [], error: null };
+    }
+    return next;
+  }
+  return response;
+}
+
 /**
  * Sets up a lightweight Supabase client mock used across domain tests. The
  * implementation simply returns chainable no-ops and allows tables to inject
@@ -120,9 +147,11 @@ export function setupSupabaseMock(
   const state: SupabaseMockState = {
     supabase: {
       from: vi.fn(),
+      rpc: vi.fn(),
     },
     queries: {},
     responses,
+    rpcResponses: {},
     limitErrors: {},
   };
 
@@ -130,6 +159,10 @@ export function setupSupabaseMock(
     const query = createQuery(table, state);
     state.queries[table] = query;
     return query;
+  });
+
+  state.supabase.rpc.mockImplementation(async (functionName: string) => {
+    return Promise.resolve(ensureRpcResponse(state, functionName));
   });
 
   return state;

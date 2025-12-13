@@ -199,6 +199,7 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
       notes: "Followed up in detail",
       recordedAtIso: "2025-01-01T12:00:00Z",
     };
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const formAction = vi.fn(async (formData: FormData | null | undefined) => {
       expect(formData).toBeInstanceOf(FormData);
       return successResponse;
@@ -269,13 +270,19 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
     expect(container.textContent).toContain("Outcome recorded");
     expect(container.textContent).toContain("Saved just now");
     expect(container.textContent).toContain("Outcome: Reached · Needs follow-up");
+
+    const successLogs = logSpy.mock.calls.filter(
+      (call) => call[0] === "[calls-outcome-save-success]",
+    );
+    expect(successLogs).toHaveLength(1);
+    logSpy.mockRestore();
   });
 
-  it("shows the schema-out-of-date prompt when the action fails with schema_out_of_date", async () => {
+  it("shows the schema-not-applied prompt when the action fails with schema_not_applied", async () => {
     const failureResponse: SaveCallOutcomeResponse = {
       ok: false,
       error: "Unable to save outcome",
-      code: "schema_out_of_date",
+      code: "schema_not_applied",
     };
     const formAction = vi.fn(async () => failureResponse);
     renderCard("call-schema", { actionStateOverride: [null, formAction, false] });
@@ -300,5 +307,11 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
     expect(container.textContent).toContain(
       CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
     );
+    expect(container.textContent).not.toContain("Outcome recorded");
+    const formElement = container.querySelector<HTMLFormElement>("form");
+    expect(formElement).toBeTruthy();
+    const outcomeSelect = formElement?.querySelector<HTMLSelectElement>("select[name='outcomeCode']");
+    expect(outcomeSelect).toBeTruthy();
+    expect(outcomeSelect?.disabled).toBe(false);
   });
 });

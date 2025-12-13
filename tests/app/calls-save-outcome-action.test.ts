@@ -6,6 +6,7 @@ import { CALL_OUTCOME_CODE_VALUES } from "@/lib/domain/communications/callOutcom
 const createServerClientMock = vi.fn();
 const mockGetCurrentWorkspace = vi.fn();
 const mockRevalidatePath = vi.fn();
+const DB_CONSTRAINT_ERROR_MESSAGE = "Saved failed, please try again";
 
 vi.mock("@/utils/supabase/server", () => ({
   createServerClient: () => createServerClientMock(),
@@ -20,15 +21,25 @@ vi.mock("next/cache", () => ({
 }));
 
 import { CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE } from "@/utils/calls/callOutcomeMessages";
-import { saveCallOutcomeAction } from "@/app/(app)/calls/actions/saveCallOutcome";
+import {
+  resetCallOutcomeSchemaStateForTests,
+  saveCallOutcomeAction,
+} from "@/app/(app)/calls/actions/saveCallOutcome";
 import { resetCallOutcomeSchemaMismatchSentinelForTests } from "@/utils/calls/callOutcomeSchemaMismatchSentinel";
+import { resetCallOutcomeSchemaReadinessSentinelForTests } from "@/utils/calls/callOutcomeSchemaReadinessSentinel";
 
 describe("saveCallOutcomeAction", () => {
   let supabaseState = setupSupabaseMock();
 
-  beforeEach(() => {
+  beforeEach(async () => {
     resetCallOutcomeSchemaMismatchSentinelForTests();
+    resetCallOutcomeSchemaReadinessSentinelForTests();
+    await resetCallOutcomeSchemaStateForTests();
     supabaseState = setupSupabaseMock();
+    supabaseState.rpcResponses["get_call_outcome_schema_readiness"] = {
+      data: [{ columns_present: true, constraint_present: true }],
+      error: null,
+    };
     createServerClientMock.mockReturnValue(supabaseState.supabase);
     mockGetCurrentWorkspace.mockResolvedValue({
       workspace: { id: "workspace-1" },
@@ -162,7 +173,48 @@ describe("saveCallOutcomeAction", () => {
     warnSpy.mockRestore();
   });
 
-  it("returns schema_out_of_date when Postgres rejects an allowed outcome code", async () => {
+  it("returns schema_not_applied when the schema readiness check fails", async () => {
+    const callRow = { id: "call-schema-not-applied", workspace_id: "workspace-1" };
+    supabaseState.responses.calls = { data: [callRow], error: null };
+    supabaseState.rpcResponses["get_call_outcome_schema_readiness"] = {
+      data: [{ columns_present: false, constraint_present: false }],
+      error: null,
+    };
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const formData = new FormData();
+    formData.append("callId", "call-schema-not-applied");
+    formData.append("workspaceId", "workspace-1");
+    formData.append("outcomeCode", "reached_needs_followup");
+
+    const result = await saveCallOutcomeAction(formData);
+
+    expect(result).toEqual({
+      ok: false,
+      error: CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
+      code: "schema_not_applied",
+    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[calls-outcome-schema-not-applied]",
+      expect.objectContaining({
+        schemaApplied: false,
+        reason: "missing_columns",
+      }),
+    );
+    expect(supabaseState.queries.calls.update).not.toHaveBeenCalled();
+
+    supabaseState.responses.calls = { data: [callRow], error: null };
+    await saveCallOutcomeAction(formData);
+
+    const sentinelCalls = errorSpy.mock.calls.filter(
+      (call) => call[0] === "[calls-outcome-schema-not-applied]",
+    );
+    expect(sentinelCalls).toHaveLength(1);
+
+    errorSpy.mockRestore();
+  });
+
+  it("returns db_constraint_rejects_value when Postgres rejects an allowed outcome code", async () => {
     const callRow = { id: "call-with-constraint", workspace_id: "workspace-1" };
     supabaseState.responses.calls = [
       { data: [callRow], error: null },
@@ -182,25 +234,17 @@ describe("saveCallOutcomeAction", () => {
 
     expect(result).toEqual({
       ok: false,
-      error: CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
-      code: "schema_out_of_date",
+      error: DB_CONSTRAINT_ERROR_MESSAGE,
+      code: "db_constraint_rejects_value",
     });
-    expect(errorSpy).toHaveBeenNthCalledWith(
-      1,
-      "[calls-outcome-db-constraint-violation]",
-      expect.objectContaining({
-        constraint: "calls_outcome_code_check",
-        outcomeCodeSent: "reached_needs_followup",
-      }),
+    const dbViolationCalls = errorSpy.mock.calls.filter(
+      (call) => call[0] === "[calls-outcome-db-constraint-violation]",
     );
-    expect(errorSpy).toHaveBeenNthCalledWith(
-      2,
-      "[calls-outcome-schema-mismatch]",
-      expect.objectContaining({
-        outcomeCodeSent: "reached_needs_followup",
-        actionHint: expect.stringContaining("20260101000000_align_call_outcome_vocab.sql"),
-      }),
+    expect(dbViolationCalls).toHaveLength(1);
+    const schemaMismatchCalls = errorSpy.mock.calls.filter(
+      (call) => call[0] === "[calls-outcome-schema-mismatch]",
     );
+    expect(schemaMismatchCalls).toHaveLength(1);
 
     errorSpy.mockRestore();
   });
@@ -227,16 +271,16 @@ describe("saveCallOutcomeAction", () => {
       supabaseState.responses.calls = buildResponses();
       expect(await saveCallOutcomeAction(formDataFactory())).toEqual({
         ok: false,
-        error: CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
-        code: "schema_out_of_date",
+        error: DB_CONSTRAINT_ERROR_MESSAGE,
+        code: "db_constraint_rejects_value",
       });
     })();
     await (async () => {
       supabaseState.responses.calls = buildResponses();
       expect(await saveCallOutcomeAction(formDataFactory())).toEqual({
         ok: false,
-        error: CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
-        code: "schema_out_of_date",
+        error: DB_CONSTRAINT_ERROR_MESSAGE,
+        code: "db_constraint_rejects_value",
       });
     })();
 

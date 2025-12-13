@@ -154,7 +154,7 @@ export default function CallOutcomeCaptureCard({
   const actionStateTuple = actionStateOverride ?? hookTuple;
   const [actionState, formAction, pending] = actionStateTuple;
   const actionErrorMessage =
-    actionState?.code === "schema_out_of_date"
+    actionState?.code === "schema_not_applied"
       ? CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE
       : actionState?.error ?? null;
 
