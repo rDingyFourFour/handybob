@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { CallSummarySignals } from "./callHistory";
+import type { LatestCallOutcomeForJob } from "@/lib/domain/calls/latestCallOutcome";
 
 // AskBob tasks are processed through a shared routing surface; future tasks might include
 // "message.draft", "quote.generate", "materials.estimate", "followup.plan", etc.
@@ -335,6 +336,8 @@ export interface AskBobJobFollowupInput {
   hasQuoteContextForFollowup?: boolean;
   hasAskBobAppointment?: boolean;
   callSummarySignals?: CallSummarySignals | null;
+  latestCallOutcome?: LatestCallOutcomeForJob | null;
+  latestCallOutcomeContext?: string | null;
 }
 
 export interface AskBobJobFollowupResult {
@@ -376,6 +379,7 @@ export interface AskBobJobAfterCallInput {
   existingCallSummary?: string | null;
   recentJobSignals?: string | null;
   callSummarySignals?: CallSummarySignals | null;
+  latestCallOutcome?: LatestCallOutcomeForJob | null;
 }
 
 export interface AskBobJobAfterCallResult {

@@ -29,6 +29,7 @@ import {
   describeCallOutcome,
   type CallSummarySignals,
 } from "@/lib/domain/askbob/callHistory";
+import { getLatestCallOutcomeForJob } from "@/lib/domain/calls/latestCallOutcome";
 
 type JobRecord = {
   id: string;
@@ -479,6 +480,17 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
       ? buildCallHistoryHint(callSummarySignals)
       : null;
 
+  let initialLatestCallOutcome = null;
+  try {
+    initialLatestCallOutcome = await getLatestCallOutcomeForJob(supabase, workspace.id, job.id);
+  } catch (error) {
+    console.error("[job-detail] Failed to load latest call outcome", {
+      workspaceId: workspace.id,
+      jobId: job.id,
+      error,
+    });
+  }
+
   const quoteCandidate = quotes.find((quote) => quote.id === callScriptQuoteId) ?? null;
   const quoteCreatedAt = quoteCandidate?.created_at ?? null;
   const followupDueInfo: FollowupDueInfo = computeFollowupDueInfo({
@@ -561,6 +573,7 @@ export default async function JobDetailPage(props: { params: Promise<{ id: strin
           latestCallLabel={latestCallLabelText}
           hasLatestCall={Boolean(latestCall)}
           callHistoryHint={callHistoryHint}
+          initialLatestCallOutcome={initialLatestCallOutcome}
         />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">

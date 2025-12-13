@@ -104,10 +104,15 @@ export type Call = {
   customer_id: string | null;
   user_id: string | null;
   twilio_call_sid?: string | null;
+  reached_customer?: boolean | null;
   recording_url?: string | null;
   duration_seconds?: number | null;
   status: string | null;
   summary: string | null;
+  outcome_code?: string | null;
+  outcome_notes?: string | null;
+  outcome_recorded_at?: string | null;
+  outcome_recorded_by?: string | null;
   ai_summary?: string | null;
   transcript?: string | null;
   direction: string | null;

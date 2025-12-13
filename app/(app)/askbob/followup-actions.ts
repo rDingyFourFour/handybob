@@ -11,6 +11,7 @@ import {
 import { AskBobJobFollowupInput } from "@/lib/domain/askbob/types";
 import { computeFollowupDueInfo, FollowupDueStatus } from "@/lib/domain/communications/followupRecommendations";
 import { z } from "zod";
+import { buildCallOutcomePromptContext } from "@/lib/domain/calls/latestCallOutcome";
 
 const normalizeOptionalString = (value?: string | null) => {
   if (!value) {
@@ -30,6 +31,18 @@ const jobFollowupPayloadSchema = z.object({
   materialsSummary: z.string().optional().nullable().transform(normalizeOptionalString),
   hasQuoteContextForFollowup: z.boolean().optional(),
   hasAskBobAppointment: z.boolean().optional(),
+  latestCallOutcome: z
+    .object({
+      callId: z.string().min(1),
+      occurredAt: z.string().optional().nullable(),
+      reachedCustomer: z.boolean().nullable(),
+      outcomeCode: z.string().nullable(),
+      outcomeNotes: z.string().nullable(),
+      isAskBobAssisted: z.boolean(),
+    })
+    .optional()
+    .nullable(),
+  latestCallOutcomeContext: z.string().optional().nullable(),
 });
 
 export type JobFollowupPayload = z.infer<typeof jobFollowupPayloadSchema>;
@@ -55,6 +68,10 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
   const hasDiagnosisContextForFollowup = Boolean(diagnosisSummaryForLog);
   const hasMaterialsContextForFollowup = Boolean(materialsSummaryForLog);
   const hasAskBobAppointment = Boolean(parsed.hasAskBobAppointment);
+  const latestCallOutcome = parsed.latestCallOutcome ?? null;
+  const latestCallOutcomeContext =
+    parsed.latestCallOutcomeContext?.trim() ||
+    buildCallOutcomePromptContext(latestCallOutcome);
 
   const supabase = await createServerClient();
   const { workspace, user } = await getCurrentWorkspace({ supabase });
@@ -180,6 +197,8 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
     hasMaterialsContextForFollowup,
     hasQuoteContextForFollowup,
     hasAskBobAppointment,
+    hasLatestCallOutcome: Boolean(latestCallOutcome),
+    outcomeCode: latestCallOutcome?.outcomeCode ?? null,
   });
 
   const notesSummary =
@@ -210,6 +229,8 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
     hasUnpaidInvoice,
     notesSummary,
     callSummarySignals,
+    latestCallOutcome,
+    latestCallOutcomeContext,
     hasQuoteContextForFollowup,
     hasAskBobAppointment,
   };

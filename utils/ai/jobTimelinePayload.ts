@@ -2,6 +2,8 @@
 
 import { createServerClient } from "@/utils/supabase/server";
 import { TimelineEvent } from "@/types/ai";
+import { getCallOutcomeCodeMetadata } from "@/lib/domain/communications/callOutcomes";
+import { isAskBobScriptSummary } from "@/lib/domain/askbob/constants";
 
 // Central timeline normaliser for AI prompts:
 // - Used by job AI summary, next actions, and follow-up helpers.
@@ -21,8 +23,6 @@ import { TimelineEvent } from "@/types/ai";
  *
  * The returned object is safe to JSON.stringify and send to the OpenAI Responses API.
  */
-const ASKBOB_SCRIPT_PREFIX = "AskBob call script:";
-
 export async function buildJobTimelinePayload(jobId: string, workspaceId: string) {
   const supabase = await createServerClient();
 
@@ -60,8 +60,10 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
       .order("created_at", { ascending: false })
       .limit(100),
     supabase
-      .from("calls")
-      .select("direction, status, started_at, duration_seconds, summary, ai_summary, transcript")
+    .from("calls")
+    .select(
+      "direction, status, started_at, duration_seconds, summary, ai_summary, transcript, reached_customer, outcome_code, outcome_recorded_at",
+    )
       .eq("job_id", jobId)
       .eq("workspace_id", workspaceId)
       .order("started_at", { ascending: false })
@@ -114,7 +116,7 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
 
   calls.forEach((call) => {
     const callSummary = (call.ai_summary || call.summary || "").trim();
-    const isAskBobScript = callSummary.startsWith(ASKBOB_SCRIPT_PREFIX);
+    const isAskBobScript = isAskBobScriptSummary(callSummary);
     const detailSegments: string[] = [];
     if (callSummary) {
       detailSegments.push(`Summary: ${truncate(callSummary, 200)}`);
@@ -124,6 +126,25 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
     }
     if (isAskBobScript) {
       detailSegments.push("AskBob script");
+    }
+    if (call.outcome_recorded_at) {
+      const outcomeMetadata = getCallOutcomeCodeMetadata(call.outcome_code ?? null);
+      const reachSegments: string[] = [];
+      if (call.reached_customer === true) {
+        reachSegments.push("Reached: yes");
+      } else if (call.reached_customer === false) {
+        reachSegments.push("Reached: no");
+      }
+      const outcomeSegments: string[] = [];
+      if (outcomeMetadata.value) {
+        outcomeSegments.push(`Outcome: ${outcomeMetadata.label}`);
+      }
+      if (reachSegments.length) {
+        outcomeSegments.push(reachSegments.join(" · "));
+      }
+      if (outcomeSegments.length) {
+        detailSegments.push(outcomeSegments.join(" · "));
+      }
     }
     const detail = detailSegments.length ? detailSegments.join(" ") : null;
     events.push({

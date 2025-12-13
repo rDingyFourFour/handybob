@@ -16,6 +16,11 @@ import { runAskBobJobFollowupAction } from "@/app/(app)/askbob/followup-actions"
 import { runAskBobJobScheduleAction, runAskBobScheduleAppointmentAction } from "@/app/(app)/askbob/job-schedule-actions";
 import { draftAskBobJobFollowupMessageAction } from "@/app/(app)/askbob/followup-message-draft-actions";
 import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
+import {
+  buildCallOutcomePromptContext,
+  formatLatestCallOutcomeHint,
+  type LatestCallOutcomeForJob,
+} from "@/lib/domain/calls/latestCallOutcome";
 
 type JobAskBobFollowupPanelProps = {
   workspaceId: string;
@@ -50,6 +55,8 @@ type JobAskBobFollowupPanelProps = {
   }) => void;
   onFollowupSummaryUpdate?: (summary: string | null) => void;
   onJumpToCallAssist?: () => void;
+  latestCallOutcome?: LatestCallOutcomeForJob | null;
+  latestCallOutcomeHint?: string | null;
   callHistoryHint?: string | null;
 };
 
@@ -77,6 +84,8 @@ export default function JobAskBobFollowupPanel({
   onFollowupSummaryUpdate,
   onFollowupResult,
   onJumpToCallAssist,
+  latestCallOutcome,
+  latestCallOutcomeHint,
   callHistoryHint,
 }: JobAskBobFollowupPanelProps) {
   const router = useRouter();
@@ -145,6 +154,9 @@ export default function JobAskBobFollowupPanel({
     contextParts.length > 0
       ? `Context used: ${contextParts.join(", ")}`
       : "Context used: none yet. Provide job and follow-up details on this page so AskBob can reference them.";
+  const callOutcomeHintText =
+    latestCallOutcomeHint ??
+    (latestCallOutcome ? formatLatestCallOutcomeHint(latestCallOutcome) : null);
 
   const fallbackFriendlyDate =
     lastQuoteCreatedAtForFollowup && !lastQuoteCreatedAtLabelForFollowup
@@ -199,6 +211,10 @@ export default function JobAskBobFollowupPanel({
         materialsSummary: normalizedMaterialsSummary || undefined,
         hasQuoteContextForFollowup: hasQuoteContext,
         hasAskBobAppointment: Boolean(askBobAppointmentScheduled),
+        latestCallOutcome: latestCallOutcome ?? undefined,
+        latestCallOutcomeContext: latestCallOutcome
+          ? buildCallOutcomePromptContext(latestCallOutcome)
+          : undefined,
       });
       if (!response.ok) {
         setErrorMessage("AskBob couldn’t generate a follow-up suggestion right now. Please try again.");
@@ -494,6 +510,9 @@ export default function JobAskBobFollowupPanel({
             </div>
           )}
           <p className="text-xs text-muted-foreground">{contextUsedText}</p>
+          {callOutcomeHintText && (
+            <p className="text-xs text-slate-400">{callOutcomeHintText}</p>
+          )}
           <div className="flex flex-col gap-2">
             <HbButton
               size="sm"

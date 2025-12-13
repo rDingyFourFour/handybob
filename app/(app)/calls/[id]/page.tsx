@@ -5,7 +5,6 @@ import Link from "next/link";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import CallSummaryStatus from "@/components/call-summary-status";
-import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import JobCallScriptPanel, {
   type PhoneMessageSummary,
@@ -15,10 +14,11 @@ import {
   deriveFollowupRecommendation,
   type FollowupRecommendation,
 } from "@/lib/domain/communications/followupRecommendations";
-import { CALL_OUTCOME_OPTIONS, getCallOutcomeMetadata } from "@/lib/domain/communications/callOutcomes";
+import type { CallOutcomeCode } from "@/lib/domain/communications/callOutcomes";
 import { findMatchingFollowupMessage } from "@/lib/domain/communications/followupMessages";
 import { markFollowupDoneAction } from "../actions/markFollowupDone";
-import { updateCallOutcomeAction } from "@/app/actions/calls";
+import CallOutcomeCaptureCard from "./CallOutcomeCaptureCard";
+import { isAskBobScriptSummary } from "@/lib/domain/askbob/constants";
 
 type CallRecord = {
   id: string;
@@ -30,6 +30,9 @@ type CallRecord = {
   outcome: string | null;
   outcome_notes: string | null;
   outcome_recorded_at: string | null;
+  outcome_code: string | null;
+  reached_customer: boolean | null;
+  summary: string | null;
 };
 
 const CALL_FROM_PLACEHOLDER = "workspace-default";
@@ -78,31 +81,6 @@ function formatDate(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function formatOutcomeRecordedAtLabel(value: string | null) {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-  const now = new Date();
-  const isToday =
-    parsed.getUTCFullYear() === now.getUTCFullYear() &&
-    parsed.getUTCMonth() === now.getUTCMonth() &&
-    parsed.getUTCDate() === now.getUTCDate();
-  const timeLabel = parsed.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  if (isToday) {
-    return `Recorded today at ${timeLabel}`;
-  }
-  const dateLabel = parsed.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-  return `Recorded ${dateLabel} at ${timeLabel}`;
 }
 
 function formatCurrency(value: number | null | undefined) {
@@ -211,7 +189,7 @@ export default async function CallSessionPage({
   } = await supabase
     .from<CallRecord>("calls")
     .select(
-      "id, workspace_id, created_at, job_id, from_number, to_number, outcome, outcome_notes, outcome_recorded_at"
+      "id, workspace_id, created_at, job_id, from_number, to_number, outcome, outcome_notes, outcome_recorded_at, outcome_code, reached_customer, summary"
     )
     .eq("workspace_id", workspace.id)
     .eq("id", id)
@@ -246,6 +224,8 @@ export default async function CallSessionPage({
   const fromNeedsConfig =
     !call.from_number?.trim() || call.from_number === CALL_FROM_PLACEHOLDER;
   const toNeedsConfig = !call.to_number?.trim() || call.to_number === CALL_TO_PLACEHOLDER;
+  const callSummaryRow = call.summary?.trim() ?? null;
+  const hasAskBobScriptHint = isAskBobScriptSummary(callSummaryRow);
 
   const jobId = call.job_id ?? null;
 
@@ -393,9 +373,6 @@ export default async function CallSessionPage({
       : dueInfo.dueStatus === "scheduled"
       ? "text-slate-300"
     : "text-slate-500";
-
-  const callOutcomeMetadata = getCallOutcomeMetadata(call.outcome);
-  const outcomeRecordedLabel = formatOutcomeRecordedAtLabel(call.outcome_recorded_at);
 
   const latestPhoneMessageBody = latestPhoneMessage?.body?.trim();
   const hasSummary = Boolean(latestPhoneMessageBody);
@@ -585,58 +562,15 @@ export default async function CallSessionPage({
               )}
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-              <div className="space-y-1">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call outcome</p>
-                <h3 className="text-lg font-semibold text-white">Call outcome</h3>
-                <p className="text-sm text-slate-400">
-                  Log what happened on this call so follow-ups and reports stay accurate.
-                </p>
-                {callOutcomeMetadata.value ? (
-                  <p className="text-sm text-slate-200">
-                    Current outcome: {callOutcomeMetadata.label}
-                    {outcomeRecordedLabel ? ` · ${outcomeRecordedLabel}` : ""}
-                  </p>
-                ) : (
-                  <p className="text-sm text-slate-400">No outcome recorded yet.</p>
-                )}
-              </div>
-              <form action={updateCallOutcomeAction} className="space-y-3">
-                <input type="hidden" name="callId" value={call.id} />
-                <label className="text-sm text-slate-200">
-                  <span className="text-xs uppercase tracking-[0.3em] text-slate-500">Outcome</span>
-                  <select
-                    name="outcome"
-                    defaultValue={callOutcomeMetadata.value ?? ""}
-                    className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 focus:border-slate-600 focus:outline-none"
-                  >
-                    <option value="">Select outcome…</option>
-                    {CALL_OUTCOME_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="text-sm text-slate-200">
-                  <span className="text-xs uppercase tracking-[0.3em] text-slate-500">Outcome notes (optional)</span>
-                  <textarea
-                    name="outcomeNotes"
-                    rows={3}
-                    defaultValue={call.outcome_notes ?? ""}
-                    className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 focus:border-slate-600 focus:outline-none"
-                  />
-                </label>
-                <p className="text-[11px] text-slate-500">
-                  Example: customer requested a callback tomorrow, left voicemail at 3:20 PM, etc.
-                </p>
-                <div className="text-right">
-                  <HbButton type="submit" variant="secondary" size="sm">
-                    Save outcome
-                  </HbButton>
-                </div>
-              </form>
-            </div>
+            <CallOutcomeCaptureCard
+              callId={call.id}
+              workspaceId={workspace.id}
+              initialOutcomeCode={call.outcome_code as CallOutcomeCode | null}
+              initialReachedCustomer={call.reached_customer}
+              initialNotes={call.outcome_notes}
+              initialRecordedAt={call.outcome_recorded_at}
+              hasAskBobScriptHint={hasAskBobScriptHint}
+            />
 
             {call && job && callScriptQuoteCandidate && (
               <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">

@@ -72,6 +72,10 @@ describe("runAskBobJobAfterCallAction", () => {
       from_number: "111",
       to_number: "222",
       created_at: new Date().toISOString(),
+      outcome_code: "reached_needs_followup",
+      outcome_notes: " Follow-up note ",
+      outcome_recorded_at: new Date().toISOString(),
+      reached_customer: true,
     };
     supabaseState.responses.calls = { data: [callRow], error: null };
     const taskResult = {
@@ -98,6 +102,13 @@ describe("runAskBobJobAfterCallAction", () => {
       task: "job.after_call",
       callId: "call-1",
       callOutcome: "answered",
+      latestCallOutcome: expect.objectContaining({
+        callId: "call-1",
+        reachedCustomer: true,
+        outcomeCode: "reached_needs_followup",
+        outcomeNotes: "Follow-up note",
+        isAskBobAssisted: false,
+      }),
     });
     expect(taskInput.callSummarySignals).toMatchObject({
       totalAttempts: 1,

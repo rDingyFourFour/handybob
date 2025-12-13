@@ -2,6 +2,8 @@
 
 import OpenAI from "openai";
 import { buildCallHistoryPromptSections } from "@/lib/domain/askbob/callHistory";
+import type { LatestCallOutcomeForJob } from "@/lib/domain/calls/latestCallOutcome";
+import { buildCallOutcomePromptContext } from "@/lib/domain/calls/latestCallOutcome";
 import { ASKBOB_CALL_INTENT_DESCRIPTIONS } from "@/lib/domain/askbob/types";
 import type {
   AskBobContext,
@@ -34,6 +36,8 @@ import type {
   AskBobCallIntent,
   AskBobCallPersonaStyle,
 } from "@/lib/domain/askbob/types";
+
+import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
 
 const SAFETY_GUARDRAILS =
   "Always mention critical safety hazards before any tooling or wiring steps, remind technicians to follow local building codes and manufacturer instructions, and when in doubt, consult a licensed professional rather than improvising.";
@@ -796,6 +800,10 @@ export async function callAskBobJobFollowup(
     notesSummary: input.notesSummary ?? null,
     hasQuoteContextForFollowup: input.hasQuoteContextForFollowup ?? false,
   };
+  const latestCallOutcome = input.latestCallOutcome ?? null;
+  const callOutcomeContext =
+    input.latestCallOutcomeContext?.trim() ||
+    buildCallOutcomePromptContext(latestCallOutcome);
 
   const callHistorySections = buildCallHistoryPromptSections(input.callSummarySignals ?? null);
 
@@ -803,6 +811,7 @@ export async function callAskBobJobFollowup(
     `Context: ${contextParts}`,
     jobTitleLine,
     `Follow-up context:\n${JSON.stringify(followupContext, null, 2)}`,
+    callOutcomeContext ? `Call outcome context:\n${callOutcomeContext}` : null,
     callHistorySections.callHistoryLine,
     callHistorySections.bestRetryWindowLine,
     input.notesSummary ? `Notes: ${input.notesSummary}` : null,
@@ -820,6 +829,8 @@ export async function callAskBobJobFollowup(
     hasUnpaidInvoice: input.hasUnpaidInvoice,
     promptLength: messageParts.length,
     hasQuoteContextForFollowup: Boolean(input.hasQuoteContextForFollowup),
+    hasLatestCallOutcome: Boolean(latestCallOutcome),
+    outcomeCode: latestCallOutcome?.outcomeCode ?? null,
   });
 
   const openai = new OpenAI({ apiKey });
@@ -1000,6 +1011,8 @@ export async function callAskBobJobAfterCall(
     callMetadataLines.push(`Existing summary:\n${input.existingCallSummary.trim()}`);
   }
   const callContextBlock = `Call metadata:\n${callMetadataLines.join("\n")}`;
+  const callOutcomeContext = buildCallOutcomePromptContext(input.latestCallOutcome ?? null);
+  const callOutcomeInstruction = buildAfterCallOutcomeInstruction(input.latestCallOutcome ?? null);
   const signalsBlock = input.recentJobSignals?.trim()
     ? `Recent signals:\n${input.recentJobSignals.trim()}`
     : null;
@@ -1014,6 +1027,10 @@ export async function callAskBobJobAfterCall(
     jobTitleLine,
     jobDescriptionBlock,
     callContextBlock,
+    callOutcomeContext ? `Call outcome context:\n${callOutcomeContext}` : null,
+    callOutcomeInstruction
+      ? `Call outcome guidance:\n${callOutcomeInstruction}`
+      : null,
     callHistorySections.callHistoryLine,
     callHistorySections.bestRetryWindowLine,
     signalsBlock,
@@ -1131,6 +1148,30 @@ export async function callAskBobJobAfterCall(
     });
 
     throw error;
+  }
+}
+
+function buildAfterCallOutcomeInstruction(
+  outcome: LatestCallOutcomeForJob | null,
+): string | null {
+  if (!outcome?.outcomeCode) {
+    return null;
+  }
+  const timeLabel = formatFriendlyDateTime(outcome.occurredAt, "");
+  const timeSuffix = timeLabel ? ` (${timeLabel})` : "";
+  switch (outcome.outcomeCode) {
+    case "reached_scheduled":
+      return `The call confirmed an appointment. Draft a confirmation message that restates the scheduled time${timeSuffix} and outlines the next steps without asking for availability again.`;
+    case "no_answer_left_voicemail":
+      return "You left a voicemail. Draft a short reply noting that you left a voicemail and invite them to text back if they need more details.";
+    case "no_answer_no_voicemail":
+      return "The call was not answered and no voicemail was left. Draft a gentle check-in text referencing the missed call and asking if there is a better time to connect.";
+    case "reached_declined":
+      return "The customer declined during this call. Draft a polite closure message that thanks them for their time, states that no further follow-up is planned unless they get back to you, and treats the job follow-up as optional.";
+    case "reached_needs_followup":
+      return "The call left a need for follow-up. Draft a clear next action request and ask for 1-2 preferred times they can reconnect.";
+    default:
+      return null;
   }
 }
 

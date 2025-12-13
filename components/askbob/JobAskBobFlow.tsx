@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import AskBobSection from "@/components/askbob/AskBobSection";
@@ -15,6 +15,10 @@ import JobAskBobPanel, { type JobDiagnosisContext } from "@/components/askbob/Jo
 import JobAskBobAfterCallPanel from "@/components/askbob/JobAskBobAfterCallPanel";
 import JobAskBobContainer from "@/components/askbob/JobAskBobContainer";
 import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
+import {
+  formatLatestCallOutcomeHint,
+  type LatestCallOutcomeForJob,
+} from "@/lib/domain/calls/latestCallOutcome";
 import {
   adaptAskBobMaterialsToSmartQuote,
   summarizeMaterialsSuggestion,
@@ -127,6 +131,8 @@ type JobAskBobFlowProps = {
   latestCallLabel?: string | null;
   hasLatestCall?: boolean;
   callHistoryHint?: string | null;
+  initialLatestCallOutcome?: LatestCallOutcomeForJob | null;
+  callSessionLatestCallOutcome?: LatestCallOutcomeForJob | null;
 };
 
 type SessionQuote = {
@@ -160,6 +166,8 @@ export default function JobAskBobFlow({
   latestCallLabel,
   hasLatestCall,
   callHistoryHint,
+  initialLatestCallOutcome,
+  callSessionLatestCallOutcome,
 }: JobAskBobFlowProps) {
   const diagnosisSummaryInitialValue = initialDiagnoseSnapshot
     ? buildDiagnosisSummary(initialDiagnoseSnapshot.response)
@@ -233,6 +241,8 @@ export default function JobAskBobFlow({
   );
   const [afterCallCollapsed, setAfterCallCollapsed] = useState(false);
   const [afterCallResetToken, setAfterCallResetToken] = useState(0);
+  const latestCallOutcome = callSessionLatestCallOutcome ?? initialLatestCallOutcome ?? null;
+  const latestCallOutcomeHint = latestCallOutcome ? formatLatestCallOutcomeHint(latestCallOutcome) : null;
 
   const serverQuoteCandidate = initialLastQuoteId
     ? {
@@ -561,6 +571,8 @@ export default function JobAskBobFlow({
             onFollowupResult={handleFollowupResult}
             onJumpToCallAssist={handleJumpToCallAssist}
             callHistoryHint={callHistoryHint ?? null}
+            latestCallOutcome={latestCallOutcome}
+            latestCallOutcomeHint={latestCallOutcomeHint}
           />
         </AskBobSection>
         <AskBobSection id="askbob-scheduler">
@@ -630,6 +642,7 @@ export default function JobAskBobFlow({
             initialAfterCallSnapshot={initialAfterCallSnapshot ?? undefined}
             onAfterCallSummaryChange={handleAfterCallSummaryChange}
             callHistoryHint={callHistoryHint ?? null}
+            latestCallOutcomeHint={latestCallOutcomeHint}
           />
         </AskBobSection>
       </div>

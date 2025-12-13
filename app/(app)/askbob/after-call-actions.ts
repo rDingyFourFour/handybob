@@ -12,6 +12,11 @@ import {
 import type { CallHistoryRecord } from "@/lib/domain/askbob/callHistory";
 import type { AskBobJobAfterCallInput, AskBobJobAfterCallResult } from "@/lib/domain/askbob/types";
 import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
+import {
+  LatestCallOutcomeForJob,
+  normalizeCallOutcomeNotes,
+} from "@/lib/domain/calls/latestCallOutcome";
+import { isAskBobScriptSummary } from "@/lib/domain/askbob/constants";
 
 const afterCallPayloadSchema = z.object({
   workspaceId: z.string().min(1),
@@ -56,6 +61,10 @@ type CallRow = {
   from_number: string | null;
   to_number: string | null;
   created_at: string | null;
+  outcome_code: string | null;
+  outcome_notes: string | null;
+  outcome_recorded_at: string | null;
+  reached_customer: boolean | null;
 };
 
 export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Promise<AfterCallActionResult> {
@@ -116,6 +125,14 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
   const phoneNumber = selectCallPhoneNumber(call);
   const callOutcome = mapCallOutcome(call);
   const recentJobSignals = await buildRecentJobSignals(supabase, workspace.id, job.id);
+  const latestCallOutcome: LatestCallOutcomeForJob = {
+    callId: call.id,
+    occurredAt: call.outcome_recorded_at ?? call.created_at ?? call.started_at ?? null,
+    reachedCustomer: call.reached_customer ?? null,
+    outcomeCode: (call.outcome_code as LatestCallOutcomeForJob["outcomeCode"]) ?? null,
+    outcomeNotes: normalizeCallOutcomeNotes(call.outcome_notes),
+    isAskBobAssisted: isAskBobScriptSummary(call.ai_summary ?? call.summary ?? null),
+  };
 
   console.log("[askbob-after-call-ui-request]", {
     workspaceId: workspace.id,
@@ -155,6 +172,7 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
     existingCallSummary,
     recentJobSignals,
     callSummarySignals,
+    latestCallOutcome,
   };
 
   try {
