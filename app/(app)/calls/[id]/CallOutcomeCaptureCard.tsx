@@ -12,7 +12,10 @@ import {
   getCallOutcomeMetadata,
   mapOutcomeCodeToLegacyOutcome,
 } from "@/lib/domain/communications/callOutcomes";
-import { CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE } from "@/utils/calls/callOutcomeMessages";
+import {
+  CALL_OUTCOME_DB_CONSTRAINT_MISMATCH_MESSAGE,
+  CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
+} from "@/utils/calls/callOutcomeMessages";
 import { SaveCallOutcomeResponse, saveCallOutcomeAction } from "../actions/saveCallOutcome";
 import { readAndClearCallOutcomePrefill } from "@/utils/askbob/callOutcomePrefillCache";
 
@@ -156,6 +159,8 @@ export default function CallOutcomeCaptureCard({
   const actionErrorMessage =
     actionState?.code === "schema_not_applied"
       ? CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE
+      : actionState?.code === "db_constraint_rejects_value"
+      ? CALL_OUTCOME_DB_CONSTRAINT_MISMATCH_MESSAGE
       : actionState?.error ?? null;
 
   useEffect(() => {

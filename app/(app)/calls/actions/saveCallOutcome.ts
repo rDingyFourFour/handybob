@@ -15,16 +15,18 @@ import {
   markCallOutcomeSchemaMismatchSentinelAsFired,
 } from "@/utils/calls/callOutcomeSchemaMismatchSentinel";
 import {
-  logCallOutcomeSchemaReadinessSentinel,
+  maybeLogSchemaNotAppliedOnce,
   type SchemaReadinessReason,
 } from "@/utils/calls/callOutcomeSchemaReadinessSentinel";
-import { CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE } from "@/utils/calls/callOutcomeMessages";
+import {
+  CALL_OUTCOME_DB_CONSTRAINT_MISMATCH_MESSAGE,
+  CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
+} from "@/utils/calls/callOutcomeMessages";
 
 const NOTES_MAX_LENGTH = 1000;
 const CALL_OUTCOME_CONSTRAINT_CODE = "23514";
 const CALL_OUTCOME_CONSTRAINT_VERIFIER_RPC = "get_call_outcome_constraint_definitions";
 const CALL_OUTCOME_SCHEMA_READINESS_RPC = "get_call_outcome_schema_readiness";
-const DB_CONSTRAINT_ERROR_MESSAGE = "Saved failed, please try again";
 const ALLOWED_OUTCOME_CODES = new Set(CALL_OUTCOME_CODE_VALUES);
 type ServerSupabaseClient = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -33,8 +35,16 @@ let schemaVerificationStatus: SchemaVerificationStatus = "unknown";
 let schemaVerificationPromise: Promise<SchemaVerificationStatus> | null = null;
 
 type SchemaReadinessStatus = "unknown" | "ready" | "missing_columns" | "missing_constraint" | "unsupported";
+type SchemaReadinessCheckResult = {
+  status: SchemaReadinessStatus;
+  columnsPresent: boolean;
+  constraintPresent: boolean;
+  error?: unknown;
+};
+type SchemaReadinessOutcome = SchemaReadinessCheckResult & { cached: boolean };
 let schemaReadinessStatus: SchemaReadinessStatus = "unknown";
-let schemaReadinessPromise: Promise<SchemaReadinessStatus> | null = null;
+let schemaReadinessPromise: Promise<SchemaReadinessCheckResult> | null = null;
+let lastSchemaReadinessCheckResult: SchemaReadinessCheckResult | null = null;
 
 type SaveCallOutcomeSuccess = {
   ok: true;
@@ -154,7 +164,7 @@ function mapSchemaReadinessStatusToReason(status: SchemaReadinessStatus): Schema
 
 async function runSchemaReadinessCheck(
   supabase: ServerSupabaseClient,
-): Promise<SchemaReadinessStatus> {
+): Promise<SchemaReadinessCheckResult> {
   try {
     const { data, error } = await supabase.rpc(CALL_OUTCOME_SCHEMA_READINESS_RPC);
     let status: SchemaReadinessStatus = "missing_constraint";
@@ -172,42 +182,51 @@ async function runSchemaReadinessCheck(
         status = "missing_constraint";
       }
     }
-    console.log("[calls-outcome-schema-readiness]", {
+    return {
+      status,
       columnsPresent,
       constraintPresent,
-      result: status,
-      node_env: process.env.NODE_ENV ?? "unknown",
-    });
-    return status;
+      error: error ?? null,
+    };
   } catch (error) {
-    console.log("[calls-outcome-schema-readiness]", {
+    return {
+      status: "unsupported",
       columnsPresent: false,
       constraintPresent: false,
-      result: "unsupported",
-      node_env: process.env.NODE_ENV ?? "unknown",
       error,
-    });
-    return "unsupported";
+    };
   }
 }
 
-async function ensureSchemaReadiness(
+function logSchemaReadinessEvent(result: SchemaReadinessCheckResult, cached: boolean) {
+  console.log("[calls-outcome-schema-readiness]", {
+    cached,
+    result: result.status,
+    columnsPresent: result.columnsPresent,
+    constraintPresent: result.constraintPresent,
+    node_env: process.env.NODE_ENV ?? "unknown",
+    error: result.error ?? undefined,
+  });
+}
+
+async function checkCallOutcomeSchemaReadiness(
   supabase: ServerSupabaseClient,
-): Promise<SchemaReadinessStatus> {
-  if (schemaReadinessStatus === "ready") {
-    return "ready";
+): Promise<SchemaReadinessOutcome> {
+  if (schemaReadinessStatus === "ready" && lastSchemaReadinessCheckResult) {
+    logSchemaReadinessEvent(lastSchemaReadinessCheckResult, true);
+    return { ...lastSchemaReadinessCheckResult, cached: true };
   }
   if (!schemaReadinessPromise) {
-    schemaReadinessPromise = (async () => {
-      const result = await runSchemaReadinessCheck(supabase);
-      if (result === "ready") {
-        schemaReadinessStatus = "ready";
-      }
-      schemaReadinessPromise = null;
-      return result;
-    })();
+    schemaReadinessPromise = runSchemaReadinessCheck(supabase);
   }
-  return schemaReadinessPromise;
+  const result = await schemaReadinessPromise;
+  schemaReadinessPromise = null;
+  schemaReadinessStatus = result.status;
+  if (result.status === "ready") {
+    lastSchemaReadinessCheckResult = result;
+  }
+  logSchemaReadinessEvent(result, false);
+  return { ...result, cached: false };
 }
 
 function logSchemaMismatchSentinel(context: {
@@ -455,12 +474,14 @@ export async function saveCallOutcomeAction(
   const legacyOutcome = mapOutcomeCodeToLegacyOutcome(parsed.outcomeCode);
 
   if (shouldRecordOutcome) {
-    const readinessStatus = await ensureSchemaReadiness(supabase);
-    if (readinessStatus !== "ready") {
-      logCallOutcomeSchemaReadinessSentinel({
+    const readiness = await checkCallOutcomeSchemaReadiness(supabase);
+    if (readiness.status !== "ready") {
+      maybeLogSchemaNotAppliedOnce({
         workspaceId: workspace.id,
         callId: parsed.callId,
-        reason: mapSchemaReadinessStatusToReason(readinessStatus),
+        reason: mapSchemaReadinessStatusToReason(readiness.status),
+        cached: readiness.cached,
+        error: readiness.error,
       });
       return {
         ok: false,
@@ -502,6 +523,8 @@ export async function saveCallOutcomeAction(
       console.error("[calls-outcome-db-constraint-violation]", {
         ...persistenceContext,
         constraint: constraintName,
+        normalizedOutcomeCode,
+        rawError: updateError ?? null,
       });
       logSchemaMismatchSentinel({
         workspaceId: workspace.id,
@@ -514,7 +537,7 @@ export async function saveCallOutcomeAction(
       await ensureSchemaVerification(supabase, normalizedOutcomeCode);
       return {
         ok: false,
-        error: DB_CONSTRAINT_ERROR_MESSAGE,
+        error: CALL_OUTCOME_DB_CONSTRAINT_MISMATCH_MESSAGE,
         code: "db_constraint_rejects_value",
       };
     }
@@ -571,4 +594,5 @@ export async function resetCallOutcomeSchemaStateForTests(): Promise<void> {
   schemaVerificationPromise = null;
   schemaReadinessStatus = "unknown";
   schemaReadinessPromise = null;
+  lastSchemaReadinessCheckResult = null;
 }

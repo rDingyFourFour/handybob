@@ -6,8 +6,6 @@ import { CALL_OUTCOME_CODE_VALUES } from "@/lib/domain/communications/callOutcom
 const createServerClientMock = vi.fn();
 const mockGetCurrentWorkspace = vi.fn();
 const mockRevalidatePath = vi.fn();
-const DB_CONSTRAINT_ERROR_MESSAGE = "Saved failed, please try again";
-
 vi.mock("@/utils/supabase/server", () => ({
   createServerClient: () => createServerClientMock(),
 }));
@@ -20,20 +18,23 @@ vi.mock("next/cache", () => ({
   revalidatePath: (...args: unknown[]) => mockRevalidatePath(...args),
 }));
 
-import { CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE } from "@/utils/calls/callOutcomeMessages";
+import {
+  CALL_OUTCOME_DB_CONSTRAINT_MISMATCH_MESSAGE,
+  CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
+} from "@/utils/calls/callOutcomeMessages";
 import {
   resetCallOutcomeSchemaStateForTests,
   saveCallOutcomeAction,
 } from "@/app/(app)/calls/actions/saveCallOutcome";
 import { resetCallOutcomeSchemaMismatchSentinelForTests } from "@/utils/calls/callOutcomeSchemaMismatchSentinel";
-import { resetCallOutcomeSchemaReadinessSentinelForTests } from "@/utils/calls/callOutcomeSchemaReadinessSentinel";
+import { resetSchemaNotAppliedSentinelForTests } from "@/utils/calls/callOutcomeSchemaReadinessSentinel";
 
 describe("saveCallOutcomeAction", () => {
   let supabaseState = setupSupabaseMock();
 
   beforeEach(async () => {
     resetCallOutcomeSchemaMismatchSentinelForTests();
-    resetCallOutcomeSchemaReadinessSentinelForTests();
+    resetSchemaNotAppliedSentinelForTests();
     await resetCallOutcomeSchemaStateForTests();
     supabaseState = setupSupabaseMock();
     supabaseState.rpcResponses["get_call_outcome_schema_readiness"] = {
@@ -199,6 +200,7 @@ describe("saveCallOutcomeAction", () => {
       expect.objectContaining({
         schemaApplied: false,
         reason: "missing_columns",
+        cached: false,
       }),
     );
     expect(supabaseState.queries.calls.update).not.toHaveBeenCalled();
@@ -234,7 +236,7 @@ describe("saveCallOutcomeAction", () => {
 
     expect(result).toEqual({
       ok: false,
-      error: DB_CONSTRAINT_ERROR_MESSAGE,
+      error: CALL_OUTCOME_DB_CONSTRAINT_MISMATCH_MESSAGE,
       code: "db_constraint_rejects_value",
     });
     const dbViolationCalls = errorSpy.mock.calls.filter(
@@ -271,7 +273,7 @@ describe("saveCallOutcomeAction", () => {
       supabaseState.responses.calls = buildResponses();
       expect(await saveCallOutcomeAction(formDataFactory())).toEqual({
         ok: false,
-        error: DB_CONSTRAINT_ERROR_MESSAGE,
+        error: CALL_OUTCOME_DB_CONSTRAINT_MISMATCH_MESSAGE,
         code: "db_constraint_rejects_value",
       });
     })();
@@ -279,7 +281,7 @@ describe("saveCallOutcomeAction", () => {
       supabaseState.responses.calls = buildResponses();
       expect(await saveCallOutcomeAction(formDataFactory())).toEqual({
         ok: false,
-        error: DB_CONSTRAINT_ERROR_MESSAGE,
+        error: CALL_OUTCOME_DB_CONSTRAINT_MISMATCH_MESSAGE,
         code: "db_constraint_rejects_value",
       });
     })();

@@ -2,7 +2,10 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE } from "@/utils/calls/callOutcomeMessages";
+import {
+  CALL_OUTCOME_DB_CONSTRAINT_MISMATCH_MESSAGE,
+  CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
+} from "@/utils/calls/callOutcomeMessages";
 import type { SaveCallOutcomeResponse } from "@/app/(app)/calls/actions/saveCallOutcome";
 import CallOutcomeCaptureCard from "@/app/(app)/calls/[id]/CallOutcomeCaptureCard";
 
@@ -313,5 +316,40 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
     const outcomeSelect = formElement?.querySelector<HTMLSelectElement>("select[name='outcomeCode']");
     expect(outcomeSelect).toBeTruthy();
     expect(outcomeSelect?.disabled).toBe(false);
+  });
+
+  it("shows the db constraint mismatch prompt when the action fails with db_constraint_rejects_value", async () => {
+    const failureResponse: SaveCallOutcomeResponse = {
+      ok: false,
+      error: CALL_OUTCOME_DB_CONSTRAINT_MISMATCH_MESSAGE,
+      code: "db_constraint_rejects_value",
+    };
+    const formAction = vi.fn(async () => failureResponse);
+    renderCard("call-constraint", { actionStateOverride: [null, formAction, false] });
+    await flushReactUpdates();
+
+    act(() => {
+      root?.render(
+        <CallOutcomeCaptureCard
+          callId="call-constraint"
+          workspaceId="workspace-1"
+          initialOutcomeCode={null}
+          initialReachedCustomer={null}
+          initialNotes={null}
+          initialRecordedAt={null}
+          hasAskBobScriptHint={false}
+          actionStateOverride={[failureResponse, formAction, false]}
+        />,
+      );
+    });
+    await flushReactUpdates();
+
+    expect(container.textContent).toContain(CALL_OUTCOME_DB_CONSTRAINT_MISMATCH_MESSAGE);
+    expect(container.textContent).not.toContain("Outcome recorded");
+    const formElement = container.querySelector<HTMLFormElement>("form");
+    expect(formElement).toBeTruthy();
+    const outcomeSelect = formElement?.querySelector<HTMLSelectElement>("select[name='outcomeCode']");
+    expect(outcomeSelect?.disabled).toBe(false);
+
   });
 });
