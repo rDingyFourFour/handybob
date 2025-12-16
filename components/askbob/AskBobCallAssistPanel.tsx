@@ -56,6 +56,7 @@ type AskBobCallAssistPanelProps = {
   onStartCallWithScript?: (payload: StartCallWithScriptPayload) => void;
   latestCallOutcomeLabel?: string | null;
   latestCallOutcome?: LatestCallOutcomeForJob | null;
+  onCallScriptBodyChange?: (body: string | null) => void;
 };
 
 type ScriptResult = {
@@ -160,6 +161,7 @@ export default function AskBobCallAssistPanel({
   onStartCallWithScript,
   latestCallOutcome,
   latestCallOutcomeLabel,
+  onCallScriptBodyChange,
 }: AskBobCallAssistPanelProps) {
   const normalizedFollowupCallPurpose = followupCallPurpose?.trim() ?? null;
   const normalizedFollowupCallTone = followupCallTone?.trim() ?? null;
@@ -228,12 +230,13 @@ export default function AskBobCallAssistPanel({
   useEffect(() => {
     if (!callScriptSummary) {
       setScriptResult(null);
+      onCallScriptBodyChange?.(null);
       setErrorMessage(null);
       resetCopyFeedback();
       setCallPersonaStyle(ASKBOB_CALL_PERSONA_DEFAULT);
       setHasPersonaSelection(false);
     }
-  }, [callScriptSummary, resetCopyFeedback]);
+  }, [callScriptSummary, resetCopyFeedback, onCallScriptBodyChange]);
 
   useEffect(() => {
     if (resetToken === undefined) {
@@ -321,6 +324,7 @@ export default function AskBobCallAssistPanel({
 
   const resetLocalState = () => {
     setScriptResult(null);
+    onCallScriptBodyChange?.(null);
     setErrorMessage(null);
     const resetPurpose = deriveCallPurpose({
       followupCallRecommended,
@@ -403,6 +407,18 @@ export default function AskBobCallAssistPanel({
       };
       setScriptResult(newScript);
       onCallScriptPersonaChange?.(personaStyleForPayload ?? null);
+      const scriptLines: string[] = [];
+      if (newScript.openingLine) {
+        scriptLines.push(newScript.openingLine);
+      }
+      if (newScript.scriptBody) {
+        scriptLines.push(newScript.scriptBody);
+      }
+      if (newScript.closingLine) {
+        scriptLines.push(newScript.closingLine);
+      }
+      const scriptText = scriptLines.join("\n\n").trim();
+      onCallScriptBodyChange?.(scriptText || null);
 
       const summaryParts = [
         `${callPurpose.charAt(0).toUpperCase() + callPurpose.slice(1)} call script`,

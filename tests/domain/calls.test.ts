@@ -22,43 +22,46 @@ describe("handleTwilioVoiceEvent", () => {
 });
 
 describe("getLatestCallOutcomeForJob", () => {
-  it("queries calls using all columns and returns sanitized outcome", async () => {
-    const outcomeDate = new Date().toISOString();
-    const createdDate = new Date(Date.now() - 1000).toISOString();
-    const supabaseState = setupSupabaseMock({
-      calls: {
-        data: [
-          {
-            id: "call-123",
-            job_id: "job-1",
-            workspace_id: "workspace-1",
-            created_at: createdDate,
-            started_at: createdDate,
-            reached_customer: true,
-            outcome_code: "reached_needs_followup",
-            outcome_notes: "  Follow-up needed  ",
-            outcome_recorded_at: outcomeDate,
-            summary: null,
-            ai_summary: "AskBob call script: test",
-          },
-        ],
-        error: null,
-      },
-    });
+  it.each(["AskBob call script: test", "AskBob automated call script: test"])(
+    "queries calls using all columns and returns sanitized outcome when ai_summary=%s",
+    async (summary) => {
+      const outcomeDate = new Date().toISOString();
+      const createdDate = new Date(Date.now() - 1000).toISOString();
+      const supabaseState = setupSupabaseMock({
+        calls: {
+          data: [
+            {
+              id: "call-123",
+              job_id: "job-1",
+              workspace_id: "workspace-1",
+              created_at: createdDate,
+              started_at: createdDate,
+              reached_customer: true,
+              outcome_code: "reached_needs_followup",
+              outcome_notes: "  Follow-up needed  ",
+              outcome_recorded_at: outcomeDate,
+              summary: null,
+              ai_summary: summary,
+            },
+          ],
+          error: null,
+        },
+      });
 
-    const result = await getLatestCallOutcomeForJob(supabaseState.supabase, "workspace-1", "job-1");
+      const result = await getLatestCallOutcomeForJob(supabaseState.supabase, "workspace-1", "job-1");
 
-    expect(result).toMatchObject({
-      callId: "call-123",
-      reachedCustomer: true,
-      outcomeCode: "reached_needs_followup",
-      isAskBobAssisted: true,
-    });
-    expect(result?.outcomeNotes).toBe("Follow-up needed");
-    const orderCalls = supabaseState.queries.calls.order.mock.calls;
-    expect(supabaseState.queries.calls.select).toHaveBeenCalledWith("*");
-    expect(orderCalls).toEqual([["created_at", { ascending: false }]]);
-  });
+      expect(result).toMatchObject({
+        callId: "call-123",
+        reachedCustomer: true,
+        outcomeCode: "reached_needs_followup",
+        isAskBobAssisted: true,
+      });
+      expect(result?.outcomeNotes).toBe("Follow-up needed");
+      const orderCalls = supabaseState.queries.calls.order.mock.calls;
+      expect(supabaseState.queries.calls.select).toHaveBeenCalledWith("*");
+      expect(orderCalls).toEqual([["created_at", { ascending: false }]]);
+    },
+  );
 
   it("returns null when the calls query errors (permission/network/etc.)", async () => {
     const supabaseState = setupSupabaseMock({
@@ -127,7 +130,7 @@ describe("getLatestCallOutcomeForJob", () => {
     warnSpy.mockRestore();
   });
 });
-
+ 
 describe("formatLatestCallOutcomeHint", () => {
   it("renders a deterministic, UTC-based hint with the outcome label and timestamp", () => {
     const hint = formatLatestCallOutcomeHint({

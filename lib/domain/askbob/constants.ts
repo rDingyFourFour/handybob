@@ -1,15 +1,22 @@
 export const ASKBOB_SCRIPT_PREFIX = "AskBob call script:";
+export const ASKBOB_AUTOMATED_SCRIPT_PREFIX = "AskBob automated call script:";
+const ASKBOB_SCRIPT_SUMMARY_PREFIXES = [ASKBOB_SCRIPT_PREFIX, ASKBOB_AUTOMATED_SCRIPT_PREFIX];
 
 export function parseAskBobCallScriptSummary(summary?: string | null): string | null {
   if (!summary) {
     return null;
   }
   const trimmed = summary.trim();
-  if (!trimmed || !trimmed.startsWith(ASKBOB_SCRIPT_PREFIX)) {
+  if (!trimmed) {
     return null;
   }
-  const scriptText = trimmed.slice(ASKBOB_SCRIPT_PREFIX.length).trim();
-  return scriptText || null;
+  for (const prefix of ASKBOB_SCRIPT_SUMMARY_PREFIXES) {
+    if (trimmed.startsWith(prefix)) {
+      const scriptText = trimmed.slice(prefix.length).trim();
+      return scriptText || null;
+    }
+  }
+  return null;
 }
 
 export function isAskBobScriptSummary(summary?: string | null) {

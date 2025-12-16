@@ -40,7 +40,7 @@ describe("buildJobTimelinePayload", () => {
           status: "completed",
             started_at: "2025-01-01T12:00:00Z",
             duration_seconds: 60,
-            summary: "AskBob call script: test",
+            summary: "AskBob automated call script: test",
             ai_summary: null,
             transcript: null,
             reached_customer: true,

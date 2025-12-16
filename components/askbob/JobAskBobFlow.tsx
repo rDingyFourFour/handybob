@@ -14,6 +14,7 @@ import JobAskBobFollowupPanel from "@/components/askbob/JobAskBobFollowupPanel";
 import JobAskBobPanel, { type JobDiagnosisContext } from "@/components/askbob/JobAskBobPanel";
 import JobAskBobAfterCallPanel from "@/components/askbob/JobAskBobAfterCallPanel";
 import JobAskBobContainer from "@/components/askbob/JobAskBobContainer";
+import AskBobAutomatedCallPanel from "@/components/askbob/AskBobAutomatedCallPanel";
 import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
 import {
   formatLatestCallOutcomeHint,
@@ -221,6 +222,7 @@ export default function JobAskBobFlow({
     initialFollowupSnapshot?.callTone ?? null,
   );
   const [callScriptSummary, setCallScriptSummary] = useState<string | null>(null);
+  const [callScriptBody, setCallScriptBody] = useState<string | null>(null);
   const [callScriptPersona, setCallScriptPersona] = useState<AskBobCallPersonaStyle | null>(null);
   const [
     callScriptFollowupCallIntents,
@@ -251,6 +253,10 @@ export default function JobAskBobFlow({
   const [schedulerResetToken, setSchedulerResetToken] = useState(0);
   const [afterCallCollapsed, setAfterCallCollapsed] = useState(false);
   const [afterCallResetToken, setAfterCallResetToken] = useState(0);
+  const [automatedCallSummary, setAutomatedCallSummary] = useState<string | null>(null);
+  const automatedCallDone = Boolean(automatedCallSummary);
+  const [automatedCallCollapsed, setAutomatedCallCollapsed] = useState(false);
+  const [automatedCallResetToken, setAutomatedCallResetToken] = useState(0);
   const [hydratedAfterCallSnapshot, setHydratedAfterCallSnapshot] =
     useState<AskBobAfterCallSnapshotPayload | null>(null);
   const [afterCallHydrationHint, setAfterCallHydrationHint] = useState<string | null>(null);
@@ -398,6 +404,7 @@ export default function JobAskBobFlow({
     { label: "Step 6 Schedule visit", done: schedulerDone },
     { label: callScriptStepLabel, done: callScriptDone },
     { label: "Step 8 · After the call summary", done: afterCallDone },
+    { label: "Step 9 · AskBob automated call", done: automatedCallDone },
   ];
 
   const promptSeed = jobDescription ?? "";
@@ -538,6 +545,10 @@ export default function JobAskBobFlow({
     setCallScriptCollapsed(false);
     setCallScriptPersona(null);
     setCallScriptResetToken((value) => value + 1);
+    setCallScriptBody(null);
+    setAutomatedCallSummary(null);
+    setAutomatedCallCollapsed(false);
+    setAutomatedCallResetToken((value) => value + 1);
   };
 
   const handleSchedulerReset = () => {
@@ -580,6 +591,12 @@ export default function JobAskBobFlow({
   const handleAfterCallReset = () => {
     setAfterCallResetToken((value) => value + 1);
     setAfterCallCollapsed(false);
+  };
+
+  const handleAutomatedCallReset = () => {
+    setAutomatedCallSummary(null);
+    setAutomatedCallCollapsed(false);
+    setAutomatedCallResetToken((value) => value + 1);
   };
 
   const handleJumpToCallAssist = () => {
@@ -751,6 +768,7 @@ export default function JobAskBobFlow({
             onCallScriptPersonaChange={setCallScriptPersona}
             callScriptSummary={callScriptSummary}
             onCallScriptSummaryChange={setCallScriptSummary}
+            onCallScriptBodyChange={setCallScriptBody}
             onStartCallWithScript={handleStartCallWithScript}
             latestCallOutcome={resolvedLatestCallOutcome}
             latestCallOutcomeLabel={latestCallOutcomeReference}
@@ -776,6 +794,27 @@ export default function JobAskBobFlow({
             latestCallOutcome={resolvedLatestCallOutcome}
             previousCallOutcome={resolvedPreviousCallOutcome}
             afterCallHydrationHint={afterCallHydrationHint}
+          />
+        </AskBobSection>
+        <AskBobSection id="askbob-automated-call">
+          <AskBobAutomatedCallPanel
+            workspaceId={workspaceId}
+            jobId={jobId}
+            customerId={customerId ?? null}
+            customerDisplayName={customerDisplayName ?? null}
+            customerPhoneNumber={customerPhoneNumber ?? null}
+            jobTitle={normalizedJobTitle || null}
+            jobDescription={jobDescription ?? null}
+            callScriptBody={callScriptBody}
+            callScriptSummary={callScriptSummary}
+            latestCallOutcomeLabel={latestCallOutcomeReference}
+            stepCompleted={automatedCallDone}
+            stepCollapsed={automatedCallCollapsed}
+            onToggleCollapse={() => setAutomatedCallCollapsed((value) => !value)}
+            resetToken={automatedCallResetToken}
+            onReset={handleAutomatedCallReset}
+            onStartCallWithScript={handleStartCallWithScript}
+            onAutomatedCallSuccess={setAutomatedCallSummary}
           />
         </AskBobSection>
       </div>

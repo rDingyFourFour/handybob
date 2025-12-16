@@ -10,6 +10,7 @@ export type CreateCallSessionForJobQuoteParams = {
   toNumber: string;
   quoteId?: string | null;
   scriptBody?: string | null;
+  summaryOverride?: string | null;
 };
 
 export type CallSessionRow = {
@@ -21,11 +22,12 @@ export async function createCallSessionForJobQuote(
 ): Promise<CallSessionRow> {
   const { supabase, workspaceId, userId, jobId, customerId, fromNumber, toNumber, scriptBody } =
     params;
+  const { summaryOverride } = params;
   const normalizedScriptBody = scriptBody?.trim();
   const askBobSummary =
-    normalizedScriptBody && normalizedScriptBody.length
+    (summaryOverride?.trim() || (normalizedScriptBody && normalizedScriptBody.length
       ? `AskBob call script: ${normalizedScriptBody}`
-      : null;
+      : null)) ?? null;
   const payload = {
     workspace_id: workspaceId,
     user_id: userId,
