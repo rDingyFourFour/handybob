@@ -10,7 +10,7 @@ import {
   attachTwilioMetadataToCallSession,
   updateCallSessionTwilioStatus,
 } from "@/lib/domain/calls/sessions";
-import { dialTwilioCall, TwilioConfigurationError } from "@/lib/domain/twilio";
+import { dialTwilioCall } from "@/lib/domain/twilio.server";
 import { ASKBOB_AUTOMATED_SCRIPT_PREFIX } from "@/lib/domain/askbob/constants";
 
 const StartAskBobAutomatedCallSchema = z.object({
@@ -111,6 +111,39 @@ export async function startAskBobAutomatedCall(
     };
   }
 
+  const recordDialFailure = async (
+    callId: string,
+    callWorkspaceId: string | null,
+    callJobId: string | null,
+    failureReason: StartAskBobAutomatedCallFailure["reason"],
+    userMessage: string,
+    errorMessage: string,
+    twilioErrorCode?: string,
+  ): Promise<StartAskBobAutomatedCallFailure> => {
+    await updateCallSessionTwilioStatus({
+      supabase,
+      callId,
+      twilioStatus: "failed",
+      errorCode: twilioErrorCode ?? undefined,
+      errorMessage,
+    });
+    logFailure(failureReason, { error: errorMessage, callId });
+    console.log("[calls-automated-dial-failure]", {
+      callId,
+      workspaceId: callWorkspaceId,
+      jobId: callJobId,
+      reason: failureReason,
+      error: errorMessage,
+      twilioErrorCode,
+    });
+    return {
+      status: "failure",
+      reason: failureReason,
+      message: userMessage,
+      callId,
+    };
+  };
+
   const envConfig = parseEnvConfig();
   const statusCallbackBaseUrl = envConfig.appUrl
     ? `${envConfig.appUrl.replace(/\/$/, "")}/api/twilio/calls/status`
@@ -187,86 +220,80 @@ export async function startAskBobAutomatedCall(
       jobId: call.job_id,
     });
 
-    try {
-      if (!outboundFromNumber) {
-        throw new TwilioConfigurationError("No outbound phone number is configured for this workspace.");
-      }
-      if (!statusCallbackBaseUrl) {
-        throw new TwilioConfigurationError("Unable to resolve the Twilio status callback URL.");
-      }
+    if (!outboundFromNumber) {
+      return recordDialFailure(
+        call.id,
+        call.workspace_id,
+        call.job_id,
+        "twilio_not_configured",
+        "Calls aren’t configured yet; please set up telephony to continue.",
+        "No outbound phone number is configured for this workspace.",
+      );
+    }
+    if (!statusCallbackBaseUrl) {
+      return recordDialFailure(
+        call.id,
+        call.workspace_id,
+        call.job_id,
+        "twilio_not_configured",
+        "Calls aren’t configured yet; please set up telephony to continue.",
+        "Unable to resolve the Twilio status callback URL.",
+      );
+    }
 
-      const metadata = { callId: call.id, workspaceId: workspace.id };
-      console.log("[calls-automated-dial-attempt]", {
-        callId: call.id,
-        workspaceId: call.workspace_id,
-        jobId: call.job_id,
-      });
+    const metadata = { callId: call.id, workspaceId: workspace.id };
+    console.log("[calls-automated-dial-attempt]", {
+      callId: call.id,
+      workspaceId: call.workspace_id,
+      jobId: call.job_id,
+    });
 
-      const dialResult = await dialTwilioCall({
-        toPhone: normalizedCustomerPhone,
-        fromPhone: outboundFromNumber,
-        callbackUrl: statusCallbackBaseUrl,
-        metadata,
-      });
+    const dialResult = await dialTwilioCall({
+      toPhone: normalizedCustomerPhone,
+      fromPhone: outboundFromNumber,
+      callbackUrl: statusCallbackBaseUrl,
+      metadata,
+    });
 
-      await attachTwilioMetadataToCallSession({
-        supabase,
-        callId: call.id,
-        twilioCallSid: dialResult.twilioCallSid,
-        initialStatus: dialResult.initialStatus,
-      });
-
-      console.log("[calls-automated-dial-success]", {
-        callId: call.id,
-        workspaceId: call.workspace_id,
-        jobId: call.job_id,
-        twilioStatus: dialResult.initialStatus,
-      });
-
-      const successLabel = trimmedScriptSummary || "Automated call started";
-      return {
-        status: "success",
-        callId: call.id,
-        label: successLabel,
-        twilioStatus: dialResult.initialStatus,
-      };
-    } catch (dialError) {
-      const errorMessage =
-        dialError instanceof Error ? dialError.message : "We couldn’t start the automated call right now.";
-      const failureReason = dialError instanceof TwilioConfigurationError ? "twilio_not_configured" : "twilio_call_failed";
+    if (!dialResult.success) {
+      const failureReason =
+        dialResult.code === "twilio_not_configured" ? "twilio_not_configured" : "twilio_call_failed";
       const userMessage =
-        dialError instanceof TwilioConfigurationError
+        failureReason === "twilio_not_configured"
           ? "Calls aren’t configured yet; please set up telephony to continue."
           : "We couldn’t start the automated call right now. Please try again.";
-      const errorCode =
-        dialError && typeof dialError === "object" && "code" in dialError
-          ? String((dialError as { code?: unknown }).code ?? "")
-          : null;
-
-      await updateCallSessionTwilioStatus({
-        supabase,
-        callId: call.id,
-        twilioStatus: "failed",
-        errorCode: errorCode ?? undefined,
-        errorMessage,
-      });
-
-      logFailure(failureReason, { error: errorMessage, callId: call.id });
-      console.log("[calls-automated-dial-failure]", {
-        callId: call.id,
-        workspaceId: call.workspace_id,
-        jobId: call.job_id,
-        reason: failureReason,
-        error: errorMessage,
-      });
-
-      return {
-        status: "failure",
-        reason: failureReason,
-        message: userMessage,
-        callId: call.id,
-      };
+      return recordDialFailure(
+        call.id,
+        call.workspace_id,
+        call.job_id,
+        failureReason,
+        userMessage,
+        dialResult.message,
+        dialResult.twilioErrorCode,
+      );
     }
+
+    await attachTwilioMetadataToCallSession({
+      supabase,
+      callId: call.id,
+      twilioCallSid: dialResult.twilioCallSid,
+      initialStatus: dialResult.initialStatus,
+    });
+
+    console.log("[calls-automated-dial-success]", {
+      callId: call.id,
+      workspaceId: call.workspace_id,
+      jobId: call.job_id,
+      twilioStatus: dialResult.initialStatus,
+    });
+
+    const successLabel = trimmedScriptSummary || "Automated call started";
+    return {
+      status: "success",
+      callId: call.id,
+      label: successLabel,
+      twilioStatus: dialResult.initialStatus,
+    };
   } catch (error) {
     logFailure("call_creation_failed", { error: error instanceof Error ? error.message : error });
     return {

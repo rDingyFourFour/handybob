@@ -63,10 +63,10 @@ describe("Twilio status callback route", () => {
     vi.resetAllMocks();
     process.env.TWILIO_AUTH_TOKEN = "token";
     mockValidateRequest.mockReturnValue(true);
-    const module = await vi.importActual<typeof import("@/app/api/twilio/calls/status/route")>(
+    const actualModule = await vi.importActual<typeof import("@/app/api/twilio/calls/status/route")>(
       "@/app/api/twilio/calls/status/route",
     );
-    POST = module.POST;
+    POST = actualModule.POST;
   });
 
   it("rejects requests with an invalid signature", async () => {

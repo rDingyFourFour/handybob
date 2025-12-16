@@ -22,8 +22,10 @@ vi.mock("@/schemas/env", () => ({
   parseEnvConfig: () => mockParseEnvConfig(),
 }));
 
-vi.mock("@/lib/domain/twilio", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/domain/twilio")>("@/lib/domain/twilio");
+vi.mock("@/lib/domain/twilio.server", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/domain/twilio.server")>(
+    "@/lib/domain/twilio.server",
+  );
   return {
     __esModule: true,
     ...actual,
@@ -32,7 +34,6 @@ vi.mock("@/lib/domain/twilio", async () => {
 });
 
 import { startAskBobAutomatedCall } from "@/app/(app)/calls/actions/startAskBobAutomatedCall";
-import { TwilioConfigurationError } from "@/lib/domain/twilio";
 
 describe("startAskBobAutomatedCall", () => {
   beforeEach(() => {
@@ -91,6 +92,7 @@ describe("startAskBobAutomatedCall", () => {
     createServerClientMock.mockReturnValue(supabaseState.supabase);
     mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
     mockDialTwilioCall.mockResolvedValueOnce({
+      success: true,
       twilioCallSid: "twilio-abc",
       initialStatus: "queued",
     });
@@ -156,7 +158,11 @@ describe("startAskBobAutomatedCall", () => {
     };
     createServerClientMock.mockReturnValue(supabaseState.supabase);
     mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
-    mockDialTwilioCall.mockRejectedValueOnce(new TwilioConfigurationError("Missing config"));
+    mockDialTwilioCall.mockResolvedValueOnce({
+      success: false,
+      code: "twilio_not_configured",
+      message: "Missing config",
+    });
 
     const result = await startAskBobAutomatedCall({
       workspaceId: "workspace-1",
