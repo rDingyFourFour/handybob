@@ -19,6 +19,8 @@ export type TimelineEvent = {
   status?: string | null;
   askBobScript?: boolean;
   callId?: string | null;
+  jobId?: string | null;
+  customerId?: string | null;
   hasOutcomeSuffix?: boolean;
 };
 

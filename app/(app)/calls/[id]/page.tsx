@@ -27,12 +27,16 @@ import {
   isAskBobScriptSummary,
 } from "@/lib/domain/askbob/constants";
 import { formatTwilioStatusLabel } from "@/utils/calls/twilioStatusLabel";
+import LinkCallContextCard from "./LinkCallContextCard";
+import AskBobLiveGuidanceCard from "./AskBobLiveGuidanceCard";
 
 type CallRecord = {
   id: string;
   workspace_id: string;
   created_at: string | null;
   job_id: string | null;
+  customer_id: string | null;
+  direction: string | null;
   twilio_call_sid?: string | null;
   twilio_status?: string | null;
   twilio_status_updated_at?: string | null;
@@ -82,6 +86,18 @@ type MessageRecord = {
   body: string | null;
   created_at: string | null;
   outcome: string | null;
+};
+
+type InboundCustomerOption = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+};
+
+type InboundJobOption = {
+  id: string;
+  title: string | null;
+  customer_id: string | null;
 };
 
 function formatDate(value: string | null) {
@@ -203,7 +219,7 @@ export default async function CallSessionPage({
   } = await supabase
     .from<CallRecord>("calls")
     .select(
-      "id, workspace_id, created_at, job_id, twilio_call_sid, twilio_status, twilio_status_updated_at, twilio_error_code, twilio_error_message, from_number, to_number, outcome, outcome_notes, outcome_recorded_at, outcome_code, reached_customer, summary, ai_summary"
+      "id, workspace_id, created_at, job_id, customer_id, direction, twilio_call_sid, twilio_status, twilio_status_updated_at, twilio_error_code, twilio_error_message, from_number, to_number, outcome, outcome_notes, outcome_recorded_at, outcome_code, reached_customer, summary, ai_summary"
     )
     .eq("workspace_id", workspace.id)
     .eq("id", id)
@@ -235,6 +251,8 @@ export default async function CallSessionPage({
 
   const callFromLabel = call.from_number?.trim() || "Unknown";
   const callToLabel = call.to_number?.trim() || "Unknown";
+  const callDirectionNormalized = (call.direction ?? "outbound").toLowerCase();
+  const isInboundCall = callDirectionNormalized === "inbound";
   const fromNeedsConfig =
     !call.from_number?.trim() || call.from_number === CALL_FROM_PLACEHOLDER;
   const toNeedsConfig = !call.to_number?.trim() || call.to_number === CALL_TO_PLACEHOLDER;
@@ -321,6 +339,39 @@ export default async function CallSessionPage({
       });
     }
   }
+
+  const {
+    data: workspaceCustomersRows,
+    error: workspaceCustomersError,
+  } = await supabase
+    .from<InboundCustomerOption>("customers")
+    .select("id, name, phone")
+    .eq("workspace_id", workspace.id)
+    .order("created_at", { ascending: false })
+    .limit(400);
+  if (workspaceCustomersError) {
+    console.error("[calls/[id]/page] Failed to load workspace customers", {
+      workspaceId: workspace.id,
+      error: workspaceCustomersError,
+    });
+  }
+  const customerOptions = workspaceCustomersRows ?? [];
+  const {
+    data: workspaceJobsRows,
+    error: workspaceJobsError,
+  } = await supabase
+    .from<InboundJobOption>("jobs")
+    .select("id, title, customer_id")
+    .eq("workspace_id", workspace.id)
+    .order("created_at", { ascending: false })
+    .limit(400);
+  if (workspaceJobsError) {
+    console.error("[calls/[id]/page] Failed to load workspace jobs", {
+      workspaceId: workspace.id,
+      error: workspaceJobsError,
+    });
+  }
+  const jobOptions = workspaceJobsRows ?? [];
 
   let messages: MessageRecord[] = [];
   if (jobId) {
@@ -473,6 +524,7 @@ export default async function CallSessionPage({
   const customerPhone = customer?.phone ?? null;
   const customerId = customer?.id ?? null;
   const customerFirstName = customerName ? customerName.split(" ")[0] : null;
+  const linkedCustomerId = call.customer_id ?? null;
 
   return (
     <div className="hb-shell pt-20 pb-8">
@@ -483,9 +535,6 @@ export default async function CallSessionPage({
               <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call session</p>
               <h1 className="hb-heading-1 text-3xl font-semibold">Call session</h1>
             </div>
-            {call.created_at && (
-              <p className="text-sm text-slate-400">Created {createdAtLabel}</p>
-            )}
             {job && job.id && (
               <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.3em] text-slate-400">
                 <span className="font-semibold text-slate-100">
@@ -512,6 +561,24 @@ export default async function CallSessionPage({
           >
             Back to calls
           </Link>
+        </div>
+
+        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+              {isInboundCall ? "Inbound call" : "Call details"}
+            </p>
+            {isInboundCall && (
+              <span className="inline-flex items-center rounded-full border border-slate-800/60 bg-slate-950/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-sky-300">
+                Inbound
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-4 text-sm text-slate-100">
+            <span>From: {callFromLabel}</span>
+            <span className="text-slate-400">To: {callToLabel}</span>
+            <span className="text-slate-400">Created {createdAtLabel}</span>
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -641,6 +708,33 @@ export default async function CallSessionPage({
                   Boolean(call.outcome_notes?.trim())
                 }
                 hasOutcomeNotes={Boolean(call.outcome_notes?.trim())}
+              />
+            )}
+
+            {isInboundCall && (
+              <LinkCallContextCard
+                workspaceId={workspace.id}
+                callId={call.id}
+                direction={callDirectionNormalized}
+                fromNumber={call.from_number ?? null}
+                toNumber={call.to_number ?? null}
+                customerId={linkedCustomerId}
+                jobId={call.job_id ?? null}
+                customerOptions={customerOptions}
+                jobOptions={jobOptions}
+              />
+            )}
+            {isInboundCall && linkedCustomerId && (
+              <AskBobLiveGuidanceCard
+                workspaceId={workspace.id}
+                callId={call.id}
+                direction={callDirectionNormalized}
+                fromNumber={call.from_number ?? null}
+                toNumber={call.to_number ?? null}
+                customerId={linkedCustomerId}
+                jobId={call.job_id ?? null}
+                customerName={customerName}
+                jobTitle={job?.title ?? null}
               />
             )}
 
@@ -904,6 +998,7 @@ export default async function CallSessionPage({
                     mode="callSession"
                     context="call-session"
                     callId={call.id}
+                    isInboundCall={isInboundCall}
                   />
                 </>
               ) : (

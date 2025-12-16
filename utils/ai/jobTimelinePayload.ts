@@ -64,9 +64,9 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
       .order("created_at", { ascending: false })
       .limit(100),
     supabase
-    .from("calls")
-    .select(
-      "id, direction, status, twilio_status, started_at, duration_seconds, summary, ai_summary, transcript, reached_customer, outcome_code, outcome_recorded_at, outcome",
+      .from("calls")
+      .select(
+      "id, job_id, customer_id, direction, status, twilio_status, started_at, duration_seconds, summary, ai_summary, transcript, reached_customer, outcome_code, outcome_recorded_at, outcome",
     )
       .eq("job_id", jobId)
       .eq("workspace_id", workspaceId)
@@ -162,6 +162,8 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
       status: call.twilio_status ?? call.status,
       askBobScript: Boolean(getAskBobCallScriptBody(call.ai_summary ?? null, call.summary ?? null)),
       callId: call.id ?? null,
+      jobId: call.job_id ?? null,
+      customerId: call.customer_id ?? null,
       hasOutcomeSuffix,
     });
   });

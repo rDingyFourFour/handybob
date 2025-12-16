@@ -15,6 +15,9 @@ import type {
   AskBobJobCallScriptResult,
   AskBobJobAfterCallInput,
   AskBobJobAfterCallResult,
+  CallLiveGuidanceInput,
+  CallLiveGuidanceResult,
+  CallLiveGuidanceMode,
   AskBobSchedulerSlot,
   AskBobUrgencyLevel,
   AskBobLineExplanation,
@@ -164,6 +167,76 @@ const CALL_SCRIPT_INSTRUCTIONS = [
   COST_GUARDRAILS,
   SCOPE_LIMIT_GUARDRAILS,
 ].join(" ");
+
+const CALL_LIVE_GUIDANCE_MODE_INSTRUCTIONS: Record<CallLiveGuidanceMode, string> = {
+  intake:
+    "Intake mode focuses on discovery: ask concise questions to scope the job, confirm site conditions, surface constraints, and note anything that should trigger a safety stop or escalation.",
+  scheduling:
+    "Scheduling mode focuses on availability: confirm dates/times, verify location/address details, summarize pricing expectations, and use appointment confirmation language that secures consent or permission to schedule.",
+};
+
+const CALL_LIVE_GUIDANCE_INSTRUCTIONS = [
+  ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
+  "You are AskBob, the live guidance coach for inbound call sessions. Respond with strict JSON only containing the keys: openingLine (a brief, professional opener); questions (array of concise discovery prompts); confirmations (array of clear phrases to confirm facts); nextActions (array of immediate steps the technician should take); guardrails (array of reminders that avoid unsafe, legal, or medical claims and recommend escalation when needed); summary (short paragraph that highlights how this guidance differs from previous coaching); phasedPlan (array of the next 3-4 phases with actions); nextBestQuestion (a single, critical question to ask next); riskFlags (array of potential hazards or constraints to monitor); changedRecommendation (boolean indicating whether the plan shifted); and changedReason (explain why the plan changed, or null if it stayed the same).",
+  "Lead with safety, clarity, and customer respect; keep the tone professional and concise. Each array should have between 1 and 6 entries, and use numbered phrases when helpful to imply sequence. Mention constraints, required approvals, or regulatory reminders within guardrails.",
+  "Guidance mode changes emphasis—intake mode focuses on discovery, scope validation, and safety triggers; scheduling mode emphasizes availability, confirmations, and consent. Reference the linked context (customer, job, quote, call outcomes), call metadata (direction, from/to), session and cycle identifiers, and the live notes/previous summary so the technician understands why any recommendations changed.",
+  "When anecdotes or notes show that the plan has shifted, set changedRecommendation to true and craft a clear changedReason describing the new trigger. If the plan remains consistent, set changedRecommendation to false and leave changedReason null. Always keep summary, phasedPlan, and riskFlags aligned with the current live notes.",
+  "Avoid fabricating promises or giving legal/medical advice, and use guardrails to remind the agent when to escalate to a supervisor, mention compliance checks, or slow down for safety.",
+  SAFETY_GUARDRAILS,
+].join("\n");
+
+const CALL_LIVE_GUIDANCE_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    openingLine: { type: "string" },
+    questions: {
+      type: "array",
+      items: { type: "string" },
+    },
+    confirmations: {
+      type: "array",
+      items: { type: "string" },
+    },
+    nextActions: {
+      type: "array",
+      items: { type: "string" },
+    },
+    guardrails: {
+      type: "array",
+      items: { type: "string" },
+    },
+    summary: { type: "string" },
+    phasedPlan: {
+      type: "array",
+      items: { type: "string" },
+    },
+    nextBestQuestion: { type: "string" },
+    riskFlags: {
+      type: "array",
+      items: { type: "string" },
+    },
+    changedRecommendation: { type: "boolean" },
+    changedReason: { type: ["string", "null"] },
+  },
+  required: [
+    "openingLine",
+    "questions",
+    "confirmations",
+    "nextActions",
+    "guardrails",
+    "summary",
+    "phasedPlan",
+    "nextBestQuestion",
+    "riskFlags",
+    "changedRecommendation",
+  ],
+  additionalProperties: false,
+};
+
+const CALL_LIVE_GUIDANCE_RESPONSE_FORMAT = {
+  type: "json_schema" as const,
+  json_schema: CALL_LIVE_GUIDANCE_JSON_SCHEMA,
+};
 
 const CALL_PERSONA_DESCRIPTIONS: Record<AskBobCallPersonaStyle, string> = {
   friendly_warm: "Speak in a friendly, warm tone that feels personable, reassuring, and upbeat without sounding unprofessional.",
@@ -1179,6 +1252,188 @@ function buildAfterCallOutcomeInstruction(
       return "The call left a need for follow-up. Draft a clear next action request and ask for 1-2 preferred times they can reconnect.";
     default:
       return null;
+  }
+}
+
+export async function callAskBobLiveGuidance(
+  input: CallLiveGuidanceInput,
+): Promise<{ result: CallLiveGuidanceResult; latencyMs: number; modelName: string }> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured for AskBob.");
+  }
+
+  const contextParts = [
+    `workspaceId=${input.workspaceId}`,
+    `callId=${input.callId}`,
+    `customerId=${input.customerId}`,
+    input.jobId ? `jobId=${input.jobId}` : null,
+    input.callGuidanceSessionId ? `sessionId=${input.callGuidanceSessionId}` : null,
+    `cycleIndex=${input.cycleIndex}`,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const notesText = input.notesText?.trim() ?? null;
+  const priorSummary = input.priorGuidanceSummary?.trim() ?? null;
+  const directionLabel = input.direction?.trim() || "Unknown";
+
+  const contextBlocks: string[] = [];
+  const addContextBlock = (label: string, value?: string | null) => {
+    if (!value) return;
+    const trimmed = value.trim();
+    if (!trimmed.length) return;
+    contextBlocks.push(`${label}:\n${trimmed}`);
+  };
+
+  addContextBlock(
+    "Customer",
+    input.customerName
+      ? `${input.customerName} (${input.customerId})`
+      : `ID ${input.customerId}`,
+  );
+  addContextBlock("Job title", input.jobTitle);
+  addContextBlock("Job status", input.jobStatus);
+  addContextBlock(
+    "Quote summary",
+    input.quoteSummary ?? (input.quoteId ? `Quote ${input.quoteId}` : null),
+  );
+  addContextBlock(
+    "Call metadata",
+    `Direction: ${directionLabel} · From: ${input.fromNumber ?? "Unknown"} · To: ${
+      input.toNumber ?? "Unknown"
+    }`,
+  );
+  if (input.callerMetadata) {
+    const metadataLines = Object.entries(input.callerMetadata)
+      .map(([key, value]) => `${key}: ${value ?? "unknown"}`)
+      .filter(Boolean);
+    if (metadataLines.length) {
+      addContextBlock("Caller metadata", metadataLines.join("\n"));
+    }
+  }
+  addContextBlock(
+    "Call outcome",
+    input.latestCallOutcomeContext ?? input.latestCallOutcomeLabel ?? null,
+  );
+  addContextBlock("Live notes", notesText);
+  addContextBlock("Prior guidance summary", priorSummary);
+
+  const contextBlock = contextBlocks.length ? contextBlocks.join("\n\n") : null;
+  const extraDetailsBlock =
+    input.extraDetails && input.extraDetails.trim().length
+      ? `Additional context:\n${input.extraDetails.trim()}`
+      : null;
+  const nowTimestamp = Date.now();
+  const nowIso = new Date(nowTimestamp).toISOString();
+  const todayDateIso = nowIso.split("T")[0];
+  const timingInstructions = [
+    `Today is ${todayDateIso}.`,
+    `The current moment is ${nowIso}.`,
+  ].join("\n");
+
+  const messageParts = [
+    `Context: ${contextParts}`,
+    contextBlock,
+    extraDetailsBlock,
+    CALL_LIVE_GUIDANCE_MODE_INSTRUCTIONS[input.guidanceMode],
+    timingInstructions,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join("\n\n");
+
+  const openai = new OpenAI({ apiKey });
+  const modelRequestStart = Date.now();
+  let modelName = DEFAULT_MODEL;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: "system", content: CALL_LIVE_GUIDANCE_INSTRUCTIONS },
+        { role: "user", content: messageParts },
+      ],
+      response_format: CALL_LIVE_GUIDANCE_RESPONSE_FORMAT,
+    });
+
+    modelName = completion.model ?? DEFAULT_MODEL;
+    const messageContent = completion.choices?.[0]?.message?.content;
+    const payload = extractModelPayload(messageContent, {
+      workspaceId: input.workspaceId,
+      model: modelName,
+    });
+
+    const openingLine = normalizeNullableString(payload.openingLine) ?? "";
+    const summary = normalizeNullableString(payload.summary) ?? openingLine;
+    const questions = limitArray(ensureStringArray(payload.questions), 6).items;
+    const confirmations = limitArray(ensureStringArray(payload.confirmations), 6).items;
+    const nextActions = limitArray(ensureStringArray(payload.nextActions), 6).items;
+    const guardrails = limitArray(ensureStringArray(payload.guardrails), 6).items;
+    const phasedPlan = limitArray(ensureStringArray(payload.phasedPlan), 4).items;
+    const riskFlags = limitArray(ensureStringArray(payload.riskFlags), 4).items;
+    const nextBestQuestion = normalizeNullableString(payload.nextBestQuestion) ?? "";
+    const changedRecommendation = Boolean(payload.changedRecommendation);
+    const changedReason = normalizeNullableString(payload.changedReason);
+
+    const latencyMs = Date.now() - modelRequestStart;
+    console.log("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: input.workspaceId,
+      callId: input.callId,
+      customerId: input.customerId,
+      jobId: input.jobId ?? null,
+      guidanceMode: input.guidanceMode,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: true,
+      task: "call.live_guidance",
+      notesPresent: Boolean(notesText),
+      cycleIndex: input.cycleIndex,
+      direction: directionLabel,
+      summary,
+    });
+
+    const result: CallLiveGuidanceResult = {
+      openingLine,
+      questions,
+      confirmations,
+      nextActions,
+      guardrails,
+      summary,
+      phasedPlan,
+      nextBestQuestion,
+      riskFlags,
+      changedRecommendation,
+      changedReason,
+      modelLatencyMs: latencyMs,
+      rawModelOutput: typeof messageContent === "string" ? messageContent.trim() : null,
+    };
+
+    return { result, latencyMs, modelName };
+  } catch (error) {
+    const latencyMs = Date.now() - modelRequestStart;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: input.workspaceId,
+      callId: input.callId,
+      customerId: input.customerId,
+      jobId: input.jobId ?? null,
+      guidanceMode: input.guidanceMode,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: false,
+      task: "call.live_guidance",
+      errorMessage: truncatedError,
+      notesPresent: Boolean(notesText),
+      cycleIndex: input.cycleIndex,
+      direction: directionLabel,
+    });
+
+    throw error;
   }
 }
 

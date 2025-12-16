@@ -220,8 +220,52 @@ export default async function CallsPage({
     const showRowDue = rowDueInfo.dueStatus !== "none";
     const hasSmsRecommendation = call.followupRecommendation?.recommendedChannel === "sms";
     const hasCustomerContext = Boolean(call.customer_id);
+    const normalizedDirection = (call.direction ?? "outbound").toLowerCase();
+    const isInbound = normalizedDirection === "inbound";
+    const isOutbound = normalizedDirection === "outbound";
+    const callFromLabel = call.from_number?.trim() || "Unknown";
+    const callToLabel = call.to_number?.trim() || "Unknown";
+    const jobChip = call.job_id ? (
+      <Link
+        href={`/jobs/${call.job_id}`}
+        className="rounded-full border border-slate-800/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-100 hover:border-slate-600"
+      >
+        Job #{call.job_id.slice(0, 8)}…
+      </Link>
+    ) : (
+      <span className="rounded-full border border-slate-800/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500">
+        Unlinked job
+      </span>
+    );
+    const customerChip = call.customer_id ? (
+      <Link
+        href={`/customers/${call.customer_id}`}
+        className="rounded-full border border-slate-800/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-100 hover:border-slate-600"
+      >
+        Customer #{call.customer_id.slice(0, 8)}…
+      </Link>
+    ) : (
+      <span className="rounded-full border border-slate-800/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500">
+        Unlinked customer
+      </span>
+    );
+    const inboundBadge = isInbound ? (
+      <span
+        className="inline-flex items-center rounded-full border border-slate-800/60 bg-slate-800/40 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-sky-300"
+        role="status"
+      >
+        Inbound
+      </span>
+    ) : null;
+    if (isInbound) {
+      console.log("[calls-list-inbound-label-rendered]", {
+        callId: call.id,
+        direction: call.direction ?? null,
+      });
+    }
     let followupMessagesHref: string | null = null;
-    const showFollowupLink = followupQueueActive && hasSmsRecommendation && hasCustomerContext;
+    const showFollowupLink =
+      isOutbound && followupQueueActive && hasSmsRecommendation && hasCustomerContext;
     if (showFollowupLink && call.customer_id) {
       const params = new URLSearchParams();
       params.set("filterMode", "followups");
@@ -254,18 +298,9 @@ export default async function CallsPage({
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              {call.job_id ? (
-                <Link
-                  href={`/jobs/${call.job_id}`}
-                  className="text-base font-semibold text-white hover:text-slate-200"
-                >
-                  Job #{call.job_id.slice(0, 8)}…
-                </Link>
-              ) : (
-                <span className="text-base font-semibold text-slate-200">
-                  Call {call.id.slice(0, 8)}…
-                </span>
-              )}
+              <span className="text-base font-semibold text-slate-200">
+                Call {call.id.slice(0, 8)}…
+              </span>
               {call.quote_id && (
                 <Link
                   href={`/quotes/${call.quote_id}`}
@@ -274,6 +309,11 @@ export default async function CallsPage({
                   Quote #{call.quote_id.slice(0, 8)}…
                 </Link>
               )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {jobChip}
+              {customerChip}
+              {inboundBadge}
             </div>
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
               <span className="flex items-center gap-1 text-slate-200">
@@ -322,13 +362,9 @@ export default async function CallsPage({
                 </span>
               )}
             </div>
-            <p className="text-sm text-slate-400">
-              From: {call.from_number ?? "Unknown"}
-            </p>
-            {call.customer_id && (
-              <p className="text-xs text-slate-500">
-                Customer: {call.customer_id.slice(0, 8)}…
-              </p>
+            <p className="text-sm text-slate-400">From: {callFromLabel}</p>
+            {isInbound && (
+              <p className="text-xs text-slate-500">To: {callToLabel}</p>
             )}
             <p className="text-xs text-slate-500">
               Priority: {call.priority ?? "normal"} · Needs follow-up:{" "}

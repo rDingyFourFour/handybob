@@ -3,9 +3,13 @@ import { Database } from "@/lib/supabase/types";
 import { z } from "zod";
 import {
   AskBobAfterCallSnapshotPayload,
+  AskBobCallLiveGuidanceSnapshotPayload,
   AskBobContext,
   AskBobDiagnoseSnapshotPayload,
   AskBobJobAfterCallInput,
+  CallLiveGuidanceInput,
+  CallLiveGuidanceResult,
+  CallLiveGuidanceMode,
   AskBobJobCallScriptInput,
   AskBobJobCallScriptResult,
   AskBobJobFollowupInput,
@@ -49,6 +53,7 @@ import {
   callAskBobJobSchedule,
   callAskBobJobCallScript,
   callAskBobJobAfterCall,
+  callAskBobLiveGuidance,
 } from "@/utils/openai/askbob";
 
 type DbClient = SupabaseClient<Database>;
@@ -126,6 +131,10 @@ export async function runAskBobTask(
 
   if (input.task === "job.after_call") {
     return runAskBobJobAfterCallTask(supabase, input);
+  }
+
+  if (input.task === "call.live_guidance") {
+    return runAskBobLiveGuidanceTask(supabase, input);
   }
 
   if (input.task === "materials.explain") {
@@ -496,6 +505,126 @@ export async function runAskBobJobAfterCallTask(
   }
 }
 
+export async function runAskBobLiveGuidanceTask(
+  supabase: DbClient,
+  input: CallLiveGuidanceInput,
+): Promise<CallLiveGuidanceResult> {
+  const workspaceId = input.workspaceId;
+  const callId = input.callId;
+  const customerId = input.customerId;
+  const jobId = input.jobId ?? null;
+  const guidanceMode = input.guidanceMode;
+  const notesText = input.notesText?.trim() ?? null;
+  const notesPresent = Boolean(notesText);
+  const notesLength = notesText?.length ?? 0;
+  const notesLengthBucket = describeNotesLengthBucket(notesLength);
+  const hasPriorGuidance = Boolean(input.priorGuidanceSummary);
+  const direction = input.direction ?? null;
+  const callGuidanceSessionId = input.callGuidanceSessionId;
+  const cycleIndex = input.cycleIndex;
+
+  console.log("[askbob-call-live-guidance-request]", {
+    workspaceId,
+    callId,
+    customerId,
+    jobId,
+    guidanceMode,
+    direction,
+    hasJobContext: Boolean(jobId),
+    callGuidanceSessionId,
+    cycleIndex,
+    notesPresent,
+    notesLengthBucket,
+    hasPriorGuidance,
+  });
+  console.log("[askbob-call-live-guidance-cycle-request]", {
+    workspaceId,
+    callId,
+    customerId,
+    jobId,
+    guidanceMode,
+    direction,
+    callGuidanceSessionId,
+    cycleIndex,
+    notesPresent,
+    notesLengthBucket,
+  });
+
+  try {
+    const modelResult = await callAskBobLiveGuidance(input);
+    const result = modelResult.result;
+    console.log("[askbob-call-live-guidance-success]", {
+      workspaceId,
+      callId,
+      customerId,
+      jobId,
+      guidanceMode,
+      modelLatencyMs: result.modelLatencyMs,
+    });
+    console.log("[askbob-call-live-guidance-cycle-success]", {
+      workspaceId,
+      callId,
+      customerId,
+      jobId,
+      guidanceMode,
+      callGuidanceSessionId,
+      cycleIndex,
+      summary: result.summary,
+    });
+
+    if (jobId) {
+      try {
+        await recordAskBobJobTaskSnapshot(supabase, {
+          workspaceId,
+          jobId,
+          task: "call.live_guidance",
+          result,
+          metadata: {
+            callId,
+            guidanceMode,
+            customerId,
+            callGuidanceSessionId,
+            cycleIndex,
+            priorGuidanceSummary: input.priorGuidanceSummary ?? null,
+          },
+        });
+      } catch (snapshotError) {
+        console.error("[askbob-snapshot-upsert] call live guidance failed", {
+          workspaceId,
+          jobId,
+          callId,
+          error: snapshotError,
+        });
+      }
+    }
+
+    return result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+    console.error("[askbob-call-live-guidance-failure]", {
+      workspaceId,
+      callId,
+      customerId,
+      jobId,
+      guidanceMode,
+      errorMessage: truncatedError,
+    });
+    console.error("[askbob-call-live-guidance-cycle-failure]", {
+      workspaceId,
+      callId,
+      customerId,
+      jobId,
+      guidanceMode,
+      callGuidanceSessionId,
+      cycleIndex,
+      errorMessage: truncatedError,
+    });
+    throw error;
+  }
+}
+
 export async function runAskBobJobScheduleTask(
   input: AskBobJobScheduleInput
 ): Promise<AskBobJobScheduleResult> {
@@ -833,6 +962,31 @@ function buildAfterCallSnapshotPayload(result: AskBobJobAfterCallResult): AskBob
   };
 }
 
+function buildCallLiveGuidanceSnapshotPayload(
+  result: CallLiveGuidanceResult,
+  metadata:
+    | {
+        callId?: string;
+        guidanceMode?: CallLiveGuidanceMode;
+        customerId?: string;
+        callGuidanceSessionId?: string;
+        cycleIndex?: number;
+      }
+    | undefined,
+  jobId: string,
+): AskBobCallLiveGuidanceSnapshotPayload {
+  return {
+    callId: metadata?.callId ?? "unknown",
+    guidanceMode: metadata?.guidanceMode ?? "intake",
+    customerId: metadata?.customerId ?? "unknown",
+    jobId,
+    callGuidanceSessionId: metadata?.callGuidanceSessionId ?? "unknown",
+    cycleIndex: metadata?.cycleIndex ?? 0,
+    summary: result.summary,
+    result,
+  };
+}
+
 function buildScheduleSnapshotPayload(
   result: AskBobJobScheduleSnapshotPayload,
 ): AskBobJobScheduleSnapshotPayload {
@@ -854,12 +1008,21 @@ export async function recordAskBobJobTaskSnapshot(
     jobId: string;
     task: AskBobJobTaskSnapshotTask;
     result:
-    | AskBobJobDiagnoseResult
-    | AskBobMaterialsGenerateResult
-    | AskBobQuoteGenerateResult
-    | AskBobJobFollowupResult
-    | AskBobJobScheduleSnapshotPayload
-    | AskBobJobAfterCallResult;
+      | AskBobJobDiagnoseResult
+      | AskBobMaterialsGenerateResult
+      | AskBobQuoteGenerateResult
+      | AskBobJobFollowupResult
+      | AskBobJobScheduleSnapshotPayload
+      | AskBobJobAfterCallResult
+      | CallLiveGuidanceResult;
+    metadata?: {
+      callId?: string;
+      guidanceMode?: CallLiveGuidanceMode;
+      customerId?: string;
+      callGuidanceSessionId?: string;
+      cycleIndex?: number;
+      priorGuidanceSummary?: string | null;
+    };
   }
 ): Promise<void> {
   let payload:
@@ -868,6 +1031,7 @@ export async function recordAskBobJobTaskSnapshot(
     | AskBobQuoteSnapshotPayload
     | AskBobFollowupSnapshotPayload
     | AskBobJobScheduleSnapshotPayload
+    | AskBobCallLiveGuidanceSnapshotPayload
     | null = null;
   let summary: string | null = null;
 
@@ -908,6 +1072,12 @@ export async function recordAskBobJobTaskSnapshot(
       const result = params.result as AskBobJobAfterCallResult;
       payload = buildAfterCallSnapshotPayload(result);
       summary = `action:${payload.recommendedActionLabel},steps:${payload.recommendedActionSteps.length}`;
+      break;
+    }
+    case "call.live_guidance": {
+      const result = params.result as CallLiveGuidanceResult;
+      payload = buildCallLiveGuidanceSnapshotPayload(result, params.metadata, params.jobId);
+      summary = `guidance:${payload.guidanceMode}`;
       break;
     }
   }
@@ -1243,4 +1413,20 @@ export function toAskBobResponseDTO(input: {
     sections,
     materials: input.data.materials,
   };
+}
+
+function describeNotesLengthBucket(length: number): string {
+  if (length === 0) {
+    return "none";
+  }
+  if (length <= 200) {
+    return "short";
+  }
+  if (length <= 500) {
+    return "medium";
+  }
+  if (length <= 1000) {
+    return "long";
+  }
+  return "very_long";
 }

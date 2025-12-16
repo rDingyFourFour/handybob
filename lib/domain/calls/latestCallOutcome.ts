@@ -68,7 +68,7 @@ export function normalizeCallOutcomeNotes(
   return `${capped}…`;
 }
 
-function mapLegacyCallOutcomeToCode(outcome?: string | null): CallOutcomeCode | null {
+export function mapLegacyCallOutcomeToCode(outcome?: string | null): CallOutcomeCode | null {
   if (!outcome) {
     return null;
   }

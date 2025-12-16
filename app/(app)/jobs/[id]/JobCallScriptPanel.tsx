@@ -42,6 +42,7 @@ type JobCallScriptPanelProps = {
   mode?: "job" | "callSession";
   context?: "job-sidebar" | "call-session";
   callId?: string | null;
+  isInboundCall?: boolean;
 };
 
 function normalize(value?: string | null): string {
@@ -290,11 +291,13 @@ export default function JobCallScriptPanel({
   mode = "job",
   context = "job-sidebar",
   callId = null,
+  isInboundCall = false,
 }: JobCallScriptPanelProps) {
   const normalizedContext =
     context ?? (mode === "callSession" ? "call-session" : "job-sidebar");
   const isCallSession = normalizedContext === "call-session";
   const isJobSidebar = normalizedContext === "job-sidebar";
+  const isCallInbound = Boolean(isInboundCall);
   const [callScriptResult, setCallScriptResult] = useState<OutboundCallScriptResult | null>(
     initialLatestCallScript ?? null,
   );
@@ -1048,7 +1051,7 @@ export default function JobCallScriptPanel({
               variant="primary"
               size="sm"
               onClick={handleToggleGuidedCall}
-              disabled={!hasCallScript || callScriptLoading}
+              disabled={!hasCallScript || callScriptLoading || isCallInbound}
             >
               {inGuidedCall ? "End guided call" : "Start guided call"}
             </HbButton>
@@ -1278,7 +1281,7 @@ export default function JobCallScriptPanel({
           <button
             type="button"
             onClick={handleToggleGuidedCall}
-            disabled={!hasCallScript}
+            disabled={!hasCallScript || isCallInbound}
             className={`inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-medium transition ${
               inGuidedCall
                 ? "border border-rose-500/60 bg-transparent text-rose-300 hover:bg-rose-500/10"

@@ -20,16 +20,36 @@ vi.mock("next/navigation", () => ({
 const MOCK_AUTOMATED_SCRIPT_BODY = `${ASKBOB_AUTOMATED_SCRIPT_PREFIX} Mock script body`;
 const MOCK_AUTOMATED_SCRIPT_SUMMARY = "Mock summary";
 
-vi.mock("@/components/askbob/AskBobCallAssistPanel", () => ({
-  __esModule: true,
-  default: (props: { onCallScriptBodyChange?: (value: string) => void; onCallScriptSummaryChange?: (value: string | null) => void }) => {
+vi.mock("@/components/askbob/AskBobCallAssistPanel", () => {
+  type MockAskBobCallAssistPanelProps = {
+    onCallScriptBodyChange?: (value: string) => void;
+    onCallScriptSummaryChange?: (value: string | null) => void;
+  };
+
+  function MockAskBobCallAssistPanel({
+    onCallScriptBodyChange,
+    onCallScriptSummaryChange,
+  }: MockAskBobCallAssistPanelProps) {
+    const hasSeededScriptRef = React.useRef(false);
+
     React.useEffect(() => {
-      props.onCallScriptBodyChange?.(MOCK_AUTOMATED_SCRIPT_BODY);
-      props.onCallScriptSummaryChange?.(MOCK_AUTOMATED_SCRIPT_SUMMARY);
-    }, []);
+      if (hasSeededScriptRef.current) {
+        return;
+      }
+      hasSeededScriptRef.current = true;
+
+      onCallScriptBodyChange?.(MOCK_AUTOMATED_SCRIPT_BODY);
+      onCallScriptSummaryChange?.(MOCK_AUTOMATED_SCRIPT_SUMMARY);
+    }, [onCallScriptBodyChange, onCallScriptSummaryChange]);
+
     return <div data-testid="mock-call-assist" />;
-  },
-}));
+  }
+
+  return {
+    __esModule: true,
+    default: MockAskBobCallAssistPanel,
+  };
+});
 
 vi.mock("@/components/askbob/JobAskBobFollowupPanel", () => ({
   __esModule: true,
@@ -75,8 +95,8 @@ describe("JobAskBobFlow Step 9 smoke", () => {
 
   it("renders Step 9 and surfaces a Twilio not configured failure", async () => {
     mockStartCallAction.mockResolvedValueOnce({
-      success: false,
-      code: "twilio_not_configured",
+      status: "failure",
+      reason: "twilio_not_configured",
       message: "Calls aren’t configured yet; please set up telephony to continue.",
       callId: "call-123",
     });
@@ -145,7 +165,7 @@ describe("JobAskBobFlow Step 9 smoke", () => {
 
   it("renders the success UI when the automated call starts", async () => {
     mockStartCallAction.mockResolvedValueOnce({
-      success: true,
+      status: "success",
       callId: "call_123",
     });
 

@@ -40,6 +40,13 @@ export type EnsureInboundCallSessionResult = {
   isNew: boolean;
 };
 
+export type LinkCallToCustomerJobResult = {
+  callId: string;
+  customerId: string;
+  jobId: string | null;
+  direction: string | null;
+};
+
 export async function createCallSessionForJobQuote(
   params: CreateCallSessionForJobQuoteParams
 ): Promise<CallSessionRow> {
@@ -151,6 +158,58 @@ export async function ensureInboundCallSession(
   }
 
   return { callId: data.id, isNew: true };
+}
+
+export async function linkCallToCustomerJob({
+  supabase,
+  workspaceId,
+  callId,
+  customerId,
+  jobId,
+}: {
+  supabase: SupabaseClient;
+  workspaceId: string;
+  callId: string;
+  customerId: string;
+  jobId?: string | null;
+}): Promise<LinkCallToCustomerJobResult> {
+  const { data: existingCall, error: fetchError } = await supabase
+    .from("calls")
+    .select("id, workspace_id, direction")
+    .eq("id", callId)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw fetchError;
+  }
+
+  if (!existingCall) {
+    throw new Error("Call not found");
+  }
+
+  if (existingCall.workspace_id !== workspaceId) {
+    throw new Error("Call does not belong to workspace");
+  }
+
+  const { error: updateError } = await supabase
+    .from("calls")
+    .update({
+      customer_id: customerId,
+      job_id: jobId ?? null,
+    })
+    .eq("id", callId)
+    .eq("workspace_id", workspaceId);
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  return {
+    callId,
+    customerId,
+    jobId: jobId ?? null,
+    direction: existingCall.direction ?? null,
+  };
 }
 
 type AttachTwilioMetadataParams = {

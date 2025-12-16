@@ -31,6 +31,8 @@ export type FollowupCallRow = {
   created_at: string | null;
   updated_at: string | null;
   from_number: string | null;
+  to_number: string | null;
+  direction: string | null;
   priority: string | null;
   needs_followup: boolean | null;
   attention_reason: string | null;
@@ -90,6 +92,8 @@ export async function loadFollowupQueueData({
         created_at,
         updated_at,
         from_number,
+        to_number,
+        direction,
         priority,
         needs_followup,
         attention_reason,

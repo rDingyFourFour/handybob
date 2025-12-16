@@ -22,7 +22,8 @@ export type AskBobJobTaskSnapshotTask =
   | "quote.generate"
   | "job.followup"
   | "job.schedule"
-  | "job.after_call";
+  | "job.after_call"
+  | "call.live_guidance";
 
 export interface AskBobDiagnoseSnapshotPayload {
   sessionId: string;
@@ -76,7 +77,8 @@ export interface AskBobJobTaskSnapshot {
     | AskBobQuoteSnapshotPayload
     | AskBobFollowupSnapshotPayload
     | AskBobJobScheduleSnapshotPayload
-    | AskBobAfterCallSnapshotPayload;
+    | AskBobAfterCallSnapshotPayload
+    | AskBobCallLiveGuidanceSnapshotPayload;
 }
 
 export type AskBobSection = "steps" | "materials" | "safety" | "costTime" | "escalation";
@@ -405,6 +407,60 @@ export interface AskBobAfterCallSnapshotPayload {
   modelLatencyMs?: number | null;
 }
 
+export interface AskBobCallLiveGuidanceSnapshotPayload {
+  callId: string;
+  guidanceMode: CallLiveGuidanceMode;
+  customerId: string;
+  jobId?: string | null;
+  callGuidanceSessionId: string;
+  cycleIndex: number;
+  summary: string;
+  result: CallLiveGuidanceResult;
+}
+
+export type CallLiveGuidanceMode = "intake" | "scheduling";
+
+export interface CallLiveGuidanceInput {
+  task: "call.live_guidance";
+  workspaceId: string;
+  callId: string;
+  customerId: string;
+  jobId?: string | null;
+  guidanceMode: CallLiveGuidanceMode;
+  fromNumber?: string | null;
+  toNumber?: string | null;
+  direction?: string | null;
+  callerMetadata?: Record<string, string | null> | null;
+  customerName?: string | null;
+  jobTitle?: string | null;
+  jobStatus?: string | null;
+  quoteSummary?: string | null;
+  quoteId?: string | null;
+  latestCallOutcomeContext?: string | null;
+  latestCallOutcomeLabel?: string | null;
+  extraDetails?: string | null;
+  notesText?: string | null;
+  callGuidanceSessionId: string;
+  cycleIndex: number;
+  priorGuidanceSummary?: string | null;
+}
+
+export interface CallLiveGuidanceResult {
+  openingLine: string;
+  questions: string[];
+  confirmations: string[];
+  nextActions: string[];
+  guardrails: string[];
+  modelLatencyMs?: number | null;
+  rawModelOutput?: unknown;
+  summary: string;
+  phasedPlan: string[];
+  nextBestQuestion: string;
+  riskFlags: string[];
+  changedRecommendation: boolean;
+  changedReason?: string | null;
+}
+
 export interface AskBobWorkingHoursWindow {
   startAt: string;
   endAt: string;
@@ -562,7 +618,8 @@ export type AskBobTaskInput =
   | AskBobJobFollowupInput
   | AskBobJobScheduleInput
   | AskBobJobCallScriptInput
-  | AskBobJobAfterCallInput;
+  | AskBobJobAfterCallInput
+  | CallLiveGuidanceInput;
 export type AskBobTaskResult =
   | AskBobJobDiagnoseResult
   | AskBobMessageDraftResult
@@ -573,7 +630,8 @@ export type AskBobTaskResult =
   | AskBobJobFollowupResult
   | AskBobJobScheduleResult
   | AskBobJobCallScriptResult
-  | AskBobJobAfterCallResult;
+  | AskBobJobAfterCallResult
+  | CallLiveGuidanceResult;
 
 // Zod schemas for validation
 
