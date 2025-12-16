@@ -9,6 +9,7 @@ import { classifyJobWithAi } from "@/lib/domain/jobs";
 import { generateUniqueWorkspaceSlug } from "@/lib/domain/workspaces";
 import { runLeadAutomations } from "@/lib/domain/automation";
 import { inferAttentionSignals, type AttentionSignals } from "@/utils/attention/inferAttentionSignals";
+import { normalizePhone } from "@/utils/phones/normalizePhone";
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
@@ -632,11 +633,6 @@ async function getFirstUserId(supabase: ReturnType<typeof createAdminClient>) {
     console.warn("[voice-webhook] Unable to fetch default user:", message);
     return null;
   }
-}
-
-function normalizePhone(value: string | null) {
-  if (!value) return null;
-  return value.trim();
 }
 
 function parseTimestamp(raw: string | null) {

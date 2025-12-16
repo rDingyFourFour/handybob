@@ -24,6 +24,22 @@ export type CallSessionRow = {
   twilio_error_message?: string | null;
 };
 
+export type EnsureInboundCallSessionParams = {
+  supabase: SupabaseClient;
+  workspaceId: string;
+  userId: string;
+  twilioCallSid: string;
+  fromNumber?: string | null;
+  toNumber?: string | null;
+  customerId?: string | null;
+  jobId?: string | null;
+};
+
+export type EnsureInboundCallSessionResult = {
+  callId: string;
+  isNew: boolean;
+};
+
 export async function createCallSessionForJobQuote(
   params: CreateCallSessionForJobQuoteParams
 ): Promise<CallSessionRow> {
@@ -64,6 +80,77 @@ export async function createCallSessionForJobQuote(
   }
 
   return data;
+}
+
+export async function ensureInboundCallSession(
+  params: EnsureInboundCallSessionParams,
+): Promise<EnsureInboundCallSessionResult> {
+  const {
+    supabase,
+    workspaceId,
+    userId,
+    twilioCallSid,
+    fromNumber,
+    toNumber,
+    customerId,
+    jobId,
+  } = params;
+  const trimmedSid = twilioCallSid.trim();
+
+  const { data: existingSession, error: fetchError } = await supabase
+    .from("calls")
+    .select("id, customer_id")
+    .eq("workspace_id", workspaceId)
+    .eq("twilio_call_sid", trimmedSid)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw fetchError;
+  }
+
+  if (existingSession?.id) {
+    if (customerId && !existingSession.customer_id) {
+      await supabase
+        .from("calls")
+        .update({
+          customer_id: customerId,
+        })
+        .eq("id", existingSession.id);
+    }
+    return { callId: existingSession.id, isNew: false };
+  }
+
+  const now = new Date().toISOString();
+  const payload = {
+    workspace_id: workspaceId,
+    user_id: userId,
+    direction: "inbound",
+    status: "pending",
+    summary: "Inbound call",
+    from_number: fromNumber ?? null,
+    to_number: toNumber ?? null,
+    customer_id: customerId ?? null,
+    job_id: jobId ?? null,
+    twilio_call_sid: trimmedSid,
+    started_at: now,
+    duration_seconds: 0,
+  };
+
+  const { data, error } = await supabase
+    .from("calls")
+    .insert(payload)
+    .select("id")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data?.id) {
+    throw new Error("Failed to insert inbound call session");
+  }
+
+  return { callId: data.id, isNew: true };
 }
 
 type AttachTwilioMetadataParams = {
