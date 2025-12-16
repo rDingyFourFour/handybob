@@ -7,6 +7,7 @@ import {
   getCallOutcomeMetadata,
 } from "@/lib/domain/communications/callOutcomes";
 import { getAskBobCallScriptBody } from "@/lib/domain/askbob/constants";
+import { formatTwilioStatusLabel } from "@/utils/calls/twilioStatusLabel";
 
 // Central timeline normaliser for AI prompts:
 // - Used by job AI summary, next actions, and follow-up helpers.
@@ -65,7 +66,7 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
     supabase
     .from("calls")
     .select(
-      "id, direction, status, started_at, duration_seconds, summary, ai_summary, transcript, reached_customer, outcome_code, outcome_recorded_at, outcome",
+      "id, direction, status, twilio_status, started_at, duration_seconds, summary, ai_summary, transcript, reached_customer, outcome_code, outcome_recorded_at, outcome",
     )
       .eq("job_id", jobId)
       .eq("workspace_id", workspaceId)
@@ -144,6 +145,10 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
       detailSegmentsSuffix.push("Reached: no");
       hasOutcomeSuffix = true;
     }
+    const telephonyStatusLabel = formatTwilioStatusLabel(call.twilio_status ?? call.status);
+    if (telephonyStatusLabel) {
+      detailSegmentsSuffix.push(`Telephony: ${telephonyStatusLabel}`);
+    }
     const detailSuffix = detailSegmentsSuffix.length ? detailSegmentsSuffix.join(" · ") : null;
     const detail =
       detailBase && detailSuffix
@@ -154,7 +159,7 @@ export async function buildJobTimelinePayload(jobId: string, workspaceId: string
       timestamp: call.started_at,
       title: `${call.direction === "inbound" ? "Inbound" : "Outbound"} call`,
       detail,
-      status: call.status,
+      status: call.twilio_status ?? call.status,
       askBobScript: Boolean(getAskBobCallScriptBody(call.ai_summary ?? null, call.summary ?? null)),
       callId: call.id ?? null,
       hasOutcomeSuffix,

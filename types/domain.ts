@@ -104,6 +104,10 @@ export type Call = {
   customer_id: string | null;
   user_id: string | null;
   twilio_call_sid?: string | null;
+  twilio_status?: string | null;
+  twilio_status_updated_at?: string | null;
+  twilio_error_code?: string | null;
+  twilio_error_message?: string | null;
   reached_customer?: boolean | null;
   recording_url?: string | null;
   duration_seconds?: number | null;

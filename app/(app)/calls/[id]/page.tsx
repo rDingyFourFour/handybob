@@ -26,12 +26,18 @@ import {
   getAskBobCallScriptSource,
   isAskBobScriptSummary,
 } from "@/lib/domain/askbob/constants";
+import { formatTwilioStatusLabel } from "@/utils/calls/twilioStatusLabel";
 
 type CallRecord = {
   id: string;
   workspace_id: string;
   created_at: string | null;
   job_id: string | null;
+  twilio_call_sid?: string | null;
+  twilio_status?: string | null;
+  twilio_status_updated_at?: string | null;
+  twilio_error_code?: string | null;
+  twilio_error_message?: string | null;
   from_number: string | null;
   to_number: string | null;
   outcome: string | null;
@@ -197,7 +203,7 @@ export default async function CallSessionPage({
   } = await supabase
     .from<CallRecord>("calls")
     .select(
-      "id, workspace_id, created_at, job_id, from_number, to_number, outcome, outcome_notes, outcome_recorded_at, outcome_code, reached_customer, summary, ai_summary"
+      "id, workspace_id, created_at, job_id, twilio_call_sid, twilio_status, twilio_status_updated_at, twilio_error_code, twilio_error_message, from_number, to_number, outcome, outcome_notes, outcome_recorded_at, outcome_code, reached_customer, summary, ai_summary"
     )
     .eq("workspace_id", workspace.id)
     .eq("id", id)
@@ -438,6 +444,10 @@ export default async function CallSessionPage({
   const createdAtLabel = formatDate(call.created_at);
   const callSummary = latestPhoneMessageBody ?? "No summary recorded for this call yet.";
   const summaryMissing = !latestPhoneMessageBody;
+  const twilioStatusLabel = formatTwilioStatusLabel(call.twilio_status ?? null);
+  const twilioStatusUpdatedLabel = call.twilio_status_updated_at
+    ? formatDate(call.twilio_status_updated_at)
+    : null;
 
   const jobLink = jobId ? `/jobs/${jobId}` : undefined;
   const displayJobTitle =
@@ -506,12 +516,31 @@ export default async function CallSessionPage({
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <HbCard className="space-y-6">
-          <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-300">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Created</p>
-              <p className="mt-1 text-base text-white">{createdAtLabel}</p>
+            <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-300">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Created</p>
+                <p className="mt-1 text-base text-white">{createdAtLabel}</p>
+              </div>
             </div>
-            </div>
+            {call.twilio_call_sid && (
+              <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Automated call status</p>
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="font-semibold text-white">
+                    {twilioStatusLabel ?? "Queued"}
+                  </span>
+                  {twilioStatusUpdatedLabel && (
+                    <span className="text-xs text-slate-500">Updated {twilioStatusUpdatedLabel}</span>
+                  )}
+                </div>
+              </div>
+            )}
+            {call.twilio_error_message && (
+              <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-100">
+                <p className="text-xs uppercase tracking-[0.3em] text-rose-200">Call failed</p>
+                <p className="text-sm text-rose-100">{call.twilio_error_message}</p>
+              </div>
+            )}
 
             <div className="space-y-1">
               <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call workspace</p>

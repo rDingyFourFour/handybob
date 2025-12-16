@@ -84,6 +84,7 @@ describe("AskBobAutomatedCallPanel", () => {
       status: "success" as const,
       callId: "call-123",
       label: "Automated call started",
+      twilioStatus: "ringing",
     };
     mockStartCallAction.mockResolvedValue(successPayload);
     const onSuccess = vi.fn();
@@ -114,6 +115,7 @@ describe("AskBobAutomatedCallPanel", () => {
     expect(mockStartCallAction).toHaveBeenCalledTimes(1);
     expect(onSuccess).toHaveBeenCalledWith("Automated call started");
     expect(container.textContent).toContain("Automated call started");
+    expect(container.textContent).toContain("Twilio status");
     expect(container.querySelector("a[href=\"/calls/call-123\"]")).toBeTruthy();
   });
 
@@ -122,6 +124,7 @@ describe("AskBobAutomatedCallPanel", () => {
       status: "failure" as const,
       reason: "twilio_not_configured",
       message: "Twilio isn’t configured yet",
+      callId: "call-123",
     });
     const onSuccess = vi.fn();
 
@@ -151,5 +154,7 @@ describe("AskBobAutomatedCallPanel", () => {
     expect(mockStartCallAction).toHaveBeenCalledTimes(1);
     expect(onSuccess).not.toHaveBeenCalled();
     expect(container.textContent).toContain("Twilio isn’t configured yet");
+    expect(container.querySelector("a[href=\"/calls/call-123\"]")).toBeTruthy();
+    expect(container.textContent).toContain("View call details");
   });
 });

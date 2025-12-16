@@ -15,6 +15,13 @@ export type CreateCallSessionForJobQuoteParams = {
 
 export type CallSessionRow = {
   id: string;
+  workspace_id: string;
+  job_id: string;
+  twilio_call_sid?: string | null;
+  twilio_status?: string | null;
+  twilio_status_updated_at?: string | null;
+  twilio_error_code?: string | null;
+  twilio_error_message?: string | null;
 };
 
 export async function createCallSessionForJobQuote(
@@ -57,4 +64,72 @@ export async function createCallSessionForJobQuote(
   }
 
   return data;
+}
+
+type AttachTwilioMetadataParams = {
+  supabase: SupabaseClient;
+  callId: string;
+  twilioCallSid: string;
+  initialStatus?: string | null;
+};
+
+export async function attachTwilioMetadataToCallSession(
+  params: AttachTwilioMetadataParams
+): Promise<void> {
+  const { supabase, callId, twilioCallSid, initialStatus } = params;
+  const { error } = await supabase
+    .from("calls")
+    .update({
+      twilio_call_sid: twilioCallSid,
+      twilio_status: initialStatus ?? null,
+      twilio_status_updated_at: new Date().toISOString(),
+      twilio_error_code: null,
+      twilio_error_message: null,
+    })
+    .eq("id", callId);
+
+  if (error) {
+    throw error;
+  }
+
+  if (initialStatus) {
+    console.log("[calls-twilio-status-updated]", {
+      callId,
+      twilioStatus: initialStatus,
+      hasErrorCode: false,
+    });
+  }
+}
+
+type UpdateTwilioStatusParams = {
+  supabase: SupabaseClient;
+  callId: string;
+  twilioStatus: string;
+  errorCode?: string | number | null;
+  errorMessage?: string | null;
+};
+
+export async function updateCallSessionTwilioStatus(
+  params: UpdateTwilioStatusParams
+): Promise<void> {
+  const { supabase, callId, twilioStatus, errorCode, errorMessage } = params;
+  const { error } = await supabase
+    .from("calls")
+    .update({
+      twilio_status: twilioStatus,
+      twilio_status_updated_at: new Date().toISOString(),
+      twilio_error_code: errorCode ?? null,
+      twilio_error_message: errorMessage ?? null,
+    })
+    .eq("id", callId);
+
+  if (error) {
+    throw error;
+  }
+
+  console.log("[calls-twilio-status-updated]", {
+    callId,
+    twilioStatus,
+    hasErrorCode: Boolean(errorCode),
+  });
 }

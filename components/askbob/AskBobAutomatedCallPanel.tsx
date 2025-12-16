@@ -7,6 +7,7 @@ import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import { type StartCallWithScriptPayload } from "@/components/askbob/AskBobCallAssistPanel";
 import { startAskBobAutomatedCall } from "@/app/(app)/calls/actions/startAskBobAutomatedCall";
+import { formatTwilioStatusLabel } from "@/utils/calls/twilioStatusLabel";
 
 const SCRIPT_PREVIEW_LIMIT = 360;
 
@@ -61,6 +62,7 @@ export default function AskBobAutomatedCallPanel({
   const [status, setStatus] = useState<StatusState>("idle");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [callSessionId, setCallSessionId] = useState<string | null>(null);
+  const [twilioStatus, setTwilioStatus] = useState<string | null>(null);
   const [isPlacingCall, setIsPlacingCall] = useState(false);
   const hasResetEffectRunRef = useRef(false);
 
@@ -102,6 +104,7 @@ export default function AskBobAutomatedCallPanel({
     setStatus("idle");
     setStatusMessage(null);
     setCallSessionId(null);
+    setTwilioStatus(null);
     setIsPlacingCall(false);
   }, []);
 
@@ -155,15 +158,20 @@ export default function AskBobAutomatedCallPanel({
         setStatus("success");
         setStatusMessage(successLabel);
         setCallSessionId(result.callId);
+        setTwilioStatus(result.twilioStatus ?? null);
         onAutomatedCallSuccess?.(successLabel);
       } else {
         setStatus("failure");
         setStatusMessage(result.message);
+        setCallSessionId(result.callId ?? null);
+        setTwilioStatus(result.twilioStatus ?? null);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unable to start the call right now.";
       setStatus("failure");
       setStatusMessage(errorMessage);
+      setCallSessionId(null);
+      setTwilioStatus(null);
     } finally {
       setIsPlacingCall(false);
     }
@@ -193,6 +201,7 @@ export default function AskBobAutomatedCallPanel({
     });
   };
 
+  const twilioStatusLabel = useMemo(() => formatTwilioStatusLabel(twilioStatus), [twilioStatus]);
   const statusCopy = useMemo(() => {
     if (status === "calling") {
       return "Placing the AskBob automated call...";
@@ -278,14 +287,19 @@ export default function AskBobAutomatedCallPanel({
                 Open call workspace instead
               </HbButton>
             </div>
-            <div className="text-sm text-slate-400">
+            <div className="space-y-1 text-sm text-slate-400">
               <p>{statusCopy}</p>
-              {status === "success" && callSessionId && (
+              {twilioStatusLabel && (
+                <p className="text-xs text-slate-500 whitespace-normal break-words">
+                  Twilio status: {twilioStatusLabel}
+                </p>
+              )}
+              {callSessionId && (
                 <Link
                   href={`/calls/${callSessionId}`}
                   className="text-emerald-400 underline-offset-2 hover:text-emerald-200"
                 >
-                  View call session
+                  {status === "failure" ? "View call details" : "View call session"}
                 </Link>
               )}
             </div>

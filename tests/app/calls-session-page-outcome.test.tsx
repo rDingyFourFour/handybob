@@ -135,4 +135,38 @@ describe("CallSessionPage outcome card", () => {
     const markup = renderToStaticMarkup(element);
     expect(markup).not.toContain("Prepared call script for this job");
   });
+
+  it("shows Twilio status and error banner when Twilio data exists", async () => {
+    const now = new Date().toISOString();
+    supabaseState.responses.calls = {
+      data: [
+        {
+          id: "call-5",
+          workspace_id: "workspace-1",
+          created_at: now,
+          job_id: null,
+          from_number: "+15550005555",
+          to_number: "+15550006666",
+          outcome: null,
+          outcome_notes: null,
+          outcome_recorded_at: null,
+          outcome_code: null,
+          reached_customer: null,
+          summary: null,
+          twilio_call_sid: "sid-1",
+          twilio_status: "ringing",
+          twilio_status_updated_at: now,
+          twilio_error_message: "Invalid destination number",
+        },
+      ],
+      error: null,
+    };
+
+    const element = await CallSessionPage({ params: Promise.resolve({ id: "call-5" }) });
+    const markup = renderToStaticMarkup(element);
+    expect(markup).toContain("Automated call status");
+    expect(markup).toContain("Ringing");
+    expect(markup).toContain("Call failed");
+    expect(markup).toContain("Invalid destination number");
+  });
 });
