@@ -553,6 +553,13 @@ export async function runAskBobLiveGuidanceTask(
   try {
     const modelResult = await callAskBobLiveGuidance(input);
     const result = modelResult.result;
+    const telemetryFields = {
+      cycleIndex,
+      objectionSignalsCount: result.objectionSignals.length,
+      escalationSignal: result.escalationSignal ?? null,
+      hasTalkTrackNextLine: Boolean(result.talkTrackNextLine?.trim()),
+      pauseNow: result.pauseNow,
+    };
     console.log("[askbob-call-live-guidance-success]", {
       workspaceId,
       callId,
@@ -560,6 +567,7 @@ export async function runAskBobLiveGuidanceTask(
       jobId,
       guidanceMode,
       modelLatencyMs: result.modelLatencyMs,
+      ...telemetryFields,
     });
     console.log("[askbob-call-live-guidance-cycle-success]", {
       workspaceId,
@@ -568,7 +576,7 @@ export async function runAskBobLiveGuidanceTask(
       jobId,
       guidanceMode,
       callGuidanceSessionId,
-      cycleIndex,
+      ...telemetryFields,
       summary: result.summary,
     });
 

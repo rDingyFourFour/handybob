@@ -35,6 +35,7 @@ type CallLiveGuidanceActionResponse =
   | CallLiveGuidanceActionFailure;
 
 const NOTES_MAX_LENGTH = 2000;
+const ADDRESSED_OBJECTIONS_SUMMARY_MAX_LENGTH = 400;
 
 function determineNotesLengthBucket(length: number): string {
   if (length === 0) {
@@ -80,6 +81,10 @@ const callLiveGuidanceSchema = z.object({
       return null;
     }, z.number().int().min(1)),
   priorGuidanceSummary: z.string().optional(),
+  addressedObjectionsSummary: z
+    .string()
+    .max(ADDRESSED_OBJECTIONS_SUMMARY_MAX_LENGTH)
+    .optional(),
 });
 
 function buildQuoteSummary(quote: { id: string; status?: string | null; total?: number | null }) {
@@ -107,6 +112,7 @@ export async function callLiveGuidanceAction(
     callGuidanceSessionId: formData.get("callGuidanceSessionId")?.toString() ?? "",
     cycleIndex: formData.get("cycleIndex")?.toString(),
     priorGuidanceSummary: formData.get("priorGuidanceSummary")?.toString(),
+    addressedObjectionsSummary: formData.get("addressedObjectionsSummary")?.toString(),
   });
 
   if (!parsed.success) {
@@ -131,6 +137,7 @@ export async function callLiveGuidanceAction(
     callGuidanceSessionId,
     cycleIndex,
     priorGuidanceSummary,
+    addressedObjectionsSummary,
   } = parsed.data;
   const normalizedNotes = notesText?.trim() ?? null;
   if (normalizedNotes && normalizedNotes.length > NOTES_MAX_LENGTH) {
@@ -150,6 +157,11 @@ export async function callLiveGuidanceAction(
   const notesPresent = Boolean(normalizedNotes);
   const guidanceSessionId = callGuidanceSessionId.trim();
   const normalizedPriorGuidanceSummary = priorGuidanceSummary?.trim() ?? null;
+  const addressedObjectionsSummaryTrimmed = addressedObjectionsSummary?.trim() ?? null;
+  const normalizedAddressedObjectionsSummary =
+    addressedObjectionsSummaryTrimmed && addressedObjectionsSummaryTrimmed.length
+      ? addressedObjectionsSummaryTrimmed
+      : null;
   console.log("[askbob-call-live-guidance-request]", {
     workspaceId,
     callId,
@@ -161,6 +173,7 @@ export async function callLiveGuidanceAction(
     notesPresent,
     notesLengthBucket,
     hasPriorGuidance: Boolean(normalizedPriorGuidanceSummary),
+    hasAddressedObjectionsSummary: Boolean(normalizedAddressedObjectionsSummary),
     source: "askbob.call-live-guidance",
   });
 

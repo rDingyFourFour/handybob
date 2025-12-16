@@ -4,7 +4,11 @@ import OpenAI from "openai";
 import { buildCallHistoryPromptSections } from "@/lib/domain/askbob/callHistory";
 import type { LatestCallOutcomeForJob } from "@/lib/domain/calls/latestCallOutcome";
 import { buildCallOutcomePromptContext } from "@/lib/domain/calls/latestCallOutcome";
-import { ASKBOB_CALL_INTENT_DESCRIPTIONS } from "@/lib/domain/askbob/types";
+import {
+  ASKBOB_CALL_INTENT_DESCRIPTIONS,
+  CALL_LIVE_GUIDANCE_OBJECTION_SIGNALS,
+  CALL_LIVE_GUIDANCE_ESCALATION_SIGNALS,
+} from "@/lib/domain/askbob/types";
 import type {
   AskBobContext,
   AskBobJobFollowupInput,
@@ -18,6 +22,8 @@ import type {
   CallLiveGuidanceInput,
   CallLiveGuidanceResult,
   CallLiveGuidanceMode,
+  CallLiveGuidanceObjectionSignal,
+  CallLiveGuidanceEscalationSignal,
   AskBobSchedulerSlot,
   AskBobUrgencyLevel,
   AskBobLineExplanation,
@@ -177,11 +183,18 @@ const CALL_LIVE_GUIDANCE_MODE_INSTRUCTIONS: Record<CallLiveGuidanceMode, string>
 
 const CALL_LIVE_GUIDANCE_INSTRUCTIONS = [
   ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
-  "You are AskBob, the live guidance coach for inbound call sessions. Respond with strict JSON only containing the keys: openingLine (a brief, professional opener); questions (array of concise discovery prompts); confirmations (array of clear phrases to confirm facts); nextActions (array of immediate steps the technician should take); guardrails (array of reminders that avoid unsafe, legal, or medical claims and recommend escalation when needed); summary (short paragraph that highlights how this guidance differs from previous coaching); phasedPlan (array of the next 3-4 phases with actions); nextBestQuestion (a single, critical question to ask next); riskFlags (array of potential hazards or constraints to monitor); changedRecommendation (boolean indicating whether the plan shifted); and changedReason (explain why the plan changed, or null if it stayed the same).",
+  "You are AskBob, the live guidance coach for inbound call sessions. Respond with strict JSON only containing the keys: openingLine (a brief, professional opener); questions (array of concise discovery prompts); confirmations (array of clear phrases to confirm facts); nextActions (array of immediate steps the technician should take); guardrails (array of reminders that avoid unsafe, legal, or medical claims and recommend escalation when needed); talkTrackNextLine (a short, single sentence the technician can say next); pauseNow (boolean that indicates whether the technician should stop talking and listen); confirmBeforeProceeding (a short confirmation question to gather consent); objectionSignals (array of canonical tags from the list provided in this prompt); escalationSignal (single tag from the canonical list or null when no action is needed); escalationReason (short explanation of the urgency/risk when escalationSignal is set); summary (short paragraph that highlights how this guidance differs from previous coaching); phasedPlan (array of the next 3-4 phases with actions); nextBestQuestion (a single, critical question to ask next); riskFlags (array of potential hazards or constraints to monitor); changedRecommendation (boolean indicating whether the plan shifted); and changedReason (explain why the plan changed, or null if it stayed the same).",
   "Lead with safety, clarity, and customer respect; keep the tone professional and concise. Each array should have between 1 and 6 entries, and use numbered phrases when helpful to imply sequence. Mention constraints, required approvals, or regulatory reminders within guardrails.",
   "Guidance mode changes emphasis—intake mode focuses on discovery, scope validation, and safety triggers; scheduling mode emphasizes availability, confirmations, and consent. Reference the linked context (customer, job, quote, call outcomes), call metadata (direction, from/to), session and cycle identifiers, and the live notes/previous summary so the technician understands why any recommendations changed.",
   "When anecdotes or notes show that the plan has shifted, set changedRecommendation to true and craft a clear changedReason describing the new trigger. If the plan remains consistent, set changedRecommendation to false and leave changedReason null. Always keep summary, phasedPlan, and riskFlags aligned with the current live notes.",
   "Avoid fabricating promises or giving legal/medical advice, and use guardrails to remind the agent when to escalate to a supervisor, mention compliance checks, or slow down for safety.",
+  "Keep talkTrackNextLine as a single, plain-language sentence that fits the current guidance mode; confirmBeforeProceeding should be a concise question referencing the idea you want to verify, and set pauseNow to true only when the technician should stop talking and let the customer speak.",
+  `objectionSignals must be zero or more of the canonical tags: ${CALL_LIVE_GUIDANCE_OBJECTION_SIGNALS.join(
+    ", ",
+  )}. Include each tag at most once and only when the live notes or customer words explicitly reflect that concern.`,
+  `escalationSignal must be one of ${CALL_LIVE_GUIDANCE_ESCALATION_SIGNALS.join(
+    ", ",
+  )} or null when no escalation is needed; when it is set, provide escalationReason as a short explanation of the urgency or risk without repeating the full context.`,
   SAFETY_GUARDRAILS,
 ].join("\n");
 
@@ -205,6 +218,28 @@ const CALL_LIVE_GUIDANCE_JSON_SCHEMA = {
       type: "array",
       items: { type: "string" },
     },
+    talkTrackNextLine: { type: "string" },
+    pauseNow: { type: "boolean" },
+    confirmBeforeProceeding: { type: "string" },
+    objectionSignals: {
+      type: "array",
+      items: {
+        type: "string",
+        enum: CALL_LIVE_GUIDANCE_OBJECTION_SIGNALS,
+      },
+    },
+    escalationSignal: {
+      anyOf: [
+        {
+          type: "string",
+          enum: CALL_LIVE_GUIDANCE_ESCALATION_SIGNALS,
+        },
+        {
+          type: "null",
+        },
+      ],
+    },
+    escalationReason: { type: ["string", "null"] },
     summary: { type: "string" },
     phasedPlan: {
       type: "array",
@@ -224,6 +259,12 @@ const CALL_LIVE_GUIDANCE_JSON_SCHEMA = {
     "confirmations",
     "nextActions",
     "guardrails",
+    "talkTrackNextLine",
+    "pauseNow",
+    "confirmBeforeProceeding",
+    "objectionSignals",
+    "escalationSignal",
+    "escalationReason",
     "summary",
     "phasedPlan",
     "nextBestQuestion",
@@ -1336,11 +1377,11 @@ export async function callAskBobLiveGuidance(
     `Context: ${contextParts}`,
     contextBlock,
     extraDetailsBlock,
-    CALL_LIVE_GUIDANCE_MODE_INSTRUCTIONS[input.guidanceMode],
-    timingInstructions,
-  ]
-    .filter((part): part is string => Boolean(part))
-    .join("\n\n");
+  CALL_LIVE_GUIDANCE_MODE_INSTRUCTIONS[input.guidanceMode],
+  timingInstructions,
+]
+  .filter((part): part is string => Boolean(part))
+  .join("\n\n");
 
   const openai = new OpenAI({ apiKey });
   const modelRequestStart = Date.now();
@@ -1374,6 +1415,25 @@ export async function callAskBobLiveGuidance(
     const nextBestQuestion = normalizeNullableString(payload.nextBestQuestion) ?? "";
     const changedRecommendation = Boolean(payload.changedRecommendation);
     const changedReason = normalizeNullableString(payload.changedReason);
+    const talkTrackNextLine = normalizeNullableString(payload.talkTrackNextLine) ?? "";
+    const pauseNow = Boolean(payload.pauseNow);
+    const confirmBeforeProceeding =
+      normalizeNullableString(payload.confirmBeforeProceeding) ?? "";
+    const rawObjectionSignals = ensureStringArray(payload.objectionSignals);
+    const objectionSignals = rawObjectionSignals
+      .filter((signal) =>
+        CALL_LIVE_GUIDANCE_OBJECTION_SIGNALS.includes(signal as CallLiveGuidanceObjectionSignal),
+      )
+      .map((signal) => signal as CallLiveGuidanceObjectionSignal);
+    const requestedEscalationSignal = normalizeNullableString(payload.escalationSignal);
+    const escalationSignal =
+      requestedEscalationSignal &&
+      CALL_LIVE_GUIDANCE_ESCALATION_SIGNALS.includes(
+        requestedEscalationSignal as CallLiveGuidanceEscalationSignal,
+      )
+        ? (requestedEscalationSignal as CallLiveGuidanceEscalationSignal)
+        : null;
+    const escalationReason = normalizeNullableString(payload.escalationReason);
 
     const latencyMs = Date.now() - modelRequestStart;
     console.log("[askbob-model-call]", {
@@ -1399,6 +1459,12 @@ export async function callAskBobLiveGuidance(
       confirmations,
       nextActions,
       guardrails,
+      talkTrackNextLine,
+      pauseNow,
+      confirmBeforeProceeding,
+      objectionSignals,
+      escalationSignal,
+      escalationReason,
       summary,
       phasedPlan,
       nextBestQuestion,

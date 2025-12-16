@@ -443,7 +443,31 @@ export interface CallLiveGuidanceInput {
   callGuidanceSessionId: string;
   cycleIndex: number;
   priorGuidanceSummary?: string | null;
+  addressedObjectionsSummary?: string | null;
 }
+
+export const CALL_LIVE_GUIDANCE_OBJECTION_SIGNALS = [
+  "pricing_concern",
+  "timeline_conflict",
+  "scope_dispute",
+  "safety_concern",
+  "trust_issue",
+  "approval_required",
+] as const;
+
+export const CALL_LIVE_GUIDANCE_ESCALATION_SIGNALS = [
+  "safety_critical",
+  "supervisor_required",
+  "regulatory_risk",
+  "out_of_scope",
+  "time_sensitive",
+] as const;
+
+export type CallLiveGuidanceObjectionSignal =
+  (typeof CALL_LIVE_GUIDANCE_OBJECTION_SIGNALS)[number];
+
+export type CallLiveGuidanceEscalationSignal =
+  (typeof CALL_LIVE_GUIDANCE_ESCALATION_SIGNALS)[number];
 
 export interface CallLiveGuidanceResult {
   openingLine: string;
@@ -451,6 +475,12 @@ export interface CallLiveGuidanceResult {
   confirmations: string[];
   nextActions: string[];
   guardrails: string[];
+  talkTrackNextLine: string;
+  pauseNow: boolean;
+  confirmBeforeProceeding: string;
+  objectionSignals: CallLiveGuidanceObjectionSignal[];
+  escalationSignal?: CallLiveGuidanceEscalationSignal | null;
+  escalationReason?: string | null;
   modelLatencyMs?: number | null;
   rawModelOutput?: unknown;
   summary: string;
