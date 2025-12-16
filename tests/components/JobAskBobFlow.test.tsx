@@ -227,7 +227,7 @@ describe("JobAskBobFlow wiring", () => {
     });
 
     expect(capturedPanelProps?.latestCallOutcomeLabel).toBe(
-      "Reached · Needs follow-up · reached · 2025-01-01 10:00",
+      "Reached · Needs follow-up · 2025-01-01 10:00",
     );
     const statusItems = (capturedContainerProps?.stepStatusItems ?? []) as Array<{
       label: string;

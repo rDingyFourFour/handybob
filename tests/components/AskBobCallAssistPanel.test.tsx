@@ -306,7 +306,7 @@ describe("AskBobCallAssistPanel", () => {
   });
 
   it("shows the latest call outcome and sends it along with the request", async () => {
-    const latestLabel = "Needs follow-up · reached · 2025-01-01 10:00";
+    const latestLabel = "Reached · Needs follow-up · 2025-01-01 10:00";
 
     await act(async () => {
       root?.render(

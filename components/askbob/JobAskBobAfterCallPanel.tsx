@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
+import {
+  formatLatestCallOutcomeReference,
+  type LatestCallOutcomeForJob,
+} from "@/lib/domain/calls/latestCallOutcome";
 import type {
   AskBobAfterCallSnapshotPayload,
   AskBobJobAfterCallResult,
@@ -27,9 +31,9 @@ export type JobAskBobAfterCallPanelProps = {
   initialAfterCallSnapshot?: AskBobAfterCallSnapshotPayload | null;
   onAfterCallSummaryChange?: (summary: string | null) => void;
   callHistoryHint?: string | null;
-  latestCallOutcomeHint?: string | null;
+  latestCallOutcome?: LatestCallOutcomeForJob | null;
+  previousCallOutcome?: LatestCallOutcomeForJob | null;
   customerId?: string | null;
-  latestCallOutcomeReference?: string | null;
   afterCallHydrationHint?: string | null;
 };
 
@@ -50,6 +54,31 @@ const summaryFromSnapshot = (snapshot?: AskBobAfterCallSnapshotPayload | null): 
   };
 };
 
+const getCanonicalOutcomeLabel = (outcome: LatestCallOutcomeForJob) =>
+  outcome.displayLabel ?? formatLatestCallOutcomeReference(outcome);
+
+const areCallOutcomesSame = (
+  latest?: LatestCallOutcomeForJob | null,
+  previous?: LatestCallOutcomeForJob | null,
+): boolean => {
+  if (!latest || !previous) {
+    return false;
+  }
+  if (latest.callId && previous.callId && latest.callId === previous.callId) {
+    return true;
+  }
+  if (!latest.callId || !previous.callId) {
+    if (latest.occurredAt && previous.occurredAt && latest.occurredAt === previous.occurredAt) {
+      const latestLabel = getCanonicalOutcomeLabel(latest);
+      const previousLabel = getCanonicalOutcomeLabel(previous);
+      if (latestLabel === previousLabel) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
 export default function JobAskBobAfterCallPanel({
   workspaceId,
   jobId,
@@ -65,8 +94,8 @@ export default function JobAskBobAfterCallPanel({
   initialAfterCallSnapshot,
   onAfterCallSummaryChange,
   callHistoryHint,
-  latestCallOutcomeHint,
-  latestCallOutcomeReference,
+  latestCallOutcome,
+  previousCallOutcome,
   customerId,
   afterCallHydrationHint,
 }: JobAskBobAfterCallPanelProps) {
@@ -205,6 +234,16 @@ export default function JobAskBobAfterCallPanel({
     router.push(`/messages?${params.toString()}`);
   };
 
+  const latestCallOutcomeLabel = latestCallOutcome
+    ? getCanonicalOutcomeLabel(latestCallOutcome)
+    : null;
+  const previousCallOutcomeLabel = previousCallOutcome
+    ? getCanonicalOutcomeLabel(previousCallOutcome)
+    : null;
+  const shouldShowPreviousCallOutcome =
+    Boolean(previousCallOutcomeLabel) &&
+    !areCallOutcomesSame(latestCallOutcome, previousCallOutcome);
+
   return (
     <HbCard className="space-y-4">
       <div>
@@ -248,11 +287,13 @@ export default function JobAskBobAfterCallPanel({
               <p className="text-xs text-slate-400">Call history: {callHistoryHint}</p>
             )}
             <p className="text-xs text-slate-500">{contextUsedText}</p>
-            {latestCallOutcomeHint && (
-              <p className="text-xs text-slate-400">{latestCallOutcomeHint}</p>
+            {latestCallOutcomeLabel && (
+              <p className="text-xs text-slate-400">
+                Latest call outcome: {latestCallOutcomeLabel}
+              </p>
             )}
-            {latestCallOutcomeReference && (
-              <p className="text-xs text-slate-400">Previous outcome: {latestCallOutcomeReference}</p>
+            {shouldShowPreviousCallOutcome && previousCallOutcomeLabel && (
+              <p className="text-xs text-slate-400">Previous outcome: {previousCallOutcomeLabel}</p>
             )}
             {afterCallHydrationHint && (
               <p className="text-xs text-slate-400">{afterCallHydrationHint}</p>

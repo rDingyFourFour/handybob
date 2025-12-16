@@ -355,6 +355,8 @@ export default function JobAskBobFlow({
   const resolvedAfterCallSnapshot = initialAfterCallSnapshot ?? hydratedAfterCallSnapshot ?? null;
   const resolvedLatestCallOutcome =
     callSessionLatestCallOutcome ?? latestCallOutcome ?? null;
+  const resolvedPreviousCallOutcome =
+    callSessionLatestCallOutcome && latestCallOutcome ? latestCallOutcome : null;
   const latestCallOutcomeHint = resolvedLatestCallOutcome
     ? formatLatestCallOutcomeHint(resolvedLatestCallOutcome)
     : null;
@@ -771,8 +773,8 @@ export default function JobAskBobFlow({
             initialAfterCallSnapshot={resolvedAfterCallSnapshot ?? undefined}
             onAfterCallSummaryChange={handleAfterCallSummaryChange}
             callHistoryHint={callHistoryHint ?? null}
-            latestCallOutcomeHint={latestCallOutcomeHint}
-            latestCallOutcomeReference={latestCallOutcomeReference}
+            latestCallOutcome={resolvedLatestCallOutcome}
+            previousCallOutcome={resolvedPreviousCallOutcome}
             afterCallHydrationHint={afterCallHydrationHint}
           />
         </AskBobSection>

@@ -144,13 +144,7 @@ function formatLatestCallOutcomeDateLabel(date?: string | null): string | null {
 export function formatLatestCallOutcomeReference(outcome: LatestCallOutcomeForJob): string {
   const metadata = getCallOutcomeCodeMetadata(outcome.outcomeCode);
   const dateLabel = formatLatestCallOutcomeDateLabel(outcome.occurredAt) ?? "time unknown";
-  const reachedLabel =
-    outcome.reachedCustomer === true
-      ? "reached"
-      : outcome.reachedCustomer === false
-      ? "not reached"
-      : "reach unknown";
-  return `${metadata.label} · ${reachedLabel} · ${dateLabel}`;
+  return `${metadata.label} · ${dateLabel}`;
 }
 
 export function buildCallOutcomePromptContext(
