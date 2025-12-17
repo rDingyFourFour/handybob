@@ -4,12 +4,19 @@ import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 
 import AskBobAutomatedCallPanel from "@/components/askbob/AskBobAutomatedCallPanel";
 import { startAskBobAutomatedCall } from "@/app/(app)/calls/actions/startAskBobAutomatedCall";
+import { getCallSessionDialStatus } from "@/app/(app)/calls/actions/getCallSessionDialStatus";
+import { ASKBOB_AUTOMATED_VOICE_DEFAULT } from "@/lib/domain/askbob/speechPlan";
 
 vi.mock("@/app/(app)/calls/actions/startAskBobAutomatedCall", () => ({
   startAskBobAutomatedCall: vi.fn(),
 }));
 
+vi.mock("@/app/(app)/calls/actions/getCallSessionDialStatus", () => ({
+  getCallSessionDialStatus: vi.fn(),
+}));
+
 const mockStartCallAction = startAskBobAutomatedCall as unknown as ReturnType<typeof vi.fn>;
+const mockGetSessionStatus = getCallSessionDialStatus as unknown as ReturnType<typeof vi.fn>;
 const ORIGINAL_FETCH = global.fetch;
 
 function findPrimaryButton(container: HTMLElement) {
@@ -27,6 +34,7 @@ describe("AskBobAutomatedCallPanel", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     mockStartCallAction.mockReset();
+    mockGetSessionStatus.mockReset();
   });
 
   afterEach(() => {
@@ -281,8 +289,80 @@ describe("AskBobAutomatedCallPanel", () => {
     ).toBe(false);
   });
 
+  it("applies voice and voicemail choices, logs interactions, and surfaces the guard warning", async () => {
+    const successPayload = {
+      status: "success" as const,
+      code: "call_started" as const,
+      message: "Automated call started",
+      callId: "call-voice",
+      label: "Automated call started",
+      twilioStatus: "ringing",
+      twilioCallSid: "twilio-abc",
+    };
+    mockStartCallAction.mockResolvedValue(successPayload);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await act(async () => {
+      root?.render(
+        <AskBobAutomatedCallPanel
+          workspaceId="workspace-1"
+          jobId="job-1"
+          customerPhoneNumber="+15550001234"
+          customerDisplayName="Customer"
+          callScriptBody="Hello preview"
+          callScriptSummary="Summary"
+          jobTitle="Title"
+          jobDescription="Description"
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const voiceSelect = container.querySelector<HTMLSelectElement>("select#voice-control");
+    const greetingSelect = container.querySelector<HTMLSelectElement>("select#greeting-style-control");
+    const voicemailCheckbox = container.querySelector<HTMLInputElement>("input[type='checkbox']");
+    expect(voiceSelect).toBeTruthy();
+    expect(greetingSelect).toBeTruthy();
+    expect(voicemailCheckbox).toBeTruthy();
+
+    await act(async () => {
+      if (voiceSelect) {
+        voiceSelect.value = "samantha";
+        voiceSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      if (greetingSelect) {
+        greetingSelect.value = "Friendly";
+        greetingSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      if (voicemailCheckbox) {
+        voicemailCheckbox.click();
+      }
+      await Promise.resolve();
+    });
+    await act(async () => {});
+
+    const button = findPrimaryButton(container);
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(mockStartCallAction).toHaveBeenCalledTimes(1);
+    const payload = mockStartCallAction.mock.calls[0][0];
+    expect(payload.voice).not.toBe(ASKBOB_AUTOMATED_VOICE_DEFAULT);
+    expect(logSpy.mock.calls.some((args) => args[0] === "[askbob-automated-call-voice-change]")).toBe(
+      true,
+    );
+    expect(
+      logSpy.mock.calls.some((args) => args[0] === "[askbob-automated-call-robocall-guard-visible]"),
+    ).toBe(true);
+    expect(container.textContent).toContain("Automated calls are for job-related follow-ups only.");
+
+    logSpy.mockRestore();
+  });
+
   it("polls Twilio status until recording is ready when expanded", async () => {
-    const fetchMock = vi.fn();
+    vi.useFakeTimers();
     const responses = [
       {
         callId: "call-123",
@@ -321,17 +401,11 @@ describe("AskBobAutomatedCallPanel", () => {
         recordingDurationSeconds: 52,
       },
     ];
-    fetchMock.mockImplementation(() => {
-      const payload = responses.shift() ?? responses[responses.length - 1];
-      return Promise.resolve(
-        new Response(JSON.stringify(payload), {
-          headers: { "content-type": "application/json" },
-        }),
-      );
+    const queue = [...responses];
+    mockGetSessionStatus.mockImplementation(() => {
+      const next = queue.shift() ?? responses[responses.length - 1];
+      return Promise.resolve(next);
     });
-    global.fetch = fetchMock;
-    vi.useFakeTimers();
-
     mockStartCallAction.mockResolvedValue({
       status: "success" as const,
       code: "call_started" as const,
@@ -368,7 +442,7 @@ describe("AskBobAutomatedCallPanel", () => {
       await Promise.resolve();
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mockGetSessionStatus).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Twilio status: Queued");
     expect(container.textContent).toContain("Recording: processing");
 
@@ -376,33 +450,40 @@ describe("AskBobAutomatedCallPanel", () => {
       vi.advanceTimersByTime(2500);
       await Promise.resolve();
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(mockGetSessionStatus).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain("Twilio status: Ringing");
 
     await act(async () => {
       vi.advanceTimersByTime(2500);
       await Promise.resolve();
     });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(mockGetSessionStatus).toHaveBeenCalledTimes(3);
     expect(container.textContent).toContain("Recording: processing");
 
     await act(async () => {
       vi.advanceTimersByTime(2500);
       await Promise.resolve();
     });
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(mockGetSessionStatus).toHaveBeenCalledTimes(4);
     expect(container.textContent).toContain("Recording: ready · 52s");
 
     await act(async () => {
       vi.advanceTimersByTime(10000);
       await Promise.resolve();
     });
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(mockGetSessionStatus).toHaveBeenCalledTimes(4);
   });
 
   it("skips polling when the panel is collapsed", async () => {
-    const fetchMock = vi.fn();
-    global.fetch = fetchMock;
+    mockGetSessionStatus.mockResolvedValue({
+      callId: "call-456",
+      twilioCallSid: "sid-456",
+      twilioStatus: "queued",
+      twilioStatusUpdatedAt: "2024-01-01T00:00:00Z",
+      isTerminal: false,
+      hasRecording: false,
+      recordingDurationSeconds: null,
+    });
     vi.useFakeTimers();
 
     mockStartCallAction.mockResolvedValue({
@@ -441,7 +522,7 @@ describe("AskBobAutomatedCallPanel", () => {
       vi.advanceTimersByTime(2500);
       await Promise.resolve();
     });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mockGetSessionStatus).not.toHaveBeenCalled();
   });
 
   it("shows an inline hint when the call is already in progress", async () => {

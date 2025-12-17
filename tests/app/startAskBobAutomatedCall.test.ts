@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 import * as callSessionsModule from "@/lib/domain/calls/sessions";
+import {
+  ASKBOB_AUTOMATED_GREETING_STYLE_DEFAULT,
+  ASKBOB_AUTOMATED_VOICE_DEFAULT,
+} from "@/lib/domain/askbob/speechPlan";
 
 const createServerClientMock = vi.fn();
 const mockGetCurrentWorkspace = vi.fn();
@@ -9,6 +13,7 @@ const mockDialTwilioCall = vi.fn();
 const mockParseEnvConfig = vi.fn();
 const setDialResultSpy = vi.spyOn(callSessionsModule, "setTwilioDialResultForCallSession");
 const markDialRequestedSpy = vi.spyOn(callSessionsModule, "markCallSessionDialRequested");
+const updateSpeechPlanSpy = vi.spyOn(callSessionsModule, "updateCallSessionAutomatedSpeechPlan");
 
 vi.mock("@/utils/supabase/server", () => ({
   createServerClient: () => createServerClientMock(),
@@ -47,6 +52,13 @@ describe("startAskBobAutomatedCall", () => {
     markDialRequestedSpy.mockResolvedValue({
       outcome: "allowed_to_dial",
       callId: "call-123",
+    });
+    updateSpeechPlanSpy.mockReset();
+    updateSpeechPlanSpy.mockResolvedValue({
+      voice: ASKBOB_AUTOMATED_VOICE_DEFAULT,
+      greetingStyle: ASKBOB_AUTOMATED_GREETING_STYLE_DEFAULT,
+      allowVoicemail: false,
+      scriptSummary: "Follow-up script",
     });
     mockParseEnvConfig.mockReturnValue({
       appUrl: "https://app.test",
@@ -104,6 +116,7 @@ describe("startAskBobAutomatedCall", () => {
       initialStatus: "queued",
     });
 
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const result = await startAskBobAutomatedCall({
       workspaceId: "workspace-1",
       jobId: "job-1",
@@ -139,8 +152,23 @@ describe("startAskBobAutomatedCall", () => {
       expect.objectContaining({
         recordCall: true,
         recordingCallbackUrl: "https://app.test/api/twilio/calls/recording",
+        twimlUrl: "https://app.test/api/twilio/voice/outbound?callId=call-123&workspaceId=workspace-1",
       }),
     );
+    expect(updateSpeechPlanSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plan: expect.objectContaining({
+          voice: ASKBOB_AUTOMATED_VOICE_DEFAULT,
+          greetingStyle: ASKBOB_AUTOMATED_GREETING_STYLE_DEFAULT,
+          allowVoicemail: false,
+          scriptSummary: "Follow-up script",
+        }),
+      }),
+    );
+    expect(
+      logSpy.mock.calls.some((args) => args[0] === "[askbob-automated-call-speechplan-saved]"),
+    ).toBe(true);
+    logSpy.mockRestore();
   });
 
   it("returns a failure when Twilio is not configured", async () => {

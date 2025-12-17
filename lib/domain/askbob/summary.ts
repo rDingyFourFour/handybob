@@ -134,3 +134,13 @@ export function buildFollowupSummaryFromSnapshot(
   }
   return parts.length ? parts.join(" ") : null;
 }
+
+export const ASKBOB_AUTOMATED_SCRIPT_SUMMARY_LIMIT = 900;
+
+export function truncateAskBobScriptSummary(value: string, limit = ASKBOB_AUTOMATED_SCRIPT_SUMMARY_LIMIT) {
+  const trimmed = value.trim();
+  if (trimmed.length <= limit) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, limit)}…`;
+}

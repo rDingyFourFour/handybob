@@ -8,6 +8,7 @@ import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import {
   TWILIO_CALL_RECORDING_CALLBACK_PATH,
   TWILIO_CALL_STATUS_CALLBACK_PATH,
+  TWILIO_OUTBOUND_VOICE_TWIML_PATH,
 } from "@/lib/domain/twilio";
 import {
   CallSessionRow,
@@ -16,9 +17,15 @@ import {
   createCallSessionForJobQuote,
   markCallSessionDialRequested,
   setTwilioDialResultForCallSession,
+  updateCallSessionAutomatedSpeechPlan,
 } from "@/lib/domain/calls/sessions";
 import { dialTwilioCall } from "@/lib/domain/twilio.server";
 import { ASKBOB_AUTOMATED_SCRIPT_PREFIX } from "@/lib/domain/askbob/constants";
+import { truncateAskBobScriptSummary } from "@/lib/domain/askbob/summary";
+import {
+  ASKBOB_AUTOMATED_GREETING_STYLE_DEFAULT,
+  ASKBOB_AUTOMATED_VOICE_DEFAULT,
+} from "@/lib/domain/askbob/speechPlan";
 
 const StartAskBobAutomatedCallSchema = z.object({
   workspaceId: z.string().min(1),
@@ -28,6 +35,9 @@ const StartAskBobAutomatedCallSchema = z.object({
   callIntents: z.array(z.string()).optional().nullable(),
   scriptSummary: z.string().optional().nullable(),
   scriptBody: z.string().min(1),
+  voice: z.string().min(1).optional(),
+  greetingStyle: z.string().min(1).optional(),
+  allowVoicemail: z.boolean().optional(),
 });
 
 type StartAskBobAutomatedCallPayload = z.infer<typeof StartAskBobAutomatedCallSchema>;
@@ -69,13 +79,6 @@ const FROM_PLACEHOLDER = "workspace-default";
 function normalizeCandidate(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : null;
-}
-
-function truncateForSummary(value: string, limit = 900) {
-  if (value.length <= limit) {
-    return value;
-  }
-  return `${value.slice(0, limit)}…`;
 }
 
 export async function startAskBobAutomatedCall(
@@ -322,12 +325,19 @@ export async function startAskBobAutomatedCall(
   const recordingCallbackBaseUrl = envConfig.appUrl
     ? `${envConfig.appUrl.replace(/\/$/, "")}${TWILIO_CALL_RECORDING_CALLBACK_PATH}`
     : null;
+  const outboundVoiceUrl = envConfig.appUrl
+    ? `${envConfig.appUrl.replace(/\/$/, "")}${TWILIO_OUTBOUND_VOICE_TWIML_PATH}`
+    : null;
   const machineDetectionConfig = envConfig.twilioMachineDetectionEnabled
     ? { enabled: true }
     : undefined;
 
+  const voiceSelection = normalizeCandidate(params.voice ?? null) ?? ASKBOB_AUTOMATED_VOICE_DEFAULT;
+  const greetingStyleSelection =
+    normalizeCandidate(params.greetingStyle ?? null) ?? ASKBOB_AUTOMATED_GREETING_STYLE_DEFAULT;
+  const allowVoicemailSelection = Boolean(params.allowVoicemail);
   const titleSource = normalizedScriptSummary || normalizedScriptBody || "Automated call";
-  const summaryOverride = `${ASKBOB_AUTOMATED_SCRIPT_PREFIX} ${truncateForSummary(titleSource)}`;
+  const summaryOverride = `${ASKBOB_AUTOMATED_SCRIPT_PREFIX} ${truncateAskBobScriptSummary(titleSource)}`;
   const scriptBodyPayload = normalizedScriptBody ? normalizedScriptBody.slice(0, 4000) : null;
 
   const recordDialFailure = async (
@@ -448,6 +458,38 @@ export async function startAskBobAutomatedCall(
       );
     }
 
+    if (!outboundVoiceUrl) {
+      return recordDialFailure(
+        call,
+        "twilio_not_configured",
+        "Calls aren’t configured yet; please set up telephony to continue.",
+        "Unable to resolve the Twilio outbound voice URL.",
+      );
+    }
+
+    const outboundVoiceUrlWithParams = `${outboundVoiceUrl}?callId=${encodeURIComponent(
+      call.id,
+    )}&workspaceId=${encodeURIComponent(workspace.id)}`;
+
+    await updateCallSessionAutomatedSpeechPlan({
+      supabase,
+      workspaceId: workspace.id,
+      callId: call.id,
+      plan: {
+        voice: voiceSelection,
+        greetingStyle: greetingStyleSelection,
+        allowVoicemail: allowVoicemailSelection,
+        scriptSummary: titleSource,
+      },
+    });
+    console.log("[askbob-automated-call-speechplan-saved]", {
+      workspaceId: workspace.id,
+      callId: call.id,
+      voice: voiceSelection,
+      greetingStyle: greetingStyleSelection,
+      allowVoicemail: allowVoicemailSelection,
+    });
+
     const metadata = { callId: call.id, workspaceId: workspace.id };
     console.log("[calls-automated-dial-attempt]", {
       callId: call.id,
@@ -463,6 +505,7 @@ export async function startAskBobAutomatedCall(
       machineDetection: machineDetectionConfig,
       recordCall: true,
       recordingCallbackUrl: recordingCallbackBaseUrl,
+      twimlUrl: outboundVoiceUrlWithParams,
     });
 
     if (!dialResult.success) {

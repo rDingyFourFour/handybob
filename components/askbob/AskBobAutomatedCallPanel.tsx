@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 
 import {
@@ -15,8 +15,22 @@ import {
   type StartAskBobAutomatedCallResult,
 } from "@/app/(app)/calls/actions/startAskBobAutomatedCall";
 import { formatTwilioStatusLabel } from "@/utils/calls/twilioStatusLabel";
+import {
+  ASKBOB_AUTOMATED_GREETING_STYLE_DEFAULT,
+  ASKBOB_AUTOMATED_VOICE_DEFAULT,
+} from "@/lib/domain/askbob/speechPlan";
 
 const SCRIPT_PREVIEW_LIMIT = 360;
+const VOICE_OPTIONS = [
+  { value: "alloy", label: "Alloy (neutral)" },
+  { value: "samantha", label: "Samantha (friendly)" },
+  { value: "david", label: "David (calm)" },
+];
+const GREETING_STYLE_OPTIONS = [
+  { value: "Professional", label: "Professional" },
+  { value: "Friendly", label: "Friendly" },
+  { value: "Warm", label: "Warm" },
+];
 const POLL_INTERVAL_MS = 2500;
 const MAX_POLL_ATTEMPTS = 30;
 const TERMINAL_GRACE_ATTEMPTS = 3;
@@ -91,8 +105,12 @@ export default function AskBobAutomatedCallPanel({
   const [isPlacingCall, setIsPlacingCall] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<GetCallSessionDialStatusResult | null>(null);
   const [pollHintVisible, setPollHintVisible] = useState(false);
+  const [voice, setVoice] = useState(ASKBOB_AUTOMATED_VOICE_DEFAULT);
+  const [greetingStyle, setGreetingStyle] = useState(ASKBOB_AUTOMATED_GREETING_STYLE_DEFAULT);
+  const [allowVoicemail, setAllowVoicemail] = useState(false);
   const hasResetEffectRunRef = useRef(false);
   const preservedSuccessSessionRef = useRef<string | null>(null);
+  const guardVisibleLoggedRef = useRef(false);
 
   const normalizedCustomerName = customerDisplayName?.trim() ?? null;
   const normalizedCustomerPhone = customerPhoneNumber?.trim() ?? null;
@@ -159,6 +177,35 @@ export default function AskBobAutomatedCallPanel({
   const handleReset = () => {
     handleLocalReset({ force: true });
     onReset?.();
+    setVoice(ASKBOB_AUTOMATED_VOICE_DEFAULT);
+    setGreetingStyle(ASKBOB_AUTOMATED_GREETING_STYLE_DEFAULT);
+    setAllowVoicemail(false);
+  };
+
+  const handleVoiceChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextVoice = event.target.value;
+    setVoice(nextVoice);
+    console.log("[askbob-automated-call-voice-change]", {
+      workspaceId,
+      jobId,
+      callId: callSessionId ?? null,
+      voice: nextVoice,
+    });
+  };
+
+  const handleGreetingStyleChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setGreetingStyle(event.target.value);
+  };
+
+  const handleVoicemailToggle = () => {
+    const nextValue = !allowVoicemail;
+    setAllowVoicemail(nextValue);
+    console.log("[askbob-automated-call-voicemail-toggle]", {
+      workspaceId,
+      jobId,
+      callId: callSessionId ?? null,
+      allowVoicemail: nextValue,
+    });
   };
 
   useEffect(() => {
@@ -177,6 +224,29 @@ export default function AskBobAutomatedCallPanel({
       handleLocalResetRef.current?.();
     }
   }, [hasScriptContent]);
+
+  useEffect(() => {
+    if (!hasScriptContent) {
+      setVoice(ASKBOB_AUTOMATED_VOICE_DEFAULT);
+      setGreetingStyle(ASKBOB_AUTOMATED_GREETING_STYLE_DEFAULT);
+      setAllowVoicemail(false);
+    }
+  }, [hasScriptContent]);
+
+  useEffect(() => {
+    if (stepCollapsed) {
+      guardVisibleLoggedRef.current = false;
+      return;
+    }
+    if (!guardVisibleLoggedRef.current) {
+      console.log("[askbob-automated-call-robocall-guard-visible]", {
+        workspaceId,
+        jobId,
+        callId: callSessionId ?? null,
+      });
+      guardVisibleLoggedRef.current = true;
+    }
+  }, [stepCollapsed, workspaceId, jobId, callSessionId]);
 
   useEffect(() => {
     if (status === "success" || status === "already_in_progress") {
@@ -209,7 +279,7 @@ export default function AskBobAutomatedCallPanel({
 
     const stopPolling = (showHint: boolean) => {
       stopped = true;
-      if (timer) {
+    if (timer) {
         clearTimeout(timer);
       }
       setPollHintVisible(showHint);
@@ -253,7 +323,7 @@ export default function AskBobAutomatedCallPanel({
         }
 
         scheduleNext();
-      } catch (error) {
+      } catch {
         if (stopped) {
           return;
         }
@@ -305,6 +375,9 @@ export default function AskBobAutomatedCallPanel({
         customerPhone: normalizedCustomerPhone,
         scriptBody: trimmedScriptBody,
         scriptSummary: trimmedScriptSummary,
+        voice,
+        greetingStyle,
+        allowVoicemail,
       });
 
       setCallSessionId(actionResult.callId ?? null);
@@ -344,13 +417,16 @@ export default function AskBobAutomatedCallPanel({
       setIsPlacingCall(false);
     }
   }, [
+    allowVoicemail,
     canPlaceCall,
     customerId,
+    greetingStyle,
     jobId,
     normalizedCustomerPhone,
     onAutomatedCallSuccess,
     trimmedScriptBody,
     trimmedScriptSummary,
+    voice,
     workspaceId,
     hasCustomerPhone,
   ]);
@@ -443,6 +519,62 @@ export default function AskBobAutomatedCallPanel({
                 </p>
               )}
             </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-1">
+                <label
+                  htmlFor="voice-control"
+                  className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500"
+                >
+                  Voice
+                </label>
+                <select
+                  id="voice-control"
+                  className="w-full rounded border border-slate-800/70 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  value={voice}
+                  onChange={handleVoiceChange}
+                  disabled={!hasScriptContent}
+                >
+                  {VOICE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label
+                  htmlFor="greeting-style-control"
+                  className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500"
+                >
+                  Greeting style
+                </label>
+                <select
+                  id="greeting-style-control"
+                  className="w-full rounded border border-slate-800/70 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  value={greetingStyle}
+                  onChange={handleGreetingStyleChange}
+                  disabled={!hasScriptContent}
+                >
+                  {GREETING_STYLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center">
+                <label className="flex items-center gap-2 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border border-slate-700 bg-slate-900 text-emerald-400 checked:border-emerald-400"
+                    checked={allowVoicemail}
+                    onChange={handleVoicemailToggle}
+                    disabled={!hasScriptContent}
+                  />
+                  Leave voicemail if unanswered
+                </label>
+              </div>
+            </div>
             <div className="flex flex-wrap items-center gap-3">
               {normalizedCustomerName && (
                 <p className="text-sm text-slate-200">Customer: {normalizedCustomerName}</p>
@@ -466,6 +598,9 @@ export default function AskBobAutomatedCallPanel({
                 Open call workspace instead
               </HbButton>
             </div>
+            <p className="text-[11px] text-amber-300">
+              Automated calls are for job-related follow-ups only.
+            </p>
             <div className="space-y-3 text-sm">
               {status === "idle" && (
                 <p className="text-slate-400">{statusCopy}</p>

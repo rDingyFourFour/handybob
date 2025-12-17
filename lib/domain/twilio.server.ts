@@ -36,6 +36,14 @@ function resolveTwilioClient() {
   return twilio(accountSid, authToken);
 }
 
+const DEFAULT_AUTOMATED_CALL_TWIML = `
+        <Response>
+          <Say voice="alice">
+            Thank you for scheduling time with HandyBob. Please hold while we connect you.
+          </Say>
+        </Response>
+      `;
+
 function buildCallbackUrl(callbackUrl: string, metadata: DialTwilioCallArgs["metadata"]) {
   try {
     const url = new URL(callbackUrl);
@@ -73,13 +81,7 @@ export async function dialTwilioCall(args: DialTwilioCallArgs): Promise<TwilioDi
     const response = await client.calls.create({
       to: args.toPhone,
       from: args.fromPhone,
-      twiml: `
-        <Response>
-          <Say voice="alice">
-            Thank you for scheduling time with HandyBob. Please hold while we connect you.
-          </Say>
-        </Response>
-      `,
+      ...(args.twimlUrl ? { url: args.twimlUrl } : { twiml: DEFAULT_AUTOMATED_CALL_TWIML }),
       statusCallback,
       statusCallbackMethod: "POST",
       statusCallbackEvent: TWILIO_STATUS_CALLBACK_EVENTS.map((event) => event),

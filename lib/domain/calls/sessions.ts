@@ -1,5 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { ASKBOB_AUTOMATED_SCRIPT_PREFIX } from "@/lib/domain/askbob/constants";
+import { truncateAskBobScriptSummary } from "@/lib/domain/askbob/summary";
+import {
+  ASKBOB_AUTOMATED_GREETING_STYLE_DEFAULT,
+  ASKBOB_AUTOMATED_VOICE_DEFAULT,
+  AskBobSpeechPlanInput,
+  SPEECH_PLAN_METADATA_MARKER,
+} from "@/lib/domain/askbob/speechPlan";
 type TwilioStatusEntry = {
   status: string;
   rank: number;
@@ -81,6 +89,86 @@ export type CallSessionRow = {
   twilio_recording_duration_seconds?: number | null;
   twilio_recording_received_at?: string | null;
 };
+
+export type CallSpeechPlan = {
+  voice: string;
+  greetingStyle: string;
+  allowVoicemail: boolean;
+  scriptSummary: string | null;
+};
+
+function buildCallSummaryWithSpeechPlan(plan: AskBobSpeechPlanInput): string {
+  const baseScript = plan.scriptSummary?.trim() || "Automated call";
+  const truncatedScript = truncateAskBobScriptSummary(baseScript);
+  const summaryBody = `${ASKBOB_AUTOMATED_SCRIPT_PREFIX} ${truncatedScript}`;
+  const metadataPayload = JSON.stringify({
+    voice: plan.voice,
+    greetingStyle: plan.greetingStyle,
+    allowVoicemail: plan.allowVoicemail,
+    scriptSummary: truncatedScript,
+  });
+  return `${summaryBody}${SPEECH_PLAN_METADATA_MARKER}${metadataPayload}`;
+}
+
+export function parseCallSpeechPlan(summary?: string | null): CallSpeechPlan | null {
+  if (!summary) {
+    return null;
+  }
+  const markerIndex = summary.indexOf(SPEECH_PLAN_METADATA_MARKER);
+  if (markerIndex === -1) {
+    return null;
+  }
+  try {
+    const metadataText = summary.slice(markerIndex + SPEECH_PLAN_METADATA_MARKER.length).trim();
+    if (!metadataText) {
+      return null;
+    }
+    const parsed = JSON.parse(metadataText);
+    return {
+      voice: typeof parsed.voice === "string" && parsed.voice.length > 0 ? parsed.voice : ASKBOB_AUTOMATED_VOICE_DEFAULT,
+      greetingStyle:
+        typeof parsed.greetingStyle === "string" && parsed.greetingStyle.length > 0
+          ? parsed.greetingStyle
+          : ASKBOB_AUTOMATED_GREETING_STYLE_DEFAULT,
+      allowVoicemail: Boolean(parsed.allowVoicemail),
+      scriptSummary: typeof parsed.scriptSummary === "string" ? parsed.scriptSummary : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function updateCallSessionAutomatedSpeechPlan({
+  supabase,
+  workspaceId,
+  callId,
+  plan,
+}: {
+  supabase: SupabaseClient;
+  workspaceId: string;
+  callId: string;
+  plan: AskBobSpeechPlanInput;
+}): Promise<CallSpeechPlan> {
+  const summary = buildCallSummaryWithSpeechPlan(plan);
+  const { error } = await supabase
+    .from("calls")
+    .update({
+      summary,
+    })
+    .eq("id", callId)
+    .eq("workspace_id", workspaceId);
+
+  if (error) {
+    throw error;
+  }
+
+  return parseCallSpeechPlan(summary) ?? {
+    voice: plan.voice,
+    greetingStyle: plan.greetingStyle,
+    allowVoicemail: plan.allowVoicemail,
+    scriptSummary: plan.scriptSummary?.trim() ?? null,
+  };
+}
 
 export type EnsureInboundCallSessionParams = {
   supabase: SupabaseClient;
