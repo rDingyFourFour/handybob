@@ -8,6 +8,7 @@ const mockGetCurrentWorkspace = vi.fn();
 const mockDialTwilioCall = vi.fn();
 const mockParseEnvConfig = vi.fn();
 const setDialResultSpy = vi.spyOn(callSessionsModule, "setTwilioDialResultForCallSession");
+const markDialRequestedSpy = vi.spyOn(callSessionsModule, "markCallSessionDialRequested");
 
 vi.mock("@/utils/supabase/server", () => ({
   createServerClient: () => createServerClientMock(),
@@ -42,6 +43,11 @@ describe("startAskBobAutomatedCall", () => {
     process.env.TWILIO_FROM_NUMBER = "+15550000000";
     setDialResultSpy.mockReset();
     setDialResultSpy.mockResolvedValue(undefined);
+    markDialRequestedSpy.mockReset();
+    markDialRequestedSpy.mockResolvedValue({
+      outcome: "allowed_to_dial",
+      callId: "call-123",
+    });
     mockParseEnvConfig.mockReturnValue({
       appUrl: "https://app.test",
       twilioAccountSid: null,
@@ -117,13 +123,13 @@ describe("startAskBobAutomatedCall", () => {
       twilioCallSid: "twilio-abc",
     });
     expect(supabaseState.queries.calls.insert).toHaveBeenCalled();
-    expect(setDialResultSpy).toHaveBeenCalledTimes(2);
-    expect(setDialResultSpy.mock.calls[0][0]).toMatchObject({
+    expect(markDialRequestedSpy).toHaveBeenCalledTimes(1);
+    expect(markDialRequestedSpy.mock.calls[0][0]).toMatchObject({
       callId: "call-123",
       workspaceId: "workspace-1",
-      twilioStatus: "queued",
     });
-    expect(setDialResultSpy.mock.calls[1][0]).toMatchObject({
+    expect(setDialResultSpy).toHaveBeenCalledTimes(1);
+    expect(setDialResultSpy.mock.calls[0][0]).toMatchObject({
       callId: "call-123",
       workspaceId: "workspace-1",
       twilioStatus: "initiated",
@@ -192,18 +198,83 @@ describe("startAskBobAutomatedCall", () => {
       callId: "call-123",
       twilioStatus: "failed",
     });
-    expect(setDialResultSpy).toHaveBeenCalledTimes(2);
+    expect(markDialRequestedSpy).toHaveBeenCalledTimes(1);
+    expect(setDialResultSpy).toHaveBeenCalledTimes(1);
     expect(setDialResultSpy.mock.calls[0][0]).toMatchObject({
-      callId: "call-123",
-      workspaceId: "workspace-1",
-      twilioStatus: "queued",
-    });
-    expect(setDialResultSpy.mock.calls[1][0]).toMatchObject({
       callId: "call-123",
       workspaceId: "workspace-1",
       twilioStatus: "failed",
       errorMessage: "Missing config",
     });
+  });
+
+  it("blocks duplicate dials when a previous session is already in progress", async () => {
+    const supabaseState = setupSupabaseMock({
+      jobs: {
+        data: [
+          {
+            id: "job-1",
+            workspace_id: "workspace-1",
+            customer_id: "customer-1",
+          },
+        ],
+        error: null,
+      },
+      workspaces: {
+        data: [
+          {
+            business_phone: "+15550001111",
+          },
+        ],
+        error: null,
+      },
+      calls: {
+        data: [
+          {
+            id: "call-in-progress",
+            workspace_id: "workspace-1",
+            job_id: "job-1",
+            twilio_call_sid: "twilio-abc",
+            twilio_status: "queued",
+          },
+        ],
+        error: null,
+      },
+    });
+    supabaseState.supabase.auth = {
+      getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
+    };
+    createServerClientMock.mockReturnValue(supabaseState.supabase);
+    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+    markDialRequestedSpy.mockResolvedValueOnce({
+      outcome: "already_in_progress",
+      callId: "call-in-progress",
+    });
+
+    const result = await startAskBobAutomatedCall({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      customerId: "customer-1",
+      customerPhone: "+15550002222",
+      scriptBody: "Hello there",
+      scriptSummary: "Follow-up script",
+    });
+
+    expect(result).toEqual({
+      status: "already_in_progress",
+      code: "already_in_progress",
+      message: "Call is already in progress. Open call session.",
+      callId: "call-in-progress",
+      twilioStatus: "queued",
+      twilioCallSid: "twilio-abc",
+    });
+    expect(markDialRequestedSpy).toHaveBeenCalledTimes(1);
+    expect(markDialRequestedSpy.mock.calls[0][0]).toMatchObject({
+      callId: "call-in-progress",
+      workspaceId: "workspace-1",
+    });
+    expect(mockDialTwilioCall).not.toHaveBeenCalled();
+    expect(setDialResultSpy).not.toHaveBeenCalled();
   });
 
   it("fails when the customer phone is missing", async () => {
@@ -314,6 +385,10 @@ describe("startAskBobAutomatedCall", () => {
     };
     createServerClientMock.mockReturnValue(supabaseState.supabase);
     mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+    markDialRequestedSpy.mockResolvedValueOnce({
+      outcome: "already_completed",
+      callId: "call-existing",
+    });
 
     const result = await startAskBobAutomatedCall({
       workspaceId: "workspace-1",
@@ -335,5 +410,6 @@ describe("startAskBobAutomatedCall", () => {
     });
     expect(mockDialTwilioCall).not.toHaveBeenCalled();
     expect(setDialResultSpy).not.toHaveBeenCalled();
+    expect(markDialRequestedSpy).toHaveBeenCalledTimes(1);
   });
 });

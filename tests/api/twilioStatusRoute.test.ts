@@ -106,6 +106,20 @@ describe("Twilio status callback route", () => {
     ).toBe(true);
   });
 
+  it("rejects callbacks when the Twilio token is not configured", async () => {
+    delete process.env.TWILIO_AUTH_TOKEN;
+
+    const response = await POST(buildRequest({ CallSid: "call-3" }));
+
+    expect(response.status).toBe(403);
+    expect(mockUpdateTwilioStatus).not.toHaveBeenCalled();
+    expect(
+      warnSpy.mock.calls.some(
+        (args) => args[0] === "[twilio-call-status-callback-rejected]" && args[1]?.reason === "missing_token",
+      ),
+    ).toBe(true);
+  });
+
   it("updates the call session when a valid callback arrives", async () => {
     const supabaseState = setupSupabaseMock({
       calls: {
@@ -119,6 +133,10 @@ describe("Twilio status callback route", () => {
       },
     });
     createAdminClientMock.mockReturnValue(supabaseState.supabase);
+    mockUpdateTwilioStatus.mockResolvedValue({
+      applied: true,
+      currentStatus: "ringing",
+    });
 
     const response = await POST(
       buildRequest(
@@ -144,7 +162,60 @@ describe("Twilio status callback route", () => {
     );
     expect(warnSpy).not.toHaveBeenCalled();
     expect(logSpy.mock.calls.some((args) => args[0] === "[twilio-call-status-callback-received]")).toBe(true);
-    expect(logSpy.mock.calls.some((args) => args[0] === "[twilio-call-status-callback-updated]")).toBe(true);
+    expect(
+      logSpy.mock.calls.some(
+        (args) =>
+          args[0] === "[twilio-call-status-callback-update]" &&
+          args[1]?.applied === true &&
+          args[1]?.incomingStatus === "ringing",
+      ),
+    ).toBe(true);
+  });
+
+  it("logs applied:false when an older status callback is ignored", async () => {
+    const supabaseState = setupSupabaseMock({
+      calls: {
+        data: [
+          {
+            id: "call-123",
+            twilio_call_sid: "call-1",
+          },
+        ],
+        error: null,
+      },
+    });
+    createAdminClientMock.mockReturnValue(supabaseState.supabase);
+    mockUpdateTwilioStatus.mockResolvedValue({
+      applied: false,
+      currentStatus: "initiated",
+    });
+
+    const response = await POST(
+      buildRequest(
+        {
+          CallSid: "call-1",
+          CallStatus: "queued",
+        },
+        "signature",
+        "call-123",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockUpdateTwilioStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callId: "call-123",
+        twilioStatus: "queued",
+      }),
+    );
+    expect(
+      logSpy.mock.calls.some(
+        (args) =>
+          args[0] === "[twilio-call-status-callback-update]" &&
+          args[1]?.applied === false &&
+          args[1]?.incomingStatus === "queued",
+      ),
+    ).toBe(true);
   });
 
   it("logs unmatched when the callback SID does not resolve a call row", async () => {

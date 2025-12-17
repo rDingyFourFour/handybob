@@ -4,7 +4,6 @@ import twilio from "twilio";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { updateCallSessionTwilioStatus } from "@/lib/domain/calls/sessions";
 
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_SIGNATURE_HEADER = "x-twilio-signature";
 
 export const runtime = "nodejs";
@@ -68,7 +67,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  await updateCallSessionTwilioStatus({
+  const updateResult = await updateCallSessionTwilioStatus({
     supabase,
     callId,
     twilioStatus: callStatus ?? "unknown",
@@ -76,11 +75,13 @@ export async function POST(req: NextRequest) {
     errorMessage,
   });
 
-  console.log("[twilio-call-status-callback-updated]", {
+  console.log("[twilio-call-status-callback-update]", {
     callId,
     callSid,
     workspaceId: workspaceIdFromParams,
-    status: callStatus ?? "unknown",
+    incomingStatus: callStatus ?? "unknown",
+    currentStatus: updateResult.currentStatus,
+    applied: updateResult.applied,
     errorCode,
   });
 
@@ -103,7 +104,8 @@ function verifyTwilioSignature(
   params: Record<string, string>,
   url: string,
 ): TwilioSignatureVerificationResult {
-  if (!TWILIO_AUTH_TOKEN) {
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!authToken) {
     return { valid: false, reason: "missing_token" };
   }
 
@@ -112,7 +114,7 @@ function verifyTwilioSignature(
   }
 
   try {
-    const isValid = twilio.validateRequest(TWILIO_AUTH_TOKEN, signature, url, params);
+    const isValid = twilio.validateRequest(authToken, signature, url, params);
     return { valid: isValid, reason: isValid ? undefined : "invalid_signature" };
   } catch (error) {
     const detail = error instanceof Error ? error.message : "validation error";

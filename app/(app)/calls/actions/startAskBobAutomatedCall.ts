@@ -8,7 +8,9 @@ import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { TWILIO_CALL_STATUS_CALLBACK_PATH } from "@/lib/domain/twilio";
 import {
   CallSessionRow,
+  TWILIO_DIAL_FAILURE_STATUSES,
   createCallSessionForJobQuote,
+  markCallSessionDialRequested,
   setTwilioDialResultForCallSession,
 } from "@/lib/domain/calls/sessions";
 import { dialTwilioCall } from "@/lib/domain/twilio.server";
@@ -60,14 +62,6 @@ export type StartAskBobAutomatedCallResult =
   | StartAskBobAutomatedCallFailure;
 
 const FROM_PLACEHOLDER = "workspace-default";
-const TELEPHONE_IN_PROGRESS_STATUSES = new Set([
-  "queued",
-  "initiated",
-  "ringing",
-  "in-progress",
-  "answered",
-]);
-
 function normalizeCandidate(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : null;
@@ -243,51 +237,65 @@ export async function startAskBobAutomatedCall(
     throw existingCallResponse.error;
   }
 
-  const existingCall =
-    Array.isArray(existingCallResponse.data) && existingCallResponse.data.length
-      ? (existingCallResponse.data[0] as CallSessionRow)
-      : (existingCallResponse.data as CallSessionRow | null) ?? null;
+  const existingCallData = existingCallResponse.data;
+  const existingCall = Array.isArray(existingCallData)
+    ? (existingCallData[0] as CallSessionRow) ?? null
+    : (existingCallData as CallSessionRow | null);
+  let callSessionToDial: CallSessionRow | null = null;
 
   if (existingCall) {
     const normalizedExistingStatus = existingCall.twilio_status?.toLowerCase() ?? null;
-    const isInProgress =
-      normalizedExistingStatus !== null && TELEPHONE_IN_PROGRESS_STATUSES.has(normalizedExistingStatus);
-    const isFailureStatus = normalizedExistingStatus === "failed";
-    const hasCallSid = Boolean(existingCall.twilio_call_sid);
+    const isFailureStatus =
+      normalizedExistingStatus !== null && TWILIO_DIAL_FAILURE_STATUSES.has(normalizedExistingStatus);
 
-    if (hasCallSid && !isFailureStatus) {
-      console.log("[askbob-automated-call-action-idempotent-return]", {
+    if (!isFailureStatus) {
+      const gateResult = await markCallSessionDialRequested({
+        supabase,
         workspaceId: workspace.id,
-        jobId: params.jobId,
         callId: existingCall.id,
-        twilioStatus: existingCall.twilio_status ?? null,
       });
-      return {
-        status: "success",
-        code: "call_already_started",
-        message: successLabel,
-        label: successLabel,
-        callId: existingCall.id,
-        twilioStatus: existingCall.twilio_status ?? null,
-        twilioCallSid: existingCall.twilio_call_sid ?? null,
-      };
-    }
 
-    if (isInProgress) {
-      console.log("[askbob-automated-call-action-already-in-progress]", {
-        workspaceId: workspace.id,
-        jobId: params.jobId,
-        callId: existingCall.id,
-        twilioStatus: existingCall.twilio_status ?? null,
-      });
-      return {
-        status: "already_in_progress",
-        code: "already_in_progress",
-        message: "Call is already in progress. Open call session.",
-        callId: existingCall.id,
-        twilioStatus: existingCall.twilio_status ?? null,
-        twilioCallSid: existingCall.twilio_call_sid ?? null,
-      };
+      if (gateResult.outcome === "allowed_to_dial") {
+        callSessionToDial = existingCall;
+      } else if (gateResult.outcome === "already_in_progress") {
+        console.log("[askbob-automated-call-action-already-in-progress]", {
+          workspaceId: workspace.id,
+          jobId: params.jobId,
+          callId: existingCall.id,
+          twilioStatus: existingCall.twilio_status ?? null,
+        });
+        return {
+          status: "already_in_progress",
+          code: "already_in_progress",
+          message: "Call is already in progress. Open call session.",
+          callId: existingCall.id,
+          twilioStatus: existingCall.twilio_status ?? null,
+          twilioCallSid: existingCall.twilio_call_sid ?? null,
+        };
+      } else if (gateResult.outcome === "already_completed") {
+        console.log("[askbob-automated-call-action-idempotent-return]", {
+          workspaceId: workspace.id,
+          jobId: params.jobId,
+          callId: existingCall.id,
+          twilioStatus: existingCall.twilio_status ?? null,
+        });
+        return {
+          status: "success",
+          code: "call_already_started",
+          message: successLabel,
+          label: successLabel,
+          callId: existingCall.id,
+          twilioStatus: existingCall.twilio_status ?? null,
+          twilioCallSid: existingCall.twilio_call_sid ?? null,
+        };
+      } else {
+        logFailure("call_session_guard_error", {
+          callId: existingCall.id,
+          workspaceId: workspace.id,
+          guardOutcome: gateResult.outcome,
+        });
+        throw new Error("call_session_guard_error");
+      }
     }
   }
 
@@ -315,7 +323,7 @@ export async function startAskBobAutomatedCall(
   const scriptBodyPayload = normalizedScriptBody ? normalizedScriptBody.slice(0, 4000) : null;
 
   const recordDialFailure = async (
-    callEntry: Awaited<ReturnType<typeof createCallSessionForJobQuote>>,
+    callEntry: CallSessionRow,
     failureReason: StartAskBobAutomatedCallFailure["code"],
     userMessage: string,
     diagnostics: string,
@@ -349,24 +357,46 @@ export async function startAskBobAutomatedCall(
   };
 
   try {
-    const call = await createCallSessionForJobQuote({
-      supabase,
-      workspaceId: workspace.id,
-      userId: user.id,
-      jobId: params.jobId,
-      customerId: resolvedCustomerId,
-      fromNumber,
-      toNumber: normalizedCustomerPhone,
-      quoteId: null,
-      scriptBody: scriptBodyPayload,
-      summaryOverride,
-    });
+    let call = callSessionToDial;
+    if (!call) {
+      call = await createCallSessionForJobQuote({
+        supabase,
+        workspaceId: workspace.id,
+        userId: user.id,
+        jobId: params.jobId,
+        customerId: resolvedCustomerId,
+        fromNumber,
+        toNumber: normalizedCustomerPhone,
+        quoteId: null,
+        scriptBody: scriptBodyPayload,
+        summaryOverride,
+      });
 
-    console.log("[calls-automated-call-session-created]", {
-      callId: call.id,
-      workspaceId: call.workspace_id,
-      jobId: call.job_id,
-    });
+      console.log("[calls-automated-call-session-created]", {
+        callId: call.id,
+        workspaceId: call.workspace_id,
+        jobId: call.job_id,
+      });
+
+      const initGateResult = await markCallSessionDialRequested({
+        supabase,
+        workspaceId: workspace.id,
+        callId: call.id,
+      });
+
+      if (initGateResult.outcome !== "allowed_to_dial") {
+        logFailure("call_session_guard_error", {
+          callId: call.id,
+          workspaceId: workspace.id,
+          guardOutcome: initGateResult.outcome,
+        });
+        throw new Error("call_session_guard_error");
+      }
+    }
+
+    if (!call) {
+      throw new Error("call_session_missing");
+    }
 
     if (!outboundFromNumber) {
       return recordDialFailure(
@@ -387,12 +417,6 @@ export async function startAskBobAutomatedCall(
     }
 
     const metadata = { callId: call.id, workspaceId: workspace.id };
-    await setTwilioDialResultForCallSession({
-      supabase,
-      workspaceId: workspace.id,
-      callId: call.id,
-      twilioStatus: "queued",
-    });
     console.log("[calls-automated-dial-attempt]", {
       callId: call.id,
       workspaceId: call.workspace_id,

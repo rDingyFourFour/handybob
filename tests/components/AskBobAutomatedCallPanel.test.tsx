@@ -243,6 +243,7 @@ describe("AskBobAutomatedCallPanel", () => {
       await Promise.resolve();
     });
 
+    expect(container.textContent).toContain("Call already started");
     expect(container.textContent).toContain("Call is already in progress. Open call session.");
     expect(container.querySelector("a[href=\"/calls/call-456\"]")).toBeTruthy();
     expect(container.textContent).not.toContain("Call failed");

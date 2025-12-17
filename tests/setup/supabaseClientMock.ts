@@ -14,6 +14,7 @@ export type SupabaseQuery = {
   lt: (...args: unknown[]) => SupabaseQuery;
   in: (...args: unknown[]) => SupabaseQuery;
   or: (...args: unknown[]) => SupabaseQuery;
+  not: (...args: unknown[]) => SupabaseQuery;
   order: (...args: unknown[]) => SupabaseQuery;
   range: (...args: unknown[]) => SupabaseQuery;
   insert?: (...args: unknown[]) => SupabaseQuery;
@@ -68,6 +69,7 @@ function createQuery(table: string, state: SupabaseMockState): SupabaseQuery {
     lt: vi.fn(() => query),
     in: vi.fn(() => query),
     or: vi.fn(() => query),
+    not: vi.fn(() => query),
     order: vi.fn(() => query),
     range: vi.fn(() => query),
     insert: vi.fn(() => query),

@@ -104,17 +104,27 @@ export default function AskBobAutomatedCallPanel({
   const canPlaceCall = Boolean(workspaceId && jobId && hasCustomerPhone && hasScriptContent && !isPlacingCall);
   const canOpenCallWorkspace = Boolean(trimmedScriptBody && hasCustomerPhone && onStartCallWithScript && !isPlacingCall);
 
-  const handleLocalReset = useCallback(() => {
-    setStatus("idle");
-    setStatusMessage(null);
-    setCallSessionId(null);
-    setTwilioStatus(null);
-    setResultCode(null);
-    setIsPlacingCall(false);
-  }, []);
+  const handleLocalReset = useCallback(
+    (options?: { force?: boolean }) => {
+      if (!options?.force && (status === "success" || status === "already_in_progress")) {
+        return;
+      }
+      setStatus("idle");
+      setStatusMessage(null);
+      setCallSessionId(null);
+      setTwilioStatus(null);
+      setResultCode(null);
+      setIsPlacingCall(false);
+    },
+    [status],
+  );
+  const handleLocalResetRef = useRef(handleLocalReset);
+  useEffect(() => {
+    handleLocalResetRef.current = handleLocalReset;
+  }, [handleLocalReset]);
 
   const handleReset = () => {
-    handleLocalReset();
+    handleLocalReset({ force: true });
     onReset?.();
   };
 
@@ -126,14 +136,14 @@ export default function AskBobAutomatedCallPanel({
       hasResetEffectRunRef.current = true;
       return;
     }
-    handleLocalReset();
-  }, [resetToken, handleLocalReset]);
+    handleLocalResetRef.current?.();
+  }, [resetToken]);
 
   useEffect(() => {
     if (!hasScriptContent) {
-      handleLocalReset();
+      handleLocalResetRef.current?.();
     }
-  }, [hasScriptContent, handleLocalReset]);
+  }, [hasScriptContent]);
 
   const handlePlaceCall = useCallback(async () => {
     if (!canPlaceCall || !normalizedCustomerPhone) {
@@ -236,6 +246,9 @@ export default function AskBobAutomatedCallPanel({
     if (status === "calling") {
       return "Placing the AskBob automated call...";
     }
+    if (status === "already_in_progress") {
+      return statusMessage ?? "Call already started. Open call session.";
+    }
     if (status === "success") {
       return statusMessage ?? "Call started.";
     }
@@ -244,6 +257,11 @@ export default function AskBobAutomatedCallPanel({
     }
     return "Generate a script in Step 7 and then place an automated call when you’re ready.";
   }, [status, statusMessage]);
+  const showSuccessBanner = (status === "success" || status === "already_in_progress") && Boolean(callSessionId);
+  const successBannerTitle =
+    status === "already_in_progress" || resultCode === "call_already_started"
+      ? "Call already started"
+      : "Call started";
 
   return (
     <HbCard className="space-y-4">
@@ -324,28 +342,18 @@ export default function AskBobAutomatedCallPanel({
               {status === "calling" && (
                 <p className="text-slate-400">{statusMessage}</p>
               )}
-              {status === "success" && callSessionId && (
+              {showSuccessBanner && (
                 <div className="space-y-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm text-slate-200">
-                  <span className="text-emerald-200 font-semibold">
-                    {resultCode === "call_already_started" ? "Call already started" : "Call started"}
-                  </span>
+                  <span className="text-emerald-200 font-semibold">{successBannerTitle}</span>
+                  {status === "already_in_progress" && statusMessage && (
+                    <p className="text-sm text-slate-200">{statusMessage}</p>
+                  )}
                   {twilioStatusLabel && (
                     <p className="text-xs text-slate-300">Twilio status: {twilioStatusLabel}</p>
                   )}
                   <Link
                     href={`/calls/${callSessionId}`}
                     className="inline-flex items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-emerald-200 shadow-sm transition hover:bg-emerald-500/20"
-                  >
-                    Open call session
-                  </Link>
-                </div>
-              )}
-              {status === "already_in_progress" && callSessionId && (
-                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
-                  <span>Call is already in progress. Open call session.</span>
-                  <Link
-                    href={`/calls/${callSessionId}`}
-                    className="text-emerald-400 underline-offset-2 hover:text-emerald-200"
                   >
                     Open call session
                   </Link>
