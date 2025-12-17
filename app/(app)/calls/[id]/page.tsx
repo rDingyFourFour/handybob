@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import CallSummaryStatus from "@/components/call-summary-status";
+import CallStatusRefreshButton from "@/components/calls/CallStatusRefreshButton";
 import HbCard from "@/components/ui/hb-card";
 import JobCallScriptPanel, {
   type PhoneMessageSummary,
@@ -111,6 +112,15 @@ function formatDate(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatTwilioStatusTimestamp(value: string | null) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
 }
 
 function formatCurrency(value: number | null | undefined) {
@@ -497,8 +507,17 @@ export default async function CallSessionPage({
   const summaryMissing = !latestPhoneMessageBody;
   const twilioStatusLabel = formatTwilioStatusLabel(call.twilio_status ?? null);
   const twilioStatusUpdatedLabel = call.twilio_status_updated_at
-    ? formatDate(call.twilio_status_updated_at)
+    ? formatTwilioStatusTimestamp(call.twilio_status_updated_at)
     : null;
+  const showTwilioStatus = Boolean(call.twilio_call_sid || call.twilio_status);
+
+  if (showTwilioStatus) {
+    console.log("[calls-session-twilio-status-visible]", {
+      callId: call.id,
+      twilioCallSid: call.twilio_call_sid ?? null,
+      twilioStatus: call.twilio_status ?? null,
+    });
+  }
 
   const jobLink = jobId ? `/jobs/${jobId}` : undefined;
   const displayJobTitle =
@@ -589,9 +608,12 @@ export default async function CallSessionPage({
                 <p className="mt-1 text-base text-white">{createdAtLabel}</p>
               </div>
             </div>
-            {call.twilio_call_sid && (
+            {showTwilioStatus && (
               <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Automated call status</p>
+                <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
+                  <span>Twilio status</span>
+                  <CallStatusRefreshButton callId={call.id} />
+                </div>
                 <div className="flex flex-wrap items-baseline gap-2">
                   <span className="font-semibold text-white">
                     {twilioStatusLabel ?? "Queued"}

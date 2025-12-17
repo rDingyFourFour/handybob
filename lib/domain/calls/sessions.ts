@@ -212,39 +212,53 @@ export async function linkCallToCustomerJob({
   };
 }
 
-type AttachTwilioMetadataParams = {
+export type SetTwilioDialResultForCallSessionParams = {
   supabase: SupabaseClient;
+  workspaceId: string;
   callId: string;
-  twilioCallSid: string;
-  initialStatus?: string | null;
+  twilioStatus: string;
+  twilioCallSid?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
 };
 
-export async function attachTwilioMetadataToCallSession(
-  params: AttachTwilioMetadataParams
+export async function setTwilioDialResultForCallSession(
+  params: SetTwilioDialResultForCallSessionParams,
 ): Promise<void> {
-  const { supabase, callId, twilioCallSid, initialStatus } = params;
+  const { supabase, workspaceId, callId, twilioStatus, twilioCallSid, errorCode, errorMessage } = params;
+  const updatePayload: {
+    twilio_status: string;
+    twilio_status_updated_at: string;
+    twilio_error_code: string | null;
+    twilio_error_message: string | null;
+    twilio_call_sid?: string | null;
+  } = {
+    twilio_status: twilioStatus,
+    twilio_status_updated_at: new Date().toISOString(),
+    twilio_error_code: errorCode ?? null,
+    twilio_error_message: errorMessage ?? null,
+  };
+
+  if (twilioCallSid !== undefined) {
+    updatePayload.twilio_call_sid = twilioCallSid;
+  }
+
   const { error } = await supabase
     .from("calls")
-    .update({
-      twilio_call_sid: twilioCallSid,
-      twilio_status: initialStatus ?? null,
-      twilio_status_updated_at: new Date().toISOString(),
-      twilio_error_code: null,
-      twilio_error_message: null,
-    })
-    .eq("id", callId);
+    .update(updatePayload)
+    .eq("id", callId)
+    .eq("workspace_id", workspaceId);
 
   if (error) {
     throw error;
   }
 
-  if (initialStatus) {
-    console.log("[calls-twilio-status-updated]", {
-      callId,
-      twilioStatus: initialStatus,
-      hasErrorCode: false,
-    });
-  }
+  console.log("[calls-twilio-status-updated]", {
+    callId,
+    twilioStatus,
+    hasErrorCode: Boolean(errorCode),
+    hasTwilioCallSid: typeof twilioCallSid === "string" && twilioCallSid.length > 0,
+  });
 }
 
 type UpdateTwilioStatusParams = {
@@ -273,9 +287,9 @@ export async function updateCallSessionTwilioStatus(
     throw error;
   }
 
-  console.log("[calls-twilio-status-updated]", {
-    callId,
-    twilioStatus,
-    hasErrorCode: Boolean(errorCode),
-  });
+    console.log("[calls-twilio-status-updated]", {
+      callId,
+      twilioStatus,
+      hasErrorCode: Boolean(errorCode),
+    });
 }

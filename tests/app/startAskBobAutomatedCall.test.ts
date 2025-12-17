@@ -7,8 +7,7 @@ const createServerClientMock = vi.fn();
 const mockGetCurrentWorkspace = vi.fn();
 const mockDialTwilioCall = vi.fn();
 const mockParseEnvConfig = vi.fn();
-const attachSpy = vi.spyOn(callSessionsModule, "attachTwilioMetadataToCallSession");
-const updateSpy = vi.spyOn(callSessionsModule, "updateCallSessionTwilioStatus");
+const setDialResultSpy = vi.spyOn(callSessionsModule, "setTwilioDialResultForCallSession");
 
 vi.mock("@/utils/supabase/server", () => ({
   createServerClient: () => createServerClientMock(),
@@ -41,14 +40,13 @@ describe("startAskBobAutomatedCall", () => {
     process.env.TWILIO_ACCOUNT_SID = "sid";
     process.env.TWILIO_AUTH_TOKEN = "token";
     process.env.TWILIO_FROM_NUMBER = "+15550000000";
-    attachSpy.mockReset();
-    attachSpy.mockResolvedValue(undefined);
-    updateSpy.mockReset();
-    updateSpy.mockResolvedValue(undefined);
+    setDialResultSpy.mockReset();
+    setDialResultSpy.mockResolvedValue(undefined);
     mockParseEnvConfig.mockReturnValue({
       appUrl: "https://app.test",
       twilioAccountSid: null,
       twilioAuthToken: null,
+      twilioMachineDetectionEnabled: false,
       stripeSecretKey: null,
       stripeWebhookSecret: null,
       openAiModel: "gpt-4.1-mini",
@@ -75,16 +73,19 @@ describe("startAskBobAutomatedCall", () => {
         ],
         error: null,
       },
-      calls: {
-        data: [
-          {
-            id: "call-123",
-            workspace_id: "workspace-1",
-            job_id: "job-1",
-          },
-        ],
-        error: null,
-      },
+      calls: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: "call-123",
+              workspace_id: "workspace-1",
+              job_id: "job-1",
+            },
+          ],
+          error: null,
+        },
+      ],
     });
     supabaseState.supabase.auth = {
       getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
@@ -102,24 +103,32 @@ describe("startAskBobAutomatedCall", () => {
       jobId: "job-1",
       customerId: "customer-1",
       customerPhone: "+15550002222",
+      scriptBody: "Hello there",
       scriptSummary: "Follow-up script",
     });
 
     expect(result).toEqual({
       status: "success",
-      callId: "call-123",
+      code: "call_started",
+      message: "Follow-up script",
       label: "Follow-up script",
+      callId: "call-123",
       twilioStatus: "queued",
+      twilioCallSid: "twilio-abc",
     });
     expect(supabaseState.queries.calls.insert).toHaveBeenCalled();
-    expect(attachSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        callId: "call-123",
-        twilioCallSid: "twilio-abc",
-        initialStatus: "queued",
-      }),
-    );
-    expect(updateSpy).not.toHaveBeenCalled();
+    expect(setDialResultSpy).toHaveBeenCalledTimes(2);
+    expect(setDialResultSpy.mock.calls[0][0]).toMatchObject({
+      callId: "call-123",
+      workspaceId: "workspace-1",
+      twilioStatus: "queued",
+    });
+    expect(setDialResultSpy.mock.calls[1][0]).toMatchObject({
+      callId: "call-123",
+      workspaceId: "workspace-1",
+      twilioStatus: "initiated",
+      twilioCallSid: "twilio-abc",
+    });
   });
 
   it("returns a failure when Twilio is not configured", async () => {
@@ -142,16 +151,19 @@ describe("startAskBobAutomatedCall", () => {
         ],
         error: null,
       },
-      calls: {
-        data: [
-          {
-            id: "call-123",
-            workspace_id: "workspace-1",
-            job_id: "job-1",
-          },
-        ],
-        error: null,
-      },
+      calls: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: "call-123",
+              workspace_id: "workspace-1",
+              job_id: "job-1",
+            },
+          ],
+          error: null,
+        },
+      ],
     });
     supabaseState.supabase.auth = {
       getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
@@ -169,23 +181,29 @@ describe("startAskBobAutomatedCall", () => {
       jobId: "job-1",
       customerId: "customer-1",
       customerPhone: "+15550002222",
+      scriptBody: "Hello there",
       scriptSummary: "Follow-up script",
     });
 
     expect(result).toEqual({
       status: "failure",
-      reason: "twilio_not_configured",
+      code: "twilio_not_configured",
       message: "Calls aren’t configured yet; please set up telephony to continue.",
       callId: "call-123",
+      twilioStatus: "failed",
     });
-    expect(attachSpy).not.toHaveBeenCalled();
-    expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        callId: "call-123",
-        twilioStatus: "failed",
-        errorMessage: "Missing config",
-      }),
-    );
+    expect(setDialResultSpy).toHaveBeenCalledTimes(2);
+    expect(setDialResultSpy.mock.calls[0][0]).toMatchObject({
+      callId: "call-123",
+      workspaceId: "workspace-1",
+      twilioStatus: "queued",
+    });
+    expect(setDialResultSpy.mock.calls[1][0]).toMatchObject({
+      callId: "call-123",
+      workspaceId: "workspace-1",
+      twilioStatus: "failed",
+      errorMessage: "Missing config",
+    });
   });
 
   it("fails when the customer phone is missing", async () => {
@@ -200,12 +218,13 @@ describe("startAskBobAutomatedCall", () => {
       workspaceId: "workspace-1",
       jobId: "job-1",
       customerPhone: "   ",
+      scriptBody: "Hello there",
       scriptSummary: "Follow-up script",
     });
 
     expect(result).toEqual({
       status: "failure",
-      reason: "missing_customer_phone",
+      code: "missing_customer_phone",
       message: "Add a customer phone number before placing an automated call.",
     });
     expect(supabaseState.queries.calls?.insert).toBeUndefined();
@@ -246,13 +265,75 @@ describe("startAskBobAutomatedCall", () => {
       workspaceId: "workspace-1",
       jobId: "job-1",
       customerPhone: "+15550002222",
+      scriptBody: "Hello there",
       scriptSummary: "Follow-up script",
     });
 
     expect(result).toEqual({
       status: "failure",
-      reason: "wrong_workspace",
+      code: "wrong_workspace",
       message: "This job does not belong to your workspace.",
     });
+  });
+
+  it("returns the existing session when a call has already been started", async () => {
+    const supabaseState = setupSupabaseMock({
+      jobs: {
+        data: [
+          {
+            id: "job-1",
+            workspace_id: "workspace-1",
+            customer_id: "customer-1",
+          },
+        ],
+        error: null,
+      },
+      workspaces: {
+        data: [
+          {
+            business_phone: "+15550001111",
+          },
+        ],
+        error: null,
+      },
+      calls: {
+        data: [
+          {
+            id: "call-existing",
+            workspace_id: "workspace-1",
+            job_id: "job-1",
+            twilio_call_sid: "twilio-abc",
+            twilio_status: "initiated",
+          },
+        ],
+        error: null,
+      },
+    });
+    supabaseState.supabase.auth = {
+      getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
+    };
+    createServerClientMock.mockReturnValue(supabaseState.supabase);
+    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+
+    const result = await startAskBobAutomatedCall({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      customerId: "customer-1",
+      customerPhone: "+15550002222",
+      scriptBody: "Hello there",
+      scriptSummary: "Follow-up script",
+    });
+
+    expect(result).toEqual({
+      status: "success",
+      code: "call_already_started",
+      message: "Follow-up script",
+      label: "Follow-up script",
+      callId: "call-existing",
+      twilioStatus: "initiated",
+      twilioCallSid: "twilio-abc",
+    });
+    expect(mockDialTwilioCall).not.toHaveBeenCalled();
+    expect(setDialResultSpy).not.toHaveBeenCalled();
   });
 });

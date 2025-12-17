@@ -6,7 +6,10 @@ import Link from "next/link";
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import { type StartCallWithScriptPayload } from "@/components/askbob/AskBobCallAssistPanel";
-import { startAskBobAutomatedCall } from "@/app/(app)/calls/actions/startAskBobAutomatedCall";
+import {
+  startAskBobAutomatedCall,
+  type StartAskBobAutomatedCallResult,
+} from "@/app/(app)/calls/actions/startAskBobAutomatedCall";
 import { formatTwilioStatusLabel } from "@/utils/calls/twilioStatusLabel";
 
 const SCRIPT_PREVIEW_LIMIT = 360;
@@ -18,7 +21,7 @@ const truncatePreview = (value: string, limit: number) => {
   return `${value.slice(0, limit)}…`;
 };
 
-type StatusState = "idle" | "calling" | "success" | "failure";
+type StatusState = "idle" | "calling" | "success" | "failure" | "already_in_progress";
 
 type Props = {
   workspaceId: string;
@@ -63,6 +66,7 @@ export default function AskBobAutomatedCallPanel({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [callSessionId, setCallSessionId] = useState<string | null>(null);
   const [twilioStatus, setTwilioStatus] = useState<string | null>(null);
+  const [resultCode, setResultCode] = useState<string | null>(null);
   const [isPlacingCall, setIsPlacingCall] = useState(false);
   const hasResetEffectRunRef = useRef(false);
 
@@ -105,6 +109,7 @@ export default function AskBobAutomatedCallPanel({
     setStatusMessage(null);
     setCallSessionId(null);
     setTwilioStatus(null);
+    setResultCode(null);
     setIsPlacingCall(false);
   }, []);
 
@@ -137,14 +142,27 @@ export default function AskBobAutomatedCallPanel({
     setIsPlacingCall(true);
     setStatus("calling");
     setStatusMessage("Placing your automated call...");
+    setCallSessionId(null);
+    setTwilioStatus(null);
+    setResultCode(null);
     console.log("[askbob-automated-call-ui-request]", {
       workspaceId,
       jobId,
       hasScriptBody: Boolean(trimmedScriptBody),
       hasCustomerPhone,
     });
+    console.log("[askbob-automated-call-ui-submit]", {
+      workspaceId,
+      jobId,
+      customerId: customerId ?? null,
+      hasScriptBody: Boolean(trimmedScriptBody),
+      hasCustomerPhone,
+    });
+
+    let actionResult: StartAskBobAutomatedCallResult | null = null;
+
     try {
-      const result = await startAskBobAutomatedCall({
+      actionResult = await startAskBobAutomatedCall({
         workspaceId,
         jobId,
         customerId: customerId ?? null,
@@ -153,26 +171,38 @@ export default function AskBobAutomatedCallPanel({
         scriptSummary: trimmedScriptSummary,
       });
 
-      if (result.status === "success") {
-        const successLabel = result.label?.trim() || "Automated call started";
+      setCallSessionId(actionResult.callId ?? null);
+      setTwilioStatus(actionResult.twilioStatus ?? null);
+      setStatusMessage(actionResult.message ?? null);
+
+      if (actionResult.status === "success") {
         setStatus("success");
-        setStatusMessage(successLabel);
-        setCallSessionId(result.callId);
-        setTwilioStatus(result.twilioStatus ?? null);
-        onAutomatedCallSuccess?.(successLabel);
+        onAutomatedCallSuccess?.(actionResult.label);
+      } else if (actionResult.status === "already_in_progress") {
+        setStatus("already_in_progress");
       } else {
         setStatus("failure");
-        setStatusMessage(result.message);
-        setCallSessionId(result.callId ?? null);
-        setTwilioStatus(result.twilioStatus ?? null);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unable to start the call right now.";
       setStatus("failure");
       setStatusMessage(errorMessage);
-      setCallSessionId(null);
-      setTwilioStatus(null);
+      actionResult = {
+        status: "failure",
+        code: "unexpected_error",
+        message: errorMessage,
+      };
     } finally {
+      const outcome = actionResult?.status ?? "failure";
+      const finalCode = actionResult?.code ?? "unexpected_error";
+      console.log("[askbob-automated-call-ui-result]", {
+        workspaceId,
+        jobId,
+        callId: actionResult?.callId ?? null,
+        outcome,
+        code: finalCode,
+      });
+      setResultCode(finalCode);
       setIsPlacingCall(false);
     }
   }, [
@@ -287,20 +317,60 @@ export default function AskBobAutomatedCallPanel({
                 Open call workspace instead
               </HbButton>
             </div>
-            <div className="space-y-1 text-sm text-slate-400">
-              <p>{statusCopy}</p>
-              {twilioStatusLabel && (
-                <p className="text-xs text-slate-500 whitespace-normal break-words">
-                  Twilio status: {twilioStatusLabel}
-                </p>
+            <div className="space-y-3 text-sm">
+              {status === "idle" && (
+                <p className="text-slate-400">{statusCopy}</p>
               )}
-              {callSessionId && (
-                <Link
-                  href={`/calls/${callSessionId}`}
-                  className="text-emerald-400 underline-offset-2 hover:text-emerald-200"
-                >
-                  {status === "failure" ? "View call details" : "View call session"}
-                </Link>
+              {status === "calling" && (
+                <p className="text-slate-400">{statusMessage}</p>
+              )}
+              {status === "success" && callSessionId && (
+                <div className="space-y-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm text-slate-200">
+                  <span className="text-emerald-200 font-semibold">
+                    {resultCode === "call_already_started" ? "Call already started" : "Call started"}
+                  </span>
+                  {twilioStatusLabel && (
+                    <p className="text-xs text-slate-300">Twilio status: {twilioStatusLabel}</p>
+                  )}
+                  <Link
+                    href={`/calls/${callSessionId}`}
+                    className="inline-flex items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-emerald-200 shadow-sm transition hover:bg-emerald-500/20"
+                  >
+                    Open call session
+                  </Link>
+                </div>
+              )}
+              {status === "already_in_progress" && callSessionId && (
+                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+                  <span>Call is already in progress. Open call session.</span>
+                  <Link
+                    href={`/calls/${callSessionId}`}
+                    className="text-emerald-400 underline-offset-2 hover:text-emerald-200"
+                  >
+                    Open call session
+                  </Link>
+                </div>
+              )}
+              {status === "failure" && (
+                <div className="space-y-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-100">
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-[0.3em] text-rose-200">Call failed</p>
+                    <p className="text-sm text-rose-100">{statusMessage}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <HbButton variant="ghost" size="sm" onClick={handlePlaceCall} disabled={!canPlaceCall}>
+                      Try again
+                    </HbButton>
+                    {callSessionId && (
+                      <Link
+                        href={`/calls/${callSessionId}`}
+                        className="text-emerald-400 underline-offset-2 hover:text-emerald-200"
+                      >
+                        View call details
+                      </Link>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </>

@@ -6,32 +6,43 @@ import { updateCallSessionTwilioStatus } from "@/lib/domain/calls/sessions";
 
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_SIGNATURE_HEADER = "x-twilio-signature";
-let twilioAuthTokenWarningLogged = false;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
-  const signatureResult = validateTwilioSignature(req, formData);
+  const params = formDataToRecord(formData);
+  const callSid = params.CallSid ?? null;
+  const callStatus = params.CallStatus ?? null;
+  const errorCode = params.ErrorCode ?? null;
+  const errorMessage = params.ErrorMessage ?? null;
+  const queryParams = getQueryParams(req.url);
+  const callIdFromParams = queryParams.get("callId");
+  const workspaceIdFromParams = queryParams.get("workspaceId");
+  const signature = req.headers.get(TWILIO_SIGNATURE_HEADER);
 
-  if (!signatureResult.valid) {
-    console.warn(
-      "[twilio-status-callback] Twilio signature validation failed:",
-      signatureResult.reason ?? "unknown",
-    );
-    return new NextResponse(JSON.stringify({ error: "Invalid Twilio signature" }), {
+  const verificationResult = verifyTwilioSignature(signature, params, req.url);
+  if (!verificationResult.valid) {
+    const rejectionLog: Record<string, unknown> = {
+      reason: verificationResult.reason,
+    };
+    if (callSid) rejectionLog.sid = callSid;
+    if (callIdFromParams) rejectionLog.callId = callIdFromParams;
+    if (workspaceIdFromParams) rejectionLog.workspaceId = workspaceIdFromParams;
+    if (verificationResult.detail) rejectionLog.detail = verificationResult.detail;
+
+    console.warn("[twilio-call-status-callback-rejected]", rejectionLog);
+    return new NextResponse(JSON.stringify({ error: "Forbidden" }), {
       status: 403,
       headers: { "content-type": "application/json" },
     });
   }
 
-  const callSid = getString(formData, "CallSid");
-  const callStatus = getString(formData, "CallStatus");
-  const errorCode = getString(formData, "ErrorCode");
-  const errorMessage = getString(formData, "ErrorMessage");
-  const queryParams = getQueryParams(req.url);
-  const callIdFromParams = queryParams.get("callId");
+  console.log("[twilio-call-status-callback-received]", {
+    status: callStatus ?? "unknown",
+    sid: callSid,
+  });
 
   const supabase = createAdminClient();
   let callId: string | null = null;
@@ -50,7 +61,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!callId) {
-    console.warn("[twilio-status-callback] Unable to resolve call session", { callSid, callIdFromParams });
+    console.warn("[twilio-call-status-callback-unmatched]", { sid: callSid, callIdFromParams });
     return new NextResponse(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { "content-type": "application/json" },
@@ -65,11 +76,11 @@ export async function POST(req: NextRequest) {
     errorMessage,
   });
 
-  console.log("[calls-twilio-status-callback]", {
+  console.log("[twilio-call-status-callback-updated]", {
     callId,
     callSid,
-    workspaceId: queryParams.get("workspaceId"),
-    twilioStatus: callStatus,
+    workspaceId: workspaceIdFromParams,
+    status: callStatus ?? "unknown",
     errorCode,
   });
 
@@ -79,38 +90,34 @@ export async function POST(req: NextRequest) {
   });
 }
 
-type TwilioSignatureResult = {
+type TwilioSignatureRejectionReason = "missing_token" | "missing_signature" | "invalid_signature";
+
+type TwilioSignatureVerificationResult = {
   valid: boolean;
-  reason?: string;
+  reason?: TwilioSignatureRejectionReason;
+  detail?: string;
 };
 
-function validateTwilioSignature(req: NextRequest, formData: FormData): TwilioSignatureResult {
+function verifyTwilioSignature(
+  signature: string | null,
+  params: Record<string, string>,
+  url: string,
+): TwilioSignatureVerificationResult {
   if (!TWILIO_AUTH_TOKEN) {
-    if (!twilioAuthTokenWarningLogged) {
-      console.warn("[twilio-status-callback] TWILIO_AUTH_TOKEN not configured; skipping signature validation.");
-      twilioAuthTokenWarningLogged = true;
-    }
-    return { valid: true };
+    return { valid: false, reason: "missing_token" };
   }
 
-  const signature = req.headers.get(TWILIO_SIGNATURE_HEADER);
   if (!signature) {
-    return { valid: false, reason: "missing Twilio signature header" };
+    return { valid: false, reason: "missing_signature" };
   }
 
   try {
-    const params = formDataToRecord(formData);
-    const isValid = twilio.validateRequest(TWILIO_AUTH_TOKEN, signature, req.url, params);
-    return { valid: isValid, reason: isValid ? undefined : "signature mismatch" };
+    const isValid = twilio.validateRequest(TWILIO_AUTH_TOKEN, signature, url, params);
+    return { valid: isValid, reason: isValid ? undefined : "invalid_signature" };
   } catch (error) {
-    const reason = error instanceof Error ? error.message : "validation error";
-    return { valid: false, reason };
+    const detail = error instanceof Error ? error.message : "validation error";
+    return { valid: false, reason: "invalid_signature", detail };
   }
-}
-
-function getString(formData: FormData, key: string) {
-  const value = formData.get(key);
-  return typeof value === "string" ? value : null;
 }
 
 function formDataToRecord(formData: FormData): Record<string, string> {

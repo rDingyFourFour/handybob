@@ -96,7 +96,7 @@ describe("JobAskBobFlow Step 9 smoke", () => {
   it("renders Step 9 and surfaces a Twilio not configured failure", async () => {
     mockStartCallAction.mockResolvedValueOnce({
       status: "failure",
-      reason: "twilio_not_configured",
+      code: "twilio_not_configured",
       message: "Calls aren’t configured yet; please set up telephony to continue.",
       callId: "call-123",
     });
@@ -166,7 +166,12 @@ describe("JobAskBobFlow Step 9 smoke", () => {
   it("renders the success UI when the automated call starts", async () => {
     mockStartCallAction.mockResolvedValueOnce({
       status: "success",
+      code: "call_started",
+      message: "Automated call started",
+      label: "Automated call started",
       callId: "call_123",
+      twilioStatus: "queued",
+      twilioCallSid: "twilio-abc",
     });
 
     await act(async () => {
@@ -219,7 +224,7 @@ describe("JobAskBobFlow Step 9 smoke", () => {
     });
 
     expect(mockStartCallAction).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain("Automated call started");
+    expect(container.textContent).toContain("Call started");
     const openCallButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
       button.textContent?.includes("Open call workspace"),
     );

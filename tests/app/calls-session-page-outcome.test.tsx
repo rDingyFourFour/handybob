@@ -164,9 +164,99 @@ describe("CallSessionPage outcome card", () => {
 
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-5" }) });
     const markup = renderToStaticMarkup(element);
-    expect(markup).toContain("Automated call status");
+    expect(markup).toContain("Twilio status");
     expect(markup).toContain("Ringing");
     expect(markup).toContain("Call failed");
     expect(markup).toContain("Invalid destination number");
+    expect(markup).toContain("Refresh status");
+  });
+
+  it("renders the Twilio status strip when only the SID exists", async () => {
+    supabaseState.responses.calls = {
+      data: [
+        {
+          id: "call-6",
+          workspace_id: "workspace-1",
+          created_at: new Date().toISOString(),
+          job_id: null,
+          from_number: "+15550005555",
+          to_number: "+15550006666",
+          outcome: null,
+          outcome_notes: null,
+          outcome_recorded_at: null,
+          outcome_code: null,
+          reached_customer: null,
+          summary: null,
+          twilio_call_sid: "sid-2",
+          twilio_status: null,
+        },
+      ],
+      error: null,
+    };
+
+    const element = await CallSessionPage({ params: Promise.resolve({ id: "call-6" }) });
+    const markup = renderToStaticMarkup(element);
+    expect(markup).toContain("Twilio status");
+    expect(markup).toContain("Queued");
+    expect(markup).toContain("Refresh status");
+  });
+
+  it("renders the Twilio status strip when only the status exists", async () => {
+    supabaseState.responses.calls = {
+      data: [
+        {
+          id: "call-7",
+          workspace_id: "workspace-1",
+          created_at: new Date().toISOString(),
+          job_id: null,
+          from_number: "+15550005555",
+          to_number: "+15550006666",
+          outcome: null,
+          outcome_notes: null,
+          outcome_recorded_at: null,
+          outcome_code: null,
+          reached_customer: null,
+          summary: null,
+          twilio_call_sid: null,
+          twilio_status: "completed",
+        },
+      ],
+      error: null,
+    };
+
+    const element = await CallSessionPage({ params: Promise.resolve({ id: "call-7" }) });
+    const markup = renderToStaticMarkup(element);
+    expect(markup).toContain("Twilio status");
+    expect(markup).toContain("Completed");
+    expect(markup).toContain("Refresh status");
+  });
+
+  it("hides the refresh control when no Twilio status or SID exists", async () => {
+    supabaseState.responses.calls = {
+      data: [
+        {
+          id: "call-8",
+          workspace_id: "workspace-1",
+          created_at: new Date().toISOString(),
+          job_id: null,
+          from_number: "+15550005555",
+          to_number: "+15550006666",
+          outcome: null,
+          outcome_notes: null,
+          outcome_recorded_at: null,
+          outcome_code: null,
+          reached_customer: null,
+          summary: null,
+          twilio_call_sid: null,
+          twilio_status: null,
+        },
+      ],
+      error: null,
+    };
+
+    const element = await CallSessionPage({ params: Promise.resolve({ id: "call-8" }) });
+    const markup = renderToStaticMarkup(element);
+    expect(markup).not.toContain("Twilio status");
+    expect(markup).not.toContain("Refresh status");
   });
 });

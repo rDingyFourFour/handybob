@@ -4,6 +4,7 @@ import { normalizePhone } from "@/utils/phones/normalizePhone";
 
 // No dialing/network calls here; helpers only.
 export const TWILIO_STATUS_CALLBACK_EVENTS = ["initiated", "ringing", "answered", "completed"] as const;
+export const TWILIO_CALL_STATUS_CALLBACK_PATH = "/api/twilio/calls/status";
 
 export type MachineDetectionConfig = {
   enabled?: boolean;
