@@ -330,11 +330,43 @@ describe("CallSessionPage outcome card", () => {
     expect(markup).toContain("Recording available");
     expect(markup).toContain("Duration 1m 25s");
     expect(markup).toContain("Open recording");
+    expect(markup).toContain('href="/api/calls/recording/call-10"');
     expect(
       logSpy.mock.calls.some(
         (args) =>
           args[0] === "[calls-session-recording-visible]" && args[1]?.recordingState === "available",
       ),
     ).toBe(true);
+  });
+
+  it("suggests refreshing when recording metadata exists but duration is still null", async () => {
+    const now = new Date().toISOString();
+    supabaseState.responses.calls = {
+      data: [
+        {
+          id: "call-11",
+          workspace_id: "workspace-1",
+          created_at: now,
+          job_id: null,
+          from_number: "+15550001111",
+          to_number: "+15550002222",
+          outcome: null,
+          outcome_notes: null,
+          outcome_recorded_at: null,
+          outcome_code: null,
+          reached_customer: null,
+          summary: null,
+          twilio_call_sid: "sid-available-2",
+          twilio_recording_url: "https://example.com/recording.mp3",
+          twilio_recording_duration_seconds: null,
+        },
+      ],
+      error: null,
+    };
+
+    const element = await CallSessionPage({ params: Promise.resolve({ id: "call-11" }) });
+    const markup = renderToStaticMarkup(element);
+    expect(markup).toContain("Recording available");
+    expect(markup).toContain("If this fails, refresh in a minute");
   });
 });

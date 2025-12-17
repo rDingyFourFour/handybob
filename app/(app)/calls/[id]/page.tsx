@@ -540,6 +540,8 @@ export default async function CallSessionPage({
   const recordingCardVisible = Boolean(call.twilio_call_sid);
   const recordingAvailable = Boolean(call.twilio_recording_url);
   const recordingDurationLabel = formatRecordingDuration(call.twilio_recording_duration_seconds);
+  const recordingProcessingHintVisible =
+    Boolean(call.twilio_recording_url) && call.twilio_recording_duration_seconds == null;
   if (recordingCardVisible) {
     console.log("[calls-session-recording-visible]", {
       callId: call.id,
@@ -666,11 +668,17 @@ export default async function CallSessionPage({
                     {recordingDurationLabel && (
                       <p className="text-xs text-slate-400">Duration {recordingDurationLabel}</p>
                     )}
-                    <CallRecordingLink
-                      callId={call.id}
-                      workspaceId={workspace.id}
-                      recordingUrl={call.twilio_recording_url ?? ""}
-                    />
+                    <div className="flex items-center gap-2">
+                      <CallRecordingLink
+                        callId={call.id}
+                        workspaceId={workspace.id}
+                      />
+                      {recordingProcessingHintVisible && (
+                        <p className="text-[10px] text-slate-400">
+                          If this fails, refresh in a minute
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <p className="text-xs text-slate-400">

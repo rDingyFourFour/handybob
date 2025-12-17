@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
+import {
+  getCallSessionDialStatus,
+  type GetCallSessionDialStatusResult,
+} from "@/app/(app)/calls/actions/getCallSessionDialStatus";
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import { type StartCallWithScriptPayload } from "@/components/askbob/AskBobCallAssistPanel";
@@ -13,6 +17,9 @@ import {
 import { formatTwilioStatusLabel } from "@/utils/calls/twilioStatusLabel";
 
 const SCRIPT_PREVIEW_LIMIT = 360;
+const POLL_INTERVAL_MS = 2500;
+const MAX_POLL_ATTEMPTS = 30;
+const TERMINAL_GRACE_ATTEMPTS = 3;
 
 const truncatePreview = (value: string, limit: number) => {
   if (value.length <= limit) {
@@ -20,6 +27,19 @@ const truncatePreview = (value: string, limit: number) => {
   }
   return `${value.slice(0, limit)}…`;
 };
+
+function formatRecordingDuration(seconds?: number | null) {
+  if (seconds == null) {
+    return null;
+  }
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainder = totalSeconds % 60;
+  if (minutes > 0) {
+    return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;
+  }
+  return `${remainder}s`;
+}
 
 type StatusState = "idle" | "calling" | "success" | "failure" | "already_in_progress";
 
@@ -69,6 +89,8 @@ export default function AskBobAutomatedCallPanel({
   const [resultTwilioCallSid, setResultTwilioCallSid] = useState<string | null>(null);
   const [resultCode, setResultCode] = useState<string | null>(null);
   const [isPlacingCall, setIsPlacingCall] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState<GetCallSessionDialStatusResult | null>(null);
+  const [pollHintVisible, setPollHintVisible] = useState(false);
   const hasResetEffectRunRef = useRef(false);
   const preservedSuccessSessionRef = useRef<string | null>(null);
 
@@ -123,6 +145,8 @@ export default function AskBobAutomatedCallPanel({
       setResultTwilioCallSid(null);
       setResultCode(null);
       setIsPlacingCall(false);
+      setSessionStatus(null);
+      setPollHintVisible(false);
       preservedSuccessSessionRef.current = null;
     },
     [status, callSessionId],
@@ -161,6 +185,91 @@ export default function AskBobAutomatedCallPanel({
       preservedSuccessSessionRef.current = null;
     }
   }, [status, callSessionId]);
+
+  useEffect(() => {
+    if (status !== "success" && status !== "already_in_progress") {
+      setSessionStatus(null);
+      setPollHintVisible(false);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    if (
+      !callSessionId ||
+      stepCollapsed ||
+      (status !== "success" && status !== "already_in_progress")
+    ) {
+      return;
+    }
+
+    let attempts = 0;
+    let graceRemaining = TERMINAL_GRACE_ATTEMPTS;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const stopPolling = (showHint: boolean) => {
+      stopped = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+      setPollHintVisible(showHint);
+    };
+
+    const scheduleNext = () => {
+      if (!stopped) {
+        timer = setTimeout(runPoll, POLL_INTERVAL_MS);
+      }
+    };
+
+    const runPoll = async () => {
+      if (stopped) {
+        return;
+      }
+      attempts += 1;
+
+      try {
+        const payload = await getCallSessionDialStatus({ callId: callSessionId });
+        if (stopped) {
+          return;
+        }
+        setSessionStatus(payload);
+        setTwilioStatus(payload.twilioStatus ?? null);
+
+        if (payload.isTerminal) {
+          if (payload.hasRecording) {
+            stopPolling(false);
+            return;
+          }
+          graceRemaining -= 1;
+          if (graceRemaining <= 0) {
+            stopPolling(true);
+            return;
+          }
+        }
+
+        if (attempts >= MAX_POLL_ATTEMPTS) {
+          stopPolling(true);
+          return;
+        }
+
+        scheduleNext();
+      } catch (error) {
+        if (stopped) {
+          return;
+        }
+        stopPolling(true);
+      }
+    };
+
+    runPoll();
+
+    return () => {
+      stopped = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [callSessionId, stepCollapsed, status]);
 
   const handlePlaceCall = useCallback(async () => {
     if (!canPlaceCall || !normalizedCustomerPhone) {
@@ -277,6 +386,9 @@ export default function AskBobAutomatedCallPanel({
     return "Generate a script in Step 7 and then place an automated call when you’re ready.";
   }, [status, statusMessage]);
   const showSuccessBanner = (status === "success" || status === "already_in_progress") && Boolean(callSessionId);
+  const sessionRecordingDurationLabel = sessionStatus?.recordingDurationSeconds
+    ? formatRecordingDuration(sessionStatus.recordingDurationSeconds)
+    : null;
   const successBannerTitle =
     status === "already_in_progress" || resultCode === "call_already_started"
       ? "Call already started"
@@ -367,20 +479,32 @@ export default function AskBobAutomatedCallPanel({
                   {status === "already_in_progress" && statusMessage && (
                     <p className="text-sm text-slate-200">{statusMessage}</p>
                   )}
-                {twilioStatusLabel && (
-                  <p className="text-xs text-slate-300">Twilio status: {twilioStatusLabel}</p>
-                )}
-                {resultTwilioCallSid && (
-                  <p className="text-xs text-slate-300">
-                    A recording will appear in the call session after the call completes.
-                  </p>
-                )}
-                <Link
-                  href={`/calls/${callSessionId}`}
-                  className="inline-flex items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-emerald-200 shadow-sm transition hover:bg-emerald-500/20"
-                >
+                  {twilioStatusLabel && (
+                    <p className="text-xs text-slate-300">Twilio status: {twilioStatusLabel}</p>
+                  )}
+                  {sessionStatus ? (
+                    <p className="text-xs text-slate-300">
+                      Recording: {sessionStatus.hasRecording ? "ready" : "processing"}
+                      {sessionStatus.hasRecording && sessionRecordingDurationLabel
+                        ? ` · ${sessionRecordingDurationLabel}`
+                        : ""}
+                    </p>
+                  ) : resultTwilioCallSid ? (
+                    <p className="text-xs text-slate-300">
+                      A recording will appear in the call session after the call completes.
+                    </p>
+                  ) : null}
+                  <Link
+                    href={`/calls/${callSessionId}`}
+                    className="inline-flex items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-emerald-200 shadow-sm transition hover:bg-emerald-500/20"
+                  >
                     Open call session
                   </Link>
+                  {pollHintVisible && (
+                    <p className="text-[11px] text-slate-400">
+                      If polling stops updating, open the call session page for the latest state.
+                    </p>
+                  )}
                 </div>
               )}
               {status === "failure" && (

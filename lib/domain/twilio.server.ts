@@ -104,3 +104,90 @@ export async function dialTwilioCall(args: DialTwilioCallArgs): Promise<TwilioDi
     return createFailure("twilio_provider_error", message, twilioErrorCode, twilioErrorMessage);
   }
 }
+
+type RecordingFetchSuccess = {
+  success: true;
+  response: Response;
+};
+
+type RecordingFetchFailure = {
+  success: false;
+  code: "missing_credentials" | "fetch_error" | "upstream_failure";
+  status?: number;
+  message: string;
+  diagnostics?: Record<string, unknown>;
+};
+
+export type RecordingFetchResult = RecordingFetchSuccess | RecordingFetchFailure;
+
+const RECORDING_FETCH_TIMEOUT_MS = 5000;
+
+function addRecordingExtensionIfMissing(urlString: string) {
+  try {
+    const parsedUrl = new URL(urlString);
+    const segments = parsedUrl.pathname.split("/");
+    const lastSegment = segments[segments.length - 1] ?? "";
+    if (lastSegment.includes(".")) {
+      return urlString;
+    }
+    parsedUrl.pathname = `${parsedUrl.pathname}.mp3`;
+    return parsedUrl.toString();
+  } catch {
+    return urlString;
+  }
+}
+
+export async function fetchTwilioRecording(recordingUrl: string): Promise<RecordingFetchResult> {
+  if (!accountSid || !authToken) {
+    return {
+      success: false,
+      code: "missing_credentials",
+      message: "Twilio credentials are not configured.",
+    };
+  }
+
+  const targetUrl = addRecordingExtensionIfMissing(recordingUrl.trim());
+  const authHeader = `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), RECORDING_FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(targetUrl, {
+      method: "GET",
+      headers: {
+        Authorization: authHeader,
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        code: "upstream_failure",
+        status: response.status,
+        message: "Twilio recording fetch failed.",
+        diagnostics: {
+          url: targetUrl,
+          status: response.status,
+        },
+      };
+    }
+
+    return {
+      success: true,
+      response,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Twilio recording fetch failed.";
+    return {
+      success: false,
+      code: "fetch_error",
+      message,
+      diagnostics: {
+        url: targetUrl,
+      },
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}

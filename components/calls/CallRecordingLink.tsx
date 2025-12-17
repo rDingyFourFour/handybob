@@ -5,20 +5,20 @@ import { useCallback } from "react";
 type Props = {
   callId: string;
   workspaceId: string;
-  recordingUrl: string;
 };
 
-export default function CallRecordingLink({ callId, workspaceId, recordingUrl }: Props) {
+export default function CallRecordingLink({ callId, workspaceId }: Props) {
   const handleClick = useCallback(() => {
     console.log("[calls-session-recording-open-click]", {
       callId,
       workspaceId,
+      recordingLinkType: "proxy",
     });
   }, [callId, workspaceId]);
 
   return (
     <a
-      href={recordingUrl}
+      href={`/api/calls/recording/${callId}`}
       target="_blank"
       rel="noreferrer noopener"
       onClick={handleClick}

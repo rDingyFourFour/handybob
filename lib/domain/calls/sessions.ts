@@ -46,6 +46,11 @@ function normalizeTwilioStatus(value?: string | null): string | null {
   return trimmed ? trimmed.toLowerCase() : null;
 }
 
+export function isTerminalTwilioStatus(value?: string | null): boolean {
+  const normalized = normalizeTwilioStatus(value);
+  return normalized !== null && TWILIO_TERMINAL_STATUSES.has(normalized);
+}
+
 export const TWILIO_DIAL_IN_PROGRESS_STATUSES = new Set(TWILIO_IN_PROGRESS_STATUSES);
 export { TWILIO_DIAL_FAILURE_STATUSES };
 

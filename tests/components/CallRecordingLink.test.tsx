@@ -19,22 +19,18 @@ describe("CallRecordingLink", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
     act(() => {
-      root.render(
-        <CallRecordingLink
-          callId="call-1"
-          workspaceId="workspace-1"
-          recordingUrl="https://example.com/recording.mp3"
-        />,
-      );
+      root.render(<CallRecordingLink callId="call-1" workspaceId="workspace-1" />);
     });
     const anchor = container.querySelector("a");
     expect(anchor).not.toBeNull();
+    expect(anchor?.getAttribute("href")).toBe("/api/calls/recording/call-1");
     act(() => {
       anchor?.click();
     });
     expect(logSpy).toHaveBeenCalledWith("[calls-session-recording-open-click]", {
       callId: "call-1",
       workspaceId: "workspace-1",
+      recordingLinkType: "proxy",
     });
     root.unmount();
   });
