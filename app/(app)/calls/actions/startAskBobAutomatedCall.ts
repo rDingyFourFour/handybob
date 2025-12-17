@@ -5,7 +5,10 @@ import { z } from "zod";
 import { createServerClient } from "@/utils/supabase/server";
 import { parseEnvConfig } from "@/schemas/env";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
-import { TWILIO_CALL_STATUS_CALLBACK_PATH } from "@/lib/domain/twilio";
+import {
+  TWILIO_CALL_RECORDING_CALLBACK_PATH,
+  TWILIO_CALL_STATUS_CALLBACK_PATH,
+} from "@/lib/domain/twilio";
 import {
   CallSessionRow,
   TWILIO_DIAL_FAILURE_STATUSES,
@@ -316,6 +319,9 @@ export async function startAskBobAutomatedCall(
   const statusCallbackBaseUrl = envConfig.appUrl
     ? `${envConfig.appUrl.replace(/\/$/, "")}${TWILIO_CALL_STATUS_CALLBACK_PATH}`
     : null;
+  const recordingCallbackBaseUrl = envConfig.appUrl
+    ? `${envConfig.appUrl.replace(/\/$/, "")}${TWILIO_CALL_RECORDING_CALLBACK_PATH}`
+    : null;
   const machineDetectionConfig = envConfig.twilioMachineDetectionEnabled
     ? { enabled: true }
     : undefined;
@@ -433,6 +439,15 @@ export async function startAskBobAutomatedCall(
       );
     }
 
+    if (!recordingCallbackBaseUrl) {
+      return recordDialFailure(
+        call,
+        "twilio_not_configured",
+        "Calls aren’t configured yet; please set up telephony to continue.",
+        "Unable to resolve the Twilio recording callback URL.",
+      );
+    }
+
     const metadata = { callId: call.id, workspaceId: workspace.id };
     console.log("[calls-automated-dial-attempt]", {
       callId: call.id,
@@ -446,6 +461,8 @@ export async function startAskBobAutomatedCall(
       callbackUrl: statusCallbackBaseUrl,
       metadata,
       machineDetection: machineDetectionConfig,
+      recordCall: true,
+      recordingCallbackUrl: recordingCallbackBaseUrl,
     });
 
     if (!dialResult.success) {

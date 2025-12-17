@@ -71,6 +71,10 @@ export type CallSessionRow = {
   twilio_status_updated_at?: string | null;
   twilio_error_code?: string | null;
   twilio_error_message?: string | null;
+  twilio_recording_sid?: string | null;
+  twilio_recording_url?: string | null;
+  twilio_recording_duration_seconds?: number | null;
+  twilio_recording_received_at?: string | null;
 };
 
 export type EnsureInboundCallSessionParams = {
@@ -381,6 +385,110 @@ export async function setTwilioDialResultForCallSession(
     hasErrorCode: Boolean(errorCode),
     hasTwilioCallSid: typeof twilioCallSid === "string" && twilioCallSid.length > 0,
   });
+}
+
+export type UpdateCallSessionRecordingParams = {
+  supabase: SupabaseClient;
+  callId?: string;
+  workspaceId?: string;
+  twilioCallSid?: string;
+  recordingSid?: string | null;
+  recordingUrl?: string | null;
+  recordingDurationSeconds?: number | null;
+  recordingReceivedAt?: string | null;
+};
+
+export type UpdateCallSessionRecordingResult = {
+  callId: string;
+  workspaceId: string;
+  applied: boolean;
+  duplicate: boolean;
+};
+
+export async function updateCallSessionRecordingMetadata(
+  params: UpdateCallSessionRecordingParams,
+): Promise<UpdateCallSessionRecordingResult | null> {
+  const {
+    supabase,
+    callId,
+    workspaceId,
+    twilioCallSid,
+    recordingSid,
+    recordingUrl,
+    recordingDurationSeconds,
+    recordingReceivedAt,
+  } = params;
+  if (!callId && !twilioCallSid) {
+    return null;
+  }
+
+  const normalizedSid = recordingSid?.trim() ?? null;
+  const normalizedUrl = recordingUrl?.trim() ?? null;
+  const timestamp = recordingReceivedAt ?? new Date().toISOString();
+
+  let query = supabase.from("calls").select(
+    "id, workspace_id, twilio_recording_sid, twilio_recording_url, twilio_recording_duration_seconds",
+  );
+  if (callId) {
+    query = query.eq("id", callId);
+  }
+  if (workspaceId) {
+    query = query.eq("workspace_id", workspaceId);
+  }
+  if (twilioCallSid) {
+    query = query.eq("twilio_call_sid", twilioCallSid);
+  }
+
+  const { data: existingRow, error: fetchError } = await query.maybeSingle();
+  if (fetchError) {
+    throw fetchError;
+  }
+
+  if (!existingRow?.id) {
+    return null;
+  }
+
+  const payload: Record<string, unknown> = {};
+  if (normalizedSid && !existingRow.twilio_recording_sid) {
+    payload.twilio_recording_sid = normalizedSid;
+  }
+  if (normalizedUrl && !existingRow.twilio_recording_url) {
+    payload.twilio_recording_url = normalizedUrl;
+  }
+  if (
+    recordingDurationSeconds !== undefined &&
+    recordingDurationSeconds !== null &&
+    existingRow.twilio_recording_duration_seconds == null
+  ) {
+    payload.twilio_recording_duration_seconds = recordingDurationSeconds;
+  }
+
+  if (Object.keys(payload).length > 0) {
+    payload.twilio_recording_received_at = timestamp;
+  }
+
+  let appliedRecord = false;
+  if (Object.keys(payload).length > 0) {
+    const { error } = await supabase
+      .from("calls")
+      .update(payload)
+      .eq("id", existingRow.id)
+      .eq("workspace_id", existingRow.workspace_id);
+
+    if (error) {
+      throw error;
+    }
+    appliedRecord = true;
+  }
+
+  const duplicate = !appliedRecord && normalizedSid && normalizedSid === existingRow.twilio_recording_sid;
+
+  return {
+    callId: existingRow.id,
+    workspaceId: existingRow.workspace_id,
+    applied: appliedRecord,
+    duplicate,
+  };
 }
 
 type UpdateTwilioStatusParams = {

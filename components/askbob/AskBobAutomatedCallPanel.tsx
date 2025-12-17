@@ -66,6 +66,7 @@ export default function AskBobAutomatedCallPanel({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [callSessionId, setCallSessionId] = useState<string | null>(null);
   const [twilioStatus, setTwilioStatus] = useState<string | null>(null);
+  const [resultTwilioCallSid, setResultTwilioCallSid] = useState<string | null>(null);
   const [resultCode, setResultCode] = useState<string | null>(null);
   const [isPlacingCall, setIsPlacingCall] = useState(false);
   const hasResetEffectRunRef = useRef(false);
@@ -119,6 +120,7 @@ export default function AskBobAutomatedCallPanel({
       setStatusMessage(null);
       setCallSessionId(null);
       setTwilioStatus(null);
+      setResultTwilioCallSid(null);
       setResultCode(null);
       setIsPlacingCall(false);
       preservedSuccessSessionRef.current = null;
@@ -198,6 +200,7 @@ export default function AskBobAutomatedCallPanel({
 
       setCallSessionId(actionResult.callId ?? null);
       setTwilioStatus(actionResult.twilioStatus ?? null);
+      setResultTwilioCallSid(actionResult.twilioCallSid ?? null);
       setStatusMessage(actionResult.message ?? null);
 
       if (actionResult.status === "success") {
@@ -212,6 +215,7 @@ export default function AskBobAutomatedCallPanel({
       const errorMessage = error instanceof Error ? error.message : "Unable to start the call right now.";
       setStatus("failure");
       setStatusMessage(errorMessage);
+      setResultTwilioCallSid(null);
       actionResult = {
         status: "failure",
         code: "unexpected_error",
@@ -363,13 +367,18 @@ export default function AskBobAutomatedCallPanel({
                   {status === "already_in_progress" && statusMessage && (
                     <p className="text-sm text-slate-200">{statusMessage}</p>
                   )}
-                  {twilioStatusLabel && (
-                    <p className="text-xs text-slate-300">Twilio status: {twilioStatusLabel}</p>
-                  )}
-                  <Link
-                    href={`/calls/${callSessionId}`}
-                    className="inline-flex items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-emerald-200 shadow-sm transition hover:bg-emerald-500/20"
-                  >
+                {twilioStatusLabel && (
+                  <p className="text-xs text-slate-300">Twilio status: {twilioStatusLabel}</p>
+                )}
+                {resultTwilioCallSid && (
+                  <p className="text-xs text-slate-300">
+                    A recording will appear in the call session after the call completes.
+                  </p>
+                )}
+                <Link
+                  href={`/calls/${callSessionId}`}
+                  className="inline-flex items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-emerald-200 shadow-sm transition hover:bg-emerald-500/20"
+                >
                     Open call session
                   </Link>
                 </div>

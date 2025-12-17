@@ -6,6 +6,7 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import CallSummaryStatus from "@/components/call-summary-status";
 import CallStatusRefreshButton from "@/components/calls/CallStatusRefreshButton";
+import CallRecordingLink from "@/components/calls/CallRecordingLink";
 import HbCard from "@/components/ui/hb-card";
 import JobCallScriptPanel, {
   type PhoneMessageSummary,
@@ -43,6 +44,10 @@ type CallRecord = {
   twilio_status_updated_at?: string | null;
   twilio_error_code?: string | null;
   twilio_error_message?: string | null;
+  twilio_recording_sid?: string | null;
+  twilio_recording_url?: string | null;
+  twilio_recording_duration_seconds?: number | null;
+  twilio_recording_received_at?: string | null;
   from_number: string | null;
   to_number: string | null;
   outcome: string | null;
@@ -131,6 +136,19 @@ function formatCurrency(value: number | null | undefined) {
     style: "currency",
     currency: "USD",
   }).format(value);
+}
+
+function formatRecordingDuration(seconds?: number | null) {
+  if (seconds == null) {
+    return null;
+  }
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainder = totalSeconds % 60;
+  if (minutes > 0) {
+    return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;
+  }
+  return `${remainder}s`;
 }
 
 function calculateDaysSince(value?: string | null): number | null {
@@ -229,7 +247,7 @@ export default async function CallSessionPage({
   } = await supabase
     .from<CallRecord>("calls")
     .select(
-      "id, workspace_id, created_at, job_id, customer_id, direction, twilio_call_sid, twilio_status, twilio_status_updated_at, twilio_error_code, twilio_error_message, from_number, to_number, outcome, outcome_notes, outcome_recorded_at, outcome_code, reached_customer, summary, ai_summary"
+      "id, workspace_id, created_at, job_id, customer_id, direction, twilio_call_sid, twilio_status, twilio_status_updated_at, twilio_error_code, twilio_error_message, twilio_recording_sid, twilio_recording_url, twilio_recording_duration_seconds, twilio_recording_received_at, from_number, to_number, outcome, outcome_notes, outcome_recorded_at, outcome_code, reached_customer, summary, ai_summary"
     )
     .eq("workspace_id", workspace.id)
     .eq("id", id)
@@ -519,6 +537,17 @@ export default async function CallSessionPage({
     });
   }
 
+  const recordingCardVisible = Boolean(call.twilio_call_sid);
+  const recordingAvailable = Boolean(call.twilio_recording_url);
+  const recordingDurationLabel = formatRecordingDuration(call.twilio_recording_duration_seconds);
+  if (recordingCardVisible) {
+    console.log("[calls-session-recording-visible]", {
+      callId: call.id,
+      workspaceId: workspace.id,
+      recordingState: recordingAvailable ? "available" : "pending",
+    });
+  }
+
   const jobLink = jobId ? `/jobs/${jobId}` : undefined;
   const displayJobTitle =
     job?.title ?? (jobId ? `Job ${jobId.slice(0, 8)}…` : "Not linked to a job");
@@ -622,6 +651,32 @@ export default async function CallSessionPage({
                     <span className="text-xs text-slate-500">Updated {twilioStatusUpdatedLabel}</span>
                   )}
                 </div>
+              </div>
+            )}
+            {recordingCardVisible && (
+              <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
+                <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
+                  <span>Recording</span>
+                  <span className="rounded-full border border-slate-800/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
+                    {recordingAvailable ? "Recording available" : "Recording pending"}
+                  </span>
+                </div>
+                {recordingAvailable ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    {recordingDurationLabel && (
+                      <p className="text-xs text-slate-400">Duration {recordingDurationLabel}</p>
+                    )}
+                    <CallRecordingLink
+                      callId={call.id}
+                      workspaceId={workspace.id}
+                      recordingUrl={call.twilio_recording_url ?? ""}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400">
+                    A recording will appear here after the call completes.
+                  </p>
+                )}
               </div>
             )}
             {call.twilio_error_message && (

@@ -5,6 +5,7 @@ import { normalizePhone } from "@/utils/phones/normalizePhone";
 // No dialing/network calls here; helpers only.
 export const TWILIO_STATUS_CALLBACK_EVENTS = ["initiated", "ringing", "answered", "completed"] as const;
 export const TWILIO_CALL_STATUS_CALLBACK_PATH = "/api/twilio/calls/status";
+export const TWILIO_CALL_RECORDING_CALLBACK_PATH = "/api/twilio/calls/recording";
 
 export type MachineDetectionConfig = {
   enabled?: boolean;
@@ -19,6 +20,8 @@ export type DialTwilioCallArgs = {
     workspaceId: string;
   };
   machineDetection?: MachineDetectionConfig;
+  recordCall?: boolean;
+  recordingCallbackUrl?: string;
 };
 
 export type TwilioDialSuccess = {

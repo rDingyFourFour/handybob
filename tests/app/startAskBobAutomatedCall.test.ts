@@ -135,6 +135,12 @@ describe("startAskBobAutomatedCall", () => {
       twilioStatus: "initiated",
       twilioCallSid: "twilio-abc",
     });
+    expect(mockDialTwilioCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recordCall: true,
+        recordingCallbackUrl: "https://app.test/api/twilio/calls/recording",
+      }),
+    );
   });
 
   it("returns a failure when Twilio is not configured", async () => {

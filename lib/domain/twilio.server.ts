@@ -36,7 +36,7 @@ function resolveTwilioClient() {
   return twilio(accountSid, authToken);
 }
 
-function buildStatusCallbackUrl(callbackUrl: string, metadata: DialTwilioCallArgs["metadata"]) {
+function buildCallbackUrl(callbackUrl: string, metadata: DialTwilioCallArgs["metadata"]) {
   try {
     const url = new URL(callbackUrl);
     url.searchParams.set("callId", metadata.callId);
@@ -53,9 +53,20 @@ export async function dialTwilioCall(args: DialTwilioCallArgs): Promise<TwilioDi
     return createFailure("twilio_not_configured", "Missing Twilio credentials.");
   }
 
-  const statusCallback = buildStatusCallbackUrl(args.callbackUrl, args.metadata);
+  const statusCallback = buildCallbackUrl(args.callbackUrl, args.metadata);
   if (!statusCallback) {
     return createFailure("twilio_not_configured", "Unable to resolve the Twilio status callback URL.");
+  }
+
+  let recordingCallback: string | null = null;
+  if (args.recordCall) {
+    if (!args.recordingCallbackUrl) {
+      return createFailure("twilio_not_configured", "Unable to resolve the Twilio recording callback URL.");
+    }
+    recordingCallback = buildCallbackUrl(args.recordingCallbackUrl, args.metadata);
+    if (!recordingCallback) {
+      return createFailure("twilio_not_configured", "Unable to resolve the Twilio recording callback URL.");
+    }
   }
 
   try {
@@ -72,6 +83,10 @@ export async function dialTwilioCall(args: DialTwilioCallArgs): Promise<TwilioDi
       statusCallback,
       statusCallbackMethod: "POST",
       statusCallbackEvent: TWILIO_STATUS_CALLBACK_EVENTS.map((event) => event),
+      record: args.recordCall ? true : undefined,
+      recordingStatusCallback: recordingCallback ?? undefined,
+      recordingStatusCallbackMethod: recordingCallback ? "POST" : undefined,
+      recordingStatusCallbackEvent: recordingCallback ? ["completed"] : undefined,
       machineDetection: args.machineDetection?.enabled ? "Enable" : undefined,
     });
 

@@ -18,6 +18,7 @@ import CallSessionPage from "@/app/(app)/calls/[id]/page";
 
 describe("CallSessionPage outcome card", () => {
   let supabaseState = setupSupabaseMock();
+  let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     supabaseState = setupSupabaseMock();
@@ -26,6 +27,11 @@ describe("CallSessionPage outcome card", () => {
       workspace: { id: "workspace-1" },
       user: { id: "user-1" },
     });
+    logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
   });
 
   it("shows the record prompt when no outcome exists", async () => {
@@ -258,5 +264,77 @@ describe("CallSessionPage outcome card", () => {
     const markup = renderToStaticMarkup(element);
     expect(markup).not.toContain("Twilio status");
     expect(markup).not.toContain("Refresh status");
+  });
+
+  it("renders a recording pending card when the Twilio call has no recording yet", async () => {
+    supabaseState.responses.calls = {
+      data: [
+        {
+          id: "call-9",
+          workspace_id: "workspace-1",
+          created_at: new Date().toISOString(),
+          job_id: null,
+          from_number: "+15550001111",
+          to_number: "+15550002222",
+          outcome: null,
+          outcome_notes: null,
+          outcome_recorded_at: null,
+          outcome_code: null,
+          reached_customer: null,
+          summary: null,
+          twilio_call_sid: "sid-pending-1",
+        },
+      ],
+      error: null,
+    };
+
+    const element = await CallSessionPage({ params: Promise.resolve({ id: "call-9" }) });
+    const markup = renderToStaticMarkup(element);
+    expect(markup).toContain("Recording pending");
+    expect(markup).toContain("A recording will appear here after the call completes.");
+    expect(
+      logSpy.mock.calls.some(
+        (args) =>
+          args[0] === "[calls-session-recording-visible]" && args[1]?.recordingState === "pending",
+      ),
+    ).toBe(true);
+  });
+
+  it("renders the recording link when a recording exists", async () => {
+    const now = new Date().toISOString();
+    supabaseState.responses.calls = {
+      data: [
+        {
+          id: "call-10",
+          workspace_id: "workspace-1",
+          created_at: now,
+          job_id: null,
+          from_number: "+15550001111",
+          to_number: "+15550002222",
+          outcome: null,
+          outcome_notes: null,
+          outcome_recorded_at: null,
+          outcome_code: null,
+          reached_customer: null,
+          summary: null,
+          twilio_call_sid: "sid-available-1",
+          twilio_recording_url: "https://example.com/recording.mp3",
+          twilio_recording_duration_seconds: 85,
+        },
+      ],
+      error: null,
+    };
+
+    const element = await CallSessionPage({ params: Promise.resolve({ id: "call-10" }) });
+    const markup = renderToStaticMarkup(element);
+    expect(markup).toContain("Recording available");
+    expect(markup).toContain("Duration 1m 25s");
+    expect(markup).toContain("Open recording");
+    expect(
+      logSpy.mock.calls.some(
+        (args) =>
+          args[0] === "[calls-session-recording-visible]" && args[1]?.recordingState === "available",
+      ),
+    ).toBe(true);
   });
 });

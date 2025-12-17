@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminClient } from "@/utils/supabase/admin";
-import { updateCallSessionTwilioStatus } from "@/lib/domain/calls/sessions";
+import {
+  updateCallSessionRecordingMetadata,
+} from "@/lib/domain/calls/sessions";
 import {
   TWILIO_SIGNATURE_HEADER,
   verifyTwilioSignature,
   formDataToRecord,
 } from "@/lib/domain/twilio/signature";
-
-const TWILIO_SIGNATURE_HEADER = "x-twilio-signature";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,9 +17,15 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const params = formDataToRecord(formData);
   const callSid = params.CallSid ?? null;
-  const callStatus = params.CallStatus ?? null;
-  const errorCode = params.ErrorCode ?? null;
-  const errorMessage = params.ErrorMessage ?? null;
+  const recordingSid = params.RecordingSid ?? null;
+  const recordingUrl = params.RecordingUrl ?? null;
+  const durationValue = params.RecordingDuration ?? null;
+  const parsedDuration =
+    durationValue !== null && durationValue !== undefined
+      ? Number(durationValue)
+      : null;
+  const recordingDurationSeconds =
+    typeof parsedDuration === "number" && Number.isFinite(parsedDuration) ? parsedDuration : null;
   const queryParams = getQueryParams(req.url);
   const callIdFromParams = queryParams.get("callId");
   const workspaceIdFromParams = queryParams.get("workspaceId");
@@ -35,59 +41,57 @@ export async function POST(req: NextRequest) {
     if (workspaceIdFromParams) rejectionLog.workspaceId = workspaceIdFromParams;
     if (verificationResult.detail) rejectionLog.detail = verificationResult.detail;
 
-    console.warn("[twilio-call-status-callback-rejected]", rejectionLog);
+    console.warn("[twilio-call-recording-callback-rejected]", rejectionLog);
     return new NextResponse(JSON.stringify({ error: "Forbidden" }), {
       status: 403,
       headers: { "content-type": "application/json" },
     });
   }
 
-  console.log("[twilio-call-status-callback-received]", {
-    status: callStatus ?? "unknown",
+  console.log("[twilio-call-recording-callback-received]", {
     sid: callSid,
+    recordingSid,
   });
 
   const supabase = createAdminClient();
-  let callId: string | null = null;
+  const updateResult = await updateCallSessionRecordingMetadata({
+    supabase,
+    recordingSid,
+    recordingUrl,
+    recordingDurationSeconds,
+    recordingReceivedAt: new Date().toISOString(),
+    callId: callIdFromParams ?? undefined,
+    workspaceId: workspaceIdFromParams ?? undefined,
+    twilioCallSid: callSid ?? undefined,
+  });
 
-  if (callSid) {
-    const { data: callBySid } = await supabase
-      .from("calls")
-      .select("id")
-      .eq("twilio_call_sid", callSid)
-      .maybeSingle();
-    callId = callBySid?.id ?? null;
-  }
-
-  if (!callId) {
-    callId = callIdFromParams;
-  }
-
-  if (!callId) {
-    console.warn("[twilio-call-status-callback-unmatched]", { sid: callSid, callIdFromParams });
+  if (!updateResult) {
+    console.warn("[twilio-call-recording-callback-unmatched]", {
+      sid: callSid,
+      recordingSid,
+      callId: callIdFromParams,
+      workspaceId: workspaceIdFromParams,
+    });
     return new NextResponse(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
   }
 
-  const updateResult = await updateCallSessionTwilioStatus({
-    supabase,
-    callId,
-    twilioStatus: callStatus ?? "unknown",
-    errorCode: errorCode ?? undefined,
-    errorMessage,
-  });
-
-  console.log("[twilio-call-status-callback-update]", {
-    callId,
-    twilioCallSid: callSid,
-    workspaceId: workspaceIdFromParams,
-    incomingStatus: callStatus ?? "unknown",
-    currentStatus: updateResult.currentStatus,
-    reason: updateResult.reason,
-    errorCode,
-  });
+  if (updateResult.applied) {
+    console.log("[twilio-call-recording-callback-applied]", {
+      callId: updateResult.callId,
+      workspaceId: updateResult.workspaceId,
+      recordingSid,
+      duration: recordingDurationSeconds,
+    });
+  } else if (updateResult.duplicate) {
+    console.log("[twilio-call-recording-callback-duplicate]", {
+      callId: updateResult.callId,
+      workspaceId: updateResult.workspaceId,
+      recordingSid,
+    });
+  }
 
   return new NextResponse(JSON.stringify({ ok: true }), {
     status: 200,
