@@ -69,6 +69,7 @@ export default function AskBobAutomatedCallPanel({
   const [resultCode, setResultCode] = useState<string | null>(null);
   const [isPlacingCall, setIsPlacingCall] = useState(false);
   const hasResetEffectRunRef = useRef(false);
+  const preservedSuccessSessionRef = useRef<string | null>(null);
 
   const normalizedCustomerName = customerDisplayName?.trim() ?? null;
   const normalizedCustomerPhone = customerPhoneNumber?.trim() ?? null;
@@ -106,7 +107,12 @@ export default function AskBobAutomatedCallPanel({
 
   const handleLocalReset = useCallback(
     (options?: { force?: boolean }) => {
-      if (!options?.force && (status === "success" || status === "already_in_progress")) {
+      const shouldPreserveStatus =
+        !options?.force &&
+        (status === "success" || status === "already_in_progress") &&
+        callSessionId &&
+        preservedSuccessSessionRef.current === callSessionId;
+      if (shouldPreserveStatus) {
         return;
       }
       setStatus("idle");
@@ -115,8 +121,9 @@ export default function AskBobAutomatedCallPanel({
       setTwilioStatus(null);
       setResultCode(null);
       setIsPlacingCall(false);
+      preservedSuccessSessionRef.current = null;
     },
-    [status],
+    [status, callSessionId],
   );
   const handleLocalResetRef = useRef(handleLocalReset);
   useEffect(() => {
@@ -144,6 +151,14 @@ export default function AskBobAutomatedCallPanel({
       handleLocalResetRef.current?.();
     }
   }, [hasScriptContent]);
+
+  useEffect(() => {
+    if (status === "success" || status === "already_in_progress") {
+      preservedSuccessSessionRef.current = callSessionId;
+    } else if (status !== "success" && status !== "already_in_progress") {
+      preservedSuccessSessionRef.current = null;
+    }
+  }, [status, callSessionId]);
 
   const handlePlaceCall = useCallback(async () => {
     if (!canPlaceCall || !normalizedCustomerPhone) {

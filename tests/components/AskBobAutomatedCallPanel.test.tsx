@@ -212,6 +212,72 @@ describe("AskBobAutomatedCallPanel", () => {
     ).toBe(false);
   });
 
+  it("keeps the already-started banner when local resets run", async () => {
+    const alreadyInProgressPayload = {
+      status: "already_in_progress" as const,
+      code: "already_in_progress" as const,
+      message: "Call is already in progress. Open call session.",
+      callId: "call-789",
+      twilioStatus: "queued",
+      twilioCallSid: "twilio-abc",
+    };
+    mockStartCallAction.mockResolvedValue(alreadyInProgressPayload);
+
+    await act(async () => {
+      root?.render(
+        <AskBobAutomatedCallPanel
+          workspaceId="workspace-1"
+          jobId="job-1"
+          customerPhoneNumber="+15550001234"
+          customerDisplayName="Customer"
+          callScriptBody="Hello preview"
+          callScriptSummary="Summary"
+          jobTitle="Title"
+          jobDescription="Description"
+          resetToken={0}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const button = findPrimaryButton(container);
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Call already started");
+    expect(
+      Array.from(container.querySelectorAll<HTMLButtonElement>("button")).some((node) =>
+        node.textContent?.includes("Try again"),
+      ),
+    ).toBe(false);
+
+    await act(async () => {
+      root?.render(
+        <AskBobAutomatedCallPanel
+          workspaceId="workspace-1"
+          jobId="job-1"
+          customerPhoneNumber="+15550001234"
+          customerDisplayName="Customer"
+          callScriptBody="Hello preview"
+          callScriptSummary="Summary"
+          jobTitle="Title"
+          jobDescription="Description"
+          resetToken={1}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Call already started");
+    expect(
+      Array.from(container.querySelectorAll<HTMLButtonElement>("button")).some((node) =>
+        node.textContent?.includes("Try again"),
+      ),
+    ).toBe(false);
+  });
+
   it("shows an inline hint when the call is already in progress", async () => {
     mockStartCallAction.mockResolvedValue({
       status: "already_in_progress" as const,

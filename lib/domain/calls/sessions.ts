@@ -1,33 +1,40 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const TWILIO_STATUS_PRECEDENCE: Record<string, number> = {
-  queued: 1,
-  initiated: 2,
-  ringing: 3,
-  "in-progress": 4,
-  answered: 5,
-  completed: 6,
-  failed: 7,
-  busy: 7,
-  "no-answer": 7,
-  canceled: 7,
+type TwilioStatusEntry = {
+  status: string;
+  rank: number;
+  terminal: boolean;
+  failure?: boolean;
 };
 
-const TWILIO_IN_PROGRESS_STATUSES = new Set<string>([
-  "queued",
-  "initiated",
-  "ringing",
-  "in-progress",
-  "answered",
-]);
+const TWILIO_STATUS_PRECEDENCE_LIST: TwilioStatusEntry[] = [
+  { status: "queued", rank: 1, terminal: false },
+  { status: "initiated", rank: 2, terminal: false },
+  { status: "ringing", rank: 3, terminal: false },
+  { status: "in-progress", rank: 4, terminal: false },
+  { status: "answered", rank: 5, terminal: false },
+  { status: "completed", rank: 6, terminal: true },
+  { status: "failed", rank: 7, terminal: true, failure: true },
+  { status: "busy", rank: 7, terminal: true, failure: true },
+  { status: "no-answer", rank: 7, terminal: true, failure: true },
+  { status: "canceled", rank: 7, terminal: true, failure: true },
+];
 
-const TWILIO_TERMINAL_STATUSES = new Set<string>([
-  "completed",
-  "failed",
-  "busy",
-  "no-answer",
-  "canceled",
-]);
+const TWILIO_STATUS_METADATA = new Map(
+  TWILIO_STATUS_PRECEDENCE_LIST.map((entry) => [entry.status, entry]),
+);
+
+const TWILIO_IN_PROGRESS_STATUSES = new Set(
+  TWILIO_STATUS_PRECEDENCE_LIST.filter((entry) => !entry.terminal).map((entry) => entry.status),
+);
+
+const TWILIO_TERMINAL_STATUSES = new Set(
+  TWILIO_STATUS_PRECEDENCE_LIST.filter((entry) => entry.terminal).map((entry) => entry.status),
+);
+
+const TWILIO_DIAL_FAILURE_STATUSES = new Set(
+  TWILIO_STATUS_PRECEDENCE_LIST.filter((entry) => entry.failure).map((entry) => entry.status),
+);
 
 const TWILIO_DIAL_BLOCKED_STATUSES = new Set<string>([
   ...TWILIO_IN_PROGRESS_STATUSES,
@@ -40,7 +47,7 @@ function normalizeTwilioStatus(value?: string | null): string | null {
 }
 
 export const TWILIO_DIAL_IN_PROGRESS_STATUSES = new Set(TWILIO_IN_PROGRESS_STATUSES);
-export const TWILIO_DIAL_FAILURE_STATUSES = new Set(TWILIO_TERMINAL_STATUSES);
+export { TWILIO_DIAL_FAILURE_STATUSES };
 
 export type CreateCallSessionForJobQuoteParams = {
   supabase: SupabaseClient;
@@ -96,9 +103,12 @@ export type CallSessionDialRequestedResult =
   | { outcome: "not_found"; callId: string }
   | { outcome: "not_owned"; callId: string };
 
+type CallSessionTwilioStatusUpdateReason = "applied" | "precedence_ignored";
+
 export type CallSessionTwilioStatusUpdateResult = {
   applied: boolean;
   currentStatus: string | null;
+  reason: CallSessionTwilioStatusUpdateReason;
 };
 
 export type MarkCallSessionDialRequestedParams = {
@@ -401,17 +411,28 @@ export async function updateCallSessionTwilioStatus(
   }
 
   const normalizedCurrentStatus = normalizeTwilioStatus(existingRow.twilio_status);
-  const currentRank =
-    normalizedCurrentStatus !== null
-      ? TWILIO_STATUS_PRECEDENCE[normalizedCurrentStatus] ?? 0
-      : 0;
-  const incomingRank =
-    normalizedIncomingStatus !== null
-      ? TWILIO_STATUS_PRECEDENCE[normalizedIncomingStatus] ?? 0
-      : 0;
-  const shouldUpdateStatus =
-    normalizedIncomingStatus !== null &&
-    (normalizedCurrentStatus === null || incomingRank >= currentRank);
+  const currentInfo =
+    normalizedCurrentStatus !== null ? TWILIO_STATUS_METADATA.get(normalizedCurrentStatus) ?? null : null;
+  const incomingInfo =
+    normalizedIncomingStatus !== null ? TWILIO_STATUS_METADATA.get(normalizedIncomingStatus) ?? null : null;
+
+  let shouldUpdateStatus = false;
+  let reason: CallSessionTwilioStatusUpdateReason = "precedence_ignored";
+
+  if (incomingInfo) {
+    if (currentInfo?.terminal) {
+      if (incomingInfo.terminal && incomingInfo.status === currentInfo.status) {
+        shouldUpdateStatus = true;
+        reason = "applied";
+      }
+    } else {
+      const currentRank = currentInfo?.rank ?? 0;
+      if (incomingInfo.rank >= currentRank) {
+        shouldUpdateStatus = true;
+        reason = "applied";
+      }
+    }
+  }
 
   const updatePayload: {
     twilio_status?: string | null;
@@ -440,5 +461,6 @@ export async function updateCallSessionTwilioStatus(
   return {
     applied: shouldUpdateStatus,
     currentStatus: existingRow.twilio_status ?? null,
+    reason,
   };
 }

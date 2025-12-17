@@ -77,11 +77,11 @@ export async function POST(req: NextRequest) {
 
   console.log("[twilio-call-status-callback-update]", {
     callId,
-    callSid,
+    twilioCallSid: callSid,
     workspaceId: workspaceIdFromParams,
     incomingStatus: callStatus ?? "unknown",
     currentStatus: updateResult.currentStatus,
-    applied: updateResult.applied,
+    reason: updateResult.reason,
     errorCode,
   });
 

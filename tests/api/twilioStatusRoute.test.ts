@@ -136,6 +136,7 @@ describe("Twilio status callback route", () => {
     mockUpdateTwilioStatus.mockResolvedValue({
       applied: true,
       currentStatus: "ringing",
+      reason: "applied",
     });
 
     const response = await POST(
@@ -166,7 +167,7 @@ describe("Twilio status callback route", () => {
       logSpy.mock.calls.some(
         (args) =>
           args[0] === "[twilio-call-status-callback-update]" &&
-          args[1]?.applied === true &&
+          args[1]?.reason === "applied" &&
           args[1]?.incomingStatus === "ringing",
       ),
     ).toBe(true);
@@ -188,6 +189,7 @@ describe("Twilio status callback route", () => {
     mockUpdateTwilioStatus.mockResolvedValue({
       applied: false,
       currentStatus: "initiated",
+      reason: "precedence_ignored",
     });
 
     const response = await POST(
@@ -212,9 +214,66 @@ describe("Twilio status callback route", () => {
       logSpy.mock.calls.some(
         (args) =>
           args[0] === "[twilio-call-status-callback-update]" &&
-          args[1]?.applied === false &&
+          args[1]?.reason === "precedence_ignored" &&
           args[1]?.incomingStatus === "queued",
       ),
+    ).toBe(true);
+  });
+
+  it("logs precedence decisions for out-of-order callbacks", async () => {
+    const supabaseState = setupSupabaseMock({
+      calls: {
+        data: [
+          {
+            id: "call-1",
+            twilio_call_sid: "call-1",
+          },
+        ],
+        error: null,
+      },
+    });
+    createAdminClientMock.mockReturnValue(supabaseState.supabase);
+    mockUpdateTwilioStatus
+      .mockResolvedValueOnce({
+        applied: true,
+        currentStatus: "completed",
+        reason: "applied",
+      })
+      .mockResolvedValueOnce({
+        applied: false,
+        currentStatus: "completed",
+        reason: "precedence_ignored",
+      });
+
+    const first = await POST(
+      buildRequest(
+        {
+          CallSid: "call-1",
+          CallStatus: "completed",
+        },
+        "signature",
+        "call-1",
+      ),
+    );
+    expect(first.status).toBe(200);
+
+    const second = await POST(
+      buildRequest(
+        {
+          CallSid: "call-1",
+          CallStatus: "ringing",
+        },
+        "signature",
+        "call-1",
+      ),
+    );
+    expect(second.status).toBe(200);
+    const updateLogs = logSpy.mock.calls.filter((args) => args[0] === "[twilio-call-status-callback-update]");
+    expect(
+      updateLogs.some(([, payload]) => payload.reason === "applied" && payload.incomingStatus === "completed"),
+    ).toBe(true);
+    expect(
+      updateLogs.some(([, payload]) => payload.reason === "precedence_ignored" && payload.incomingStatus === "ringing"),
     ).toBe(true);
   });
 
