@@ -15,6 +15,18 @@ vi.mock("@/lib/domain/workspaces", () => ({
 }));
 
 import CallSessionPage from "@/app/(app)/calls/[id]/page";
+import { ASKBOB_AUTOMATED_SCRIPT_PREFIX } from "@/lib/domain/askbob/constants";
+import { SPEECH_PLAN_METADATA_MARKER } from "@/lib/domain/askbob/speechPlan";
+
+function buildAutomatedCallSummary() {
+  const metadata = JSON.stringify({
+    voice: "Samantha",
+    greetingStyle: "Professional",
+    allowVoicemail: true,
+    scriptSummary: "Quick follow-up script",
+  });
+  return `${ASKBOB_AUTOMATED_SCRIPT_PREFIX} Quick follow-up${SPEECH_PLAN_METADATA_MARKER}${metadata}`;
+}
 
 describe("CallSessionPage outcome card", () => {
   let supabaseState = setupSupabaseMock();
@@ -175,6 +187,72 @@ describe("CallSessionPage outcome card", () => {
     expect(markup).toContain("Call failed");
     expect(markup).toContain("Invalid destination number");
     expect(markup).toContain("Refresh status");
+  });
+
+  it("shows a record prompt after a terminal automated call without outcome", async () => {
+    const summary = buildAutomatedCallSummary();
+    supabaseState.responses.calls = {
+      data: [
+        {
+          id: "call-terminal",
+          workspace_id: "workspace-1",
+          created_at: new Date().toISOString(),
+          job_id: "job-1",
+          from_number: "+15550007777",
+          to_number: "+15550008888",
+          outcome: null,
+          outcome_notes: null,
+          outcome_recorded_at: null,
+          outcome_code: null,
+          reached_customer: null,
+          summary,
+          twilio_call_sid: "sid-term",
+          twilio_status: "completed",
+          twilio_status_updated_at: new Date().toISOString(),
+          twilio_recording_url: "https://example.com/rec",
+          twilio_recording_duration_seconds: 45,
+          transcript: null,
+        },
+      ],
+      error: null,
+    };
+
+    const element = await CallSessionPage({ params: Promise.resolve({ id: "call-terminal" }) });
+    const markup = renderToStaticMarkup(element);
+    expect(markup).toContain("Call ended. Please record the outcome.");
+  });
+
+  it("reminds to wait while an automated call is in progress", async () => {
+    const summary = buildAutomatedCallSummary();
+    supabaseState.responses.calls = {
+      data: [
+        {
+          id: "call-progress",
+          workspace_id: "workspace-1",
+          created_at: new Date().toISOString(),
+          job_id: "job-1",
+          from_number: "+15550009999",
+          to_number: "+15550001111",
+          outcome: null,
+          outcome_notes: null,
+          outcome_recorded_at: null,
+          outcome_code: null,
+          reached_customer: null,
+          summary,
+          twilio_call_sid: "sid-run",
+          twilio_status: "ringing",
+          twilio_status_updated_at: new Date().toISOString(),
+          twilio_recording_url: null,
+          twilio_recording_duration_seconds: null,
+          transcript: null,
+        },
+      ],
+      error: null,
+    };
+
+    const element = await CallSessionPage({ params: Promise.resolve({ id: "call-progress" }) });
+    const markup = renderToStaticMarkup(element);
+    expect(markup).toContain("Call is in progress. Outcome can be recorded after it ends.");
   });
 
   it("renders the Twilio status strip when only the SID exists", async () => {

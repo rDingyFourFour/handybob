@@ -18,6 +18,7 @@ import {
 } from "@/utils/calls/callOutcomeMessages";
 import { SaveCallOutcomeResponse, saveCallOutcomeAction } from "../actions/saveCallOutcome";
 import { readAndClearCallOutcomePrefill } from "@/utils/askbob/callOutcomePrefillCache";
+import type { CallAutomatedDialSnapshot } from "@/lib/domain/calls/sessions";
 
 const NOTES_MAX_LENGTH = 1000;
 
@@ -54,6 +55,8 @@ type CallOutcomeCaptureCardProps = {
   hasAskBobScriptHint: boolean;
   actionStateOverride?: ActionStateTuple;
   jobId?: string | null;
+  automatedDialSnapshot?: CallAutomatedDialSnapshot | null;
+  isAutomatedCallContext?: boolean;
 };
 
 export async function callOutcomeCaptureFormAction(
@@ -101,6 +104,8 @@ export default function CallOutcomeCaptureCard({
   jobId,
   hasAskBobScriptHint,
   actionStateOverride,
+  automatedDialSnapshot,
+  isAutomatedCallContext,
 }: CallOutcomeCaptureCardProps) {
   const hasExistingOutcome =
     Boolean(initialRecordedAt) ||
@@ -114,6 +119,10 @@ export default function CallOutcomeCaptureCard({
     recordedAt: initialRecordedAt,
     legacyOutcome: initialLegacyOutcome ?? null,
   }));
+  const showTerminalCallBanner =
+    Boolean(isAutomatedCallContext && automatedDialSnapshot?.isTerminal && !hasExistingOutcome);
+  const showInProgressCallBanner =
+    Boolean(isAutomatedCallContext && automatedDialSnapshot?.isInProgress && !hasExistingOutcome);
   const [isEditing, setIsEditing] = useState(!hasExistingOutcome);
   const [prefillRecord] = useState(() => {
     if (hasExistingOutcome || typeof window === "undefined") {
@@ -272,6 +281,16 @@ export default function CallOutcomeCaptureCard({
         </p>
         {hasAskBobScriptHint && (
           <p className="text-xs italic text-slate-400">This was an AskBob-assisted call.</p>
+        )}
+        {showTerminalCallBanner && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
+            Call ended. Please record the outcome.
+          </div>
+        )}
+        {showInProgressCallBanner && (
+          <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-xs text-slate-400">
+            Call is in progress. Outcome can be recorded after it ends.
+          </div>
         )}
       </div>
 

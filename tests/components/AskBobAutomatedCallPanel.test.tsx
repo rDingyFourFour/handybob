@@ -785,4 +785,134 @@ describe("AskBobAutomatedCallPanel", () => {
     expect(container.textContent).toContain("Saved");
     vi.useRealTimers();
   });
+
+  it("finalizes dirty notes once the automated dial is terminal", async () => {
+    vi.useFakeTimers();
+    const inProgressSnapshot = {
+      callId: "call-123",
+      workspaceId: "workspace-1",
+      twilioCallSid: null,
+      twilioStatus: "ringing",
+      twilioStatusUpdatedAt: "2024-01-01T00:00:00Z",
+      isTerminal: false,
+      isInProgress: true,
+      hasRecordingMetadata: true,
+      hasRecordingReady: false,
+      hasTranscriptOrNotes: false,
+    };
+    const terminalSnapshot = {
+      ...inProgressSnapshot,
+      twilioStatus: "completed",
+      isTerminal: true,
+      isInProgress: false,
+      hasRecordingReady: true,
+    };
+    mockStartCallAction.mockResolvedValue({
+      status: "success",
+      code: "call_started",
+      message: "Call started",
+      label: "Call started",
+      callId: "call-123",
+      twilioStatus: null,
+      twilioCallSid: null,
+    });
+    mockGetSessionStatus.mockResolvedValue({
+      callId: "call-123",
+      twilioCallSid: null,
+      twilioStatus: "completed",
+      twilioStatusUpdatedAt: null,
+      isTerminal: true,
+      hasRecording: true,
+      recordingDurationSeconds: 45,
+      automatedCallNotes: null,
+    });
+    mockSaveAutomatedCallNotesAction.mockResolvedValue({
+      ok: true,
+      callId: "call-123",
+      notes: "Final note",
+    });
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await act(async () => {
+    root?.render(
+        <AskBobAutomatedCallPanel
+          workspaceId="workspace-1"
+          jobId="job-1"
+          customerPhoneNumber="+15550001234"
+          customerDisplayName="Customer"
+          callScriptBody="Hello preview"
+          callScriptSummary="Summary"
+          jobTitle="Title"
+          jobDescription="Description"
+          automatedDialSnapshot={inProgressSnapshot}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const button = findPrimaryButton(container);
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea#automated-call-live-notes");
+    if (!textarea) {
+      throw new Error("Live notes textarea not found");
+    }
+
+    const dispatchNotesChange = (value: string) => {
+      textarea.value = value;
+      const reactPropsKey = Object.keys(textarea).find((key) => key.startsWith("__reactProps"));
+      const reactProps = reactPropsKey
+        ? (textarea as Record<string, unknown>)[reactPropsKey] as Record<string, unknown>
+        : undefined;
+      const handler = reactProps?.onChange as
+        | ((event: ChangeEvent<HTMLTextAreaElement>) => void)
+        | undefined;
+      if (!handler) {
+        throw new Error("React change handler is not available");
+      }
+      handler({ target: textarea, currentTarget: textarea } as ChangeEvent<HTMLTextAreaElement>);
+    };
+
+    await act(async () => {
+      dispatchNotesChange("Final note");
+      vi.advanceTimersByTime(0);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      root?.render(
+        <AskBobAutomatedCallPanel
+          workspaceId="workspace-1"
+          jobId="job-1"
+          customerPhoneNumber="+15550001234"
+          customerDisplayName="Customer"
+          callScriptBody="Hello preview"
+          callScriptSummary="Summary"
+          jobTitle="Title"
+          jobDescription="Description"
+          automatedDialSnapshot={terminalSnapshot}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(0);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockSaveAutomatedCallNotesAction).toHaveBeenCalledTimes(1);
+    expect(logSpy.mock.calls.some((args) => args[0] === "[askbob-automated-call-notes-finalize-attempt]")).toBe(
+      true,
+    );
+    expect(logSpy.mock.calls.some((args) => args[0] === "[askbob-automated-call-notes-finalize-success]")).toBe(true);
+    expect(container.textContent).toContain("Call ended and notes saved. Ready to generate a follow-up.");
+    logSpy.mockRestore();
+  });
 });

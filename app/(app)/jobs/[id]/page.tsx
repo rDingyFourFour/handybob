@@ -233,7 +233,12 @@ export default async function JobDetailPage(props: {
   const searchParams: Record<string, string | string[] | undefined> =
     (await props.searchParams) ?? {};
   const afterCallCacheKey = normalizeParam(onlyStringParam(searchParams.afterCallKey ?? null));
-  const afterCallCallId = normalizeParam(onlyStringParam(searchParams.callId ?? null));
+  const callIdParam = normalizeParam(onlyStringParam(searchParams.callId ?? null));
+  const afterCallCallId = callIdParam;
+  const afterCallForceFlag = normalizeParam(onlyStringParam(searchParams.afterCallForce ?? null));
+  const forcedAfterCallCallId = afterCallForceFlag === "1" ? callIdParam : null;
+  const forcedAfterCallHasTranscript =
+    normalizeParam(onlyStringParam(searchParams.hasCallTranscript ?? null)) === "1";
 
   if (!id || !id.trim()) {
     notFound();
@@ -598,6 +603,8 @@ export default async function JobDetailPage(props: {
             latestCallOutcome={latestCallOutcome}
             afterCallCacheKey={afterCallCacheKey ?? undefined}
             afterCallCacheCallId={afterCallCallId ?? undefined}
+            forcedAfterCallCallId={forcedAfterCallCallId ?? undefined}
+            forcedAfterCallHasTranscript={forcedAfterCallHasTranscript}
           />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">

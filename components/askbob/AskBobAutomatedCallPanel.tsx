@@ -20,13 +20,12 @@ import {
   ASKBOB_AUTOMATED_GREETING_STYLE_DEFAULT,
   ASKBOB_AUTOMATED_VOICE_DEFAULT,
 } from "@/lib/domain/askbob/speechPlan";
+import {
+  ASKBOB_AUTOMATED_CALL_SCRIPT_PREVIEW_LIMIT,
+  ASKBOB_AUTOMATED_CALL_VOICE_OPTIONS,
+} from "@/lib/domain/askbob/automatedCallConfig";
+import type { CallAutomatedDialSnapshot } from "@/lib/domain/calls/sessions";
 
-const SCRIPT_PREVIEW_LIMIT = 360;
-const VOICE_OPTIONS = [
-  { value: "alloy", label: "Alloy (neutral)" },
-  { value: "samantha", label: "Samantha (friendly)" },
-  { value: "david", label: "David (calm)" },
-];
 const GREETING_STYLE_OPTIONS = [
   { value: "Professional", label: "Professional" },
   { value: "Friendly", label: "Friendly" },
@@ -79,6 +78,7 @@ type Props = {
   onStartCallWithScript?: (payload: StartCallWithScriptPayload) => void;
   onAutomatedCallSuccess?: (summary: string) => void;
   onAutomatedCallNotesChange?: (notes: string | null) => void;
+  automatedDialSnapshot?: CallAutomatedDialSnapshot | null;
 };
 
 export default function AskBobAutomatedCallPanel({
@@ -100,6 +100,7 @@ export default function AskBobAutomatedCallPanel({
   onStartCallWithScript,
   onAutomatedCallSuccess,
   onAutomatedCallNotesChange,
+  automatedDialSnapshot,
 }: Props) {
   const [status, setStatus] = useState<StatusState>("idle");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -131,6 +132,9 @@ export default function AskBobAutomatedCallPanel({
   const notesVisibilityLoggedRef = useRef<{ callId: string; expandVersion: number } | null>(null);
   const parentNotesValueRef = useRef<string | null>(null);
   const onAutomatedCallNotesChangeRef = useRef(onAutomatedCallNotesChange);
+  const finalizeAttemptedRef = useRef(false);
+  const finalizePendingRef = useRef(false);
+  const [readyForFollowupHintTrigger, setReadyForFollowupHintTrigger] = useState(0);
   const notifyParentOfNotes = useCallback((value: string | null) => {
     const callback = onAutomatedCallNotesChangeRef.current;
     if (!callback) {
@@ -150,7 +154,9 @@ export default function AskBobAutomatedCallPanel({
   const trimmedScriptSummary = callScriptSummary?.trim() ?? null;
   const hasScriptContent = Boolean(trimmedScriptBody || trimmedScriptSummary);
   const scriptPreview = trimmedScriptBody || trimmedScriptSummary || "";
-  const previewText = scriptPreview ? truncatePreview(scriptPreview, SCRIPT_PREVIEW_LIMIT) : null;
+const previewText = scriptPreview
+  ? truncatePreview(scriptPreview, ASKBOB_AUTOMATED_CALL_SCRIPT_PREVIEW_LIMIT)
+  : null;
   const hasCustomerPhone = Boolean(normalizedCustomerPhone);
   const toggleLabel = stepCollapsed ? "Show step" : "Hide step";
 
@@ -527,6 +533,50 @@ export default function AskBobAutomatedCallPanel({
     [callSessionId, runNotesSave],
   );
 
+  const dialIsTerminal = Boolean(automatedDialSnapshot?.isTerminal ?? sessionStatus?.isTerminal);
+
+  useEffect(() => {
+    if (!callSessionId || !dialIsTerminal || !notesDirty) {
+      return;
+    }
+    if (finalizeAttemptedRef.current) {
+      return;
+    }
+    finalizeAttemptedRef.current = true;
+    const hasNotes = Boolean(notesRef.current?.trim());
+    console.log("[askbob-automated-call-notes-finalize-attempt]", {
+      workspaceId,
+      callId: callSessionId,
+      hasNotes,
+    });
+    finalizePendingRef.current = true;
+    scheduleNotesSave({ immediate: true, force: true });
+  }, [dialIsTerminal, callSessionId, scheduleNotesSave, workspaceId, notesDirty]);
+
+  useEffect(() => {
+    if (!finalizePendingRef.current) {
+      return;
+    }
+    if (saveState === "saved") {
+      finalizePendingRef.current = false;
+      const hasNotes = Boolean(notesRef.current?.trim());
+      setReadyForFollowupHintTrigger((value) => value + 1);
+      console.log("[askbob-automated-call-notes-finalize-success]", {
+        workspaceId,
+        callId: callSessionId,
+        hasNotes,
+      });
+    } else if (saveState === "error") {
+      finalizePendingRef.current = false;
+      const hasNotes = Boolean(notesRef.current?.trim());
+      console.log("[askbob-automated-call-notes-finalize-failure]", {
+        workspaceId,
+        callId: callSessionId,
+        hasNotes,
+      });
+    }
+  }, [saveState, callSessionId, workspaceId]);
+
   const handleNotesChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => {
     const nextValue = event.target.value;
@@ -682,6 +732,8 @@ export default function AskBobAutomatedCallPanel({
       ? "Failed to save"
       : null;
   const canTriggerNotesSave = Boolean(callSessionId && (notesDirty || saveState === "error"));
+  const readyForFollowupHintVisible =
+    Boolean(dialIsTerminal && readyForFollowupHintTrigger > 0 && !notesDirty);
 
   return (
     <HbCard className="space-y-4">
@@ -747,7 +799,7 @@ export default function AskBobAutomatedCallPanel({
                   onChange={handleVoiceChange}
                   disabled={!hasScriptContent}
                 >
-                  {VOICE_OPTIONS.map((option) => (
+                  {ASKBOB_AUTOMATED_CALL_VOICE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -902,6 +954,11 @@ export default function AskBobAutomatedCallPanel({
                   rows={4}
                   placeholder="Record what was said, updates for the tech, or adjustments for follow-up."
                 />
+                {readyForFollowupHintVisible && (
+                  <p className="text-xs text-slate-400">
+                    Call ended and notes saved. Ready to generate a follow-up.
+                  </p>
+                )}
                 {notesSaveStatusText && (
                   <p className="text-xs text-slate-400">{notesSaveStatusText}</p>
                 )}

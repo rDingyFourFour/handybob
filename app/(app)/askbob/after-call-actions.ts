@@ -70,6 +70,9 @@ type CallRow = {
   outcome_notes: string | null;
   outcome_recorded_at: string | null;
   reached_customer: boolean | null;
+  transcript: string | null;
+  twilio_recording_url: string | null;
+  twilio_recording_duration_seconds: number | null;
 };
 
 export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Promise<AfterCallActionResult> {
@@ -120,6 +123,11 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
 
   const normalizedAutomatedCallNotes = sanitizeAutomatedCallNotes(parsed.automatedCallNotes ?? null);
   const hasAutomatedCallNotesContext = Boolean(normalizedAutomatedCallNotes);
+  const hasLatestCallOutcomeContext =
+    Boolean(call.outcome_code) ||
+    Boolean(call.outcome_notes?.trim()) ||
+    Boolean(call.outcome_recorded_at);
+  const hasCallTranscriptContext = Boolean(call.transcript?.trim());
 
   const customerRecord = Array.isArray(job.customers)
     ? job.customers[0] ?? null
@@ -149,7 +157,9 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
     callId: call.id,
     hasCallId: Boolean(parsed.callId),
     callOutcome,
+    hasLatestCallOutcomeContext,
     hasAutomatedCallNotesContext,
+    hasCallTranscriptContext,
   });
 
   let callHistoryRecords: CallHistoryRecord[] = [];
@@ -196,6 +206,8 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
       suggestedChannel: result.suggestedChannel,
       urgencyLevel: result.urgencyLevel,
       hasAutomatedCallNotesContext,
+      hasLatestCallOutcomeContext,
+      hasCallTranscriptContext,
     });
     return { ok: true, jobId: job.id, callId: call.id, result };
   } catch (error) {
@@ -208,7 +220,9 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
       jobId: job.id,
       callId: call.id,
       callOutcome,
+      hasLatestCallOutcomeContext,
       hasAutomatedCallNotesContext,
+      hasCallTranscriptContext,
       errorMessage: truncatedError,
     });
     return { ok: false, code: "askbob_task_failed", message: truncatedError, jobId: job.id };
@@ -224,7 +238,7 @@ async function loadCallForJob(
     const { data, error } = await supabase
       .from<CallRow>("calls")
       .select(
-        "id, job_id, workspace_id, status, outcome, duration_seconds, started_at, summary, ai_summary, direction, from_number, to_number, created_at"
+        "id, job_id, workspace_id, status, outcome, duration_seconds, started_at, summary, ai_summary, direction, from_number, to_number, created_at, outcome_code, outcome_notes, outcome_recorded_at, reached_customer, transcript, twilio_recording_url, twilio_recording_duration_seconds"
       )
       .eq("workspace_id", workspaceId)
       .eq("job_id", payload.jobId)
@@ -243,7 +257,7 @@ async function loadCallForJob(
     const { data, error } = await supabase
       .from<CallRow>("calls")
       .select(
-        "id, job_id, workspace_id, status, outcome, duration_seconds, started_at, summary, ai_summary, direction, from_number, to_number, created_at"
+        "id, job_id, workspace_id, status, outcome, duration_seconds, started_at, summary, ai_summary, direction, from_number, to_number, created_at, outcome_code, outcome_notes, outcome_recorded_at, reached_customer, transcript, twilio_recording_url, twilio_recording_duration_seconds"
       )
       .eq("workspace_id", workspaceId)
       .eq("job_id", payload.jobId)

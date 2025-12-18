@@ -6,6 +6,7 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import CallSummaryStatus from "@/components/call-summary-status";
 import CallStatusRefreshButton from "@/components/calls/CallStatusRefreshButton";
+import AutomatedCallNotesCard from "./AutomatedCallNotesCard";
 import CallRecordingLink from "@/components/calls/CallRecordingLink";
 import HbCard from "@/components/ui/hb-card";
 import JobCallScriptPanel, {
@@ -29,6 +30,13 @@ import {
   isAskBobScriptSummary,
 } from "@/lib/domain/askbob/constants";
 import { formatTwilioStatusLabel } from "@/utils/calls/twilioStatusLabel";
+import { getAutomatedCallVoiceLabel } from "@/lib/domain/askbob/automatedCallConfig";
+import {
+  buildCallAutomatedDialSnapshot,
+  getCallSessionAutomatedSpeechPlan,
+  getCallSessionJobAndCustomer,
+  sanitizeAutomatedCallNotes,
+} from "@/lib/domain/calls/sessions";
 import LinkCallContextCard from "./LinkCallContextCard";
 import AskBobLiveGuidanceCard from "./AskBobLiveGuidanceCard";
 
@@ -57,6 +65,7 @@ type CallRecord = {
   reached_customer: boolean | null;
   summary: string | null;
   ai_summary?: string | null;
+  transcript?: string | null;
 };
 
 const CALL_FROM_PLACEHOLDER = "workspace-default";
@@ -247,7 +256,7 @@ export default async function CallSessionPage({
   } = await supabase
     .from<CallRecord>("calls")
     .select(
-      "id, workspace_id, created_at, job_id, customer_id, direction, twilio_call_sid, twilio_status, twilio_status_updated_at, twilio_error_code, twilio_error_message, twilio_recording_sid, twilio_recording_url, twilio_recording_duration_seconds, twilio_recording_received_at, from_number, to_number, outcome, outcome_notes, outcome_recorded_at, outcome_code, reached_customer, summary, ai_summary"
+      "id, workspace_id, created_at, job_id, customer_id, direction, twilio_call_sid, twilio_status, twilio_status_updated_at, twilio_error_code, twilio_error_message, twilio_recording_sid, twilio_recording_url, twilio_recording_duration_seconds, twilio_recording_received_at, from_number, to_number, outcome, outcome_notes, outcome_recorded_at, outcome_code, reached_customer, summary, ai_summary, transcript"
     )
     .eq("workspace_id", workspace.id)
     .eq("id", id)
@@ -291,7 +300,35 @@ export default async function CallSessionPage({
   const hasAskBobScriptHint =
     isAskBobScriptSummary(callSummaryRow) || isAskBobScriptSummary(call.ai_summary ?? null);
 
-  const jobId = call.job_id ?? null;
+  const { jobId } = await getCallSessionJobAndCustomer({
+    supabase,
+    workspaceId: workspace.id,
+    callId: call.id,
+    existingJobId: call.job_id ?? null,
+    existingCustomerId: call.customer_id ?? null,
+  });
+  const automatedSpeechPlan = await getCallSessionAutomatedSpeechPlan({
+    supabase,
+    workspaceId: workspace.id,
+    callId: call.id,
+    summary: call.summary ?? null,
+  });
+  const isAskBobAutomatedCall = Boolean(automatedSpeechPlan);
+  const automaticVoiceLabel = getAutomatedCallVoiceLabel(automatedSpeechPlan?.voice ?? null);
+  const automaticSummaryPreview = automatedSpeechPlan?.scriptSummary ?? null;
+  const voicemailEnabled = automatedSpeechPlan?.allowVoicemail ?? null;
+  const sanitizedAutomatedNotes = sanitizeAutomatedCallNotes(call.transcript ?? null);
+  const automatedDialSnapshot = buildCallAutomatedDialSnapshot(call);
+
+  if (isAskBobAutomatedCall) {
+    console.log("[calls-session-askbob-automated-details-visible]", {
+      callId: call.id,
+      workspaceId: workspace.id,
+      hasSpeechPlan: Boolean(automatedSpeechPlan),
+      hasVoice: Boolean(automaticVoiceLabel),
+      voicemailEnabledKnown: voicemailEnabled !== null,
+    });
+  }
   const hasExistingOutcome =
     Boolean(call.outcome_recorded_at) ||
     Boolean(call.outcome_code) ||
@@ -305,6 +342,18 @@ export default async function CallSessionPage({
       hasLegacyOutcome: Boolean(call.outcome),
     });
   }
+  const callTranscriptFlag = Boolean(call.transcript?.trim());
+  const showAutomatedFollowupLink =
+    Boolean(isAskBobAutomatedCall && automatedDialSnapshot.isTerminal && hasExistingOutcome && jobId);
+  const followupLinkHref =
+    showAutomatedFollowupLink && jobId
+      ? `/jobs/${jobId}?${new URLSearchParams({
+          callId: call.id,
+          workspaceId: workspace.id,
+          afterCallForce: "1",
+          hasCallTranscript: callTranscriptFlag ? "1" : "0",
+        }).toString()}`
+      : undefined;
 
   let job: JobSummary | null = null;
   if (jobId) {
@@ -643,14 +692,94 @@ export default async function CallSessionPage({
               <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
                 <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
                   <span>Twilio status</span>
-                  <CallStatusRefreshButton callId={call.id} />
+              <CallStatusRefreshButton callId={call.id} />
+            </div>
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="font-semibold text-white">
+                {twilioStatusLabel ?? "Queued"}
+              </span>
+              {twilioStatusUpdatedLabel && (
+                <span className="text-xs text-slate-500">Updated {twilioStatusUpdatedLabel}</span>
+              )}
+            </div>
+          </div>
+        )}
+            {isAskBobAutomatedCall && (
+              <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
+                <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
+                  <span>Automated call</span>
                 </div>
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="font-semibold text-white">
-                    {twilioStatusLabel ?? "Queued"}
-                  </span>
-                  {twilioStatusUpdatedLabel && (
-                    <span className="text-xs text-slate-500">Updated {twilioStatusUpdatedLabel}</span>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Voice</p>
+                    <p className="text-sm text-white">{automaticVoiceLabel ?? "Not available"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Voicemail</p>
+                    <p className="text-sm text-white">
+                      {voicemailEnabled === null
+                        ? "Not available"
+                        : voicemailEnabled
+                        ? "Enabled"
+                        : "Disabled"}
+                    </p>
+                  </div>
+                  <div className="sm:col-span-3">
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                      Speech plan summary
+                    </p>
+                    <p className="text-sm text-white">
+                      {automaticSummaryPreview ?? "Not available"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-2">
+                  {jobId ? (
+                    <>
+                      <Link
+                        href={jobId ? `/jobs/${jobId}` : "#"}
+                        className="text-sm font-semibold text-sky-300 hover:text-sky-200"
+                        onClick={() =>
+                          console.log("[calls-session-askbob-automated-open-job-click]", {
+                            workspaceId: workspace.id,
+                            callId: call.id,
+                            jobId,
+                          })
+                        }
+                      >
+                        Open job
+                      </Link>
+                      <Link
+                        href={`/jobs/${jobId}?step=9`}
+                        className="text-sm font-semibold text-sky-300 hover:text-sky-200"
+                        onClick={() =>
+                          console.log("[calls-session-askbob-automated-open-job-askbob-click]", {
+                            workspaceId: workspace.id,
+                            callId: call.id,
+                            jobId,
+                          })
+                        }
+                      >
+                        Open AskBob on job
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled
+                        className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500"
+                      >
+                        Open job
+                      </button>
+                      <button
+                        type="button"
+                        disabled
+                        className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500"
+                      >
+                        Open AskBob on job
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -692,6 +821,14 @@ export default async function CallSessionPage({
                 <p className="text-xs uppercase tracking-[0.3em] text-rose-200">Call failed</p>
                 <p className="text-sm text-rose-100">{call.twilio_error_message}</p>
               </div>
+            )}
+
+            {isAskBobAutomatedCall && (
+              <AutomatedCallNotesCard
+                workspaceId={workspace.id}
+                callId={call.id}
+                initialNotes={sanitizedAutomatedNotes}
+              />
             )}
 
             <div className="space-y-1">
@@ -777,6 +914,20 @@ export default async function CallSessionPage({
                 scriptSummary={askBobScriptSource}
               />
             )}
+            {showAutomatedFollowupLink && followupLinkHref && (
+              <div className="space-y-1 rounded-2xl border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-200">
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">After-call follow-up</p>
+                <p className="text-sm text-slate-200">
+                  The automated call completed. Use Step 8 to turn the outcome into a follow-up message.
+                </p>
+                <Link
+                  href={`${followupLinkHref}#askbob-after-call`}
+                  className="inline-flex items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-emerald-200 shadow-sm transition hover:bg-emerald-500/20"
+                >
+                  Generate follow-up with AskBob
+                </Link>
+              </div>
+            )}
 
             {jobId && customerId && (
               <AskBobAfterCallCard
@@ -833,6 +984,8 @@ export default async function CallSessionPage({
               initialLegacyOutcome={normalizeCallOutcome(call.outcome)}
               hasAskBobScriptHint={hasAskBobScriptHint}
               jobId={jobId}
+              automatedDialSnapshot={automatedDialSnapshot}
+              isAutomatedCallContext={isAskBobAutomatedCall}
             />
 
             {call && job && callScriptQuoteCandidate && (

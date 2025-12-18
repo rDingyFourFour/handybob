@@ -145,6 +145,8 @@ type JobAskBobFlowProps = {
   callSessionLatestCallOutcome?: LatestCallOutcomeForJob | null;
   afterCallCacheKey?: string | null;
   afterCallCacheCallId?: string | null;
+  forcedAfterCallCallId?: string | null;
+  forcedAfterCallHasTranscript?: boolean;
 };
 
 type SessionQuote = {
@@ -182,6 +184,8 @@ export default function JobAskBobFlow({
   callSessionLatestCallOutcome,
   afterCallCacheKey,
   afterCallCacheCallId,
+  forcedAfterCallCallId,
+  forcedAfterCallHasTranscript,
 }: JobAskBobFlowProps) {
   const diagnosisSummaryInitialValue = initialDiagnoseSnapshot
     ? buildDiagnosisSummary(initialDiagnoseSnapshot.response)
@@ -265,6 +269,7 @@ export default function JobAskBobFlow({
   const afterCallHydrationEventSentRef = useRef(false);
   const afterCallCacheKeyRef = useRef(afterCallCacheKey);
   const afterCallCacheCallIdRef = useRef(afterCallCacheCallId);
+  const afterCallOverrideLoggedRef = useRef(false);
   useEffect(() => {
     if (afterCallCacheAttemptedRef.current) {
       return;
@@ -359,6 +364,17 @@ export default function JobAskBobFlow({
     jobId,
     workspaceId,
   ]);
+  useEffect(() => {
+    if (!forcedAfterCallCallId || afterCallOverrideLoggedRef.current) {
+      return;
+    }
+    console.log("[askbob-after-call-session-override-detected]", {
+      callId: forcedAfterCallCallId,
+      jobId,
+      workspaceId,
+    });
+    afterCallOverrideLoggedRef.current = true;
+  }, [forcedAfterCallCallId, jobId, workspaceId]);
   const resolvedAfterCallSnapshot = initialAfterCallSnapshot ?? hydratedAfterCallSnapshot ?? null;
   const resolvedLatestCallOutcome =
     callSessionLatestCallOutcome ?? latestCallOutcome ?? null;
@@ -797,6 +813,8 @@ export default function JobAskBobFlow({
             previousCallOutcome={resolvedPreviousCallOutcome}
             afterCallHydrationHint={afterCallHydrationHint}
             automatedCallNotesForFollowup={automatedCallNotesForFollowup}
+            forcedAfterCallCallId={forcedAfterCallCallId ?? undefined}
+            forcedAfterCallHasTranscript={Boolean(forcedAfterCallHasTranscript)}
           />
         </AskBobSection>
         <AskBobSection id="askbob-automated-call">

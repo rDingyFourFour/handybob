@@ -8,6 +8,7 @@ import {
   AskBobSpeechPlanInput,
   SPEECH_PLAN_METADATA_MARKER,
 } from "@/lib/domain/askbob/speechPlan";
+import { ASKBOB_AUTOMATED_CALL_SCRIPT_PREVIEW_LIMIT } from "@/lib/domain/askbob/automatedCallConfig";
 type TwilioStatusEntry = {
   status: string;
   rank: number;
@@ -59,6 +60,16 @@ export function isTerminalTwilioStatus(value?: string | null): boolean {
   return normalized !== null && TWILIO_TERMINAL_STATUSES.has(normalized);
 }
 
+export function isTerminalTwilioDialStatus(value?: string | null): boolean {
+  const normalized = normalizeTwilioStatus(value);
+  return normalized !== null && TWILIO_TERMINAL_STATUSES.has(normalized);
+}
+
+export function isDialInProgressTwilioStatus(value?: string | null): boolean {
+  const normalized = normalizeTwilioStatus(value);
+  return normalized !== null && TWILIO_IN_PROGRESS_STATUSES.has(normalized);
+}
+
 export const TWILIO_DIAL_IN_PROGRESS_STATUSES = new Set(TWILIO_IN_PROGRESS_STATUSES);
 export { TWILIO_DIAL_FAILURE_STATUSES };
 
@@ -89,6 +100,50 @@ export type CallSessionRow = {
   twilio_recording_duration_seconds?: number | null;
   twilio_recording_received_at?: string | null;
 };
+
+export type CallAutomatedDialSnapshot = {
+  callId: string;
+  workspaceId: string;
+  twilioCallSid: string | null;
+  twilioStatus: string | null;
+  twilioStatusUpdatedAt: string | null;
+  isTerminal: boolean;
+  isInProgress: boolean;
+  hasRecordingMetadata: boolean;
+  hasRecordingReady: boolean;
+  hasTranscriptOrNotes: boolean;
+};
+
+type CallSessionForSnapshot = {
+  id: string;
+  workspace_id: string;
+  twilio_call_sid?: string | null;
+  twilio_status?: string | null;
+  twilio_status_updated_at?: string | null;
+  twilio_recording_url?: string | null;
+  twilio_recording_sid?: string | null;
+  twilio_recording_duration_seconds?: number | null;
+  transcript?: string | null;
+};
+
+export function buildCallAutomatedDialSnapshot(
+  call: CallSessionForSnapshot,
+): CallAutomatedDialSnapshot {
+  const sanitizedStatus = call.twilio_status?.trim() ?? null;
+  const sanitizedNotes = sanitizeAutomatedCallNotes(call.transcript ?? null);
+  return {
+    callId: call.id,
+    workspaceId: call.workspace_id,
+    twilioCallSid: call.twilio_call_sid ?? null,
+    twilioStatus: call.twilio_status ?? null,
+    twilioStatusUpdatedAt: call.twilio_status_updated_at ?? null,
+    isTerminal: isTerminalTwilioDialStatus(sanitizedStatus),
+    isInProgress: isDialInProgressTwilioStatus(sanitizedStatus),
+    hasRecordingMetadata: Boolean(call.twilio_recording_url || call.twilio_recording_sid),
+    hasRecordingReady: call.twilio_recording_duration_seconds != null,
+    hasTranscriptOrNotes: Boolean(sanitizedNotes),
+  };
+}
 
 export const AUTOMATED_CALL_NOTES_MAX_LENGTH = 1000;
 
@@ -185,6 +240,87 @@ export async function updateCallSessionAutomatedSpeechPlan({
     greetingStyle: plan.greetingStyle,
     allowVoicemail: plan.allowVoicemail,
     scriptSummary: plan.scriptSummary?.trim() ?? null,
+  };
+}
+
+export type GetCallSessionAutomatedSpeechPlanParams = {
+  supabase: SupabaseClient;
+  workspaceId: string;
+  callId: string;
+  summary?: string | null;
+};
+
+export async function getCallSessionAutomatedSpeechPlan({
+  supabase,
+  workspaceId,
+  callId,
+  summary: providedSummary,
+}: GetCallSessionAutomatedSpeechPlanParams): Promise<CallSpeechPlan | null> {
+  let summary = providedSummary ?? null;
+  if (!summary) {
+    const { data, error } = await supabase
+      .from("calls")
+      .select("summary")
+      .eq("id", callId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    summary = data?.summary ?? null;
+  }
+
+  if (!summary) {
+    return null;
+  }
+
+  const plan = parseCallSpeechPlan(summary);
+  if (!plan) {
+    return null;
+  }
+
+  return {
+    ...plan,
+    scriptSummary: plan.scriptSummary
+      ? truncateAskBobScriptSummary(plan.scriptSummary, ASKBOB_AUTOMATED_CALL_SCRIPT_PREVIEW_LIMIT)
+      : null,
+  };
+}
+
+export type GetCallSessionJobAndCustomerParams = {
+  supabase: SupabaseClient;
+  workspaceId: string;
+  callId: string;
+  existingJobId?: string | null;
+  existingCustomerId?: string | null;
+};
+
+export async function getCallSessionJobAndCustomer({
+  supabase,
+  workspaceId,
+  callId,
+  existingJobId,
+  existingCustomerId,
+}: GetCallSessionJobAndCustomerParams): Promise<{ jobId: string | null; customerId: string | null }> {
+  if (existingJobId !== undefined && existingCustomerId !== undefined) {
+    return { jobId: existingJobId, customerId: existingCustomerId };
+  }
+  const { data, error } = await supabase
+    .from("calls")
+    .select("job_id, customer_id")
+    .eq("id", callId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    jobId: data?.job_id ?? null,
+    customerId: data?.customer_id ?? null,
   };
 }
 

@@ -36,6 +36,8 @@ export type JobAskBobAfterCallPanelProps = {
   customerId?: string | null;
   afterCallHydrationHint?: string | null;
   automatedCallNotesForFollowup?: string | null;
+  forcedAfterCallCallId?: string | null;
+  forcedAfterCallHasTranscript?: boolean;
 };
 
 const summaryFromSnapshot = (snapshot?: AskBobAfterCallSnapshotPayload | null): AskBobJobAfterCallResult | null => {
@@ -100,6 +102,8 @@ export default function JobAskBobAfterCallPanel({
   customerId,
   afterCallHydrationHint,
   automatedCallNotesForFollowup,
+  forcedAfterCallCallId,
+  forcedAfterCallHasTranscript,
 }: JobAskBobAfterCallPanelProps) {
   const [result, setResult] = useState<AskBobJobAfterCallResult | null>(() =>
     summaryFromSnapshot(initialAfterCallSnapshot),
@@ -148,6 +152,7 @@ export default function JobAskBobAfterCallPanel({
       const response = await runAskBobJobAfterCallAction({
         workspaceId,
         jobId,
+        callId: forcedAfterCallCallId ?? undefined,
         automatedCallNotes: trimmedAutomatedCallNotes,
       });
       if (!response.ok) {
@@ -184,24 +189,6 @@ export default function JobAskBobAfterCallPanel({
 
   const normalizedJobTitle = jobTitle?.trim() ?? "";
   const normalizedJobDescription = jobDescription?.trim() ?? "";
-  const contextParts: string[] = [];
-  if (normalizedJobTitle) {
-    contextParts.push("job title");
-  }
-  if (normalizedJobDescription) {
-    contextParts.push("job description");
-  }
-  if (latestCallLabel) {
-    contextParts.push("last call");
-  }
-  if (automatedCallNotesForFollowup?.trim()) {
-    contextParts.push("automated call notes");
-  }
-  const contextUsedText =
-    contextParts.length > 0
-      ? `Context used: ${contextParts.join(", ")}`
-      : "Context used: none yet. Provide job and call details so AskBob knows what to reference.";
-
   const callLabelText = latestCallLabel
     ? `Using the most recent call on this job: ${latestCallLabel}`
     : "No calls recorded for this job yet.";
@@ -250,6 +237,29 @@ export default function JobAskBobAfterCallPanel({
   const shouldShowPreviousCallOutcome =
     Boolean(previousCallOutcomeLabel) &&
     !areCallOutcomesSame(latestCallOutcome, previousCallOutcome);
+  const contextParts: string[] = [];
+  if (normalizedJobTitle) {
+    contextParts.push("job title");
+  }
+  if (normalizedJobDescription) {
+    contextParts.push("job description");
+  }
+  if (latestCallLabel) {
+    contextParts.push("last call");
+  }
+  if (latestCallOutcomeLabel) {
+    contextParts.push("latest call outcome");
+  }
+  if (automatedCallNotesForFollowup?.trim()) {
+    contextParts.push("automated call notes");
+  }
+  if (forcedAfterCallHasTranscript) {
+    contextParts.push("call transcript");
+  }
+  const contextUsedText =
+    contextParts.length > 0
+      ? `Context used: ${contextParts.join(", ")}`
+      : "Context used: none yet. Provide job and call details so AskBob knows what to reference.";
 
   return (
     <HbCard className="space-y-4">
