@@ -1089,6 +1089,23 @@ export async function callAskBobJobFollowup(
   }
 }
 
+const AUTOMATED_CALL_NOTES_PROMPT_LIMIT = 400;
+
+function buildAutomatedCallNotesPrompt(notes?: string | null) {
+  if (!notes) {
+    return null;
+  }
+  const trimmed = notes.trim();
+  if (!trimmed.length) {
+    return null;
+  }
+  if (trimmed.length <= AUTOMATED_CALL_NOTES_PROMPT_LIMIT) {
+    return `Call notes:\n${trimmed}`;
+  }
+  const truncated = `${trimmed.slice(0, AUTOMATED_CALL_NOTES_PROMPT_LIMIT - 3).trimEnd()}...`;
+  return `Call notes:\n${truncated}`;
+}
+
 export async function callAskBobJobAfterCall(
   input: AskBobJobAfterCallInput,
 ): Promise<CallAskBobJobAfterCallResult> {
@@ -1141,6 +1158,7 @@ export async function callAskBobJobAfterCall(
     input.extraDetails && input.extraDetails.trim().length
       ? `Additional guidance:\n${input.extraDetails.trim()}`
       : null;
+  const callNotesBlock = buildAutomatedCallNotesPrompt(input.automatedCallNotes ?? null);
   const callHistorySections = buildCallHistoryPromptSections(input.callSummarySignals ?? null);
 
   const messageParts = [
@@ -1152,6 +1170,7 @@ export async function callAskBobJobAfterCall(
     callOutcomeInstruction
       ? `Call outcome guidance:\n${callOutcomeInstruction}`
       : null,
+    callNotesBlock,
     callHistorySections.callHistoryLine,
     callHistorySections.bestRetryWindowLine,
     signalsBlock,

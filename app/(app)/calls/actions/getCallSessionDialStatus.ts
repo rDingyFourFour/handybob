@@ -2,7 +2,10 @@
 
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
-import { isTerminalTwilioStatus } from "@/lib/domain/calls/sessions";
+import {
+  isTerminalTwilioStatus,
+  sanitizeAutomatedCallNotes,
+} from "@/lib/domain/calls/sessions";
 
 export type GetCallSessionDialStatusResult = {
   callId: string;
@@ -12,6 +15,7 @@ export type GetCallSessionDialStatusResult = {
   isTerminal: boolean;
   hasRecording: boolean;
   recordingDurationSeconds: number | null;
+  automatedCallNotes: string | null;
 };
 
 export async function getCallSessionDialStatus({
@@ -31,7 +35,7 @@ export async function getCallSessionDialStatus({
   const { data: callRow, error: fetchError } = await supabase
     .from("calls")
     .select(
-      "id, workspace_id, twilio_call_sid, twilio_status, twilio_status_updated_at, twilio_recording_url, twilio_recording_sid, twilio_recording_duration_seconds"
+      "id, workspace_id, twilio_call_sid, twilio_status, twilio_status_updated_at, twilio_recording_url, twilio_recording_sid, twilio_recording_duration_seconds, transcript"
     )
     .eq("id", callId)
     .eq("workspace_id", workspaceId)
@@ -65,6 +69,7 @@ export async function getCallSessionDialStatus({
     isTerminal: isTerminalTwilioStatus(sanitizedStatus),
     hasRecording: Boolean(callRow.twilio_recording_url || callRow.twilio_recording_sid),
     recordingDurationSeconds: callRow.twilio_recording_duration_seconds ?? null,
+    automatedCallNotes: sanitizeAutomatedCallNotes(callRow.transcript ?? null),
   };
 
   console.log("[askbob-automated-call-status-poll-success]", {

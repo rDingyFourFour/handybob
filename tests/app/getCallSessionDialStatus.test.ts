@@ -72,6 +72,7 @@ describe("getCallSessionDialStatus", () => {
       twilioStatusUpdatedAt: null,
       isTerminal: false,
       hasRecording: false,
+      automatedCallNotes: null,
       recordingDurationSeconds: null,
     });
   });

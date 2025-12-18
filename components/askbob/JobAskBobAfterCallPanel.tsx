@@ -35,6 +35,7 @@ export type JobAskBobAfterCallPanelProps = {
   previousCallOutcome?: LatestCallOutcomeForJob | null;
   customerId?: string | null;
   afterCallHydrationHint?: string | null;
+  automatedCallNotesForFollowup?: string | null;
 };
 
 const summaryFromSnapshot = (snapshot?: AskBobAfterCallSnapshotPayload | null): AskBobJobAfterCallResult | null => {
@@ -98,6 +99,7 @@ export default function JobAskBobAfterCallPanel({
   previousCallOutcome,
   customerId,
   afterCallHydrationHint,
+  automatedCallNotesForFollowup,
 }: JobAskBobAfterCallPanelProps) {
   const [result, setResult] = useState<AskBobJobAfterCallResult | null>(() =>
     summaryFromSnapshot(initialAfterCallSnapshot),
@@ -142,9 +144,11 @@ export default function JobAskBobAfterCallPanel({
     setErrorMessage(null);
     setIsLoading(true);
     try {
+      const trimmedAutomatedCallNotes = automatedCallNotesForFollowup?.trim() || null;
       const response = await runAskBobJobAfterCallAction({
         workspaceId,
         jobId,
+        automatedCallNotes: trimmedAutomatedCallNotes,
       });
       if (!response.ok) {
         setErrorMessage(response.message ?? "AskBob could not summarize the call right now.");
@@ -189,6 +193,9 @@ export default function JobAskBobAfterCallPanel({
   }
   if (latestCallLabel) {
     contextParts.push("last call");
+  }
+  if (automatedCallNotesForFollowup?.trim()) {
+    contextParts.push("automated call notes");
   }
   const contextUsedText =
     contextParts.length > 0

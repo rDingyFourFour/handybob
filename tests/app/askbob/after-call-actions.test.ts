@@ -110,6 +110,7 @@ describe("runAskBobJobAfterCallAction", () => {
         isAskBobAssisted: false,
       }),
     });
+    expect(taskInput.automatedCallNotes).toBeNull();
     expect(taskInput.callSummarySignals).toMatchObject({
       totalAttempts: 1,
       answeredCount: 1,
@@ -135,5 +136,46 @@ describe("runAskBobJobAfterCallAction", () => {
     });
     expect(response).toEqual({ ok: false, code: "wrong_workspace" });
     expect(runAskBobTaskMock).not.toHaveBeenCalled();
+  });
+
+  it("passes automated call notes to AskBob after-call input", async () => {
+    const callRow = {
+      id: "call-1",
+      job_id: "job-1",
+      workspace_id: "workspace-1",
+      status: "completed",
+      outcome: null,
+      duration_seconds: 180,
+      started_at: new Date().toISOString(),
+      summary: "Call summary",
+      ai_summary: null,
+      direction: "outbound",
+      from_number: "111",
+      to_number: "222",
+      created_at: new Date().toISOString(),
+      outcome_code: "reached_needs_followup",
+      outcome_notes: "Follow-up note",
+      outcome_recorded_at: new Date().toISOString(),
+      reached_customer: true,
+    };
+    supabaseState.responses.calls = { data: [callRow], error: null };
+    runAskBobTaskMock.mockResolvedValue({
+      afterCallSummary: "Summary",
+      recommendedActionLabel: "Next step",
+      recommendedActionSteps: ["Do thing"],
+      suggestedChannel: "sms",
+      urgencyLevel: "normal",
+      modelLatencyMs: 123,
+    });
+
+    const response = await runAskBobJobAfterCallAction({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      automatedCallNotes: "  Live   updates  ",
+    });
+
+    expect(response.ok).toBe(true);
+    const [, taskInput] = runAskBobTaskMock.mock.calls[0];
+    expect(taskInput.automatedCallNotes).toBe("Live updates");
   });
 });

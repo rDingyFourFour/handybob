@@ -93,6 +93,29 @@ describe("JobAskBobAfterCallPanel", () => {
     expect(button?.hasAttribute("disabled")).toBe(true);
   });
 
+  it("includes automated call notes in the context display when provided", async () => {
+    await act(async () => {
+      root?.render(
+        <JobAskBobAfterCallPanel
+          workspaceId="workspace-1"
+          jobId="job-1"
+          jobTitle="Fix sink"
+          jobDescription="Leaking pipe"
+          latestCallLabel="Call on Jan 1 · Answered · 3 min"
+          hasCall
+          stepCollapsed={false}
+          onToggleStepCollapsed={vi.fn()}
+          automatedCallNotesForFollowup="  Live note "
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("Context used:");
+    expect(text).toContain("automated call notes");
+  });
+
   it("calls the server action and renders the result", async () => {
     mockRunAction.mockResolvedValue({
       ok: true,

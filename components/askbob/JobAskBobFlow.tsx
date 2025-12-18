@@ -257,6 +257,7 @@ export default function JobAskBobFlow({
   const automatedCallDone = Boolean(automatedCallSummary);
   const [automatedCallCollapsed, setAutomatedCallCollapsed] = useState(false);
   const [automatedCallResetToken, setAutomatedCallResetToken] = useState(0);
+  const [automatedCallNotesForFollowup, setAutomatedCallNotesForFollowup] = useState<string | null>(null);
   const [hydratedAfterCallSnapshot, setHydratedAfterCallSnapshot] =
     useState<AskBobAfterCallSnapshotPayload | null>(null);
   const [afterCallHydrationHint, setAfterCallHydrationHint] = useState<string | null>(null);
@@ -597,6 +598,7 @@ export default function JobAskBobFlow({
     setAutomatedCallSummary(null);
     setAutomatedCallCollapsed(false);
     setAutomatedCallResetToken((value) => value + 1);
+    setAutomatedCallNotesForFollowup(null);
   };
 
   const handleJumpToCallAssist = () => {
@@ -794,6 +796,7 @@ export default function JobAskBobFlow({
             latestCallOutcome={resolvedLatestCallOutcome}
             previousCallOutcome={resolvedPreviousCallOutcome}
             afterCallHydrationHint={afterCallHydrationHint}
+            automatedCallNotesForFollowup={automatedCallNotesForFollowup}
           />
         </AskBobSection>
         <AskBobSection id="askbob-automated-call">
@@ -815,6 +818,7 @@ export default function JobAskBobFlow({
             onReset={handleAutomatedCallReset}
             onStartCallWithScript={handleStartCallWithScript}
             onAutomatedCallSuccess={setAutomatedCallSummary}
+            onAutomatedCallNotesChange={setAutomatedCallNotesForFollowup}
           />
         </AskBobSection>
       </div>

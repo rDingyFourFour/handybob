@@ -17,11 +17,16 @@ import {
   normalizeCallOutcomeNotes,
 } from "@/lib/domain/calls/latestCallOutcome";
 import { isAskBobScriptSummary } from "@/lib/domain/askbob/constants";
+import {
+  AUTOMATED_CALL_NOTES_MAX_LENGTH,
+  sanitizeAutomatedCallNotes,
+} from "@/lib/domain/calls/sessions";
 
 const afterCallPayloadSchema = z.object({
   workspaceId: z.string().min(1),
   jobId: z.string().min(1),
   callId: z.string().min(1).optional().nullable(),
+  automatedCallNotes: z.string().max(AUTOMATED_CALL_NOTES_MAX_LENGTH).optional().nullable(),
 });
 
 type AfterCallPayload = z.infer<typeof afterCallPayloadSchema>;
@@ -113,6 +118,9 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
     return { ok: false, code: "no_calls_for_job", jobId: job.id };
   }
 
+  const normalizedAutomatedCallNotes = sanitizeAutomatedCallNotes(parsed.automatedCallNotes ?? null);
+  const hasAutomatedCallNotesContext = Boolean(normalizedAutomatedCallNotes);
+
   const customerRecord = Array.isArray(job.customers)
     ? job.customers[0] ?? null
     : job.customers ?? null;
@@ -141,6 +149,7 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
     callId: call.id,
     hasCallId: Boolean(parsed.callId),
     callOutcome,
+    hasAutomatedCallNotesContext,
   });
 
   let callHistoryRecords: CallHistoryRecord[] = [];
@@ -173,6 +182,7 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
     recentJobSignals,
     callSummarySignals,
     latestCallOutcome,
+    automatedCallNotes: normalizedAutomatedCallNotes,
   };
 
   try {
@@ -185,6 +195,7 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
       callOutcome,
       suggestedChannel: result.suggestedChannel,
       urgencyLevel: result.urgencyLevel,
+      hasAutomatedCallNotesContext,
     });
     return { ok: true, jobId: job.id, callId: call.id, result };
   } catch (error) {
@@ -197,6 +208,7 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
       jobId: job.id,
       callId: call.id,
       callOutcome,
+      hasAutomatedCallNotesContext,
       errorMessage: truncatedError,
     });
     return { ok: false, code: "askbob_task_failed", message: truncatedError, jobId: job.id };

@@ -1,10 +1,11 @@
-import { act } from "react";
+import { act, type ChangeEvent } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 
 import AskBobAutomatedCallPanel from "@/components/askbob/AskBobAutomatedCallPanel";
 import { startAskBobAutomatedCall } from "@/app/(app)/calls/actions/startAskBobAutomatedCall";
 import { getCallSessionDialStatus } from "@/app/(app)/calls/actions/getCallSessionDialStatus";
+import { saveAutomatedCallNotesAction } from "@/app/(app)/calls/actions/saveAutomatedCallNotesAction";
 import { ASKBOB_AUTOMATED_VOICE_DEFAULT } from "@/lib/domain/askbob/speechPlan";
 
 vi.mock("@/app/(app)/calls/actions/startAskBobAutomatedCall", () => ({
@@ -15,8 +16,14 @@ vi.mock("@/app/(app)/calls/actions/getCallSessionDialStatus", () => ({
   getCallSessionDialStatus: vi.fn(),
 }));
 
+vi.mock("@/app/(app)/calls/actions/saveAutomatedCallNotesAction", () => ({
+  saveAutomatedCallNotesAction: vi.fn(),
+}));
+
 const mockStartCallAction = startAskBobAutomatedCall as unknown as ReturnType<typeof vi.fn>;
 const mockGetSessionStatus = getCallSessionDialStatus as unknown as ReturnType<typeof vi.fn>;
+const mockSaveAutomatedCallNotesAction = saveAutomatedCallNotesAction as unknown as ReturnType<typeof vi.fn>;
+
 const ORIGINAL_FETCH = global.fetch;
 
 function findPrimaryButton(container: HTMLElement) {
@@ -35,6 +42,7 @@ describe("AskBobAutomatedCallPanel", () => {
     root = createRoot(container);
     mockStartCallAction.mockReset();
     mockGetSessionStatus.mockReset();
+    mockSaveAutomatedCallNotesAction.mockReset();
   });
 
   afterEach(() => {
@@ -618,5 +626,163 @@ describe("AskBobAutomatedCallPanel", () => {
     expect(container.textContent).toContain("Call started");
     expect(container.textContent).toContain("Hello preview");
     expect(onSuccess).toHaveBeenCalledWith("Automated call started");
+  });
+
+  it("shows the live notes editor once an automated call starts", async () => {
+    mockStartCallAction.mockResolvedValue({
+      status: "success",
+      code: "call_started",
+      message: "Call started",
+      label: "Call started",
+      callId: "call-123",
+      twilioStatus: null,
+      twilioCallSid: null,
+    });
+    mockGetSessionStatus.mockResolvedValue({
+      callId: "call-123",
+      twilioCallSid: null,
+      twilioStatus: "in-progress",
+      twilioStatusUpdatedAt: null,
+      isTerminal: false,
+      hasRecording: false,
+      recordingDurationSeconds: null,
+      automatedCallNotes: "Initial note",
+    });
+    mockSaveAutomatedCallNotesAction.mockResolvedValue({
+      ok: true,
+      callId: "call-123",
+      notes: "Initial note",
+    });
+
+    await act(async () => {
+      root?.render(
+        <AskBobAutomatedCallPanel
+          workspaceId="workspace-1"
+          jobId="job-1"
+          customerPhoneNumber="+15550001234"
+          customerDisplayName="Customer"
+          callScriptBody="Hello preview"
+          callScriptSummary="Summary"
+          jobTitle="Title"
+          jobDescription="Description"
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const button = findPrimaryButton(container);
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea#automated-call-live-notes");
+    expect(textarea).toBeTruthy();
+  });
+
+  it("autosaves live notes with throttled saves and status text", async () => {
+    vi.useFakeTimers();
+    mockStartCallAction.mockResolvedValue({
+      status: "success",
+      code: "call_started",
+      message: "Call started",
+      label: "Call started",
+      callId: "call-123",
+      twilioStatus: null,
+      twilioCallSid: null,
+    });
+    mockGetSessionStatus.mockResolvedValue({
+      callId: "call-123",
+      twilioCallSid: null,
+      twilioStatus: "in-progress",
+      twilioStatusUpdatedAt: null,
+      isTerminal: false,
+      hasRecording: false,
+      recordingDurationSeconds: null,
+      automatedCallNotes: null,
+    });
+    mockSaveAutomatedCallNotesAction.mockResolvedValue({
+      ok: true,
+      callId: "call-123",
+      notes: "First note",
+    });
+
+    await act(async () => {
+      root?.render(
+        <AskBobAutomatedCallPanel
+          workspaceId="workspace-1"
+          jobId="job-1"
+          customerPhoneNumber="+15550001234"
+          customerDisplayName="Customer"
+          callScriptBody="Hello preview"
+          callScriptSummary="Summary"
+          jobTitle="Title"
+          jobDescription="Description"
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const button = findPrimaryButton(container);
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea#automated-call-live-notes");
+    if (!textarea) {
+      throw new Error("Live notes textarea not found");
+    }
+
+    const dispatchNotesChange = (value: string) => {
+      textarea.value = value;
+      const reactPropsKey = Object.keys(textarea).find((key) => key.startsWith("__reactProps"));
+      const reactProps = reactPropsKey
+        ? (textarea as Record<string, unknown>)[reactPropsKey] as Record<string, unknown>
+        : undefined;
+      const handler = reactProps?.onChange as
+        | ((event: ChangeEvent<HTMLTextAreaElement>) => void)
+        | undefined;
+      if (!handler) {
+        throw new Error("React change handler is not available");
+      }
+      handler({ target: textarea, currentTarget: textarea } as ChangeEvent<HTMLTextAreaElement>);
+    };
+
+    await act(async () => {
+      dispatchNotesChange("First note");
+    });
+    expect(mockSaveAutomatedCallNotesAction).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(mockSaveAutomatedCallNotesAction).toHaveBeenCalledTimes(1);
+    expect(mockSaveAutomatedCallNotesAction).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      callId: "call-123",
+      notes: "First note",
+    });
+    expect(container.textContent).toContain("Saved");
+
+    await act(async () => {
+      dispatchNotesChange("Second note");
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(mockSaveAutomatedCallNotesAction).toHaveBeenCalledTimes(2);
+    expect(mockSaveAutomatedCallNotesAction).toHaveBeenLastCalledWith({
+      workspaceId: "workspace-1",
+      callId: "call-123",
+      notes: "Second note",
+    });
+    expect(container.textContent).toContain("Saved");
+    vi.useRealTimers();
   });
 });

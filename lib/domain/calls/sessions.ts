@@ -90,6 +90,24 @@ export type CallSessionRow = {
   twilio_recording_received_at?: string | null;
 };
 
+export const AUTOMATED_CALL_NOTES_MAX_LENGTH = 1000;
+
+export function sanitizeAutomatedCallNotes(value?: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed.length) {
+    return null;
+  }
+  const collapsed = trimmed.replace(/\s+/g, " ");
+  if (collapsed.length <= AUTOMATED_CALL_NOTES_MAX_LENGTH) {
+    return collapsed;
+  }
+  const truncated = collapsed.slice(0, AUTOMATED_CALL_NOTES_MAX_LENGTH - 3).trimEnd();
+  return `${truncated}...`;
+}
+
 export type CallSpeechPlan = {
   voice: string;
   greetingStyle: string;
@@ -168,6 +186,78 @@ export async function updateCallSessionAutomatedSpeechPlan({
     allowVoicemail: plan.allowVoicemail,
     scriptSummary: plan.scriptSummary?.trim() ?? null,
   };
+}
+
+export type GetCallSessionAutomatedNotesParams = {
+  supabase: SupabaseClient;
+  workspaceId: string;
+  callId: string;
+};
+
+export async function getCallSessionAutomatedNotes(
+  params: GetCallSessionAutomatedNotesParams,
+): Promise<string | null> {
+  const { supabase, workspaceId, callId } = params;
+  const { data, error } = await supabase
+    .from("calls")
+    .select("transcript")
+    .eq("id", callId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return sanitizeAutomatedCallNotes(data?.transcript ?? null);
+}
+
+export type UpdateCallSessionAutomatedNotesParams = {
+  supabase: SupabaseClient;
+  workspaceId: string;
+  callId: string;
+  notes?: string | null;
+};
+
+export async function updateCallSessionAutomatedNotes(
+  params: UpdateCallSessionAutomatedNotesParams,
+): Promise<string | null> {
+  const { supabase, workspaceId, callId, notes } = params;
+  const sanitized = sanitizeAutomatedCallNotes(notes ?? null);
+
+  const { data: existingRow, error: fetchError } = await supabase
+    .from("calls")
+    .select("transcript")
+    .eq("id", callId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw fetchError;
+  }
+
+  if (!existingRow) {
+    throw new Error("Call not found");
+  }
+
+  const existingSanitized = sanitizeAutomatedCallNotes(existingRow.transcript ?? null);
+  if (existingSanitized === sanitized) {
+    return sanitized;
+  }
+
+  const { error } = await supabase
+    .from("calls")
+    .update({
+      transcript: sanitized,
+    })
+    .eq("id", callId)
+    .eq("workspace_id", workspaceId);
+
+  if (error) {
+    throw error;
+  }
+
+  return sanitized;
 }
 
 export type EnsureInboundCallSessionParams = {

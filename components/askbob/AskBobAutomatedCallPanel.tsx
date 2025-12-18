@@ -14,6 +14,7 @@ import {
   startAskBobAutomatedCall,
   type StartAskBobAutomatedCallResult,
 } from "@/app/(app)/calls/actions/startAskBobAutomatedCall";
+import { saveAutomatedCallNotesAction } from "@/app/(app)/calls/actions/saveAutomatedCallNotesAction";
 import { formatTwilioStatusLabel } from "@/utils/calls/twilioStatusLabel";
 import {
   ASKBOB_AUTOMATED_GREETING_STYLE_DEFAULT,
@@ -34,6 +35,8 @@ const GREETING_STYLE_OPTIONS = [
 const POLL_INTERVAL_MS = 2500;
 const MAX_POLL_ATTEMPTS = 30;
 const TERMINAL_GRACE_ATTEMPTS = 3;
+const NOTES_AUTOSAVE_DEBOUNCE_MS = 750;
+const NOTES_SAVE_MIN_INTERVAL_MS = 2000;
 
 const truncatePreview = (value: string, limit: number) => {
   if (value.length <= limit) {
@@ -75,6 +78,7 @@ type Props = {
   onReset?: () => void;
   onStartCallWithScript?: (payload: StartCallWithScriptPayload) => void;
   onAutomatedCallSuccess?: (summary: string) => void;
+  onAutomatedCallNotesChange?: (notes: string | null) => void;
 };
 
 export default function AskBobAutomatedCallPanel({
@@ -95,6 +99,7 @@ export default function AskBobAutomatedCallPanel({
   onReset,
   onStartCallWithScript,
   onAutomatedCallSuccess,
+  onAutomatedCallNotesChange,
 }: Props) {
   const [status, setStatus] = useState<StatusState>("idle");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -111,6 +116,33 @@ export default function AskBobAutomatedCallPanel({
   const hasResetEffectRunRef = useRef(false);
   const preservedSuccessSessionRef = useRef<string | null>(null);
   const guardVisibleLoggedRef = useRef(false);
+  const [notesInput, setNotesInput] = useState("");
+  const [notesLoaded, setNotesLoaded] = useState(false);
+  const [notesDirty, setNotesDirty] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const notesRef = useRef("");
+  const notesDirtyRef = useRef(false);
+  const lastSavedNotesRef = useRef<string | null>(null);
+  const lastNotesEditedAtRef = useRef(0);
+  const lastSaveTimestampRef = useRef(0);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const expandVersionRef = useRef(stepCollapsed ? 0 : 1);
+  const previousCollapsedRef = useRef(stepCollapsed);
+  const notesVisibilityLoggedRef = useRef<{ callId: string; expandVersion: number } | null>(null);
+  const parentNotesValueRef = useRef<string | null>(null);
+  const onAutomatedCallNotesChangeRef = useRef(onAutomatedCallNotesChange);
+  const notifyParentOfNotes = useCallback((value: string | null) => {
+    const callback = onAutomatedCallNotesChangeRef.current;
+    if (!callback) {
+      parentNotesValueRef.current = value;
+      return;
+    }
+    if (parentNotesValueRef.current === value) {
+      return;
+    }
+    parentNotesValueRef.current = value;
+    callback(value);
+  }, []);
 
   const normalizedCustomerName = customerDisplayName?.trim() ?? null;
   const normalizedCustomerPhone = customerPhoneNumber?.trim() ?? null;
@@ -234,6 +266,10 @@ export default function AskBobAutomatedCallPanel({
   }, [hasScriptContent]);
 
   useEffect(() => {
+    onAutomatedCallNotesChangeRef.current = onAutomatedCallNotesChange;
+  }, [onAutomatedCallNotesChange]);
+
+  useEffect(() => {
     if (stepCollapsed) {
       guardVisibleLoggedRef.current = false;
       return;
@@ -249,6 +285,39 @@ export default function AskBobAutomatedCallPanel({
   }, [stepCollapsed, workspaceId, jobId, callSessionId]);
 
   useEffect(() => {
+    if (previousCollapsedRef.current && !stepCollapsed) {
+      expandVersionRef.current += 1;
+    }
+    previousCollapsedRef.current = stepCollapsed;
+  }, [stepCollapsed]);
+
+  useEffect(() => {
+    if (!callSessionId) {
+      setNotesInput("");
+      notesRef.current = "";
+      notesDirtyRef.current = false;
+      setNotesDirty(false);
+      setSaveState("idle");
+      lastSavedNotesRef.current = null;
+      notifyParentOfNotes(null);
+      setNotesLoaded(false);
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+      return;
+    }
+    setNotesLoaded(false);
+    notesDirtyRef.current = false;
+    setNotesDirty(false);
+    setSaveState("idle");
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+  }, [callSessionId, notifyParentOfNotes]);
+
+  useEffect(() => {
     if (status === "success" || status === "already_in_progress") {
       preservedSuccessSessionRef.current = callSessionId;
     } else if (status !== "success" && status !== "already_in_progress") {
@@ -262,6 +331,55 @@ export default function AskBobAutomatedCallPanel({
       setPollHintVisible(false);
     }
   }, [status]);
+
+  useEffect(() => {
+    if (!callSessionId) {
+      return;
+    }
+    if (!sessionStatus) {
+      return;
+    }
+    const serverNotes = sessionStatus.automatedCallNotes;
+    setNotesLoaded(true);
+    if (!notesDirtyRef.current) {
+      const value = serverNotes ?? "";
+      setNotesInput(value);
+      notesRef.current = value;
+      lastSavedNotesRef.current = serverNotes;
+      setNotesDirty(false);
+      setSaveState("idle");
+      notifyParentOfNotes(serverNotes);
+    }
+  }, [callSessionId, sessionStatus, notifyParentOfNotes]);
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const notesEditorVisible = Boolean(
+    callSessionId && !stepCollapsed && (status === "success" || status === "already_in_progress"),
+  );
+  useEffect(() => {
+    if (!notesEditorVisible || !callSessionId || !notesLoaded) {
+      return;
+    }
+    const expandVersion = expandVersionRef.current;
+    const logged = notesVisibilityLoggedRef.current;
+    if (logged?.callId === callSessionId && logged.expandVersion === expandVersion) {
+      return;
+    }
+    console.log("[askbob-automated-call-notes-visible]", {
+      workspaceId,
+      callId: callSessionId,
+      hasExistingNotes: Boolean(lastSavedNotesRef.current),
+    });
+    notesVisibilityLoggedRef.current = { callId: callSessionId, expandVersion };
+  }, [notesEditorVisible, callSessionId, notesLoaded, workspaceId]);
 
   useEffect(() => {
     if (
@@ -340,6 +458,92 @@ export default function AskBobAutomatedCallPanel({
       }
     };
   }, [callSessionId, stepCollapsed, status]);
+
+  const runNotesSave = useCallback(async () => {
+    if (!callSessionId || !notesDirtyRef.current) {
+      return;
+    }
+    const now = Date.now();
+    if (now - lastSaveTimestampRef.current < NOTES_SAVE_MIN_INTERVAL_MS) {
+      const delay = NOTES_SAVE_MIN_INTERVAL_MS - (now - lastSaveTimestampRef.current);
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+      autosaveTimerRef.current = setTimeout(runNotesSave, delay);
+      return;
+    }
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    setSaveState("saving");
+    const editedAt = lastNotesEditedAtRef.current;
+    const valueToSave = notesRef.current;
+    try {
+      const result = await saveAutomatedCallNotesAction({
+        workspaceId,
+        callId: callSessionId,
+        notes: valueToSave,
+      });
+      if (!result.ok) {
+        throw new Error(result.error);
+      }
+      lastSaveTimestampRef.current = Date.now();
+      lastSavedNotesRef.current = result.notes;
+      notifyParentOfNotes(result.notes);
+      if (lastNotesEditedAtRef.current === editedAt) {
+        const normalized = result.notes ?? "";
+        setNotesInput(normalized);
+        notesRef.current = normalized;
+        notesDirtyRef.current = false;
+        setNotesDirty(false);
+        setSaveState("saved");
+      } else {
+        notesDirtyRef.current = true;
+        setNotesDirty(true);
+        setSaveState("idle");
+      }
+    } catch {
+      notesDirtyRef.current = true;
+      setNotesDirty(true);
+      setSaveState("error");
+    }
+  }, [callSessionId, workspaceId, notifyParentOfNotes]);
+
+  const scheduleNotesSave = useCallback(
+    (options?: { immediate?: boolean; force?: boolean }) => {
+      if (!callSessionId) {
+        return;
+      }
+      if (!notesDirtyRef.current && !options?.force) {
+        return;
+      }
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+      const delay = options?.immediate ? 0 : NOTES_AUTOSAVE_DEBOUNCE_MS;
+      autosaveTimerRef.current = setTimeout(runNotesSave, delay);
+    },
+    [callSessionId, runNotesSave],
+  );
+
+  const handleNotesChange = useCallback(
+    (event: ChangeEvent<HTMLTextAreaElement>) => {
+    const nextValue = event.target.value;
+      setNotesInput(nextValue);
+      notesRef.current = nextValue;
+      notesDirtyRef.current = true;
+      setNotesDirty(true);
+      setSaveState("idle");
+      lastNotesEditedAtRef.current = Date.now();
+      scheduleNotesSave();
+    },
+    [scheduleNotesSave],
+  );
+
+  const handleManualNotesSave = useCallback(() => {
+    scheduleNotesSave({ immediate: true, force: true });
+  }, [scheduleNotesSave]);
 
   const handlePlaceCall = useCallback(async () => {
     if (!canPlaceCall || !normalizedCustomerPhone) {
@@ -469,6 +673,15 @@ export default function AskBobAutomatedCallPanel({
     status === "already_in_progress" || resultCode === "call_already_started"
       ? "Call already started"
       : "Call started";
+  const notesSaveStatusText =
+    saveState === "saving"
+      ? "Saving..."
+      : saveState === "saved"
+      ? "Saved"
+      : saveState === "error"
+      ? "Failed to save"
+      : null;
+  const canTriggerNotesSave = Boolean(callSessionId && (notesDirty || saveState === "error"));
 
   return (
     <HbCard className="space-y-4">
@@ -663,6 +876,37 @@ export default function AskBobAutomatedCallPanel({
                   </div>
                 </div>
               )}
+            {notesEditorVisible && (
+              <div className="space-y-3 rounded-2xl border border-slate-800/60 bg-slate-950/50 p-4 text-sm text-slate-200">
+                <div className="flex items-center justify-between gap-3">
+                  <label
+                    htmlFor="automated-call-live-notes"
+                    className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400"
+                  >
+                    Live notes
+                  </label>
+                  <HbButton
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleManualNotesSave}
+                    disabled={!canTriggerNotesSave}
+                  >
+                    Save now
+                  </HbButton>
+                </div>
+                <textarea
+                  id="automated-call-live-notes"
+                  className="min-h-[120px] w-full rounded-lg border border-slate-800/70 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 focus:border-emerald-400 focus:ring-0"
+                  value={notesInput}
+                  onChange={handleNotesChange}
+                  rows={4}
+                  placeholder="Record what was said, updates for the tech, or adjustments for follow-up."
+                />
+                {notesSaveStatusText && (
+                  <p className="text-xs text-slate-400">{notesSaveStatusText}</p>
+                )}
+              </div>
+            )}
             </div>
           </>
         )}
