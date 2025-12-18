@@ -119,6 +119,13 @@ export default function JobAskBobAfterCallPanel({
   }, [result, onAfterCallSummaryChange]);
 
   useEffect(() => {
+    if (!initialAfterCallSnapshot) {
+      return;
+    }
+    setResult(summaryFromSnapshot(initialAfterCallSnapshot));
+  }, [initialAfterCallSnapshot]);
+
+  useEffect(() => {
     if (resetToken === undefined) {
       return;
     }

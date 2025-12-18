@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -10,6 +10,10 @@ import { cacheAskBobAfterCallResult } from "@/utils/askbob/afterCallCache";
 import { cacheAskBobMessageDraft } from "@/utils/askbob/messageDraftCache";
 import type { AskBobJobAfterCallResult } from "@/lib/domain/askbob/types";
 import { runAskBobJobAfterCallAction } from "@/app/(app)/askbob/after-call-actions";
+import {
+  CallSessionFollowupReadiness,
+  CallSessionFollowupReadinessReason,
+} from "@/lib/domain/calls/sessions";
 
 type AskBobAfterCallCardProps = {
   callId: string;
@@ -21,6 +25,14 @@ type AskBobAfterCallCardProps = {
   hasHumanNotes: boolean;
   hasOutcomeSaved: boolean;
   hasOutcomeNotes: boolean;
+  callReadiness: CallSessionFollowupReadiness;
+  generationSource?: "call_session" | "job_step_8";
+};
+
+const CTA_READINESS_MESSAGES: Record<CallSessionFollowupReadinessReason, string> = {
+  not_terminal: "Call is still in progress. Wait until it finishes before generating a follow-up.",
+  no_outcome: "Record the call outcome before generating a follow-up.",
+  no_call_session: "Call session data is unavailable. Refresh the page to try again.",
 };
 
 export default function AskBobAfterCallCard({
@@ -33,22 +45,53 @@ export default function AskBobAfterCallCard({
   hasHumanNotes,
   hasOutcomeSaved,
   hasOutcomeNotes,
+  callReadiness,
+  generationSource = "call_session",
 }: AskBobAfterCallCardProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [result, setResult] = useState<AskBobJobAfterCallResult | null>(null);
   const [cacheKey, setCacheKey] = useState<string | null>(null);
+  const [serverNotReadyMessage, setServerNotReadyMessage] = useState<string | null>(null);
 
   const hasContext = useMemo(
     () => Boolean(hasAskBobScriptBody || callNotes?.trim() || hasHumanNotes || hasOutcomeNotes),
     [hasAskBobScriptBody, callNotes, hasHumanNotes, hasOutcomeNotes],
   );
 
+  const readinessIssueMessage =
+    callReadiness.reasons.length > 0
+      ? callReadiness.reasons
+          .map((reason) => CTA_READINESS_MESSAGES[reason])
+          .join(" ")
+      : null;
+  const readinessAlert = serverNotReadyMessage ?? readinessIssueMessage;
+  const isReadyForGenerate = callReadiness.isReady && !Boolean(serverNotReadyMessage);
+  const buttonDisabled = !hasContext || isLoading || !isReadyForGenerate;
+  const buttonLabel = isLoading
+    ? "Generating…"
+    : result
+    ? "Regenerate follow-up"
+    : "Generate follow-up";
+
+  useEffect(() => {
+    if (callReadiness.isReady) {
+      setServerNotReadyMessage(null);
+    }
+  }, [callReadiness.isReady]);
+
   const handleGenerate = async () => {
-    if (!hasContext || isLoading) {
+    if (buttonDisabled) {
       return;
     }
+    const isRegenerate = Boolean(result);
+    console.log("[calls-after-call-ui-generate-click]", {
+      callId,
+      workspaceId,
+      generationSource,
+      isRegenerate,
+    });
     console.log("[askbob-after-call-ui-generate-click]", {
       callId,
       jobId,
@@ -56,14 +99,32 @@ export default function AskBobAfterCallCard({
       hasOutcomeSaved,
       hasOutcomeNotes,
       hasAskBobScriptBody,
+      generationSource,
     });
     setErrorMessage(null);
+    setServerNotReadyMessage(null);
     setIsLoading(true);
     try {
-      const response = await runAskBobJobAfterCallAction({ workspaceId, jobId, callId });
+      const response = await runAskBobJobAfterCallAction({
+        workspaceId,
+        jobId,
+        callId,
+        generationSource,
+      });
+      console.log("[calls-after-call-ui-generate-result]", {
+        callId,
+        workspaceId,
+        generationSource,
+        success: response.ok,
+        failureCode: response.ok ? null : response.code ?? null,
+      });
       if (!response.ok) {
         const message = response.message ?? "AskBob could not summarize the call right now.";
-        setErrorMessage(message);
+        if (response.code === "not_ready_for_after_call") {
+          setServerNotReadyMessage(message);
+        } else {
+          setErrorMessage(message);
+        }
         console.log("[askbob-after-call-ui-generate-failure]", {
           callId,
           jobId,
@@ -101,6 +162,13 @@ export default function AskBobAfterCallCard({
         hasOutcomeNotes,
         hasAskBobScriptBody,
         errorMessage: message,
+      });
+      console.log("[calls-after-call-ui-generate-result]", {
+        callId,
+        workspaceId,
+        generationSource,
+        success: false,
+        failureCode: "exception",
       });
     } finally {
       setIsLoading(false);
@@ -159,14 +227,18 @@ export default function AskBobAfterCallCard({
           size="md"
           className="w-full"
           onClick={handleGenerate}
-          disabled={!hasContext || isLoading}
+          disabled={buttonDisabled}
         >
-          {isLoading ? "Generating…" : "Generate summary + draft message"}
+          {buttonLabel}
         </HbButton>
-        {!hasContext && (
-          <p className="text-xs text-slate-500">
-            AskBob needs at least a script, outcome notes, or call summary to craft the summary.
-          </p>
+        {readinessAlert ? (
+          <p className="text-xs text-slate-500">{readinessAlert}</p>
+        ) : (
+          !hasContext && (
+            <p className="text-xs text-slate-500">
+              AskBob needs at least a script, outcome notes, or call summary to craft the summary.
+            </p>
+          )
         )}
         {errorMessage && <p className="text-sm text-rose-400">{errorMessage}</p>}
       </div>

@@ -114,6 +114,47 @@ export type CallAutomatedDialSnapshot = {
   hasTranscriptOrNotes: boolean;
 };
 
+export type CallSessionFollowupReadinessReason = "not_terminal" | "no_outcome" | "no_call_session";
+
+export type CallSessionFollowupReadiness = {
+  isReady: boolean;
+  reasons: CallSessionFollowupReadinessReason[];
+};
+
+type CallSessionReadinessInput = {
+  call?: {
+    twilio_status?: string | null;
+    outcome_code?: string | null;
+    outcome_notes?: string | null;
+    outcome_recorded_at?: string | null;
+  } | null;
+  dialSnapshot?: CallAutomatedDialSnapshot | null;
+};
+
+export function buildCallSessionFollowupReadiness({
+  call,
+  dialSnapshot,
+}: CallSessionReadinessInput): CallSessionFollowupReadiness {
+  if (!call) {
+    return { isReady: false, reasons: ["no_call_session"] };
+  }
+  const status = call.twilio_status?.trim() ?? null;
+  const isTerminal =
+    dialSnapshot?.isTerminal ?? isTerminalTwilioDialStatus(status);
+  const hasOutcome =
+    Boolean(call.outcome_recorded_at) ||
+    Boolean(call.outcome_code) ||
+    Boolean(call.outcome_notes?.trim());
+  const reasons: CallSessionFollowupReadinessReason[] = [];
+  if (!isTerminal) {
+    reasons.push("not_terminal");
+  }
+  if (!hasOutcome) {
+    reasons.push("no_outcome");
+  }
+  return { isReady: reasons.length === 0, reasons };
+}
+
 type CallSessionForSnapshot = {
   id: string;
   workspace_id: string;

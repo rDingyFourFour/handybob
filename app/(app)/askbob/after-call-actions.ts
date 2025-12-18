@@ -19,15 +19,31 @@ import {
 import { isAskBobScriptSummary } from "@/lib/domain/askbob/constants";
 import {
   AUTOMATED_CALL_NOTES_MAX_LENGTH,
+  buildCallAutomatedDialSnapshot,
+  buildCallSessionFollowupReadiness,
+  CallSessionFollowupReadinessReason,
   sanitizeAutomatedCallNotes,
 } from "@/lib/domain/calls/sessions";
+
+const generationSourceSchema = z.enum(["call_session", "job_step_8"]);
 
 const afterCallPayloadSchema = z.object({
   workspaceId: z.string().min(1),
   jobId: z.string().min(1),
   callId: z.string().min(1).optional().nullable(),
   automatedCallNotes: z.string().max(AUTOMATED_CALL_NOTES_MAX_LENGTH).optional().nullable(),
+  generationSource: generationSourceSchema.optional(),
 });
+
+const CALL_SESSION_READINESS_MESSAGES: Record<CallSessionFollowupReadinessReason, string> = {
+  not_terminal: "Call is still in progress. Wait until it completes before generating a follow-up.",
+  no_outcome: "Record the call outcome before generating a follow-up.",
+  no_call_session: "Call session data is unavailable right now. Refresh the page to try again.",
+};
+
+function describeCallSessionReadinessIssues(reasons: CallSessionFollowupReadinessReason[]): string {
+  return reasons.map((reason) => CALL_SESSION_READINESS_MESSAGES[reason]).join(" ");
+}
 
 type AfterCallPayload = z.infer<typeof afterCallPayloadSchema>;
 
@@ -71,8 +87,13 @@ type CallRow = {
   outcome_recorded_at: string | null;
   reached_customer: boolean | null;
   transcript: string | null;
+  twilio_call_sid?: string | null;
+  twilio_status?: string | null;
+  twilio_status_updated_at?: string | null;
   twilio_recording_url: string | null;
+  twilio_recording_sid?: string | null;
   twilio_recording_duration_seconds: number | null;
+  twilio_recording_received_at?: string | null;
 };
 
 export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Promise<AfterCallActionResult> {
@@ -84,6 +105,8 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
     return { ok: false, code: "workspace_unavailable" };
   }
 
+  const generationSource = parsed.generationSource ?? "job_step_8";
+
   if (workspace.id !== parsed.workspaceId) {
     console.error("[askbob-after-call-ui-failure] workspace mismatch", {
       expectedWorkspaceId: workspace.id,
@@ -92,6 +115,18 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
       jobId: parsed.jobId,
     });
     return { ok: false, code: "wrong_workspace" };
+  }
+  if (generationSource === "call_session" && !(parsed.callId?.trim())) {
+    console.error("[askbob-after-call-ui-failure] missing call id for call-session generation", {
+      workspaceId: workspace.id,
+      jobId: parsed.jobId,
+      generationSource,
+    });
+    return {
+      ok: false,
+      code: "missing_call_id",
+      message: "Call ID is required when generating a follow-up from the call session.",
+    };
   }
 
   const { data: job, error: jobError } = await supabase
@@ -119,6 +154,27 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
       callId: parsed.callId ?? null,
     });
     return { ok: false, code: "no_calls_for_job", jobId: job.id };
+  }
+
+  const dialSnapshot = buildCallAutomatedDialSnapshot(call);
+  if (generationSource === "call_session") {
+    const readiness = buildCallSessionFollowupReadiness({ call, dialSnapshot });
+    if (!readiness.isReady) {
+      const notReadyMessage = describeCallSessionReadinessIssues(readiness.reasons);
+      console.log("[askbob-after-call-gate-not-ready]", {
+        workspaceId: workspace.id,
+        jobId: job.id,
+        callId: call.id,
+        generationSource,
+        reasons: readiness.reasons,
+      });
+      return {
+        ok: false,
+        code: "not_ready_for_after_call",
+        jobId: job.id,
+        message: notReadyMessage,
+      };
+    }
   }
 
   const normalizedAutomatedCallNotes = sanitizeAutomatedCallNotes(parsed.automatedCallNotes ?? null);
@@ -157,6 +213,17 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
     callId: call.id,
     hasCallId: Boolean(parsed.callId),
     callOutcome,
+    generationSource,
+    hasLatestCallOutcomeContext,
+    hasAutomatedCallNotesContext,
+    hasCallTranscriptContext,
+  });
+
+  console.log("[askbob-after-call-generate-request]", {
+    workspaceId: workspace.id,
+    jobId: job.id,
+    callId: call.id,
+    generationSource,
     hasLatestCallOutcomeContext,
     hasAutomatedCallNotesContext,
     hasCallTranscriptContext,
@@ -203,6 +270,7 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
       jobId: job.id,
       callId: call.id,
       callOutcome,
+      generationSource,
       suggestedChannel: result.suggestedChannel,
       urgencyLevel: result.urgencyLevel,
       hasAutomatedCallNotesContext,
@@ -220,6 +288,7 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
       jobId: job.id,
       callId: call.id,
       callOutcome,
+      generationSource,
       hasLatestCallOutcomeContext,
       hasAutomatedCallNotesContext,
       hasCallTranscriptContext,
@@ -238,7 +307,7 @@ async function loadCallForJob(
     const { data, error } = await supabase
       .from<CallRow>("calls")
       .select(
-        "id, job_id, workspace_id, status, outcome, duration_seconds, started_at, summary, ai_summary, direction, from_number, to_number, created_at, outcome_code, outcome_notes, outcome_recorded_at, reached_customer, transcript, twilio_recording_url, twilio_recording_duration_seconds"
+        "id, job_id, workspace_id, status, outcome, duration_seconds, started_at, summary, ai_summary, direction, from_number, to_number, created_at, outcome_code, outcome_notes, outcome_recorded_at, reached_customer, transcript, twilio_call_sid, twilio_status, twilio_status_updated_at, twilio_recording_url, twilio_recording_sid, twilio_recording_duration_seconds, twilio_recording_received_at"
       )
       .eq("workspace_id", workspaceId)
       .eq("job_id", payload.jobId)
@@ -257,7 +326,7 @@ async function loadCallForJob(
     const { data, error } = await supabase
       .from<CallRow>("calls")
       .select(
-        "id, job_id, workspace_id, status, outcome, duration_seconds, started_at, summary, ai_summary, direction, from_number, to_number, created_at, outcome_code, outcome_notes, outcome_recorded_at, reached_customer, transcript, twilio_recording_url, twilio_recording_duration_seconds"
+        "id, job_id, workspace_id, status, outcome, duration_seconds, started_at, summary, ai_summary, direction, from_number, to_number, created_at, outcome_code, outcome_notes, outcome_recorded_at, reached_customer, transcript, twilio_call_sid, twilio_status, twilio_status_updated_at, twilio_recording_url, twilio_recording_sid, twilio_recording_duration_seconds, twilio_recording_received_at"
       )
       .eq("workspace_id", workspaceId)
       .eq("job_id", payload.jobId)

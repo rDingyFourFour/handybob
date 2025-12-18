@@ -33,6 +33,7 @@ import { formatTwilioStatusLabel } from "@/utils/calls/twilioStatusLabel";
 import { getAutomatedCallVoiceLabel } from "@/lib/domain/askbob/automatedCallConfig";
 import {
   buildCallAutomatedDialSnapshot,
+  buildCallSessionFollowupReadiness,
   getCallSessionAutomatedSpeechPlan,
   getCallSessionJobAndCustomer,
   sanitizeAutomatedCallNotes,
@@ -319,6 +320,10 @@ export default async function CallSessionPage({
   const voicemailEnabled = automatedSpeechPlan?.allowVoicemail ?? null;
   const sanitizedAutomatedNotes = sanitizeAutomatedCallNotes(call.transcript ?? null);
   const automatedDialSnapshot = buildCallAutomatedDialSnapshot(call);
+  const callReadiness = buildCallSessionFollowupReadiness({
+    call,
+    dialSnapshot: automatedDialSnapshot,
+  });
 
   if (isAskBobAutomatedCall) {
     console.log("[calls-session-askbob-automated-details-visible]", {
@@ -944,6 +949,8 @@ export default async function CallSessionPage({
                   Boolean(call.outcome_notes?.trim())
                 }
                 hasOutcomeNotes={Boolean(call.outcome_notes?.trim())}
+                callReadiness={callReadiness}
+                generationSource="call_session"
               />
             )}
 

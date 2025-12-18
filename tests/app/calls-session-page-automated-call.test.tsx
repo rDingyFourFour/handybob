@@ -114,6 +114,7 @@ describe("CallSessionPage automated call view", () => {
     expect(detailEvents).toHaveLength(1);
   });
 
+
   it("hides the automated call strip and notes card when metadata is absent", async () => {
     supabaseState.responses.calls = {
       data: [
