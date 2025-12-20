@@ -269,16 +269,56 @@ export default function JobAskBobFlow({
   const afterCallHydrationEventSentRef = useRef(false);
   const afterCallCacheKeyRef = useRef(afterCallCacheKey);
   const afterCallCacheCallIdRef = useRef(afterCallCacheCallId);
+  const [callSessionSnapshotMeta, setCallSessionSnapshotMeta] = useState<{
+    workspaceId: string;
+    jobId: string;
+    callId: string | null;
+  } | null>(null);
   const afterCallOverrideLoggedRef = useRef(false);
   const callSessionDraftLoggedRef = useRef(false);
-  const previousJobIdRef = useRef(jobId);
+  const previousJobContextRef = useRef({ jobId, workspaceId });
+  const previousForcedAfterCallCallIdRef = useRef(forcedAfterCallCallId ?? null);
   useEffect(() => {
-    if (previousJobIdRef.current !== jobId) {
+    const previousContext = previousJobContextRef.current;
+    if (previousContext.jobId !== jobId || previousContext.workspaceId !== workspaceId) {
       afterCallOverrideLoggedRef.current = false;
       callSessionDraftLoggedRef.current = false;
+      afterCallHydrationEventSentRef.current = false;
+      afterCallCacheAttemptedRef.current = false;
+      startTransition(() => {
+        setHydratedAfterCallSnapshot(null);
+        setAfterCallHydrationHint(null);
+        setCallSessionSnapshotMeta(null);
+      });
     }
-    previousJobIdRef.current = jobId;
-  }, [jobId]);
+    previousJobContextRef.current = { jobId, workspaceId };
+  }, [jobId, workspaceId]);
+
+  useEffect(() => {
+    afterCallCacheKeyRef.current = afterCallCacheKey;
+    afterCallCacheCallIdRef.current = afterCallCacheCallId;
+  }, [afterCallCacheCallId, afterCallCacheKey]);
+
+  useEffect(() => {
+    afterCallCacheAttemptedRef.current = false;
+    afterCallHydrationEventSentRef.current = false;
+  }, [afterCallCacheKey, afterCallCacheCallId, jobId, workspaceId, forcedAfterCallCallId]);
+
+  useEffect(() => {
+    const previousCallId = previousForcedAfterCallCallIdRef.current;
+    const nextCallId = forcedAfterCallCallId ?? null;
+    if (previousCallId !== nextCallId) {
+      startTransition(() => {
+        setHydratedAfterCallSnapshot(null);
+        setAfterCallHydrationHint(null);
+        setCallSessionSnapshotMeta(null);
+      });
+      callSessionDraftLoggedRef.current = false;
+      afterCallHydrationEventSentRef.current = false;
+      afterCallCacheAttemptedRef.current = false;
+    }
+    previousForcedAfterCallCallIdRef.current = nextCallId;
+  }, [forcedAfterCallCallId]);
   useEffect(() => {
     if (afterCallCacheAttemptedRef.current) {
       return;
@@ -361,9 +401,15 @@ export default function JobAskBobFlow({
       callId: payload.callId,
       cacheKey,
     };
+    const snapshotMeta = {
+      workspaceId,
+      jobId,
+      callId: payload.callId ?? null,
+    };
     startTransition(() => {
       setAfterCallHydrationHint(null);
       setHydratedAfterCallSnapshot(payload.result);
+      setCallSessionSnapshotMeta(snapshotMeta);
       console.log("[askbob-after-call-job-hydrate-hit]", logPayload);
     });
   }, [
@@ -372,6 +418,7 @@ export default function JobAskBobFlow({
     initialAfterCallSnapshot,
     jobId,
     workspaceId,
+    forcedAfterCallCallId,
   ]);
   useEffect(() => {
     if (!forcedAfterCallCallId || afterCallOverrideLoggedRef.current) {
@@ -385,7 +432,14 @@ export default function JobAskBobFlow({
     afterCallOverrideLoggedRef.current = true;
   }, [forcedAfterCallCallId, jobId, workspaceId]);
   const callSessionSnapshot =
-    forcedAfterCallCallId && hydratedAfterCallSnapshot ? hydratedAfterCallSnapshot : null;
+    forcedAfterCallCallId &&
+    hydratedAfterCallSnapshot &&
+    callSessionSnapshotMeta &&
+    callSessionSnapshotMeta.workspaceId === workspaceId &&
+    callSessionSnapshotMeta.jobId === jobId &&
+    callSessionSnapshotMeta.callId === forcedAfterCallCallId
+      ? hydratedAfterCallSnapshot
+      : null;
   useEffect(() => {
     if (!callSessionSnapshot || callSessionDraftLoggedRef.current) {
       return;

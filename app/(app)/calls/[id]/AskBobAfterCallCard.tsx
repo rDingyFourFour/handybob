@@ -11,8 +11,11 @@ import { cacheAskBobMessageDraft } from "@/utils/askbob/messageDraftCache";
 import type { AskBobJobAfterCallResult } from "@/lib/domain/askbob/types";
 import { runAskBobJobAfterCallAction } from "@/app/(app)/askbob/after-call-actions";
 import {
+  CallAutomatedDialSnapshot,
   CallSessionFollowupReadiness,
   CallSessionFollowupReadinessReason,
+  CallSessionOutcomeMissingReason,
+  getCallSessionOutcomeMissingReason,
 } from "@/lib/domain/calls/sessions";
 
 type AskBobAfterCallCardProps = {
@@ -27,12 +30,18 @@ type AskBobAfterCallCardProps = {
   hasOutcomeNotes: boolean;
   callReadiness: CallSessionFollowupReadiness;
   generationSource?: "call_session" | "job_step_8";
+  automatedDialSnapshot?: CallAutomatedDialSnapshot | null;
 };
 
-const CTA_READINESS_MESSAGES: Record<CallSessionFollowupReadinessReason, string> = {
+const GENERAL_READINESS_MESSAGES: Partial<Record<CallSessionFollowupReadinessReason, string>> = {
   not_terminal: "Call is still in progress. Wait until it finishes before generating a follow-up.",
-  no_outcome: "Record the call outcome before generating a follow-up.",
   no_call_session: "Call session data is unavailable. Refresh the page to try again.",
+};
+
+const MISSING_REASON_MESSAGES: Record<CallSessionOutcomeMissingReason, string | null> = {
+  missing_outcome: "Record how the call went before generating a follow-up.",
+  missing_reached_flag: "Mark whether the customer was reached before generating a follow-up.",
+  ready: null,
 };
 
 export default function AskBobAfterCallCard({
@@ -47,6 +56,7 @@ export default function AskBobAfterCallCard({
   hasOutcomeNotes,
   callReadiness,
   generationSource = "call_session",
+  automatedDialSnapshot,
 }: AskBobAfterCallCardProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -54,24 +64,32 @@ export default function AskBobAfterCallCard({
   const [result, setResult] = useState<AskBobJobAfterCallResult | null>(null);
   const [cacheKey, setCacheKey] = useState<string | null>(null);
   const [serverNotReadyMessage, setServerNotReadyMessage] = useState<string | null>(null);
+  const [outcomeSavedHintVisible, setOutcomeSavedHintVisible] = useState(false);
 
   const hasContext = useMemo(
     () => Boolean(hasAskBobScriptBody || callNotes?.trim() || hasHumanNotes || hasOutcomeNotes),
     [hasAskBobScriptBody, callNotes, hasHumanNotes, hasOutcomeNotes],
   );
 
-  const readinessIssueMessage =
-    callReadiness.reasons.length > 0
-      ? callReadiness.reasons
-          .map((reason) => CTA_READINESS_MESSAGES[reason])
-          .join(" ")
-      : null;
-  const readinessAlert = serverNotReadyMessage ?? readinessIssueMessage;
+  const missingReason = getCallSessionOutcomeMissingReason(automatedDialSnapshot ?? null);
+  const needsMissingReason =
+    !callReadiness.isReady &&
+    callReadiness.reasons.some(
+      (reason) => reason === "missing_outcome" || reason === "missing_reached_flag",
+    );
+  const missingReasonMessage = needsMissingReason ? MISSING_REASON_MESSAGES[missingReason] : null;
+  const generalReadinessMessage = callReadiness.reasons
+    .map((reason) => GENERAL_READINESS_MESSAGES[reason])
+    .filter(Boolean)
+    .join(" ");
+  const readinessAlert =
+    serverNotReadyMessage ?? missingReasonMessage ?? (generalReadinessMessage || null);
   const isReadyForGenerate = callReadiness.isReady && !Boolean(serverNotReadyMessage);
   const buttonDisabled = !hasContext || isLoading || !isReadyForGenerate;
+  const shouldShowRegenerateLabel = result && isReadyForGenerate;
   const buttonLabel = isLoading
     ? "Generating…"
-    : result
+    : shouldShowRegenerateLabel
     ? "Regenerate follow-up"
     : "Generate follow-up";
 
@@ -80,6 +98,30 @@ export default function AskBobAfterCallCard({
       setServerNotReadyMessage(null);
     }
   }, [callReadiness.isReady]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const handleOutcomeSaved = () => {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+      setOutcomeSavedHintVisible(true);
+      timeoutId = window.setTimeout(() => {
+        setOutcomeSavedHintVisible(false);
+        timeoutId = null;
+      }, 4000);
+    };
+    window.addEventListener("calls-after-call-outcome-saved", handleOutcomeSaved);
+    return () => {
+      window.removeEventListener("calls-after-call-outcome-saved", handleOutcomeSaved);
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, []);
 
   const handleGenerate = async () => {
     if (buttonDisabled) {
@@ -120,7 +162,7 @@ export default function AskBobAfterCallCard({
       });
       if (!response.ok) {
         const message = response.message ?? "AskBob could not summarize the call right now.";
-        if (response.code === "not_ready_for_after_call") {
+        if (response.code?.startsWith("not_ready")) {
           setServerNotReadyMessage(message);
         } else {
           setErrorMessage(message);
@@ -202,6 +244,12 @@ export default function AskBobAfterCallCard({
       callId,
       draftLength: result.draftMessageBody.length,
     });
+    console.log("[calls-after-call-open-composer-click]", {
+      callId,
+      jobId,
+      customerId,
+      draftKey: draftKey ?? null,
+    });
     router.push(`/messages?${params.toString()}`);
   };
 
@@ -240,6 +288,11 @@ export default function AskBobAfterCallCard({
             </p>
           )
         )}
+        {outcomeSavedHintVisible && (
+          <p className="text-xs text-sky-300">
+            Outcome saved. You can now generate a follow-up.
+          </p>
+        )}
         {errorMessage && <p className="text-sm text-rose-400">{errorMessage}</p>}
       </div>
 
@@ -273,14 +326,14 @@ export default function AskBobAfterCallCard({
 
           <div className="flex flex-wrap gap-2">
             {result.draftMessageBody && (
-              <HbButton
-                size="sm"
-                variant="secondary"
-                className="flex-1"
-                onClick={handleOpenMessagesComposer}
-              >
-                Open Messages composer with this draft
-              </HbButton>
+                <HbButton
+                  size="sm"
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={handleOpenMessagesComposer}
+                >
+                  Open composer with this draft
+                </HbButton>
             )}
             {backToJobHref && (
               <HbButton

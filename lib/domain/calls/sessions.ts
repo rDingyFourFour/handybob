@@ -55,14 +55,17 @@ function normalizeTwilioStatus(value?: string | null): string | null {
   return trimmed ? trimmed.toLowerCase() : null;
 }
 
-export function isTerminalTwilioStatus(value?: string | null): boolean {
+export function isTwilioTerminalStatus(value?: string | null): boolean {
   const normalized = normalizeTwilioStatus(value);
   return normalized !== null && TWILIO_TERMINAL_STATUSES.has(normalized);
 }
 
+export function isTerminalTwilioStatus(value?: string | null): boolean {
+  return isTwilioTerminalStatus(value);
+}
+
 export function isTerminalTwilioDialStatus(value?: string | null): boolean {
-  const normalized = normalizeTwilioStatus(value);
-  return normalized !== null && TWILIO_TERMINAL_STATUSES.has(normalized);
+  return isTwilioTerminalStatus(value);
 }
 
 export function isDialInProgressTwilioStatus(value?: string | null): boolean {
@@ -112,9 +115,16 @@ export type CallAutomatedDialSnapshot = {
   hasRecordingMetadata: boolean;
   hasRecordingReady: boolean;
   hasTranscriptOrNotes: boolean;
+  hasOutcome: boolean;
+  hasOutcomeNotes: boolean;
+  reachedCustomer: boolean | null;
 };
 
-export type CallSessionFollowupReadinessReason = "not_terminal" | "no_outcome" | "no_call_session";
+export type CallSessionFollowupReadinessReason =
+  | "not_terminal"
+  | "missing_outcome"
+  | "missing_reached_flag"
+  | "no_call_session";
 
 export type CallSessionFollowupReadiness = {
   isReady: boolean;
@@ -124,6 +134,7 @@ export type CallSessionFollowupReadiness = {
 type CallSessionReadinessInput = {
   call?: {
     twilio_status?: string | null;
+    reached_customer?: boolean | null;
     outcome_code?: string | null;
     outcome_notes?: string | null;
     outcome_recorded_at?: string | null;
@@ -145,12 +156,18 @@ export function buildCallSessionFollowupReadiness({
     Boolean(call.outcome_recorded_at) ||
     Boolean(call.outcome_code) ||
     Boolean(call.outcome_notes?.trim());
+  const hasReachedFlag = call.reached_customer === true || call.reached_customer === false;
   const reasons: CallSessionFollowupReadinessReason[] = [];
   if (!isTerminal) {
     reasons.push("not_terminal");
   }
   if (!hasOutcome) {
-    reasons.push("no_outcome");
+    if (isTerminal) {
+      reasons.push("missing_outcome");
+    }
+  }
+  if (isTerminal && !hasReachedFlag) {
+    reasons.push("missing_reached_flag");
   }
   return { isReady: reasons.length === 0, reasons };
 }
@@ -183,7 +200,33 @@ export function buildCallAutomatedDialSnapshot(
     hasRecordingMetadata: Boolean(call.twilio_recording_url || call.twilio_recording_sid),
     hasRecordingReady: call.twilio_recording_duration_seconds != null,
     hasTranscriptOrNotes: Boolean(sanitizedNotes),
+    hasOutcome:
+      Boolean(call.outcome_recorded_at) ||
+      Boolean(call.outcome_code) ||
+      Boolean(call.outcome_notes?.trim()),
+    hasOutcomeNotes: Boolean(call.outcome_notes?.trim()),
+    reachedCustomer: call.reached_customer ?? null,
   };
+}
+
+export type CallSessionOutcomeMissingReason =
+  | "missing_outcome"
+  | "missing_reached_flag"
+  | "ready";
+
+export function getCallSessionOutcomeMissingReason(
+  snapshot?: Pick<CallAutomatedDialSnapshot, "isTerminal" | "hasOutcome" | "reachedCustomer"> | null,
+): CallSessionOutcomeMissingReason {
+  if (!snapshot || !snapshot.isTerminal) {
+    return "ready";
+  }
+  if (!snapshot.hasOutcome) {
+    return "missing_outcome";
+  }
+  if (snapshot.reachedCustomer === null || snapshot.reachedCustomer === undefined) {
+    return "missing_reached_flag";
+  }
+  return "ready";
 }
 
 export const AUTOMATED_CALL_NOTES_MAX_LENGTH = 1000;

@@ -196,6 +196,27 @@ export default function CallOutcomeCaptureCard({
         });
         setIsEditing(false);
       });
+      const shouldNudge =
+        Boolean(isAutomatedCallContext) && Boolean(automatedDialSnapshot?.isTerminal);
+      if (shouldNudge) {
+        const status = automatedDialSnapshot?.twilioStatus ?? null;
+        console.log("[calls-after-call-outcome-saved-nudge]", {
+          callId,
+          status,
+          hasAutomatedCallContext: Boolean(isAutomatedCallContext),
+        });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("calls-after-call-outcome-saved", {
+              detail: {
+                callId,
+                status,
+                hasAutomatedCallContext: Boolean(isAutomatedCallContext),
+              },
+            }),
+          );
+        }
+      }
     } else {
       console.log("[calls-outcome-save-failure]", {
         callId,
@@ -206,7 +227,13 @@ export default function CallOutcomeCaptureCard({
         code: actionState.code,
       });
     }
-  }, [actionState, callId]);
+  }, [
+    actionState,
+    callId,
+    automatedDialSnapshot?.isTerminal,
+    automatedDialSnapshot?.twilioStatus,
+    isAutomatedCallContext,
+  ]);
 
   useEffect(() => {
     if (!isEditing) {

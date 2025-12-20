@@ -1,4 +1,4 @@
-import { act, type ReactNode } from "react";
+import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -65,6 +65,8 @@ vi.mock("@/components/askbob/JobAskBobPanel", () => ({
 
 import JobAskBobFlow from "@/components/askbob/JobAskBobFlow";
 
+type JobAskBobFlowProps = ComponentProps<typeof JobAskBobFlow>;
+
 describe("JobAskBobFlow after-call cache hydration", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
@@ -97,40 +99,40 @@ describe("JobAskBobFlow after-call cache hydration", () => {
     });
   }
 
-  const renderFlow = async () =>
+  const baseFlowProps: JobAskBobFlowProps = {
+    workspaceId: "workspace-1",
+    jobId: "job-1",
+    userId: "user-1",
+    customerId: "customer-1",
+    customerDisplayName: "Customer",
+    customerPhoneNumber: "+15550000001",
+    jobDescription: "Fix it",
+    jobTitle: "Job",
+    askBobLastTaskLabel: null,
+    askBobLastUsedAtDisplay: null,
+    askBobLastUsedAtIso: null,
+    askBobRunsSummary: null,
+    initialLastQuoteId: null,
+    lastQuoteCreatedAt: null,
+    lastQuoteCreatedAtFriendly: null,
+    initialDiagnoseSnapshot: null,
+    initialMaterialsSnapshot: null,
+    initialQuoteSnapshot: null,
+    initialFollowupSnapshot: null,
+    initialAfterCallSnapshot: null,
+    lastQuoteSummary: null,
+    latestCallLabel: null,
+    hasLatestCall: false,
+    callHistoryHint: null,
+    latestCallOutcome: null,
+    callSessionLatestCallOutcome: null,
+    afterCallCacheKey: "cache-1",
+    afterCallCacheCallId: "call-1",
+  };
+
+  const renderFlow = async (overrides: Partial<JobAskBobFlowProps> = {}) =>
     act(async () => {
-      root?.render(
-        <JobAskBobFlow
-          workspaceId="workspace-1"
-          jobId="job-1"
-          userId="user-1"
-          customerId="customer-1"
-          customerDisplayName="Customer"
-          customerPhoneNumber="+15550000001"
-          jobDescription="Fix it"
-          jobTitle="Job"
-          askBobLastTaskLabel={null}
-          askBobLastUsedAtDisplay={null}
-          askBobLastUsedAtIso={null}
-          askBobRunsSummary={null}
-          initialLastQuoteId={null}
-          lastQuoteCreatedAt={null}
-          lastQuoteCreatedAtFriendly={null}
-          initialDiagnoseSnapshot={null}
-          initialMaterialsSnapshot={null}
-          initialQuoteSnapshot={null}
-          initialFollowupSnapshot={null}
-          initialAfterCallSnapshot={null}
-          lastQuoteSummary={null}
-          latestCallLabel={null}
-          hasLatestCall={false}
-          callHistoryHint={null}
-          latestCallOutcome={null}
-          callSessionLatestCallOutcome={null}
-          afterCallCacheKey="cache-1"
-          afterCallCacheCallId="call-1"
-        />,
-      );
+      root?.render(<JobAskBobFlow {...baseFlowProps} {...overrides} />);
     });
 
   const findConsoleLogs = (label: string) =>
@@ -238,5 +240,61 @@ describe("JobAskBobFlow after-call cache hydration", () => {
     });
     const panelProps = recordedPanelProps.at(-1) ?? null;
     expect(panelProps?.afterCallHydrationHint).toBe(AFTER_CALL_HYDRATION_HINT);
+  });
+
+  it("clears call-session drafts when the forced call or job context changes", async () => {
+    readAndClearMock.mockReturnValueOnce({
+      payload: {
+        jobId: "job-1",
+        callId: "call-a",
+        result: {
+          afterCallSummary: "Call A summary",
+          recommendedActionLabel: "Move A",
+          recommendedActionSteps: ["Step A"],
+          suggestedChannel: "sms",
+          draftMessageBody: "Hi!",
+          urgencyLevel: "normal",
+          notesForTech: null,
+          modelLatencyMs: 1,
+        },
+        createdAtIso: new Date().toISOString(),
+      },
+      reason: null,
+    });
+
+    await renderFlow({
+      afterCallCacheKey: "cache-a",
+      afterCallCacheCallId: "call-a",
+      forcedAfterCallCallId: "call-a",
+    });
+    await flushReactUpdates(20);
+    expect(readAndClearMock).toHaveBeenNthCalledWith(1, "cache-a");
+    const firstProps = recordedPanelProps.at(-1) ?? null;
+    expect(firstProps?.initialAfterCallSnapshot?.afterCallSummary).toBe("Call A summary");
+
+    readAndClearMock.mockReturnValueOnce({ payload: null, reason: "not_found" });
+    await renderFlow({
+      afterCallCacheKey: "cache-b",
+      afterCallCacheCallId: "call-b",
+      forcedAfterCallCallId: "call-b",
+    });
+    await flushReactUpdates(20);
+    expect(readAndClearMock).toHaveBeenNthCalledWith(2, "cache-b");
+    const secondProps = recordedPanelProps.at(-1) ?? null;
+    expect(secondProps?.initialAfterCallSnapshot).toBeUndefined();
+    expect(secondProps?.afterCallHydrationHint).toBe(AFTER_CALL_HYDRATION_HINT);
+
+    readAndClearMock.mockReturnValueOnce({ payload: null, reason: "not_found" });
+    await renderFlow({
+      jobId: "job-2",
+      afterCallCacheKey: "cache-c",
+      afterCallCacheCallId: "call-c",
+      forcedAfterCallCallId: "call-c",
+    });
+    await flushReactUpdates(20);
+    expect(readAndClearMock).toHaveBeenNthCalledWith(3, "cache-c");
+    const thirdProps = recordedPanelProps.at(-1) ?? null;
+    expect(thirdProps?.initialAfterCallSnapshot).toBeUndefined();
+    expect(thirdProps?.afterCallHydrationHint).toBe(AFTER_CALL_HYDRATION_HINT);
   });
 });

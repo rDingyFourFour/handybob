@@ -26,6 +26,7 @@ import {
 } from "@/lib/domain/calls/sessions";
 
 const generationSourceSchema = z.enum(["call_session", "job_step_8"]);
+type GenerationSource = z.infer<typeof generationSourceSchema>;
 
 const afterCallPayloadSchema = z.object({
   workspaceId: z.string().min(1),
@@ -36,8 +37,9 @@ const afterCallPayloadSchema = z.object({
 });
 
 const CALL_SESSION_READINESS_MESSAGES: Record<CallSessionFollowupReadinessReason, string> = {
+  missing_outcome: "Record the call outcome before generating a follow-up.",
+  missing_reached_flag: "Mark whether the customer was reached before generating a follow-up.",
   not_terminal: "Call is still in progress. Wait until it completes before generating a follow-up.",
-  no_outcome: "Record the call outcome before generating a follow-up.",
   no_call_session: "Call session data is unavailable right now. Refresh the page to try again.",
 };
 
@@ -105,7 +107,8 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
     return { ok: false, code: "workspace_unavailable" };
   }
 
-  const generationSource = parsed.generationSource ?? "job_step_8";
+  const generationSource: GenerationSource = parsed.generationSource ?? "job_step_8";
+  const isCallSessionGeneration = generationSource === "call_session";
 
   if (workspace.id !== parsed.workspaceId) {
     console.error("[askbob-after-call-ui-failure] workspace mismatch", {
@@ -116,7 +119,7 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
     });
     return { ok: false, code: "wrong_workspace" };
   }
-  if (generationSource === "call_session" && !(parsed.callId?.trim())) {
+  if (isCallSessionGeneration && !(parsed.callId?.trim())) {
     console.error("[askbob-after-call-ui-failure] missing call id for call-session generation", {
       workspaceId: workspace.id,
       jobId: parsed.jobId,
@@ -157,20 +160,35 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
   }
 
   const dialSnapshot = buildCallAutomatedDialSnapshot(call);
-  if (generationSource === "call_session") {
+  if (isCallSessionGeneration) {
     const readiness = buildCallSessionFollowupReadiness({ call, dialSnapshot });
     if (!readiness.isReady) {
       const notReadyMessage = describeCallSessionReadinessIssues(readiness.reasons);
+      const failureReason =
+        readiness.reasons.includes("missing_outcome")
+          ? "missing_outcome"
+          : readiness.reasons.includes("missing_reached_flag")
+          ? "missing_reached_flag"
+          : readiness.reasons.includes("not_terminal")
+          ? "not_terminal"
+          : "no_call_session";
+      const failureCode =
+        failureReason === "missing_outcome"
+          ? "not_ready_missing_outcome"
+          : failureReason === "missing_reached_flag"
+          ? "not_ready_missing_reached_flag"
+          : "not_ready_for_after_call";
       console.log("[askbob-after-call-gate-not-ready]", {
         workspaceId: workspace.id,
         jobId: job.id,
         callId: call.id,
         generationSource,
         reasons: readiness.reasons,
+        failureReason,
       });
       return {
         ok: false,
-        code: "not_ready_for_after_call",
+        code: failureCode,
         jobId: job.id,
         message: notReadyMessage,
       };

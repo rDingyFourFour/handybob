@@ -359,6 +359,15 @@ export default async function CallSessionPage({
           hasCallTranscript: callTranscriptFlag ? "1" : "0",
         }).toString()}`
       : undefined;
+  const showAutomatedOutcomeRequiredBanner =
+    Boolean(isAskBobAutomatedCall && automatedDialSnapshot.isTerminal && !hasExistingOutcome);
+  if (showAutomatedOutcomeRequiredBanner) {
+    console.log("[calls-after-call-outcome-required-visible]", {
+      callId: call.id,
+      workspaceId: workspace.id,
+      status: automatedDialSnapshot.twilioStatus ?? call.twilio_status ?? null,
+    });
+  }
 
   let job: JobSummary | null = null;
   if (jobId) {
@@ -951,6 +960,7 @@ export default async function CallSessionPage({
                 hasOutcomeNotes={Boolean(call.outcome_notes?.trim())}
                 callReadiness={callReadiness}
                 generationSource="call_session"
+                automatedDialSnapshot={automatedDialSnapshot}
               />
             )}
 
@@ -977,8 +987,14 @@ export default async function CallSessionPage({
                 customerId={linkedCustomerId}
                 jobId={call.job_id ?? null}
                 customerName={customerName}
-                jobTitle={job?.title ?? null}
-              />
+              jobTitle={job?.title ?? null}
+            />
+          )}
+
+            {showAutomatedOutcomeRequiredBanner && (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
+                Call ended. Record outcome to generate a follow-up.
+              </div>
             )}
 
             <CallOutcomeCaptureCard

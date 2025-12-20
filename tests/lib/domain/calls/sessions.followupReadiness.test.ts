@@ -10,6 +10,7 @@ describe("buildCallSessionFollowupReadiness", () => {
         outcome_code: "reached_needs_followup",
         outcome_notes: "Follow-up note",
         outcome_recorded_at: "2024-01-01T12:00:00.000Z",
+        reached_customer: true,
       },
     });
     expect(readiness.isReady).toBe(true);
@@ -29,7 +30,7 @@ describe("buildCallSessionFollowupReadiness", () => {
     expect(readiness.reasons).toContain("not_terminal");
   });
 
-  it("reports no_outcome when no outcome data is present even if the call is terminal", () => {
+  it("reports missing_outcome when no outcome data is present even if the call is terminal", () => {
     const readiness = buildCallSessionFollowupReadiness({
       call: {
         twilio_status: "completed",
@@ -39,7 +40,21 @@ describe("buildCallSessionFollowupReadiness", () => {
       },
     });
     expect(readiness.isReady).toBe(false);
-    expect(readiness.reasons).toContain("no_outcome");
+    expect(readiness.reasons).toContain("missing_outcome");
+  });
+
+  it("reports missing_reached_flag when no reached_customer flag has been set", () => {
+    const readiness = buildCallSessionFollowupReadiness({
+      call: {
+        twilio_status: "completed",
+        outcome_notes: "Auto notes",
+        outcome_code: "reached",
+        outcome_recorded_at: "2024-01-01T12:00:00.000Z",
+        reached_customer: null,
+      },
+    });
+    expect(readiness.isReady).toBe(false);
+    expect(readiness.reasons).toContain("missing_reached_flag");
   });
 
   it("reports no_call_session when no call is provided", () => {

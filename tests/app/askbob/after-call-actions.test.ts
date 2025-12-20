@@ -168,7 +168,7 @@ describe("runAskBobJobAfterCallAction", () => {
     });
 
     expect(response.ok).toBe(false);
-    expect(response.code).toBe("not_ready_for_after_call");
+    expect(response.code).toBe("not_ready_missing_outcome");
     expect(runAskBobTaskMock).not.toHaveBeenCalled();
   });
 
@@ -199,6 +199,63 @@ describe("runAskBobJobAfterCallAction", () => {
 
     expect(response.ok).toBe(true);
     expect(runAskBobTaskMock).toHaveBeenCalled();
+  });
+
+  it("allows job_step_8 generation without a call id even when the call session would block", async () => {
+    const pendingCall = {
+      ...callRow,
+      twilio_status: "ringing",
+      outcome_code: null,
+      outcome_notes: null,
+      outcome_recorded_at: null,
+    };
+    supabaseState.responses.calls = { data: [pendingCall], error: null };
+    const taskResult = {
+      afterCallSummary: "Summary",
+      recommendedActionLabel: "Next step",
+      recommendedActionSteps: ["Do thing"],
+      suggestedChannel: "sms",
+      urgencyLevel: "normal",
+      modelLatencyMs: 123,
+    };
+    runAskBobTaskMock.mockResolvedValue(taskResult);
+
+    const response = await runAskBobJobAfterCallAction({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      generationSource: "job_step_8",
+    });
+
+    expect(response.ok).toBe(true);
+    expect(runAskBobTaskMock).toHaveBeenCalledOnce();
+  });
+
+  it("treats an omitted generationSource as job_step_8 and bypasses call-session gating", async () => {
+    const pendingCall = {
+      ...callRow,
+      twilio_status: "ringing",
+      outcome_code: null,
+      outcome_notes: null,
+      outcome_recorded_at: null,
+    };
+    supabaseState.responses.calls = { data: [pendingCall], error: null };
+    const taskResult = {
+      afterCallSummary: "Summary",
+      recommendedActionLabel: "Next step",
+      recommendedActionSteps: ["Do thing"],
+      suggestedChannel: "sms",
+      urgencyLevel: "normal",
+      modelLatencyMs: 123,
+    };
+    runAskBobTaskMock.mockResolvedValue(taskResult);
+
+    const response = await runAskBobJobAfterCallAction({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+    });
+
+    expect(response.ok).toBe(true);
+    expect(runAskBobTaskMock).toHaveBeenCalledOnce();
   });
 
   it("requires a call id when generating from the call session", async () => {
