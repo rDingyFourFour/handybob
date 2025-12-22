@@ -23,6 +23,7 @@ import {
 import JobAskBobFlow from "@/components/askbob/JobAskBobFlow";
 import JobQuotesCard from "@/components/jobs/JobQuotesCard";
 import JobRecentActivityCard from "@/components/jobs/JobRecentActivityCard";
+import JobInvoiceSection from "@/app/(app)/jobs/[id]/JobInvoiceSection";
 import {
   loadCallHistoryForJob,
   computeCallSummarySignals,
@@ -76,6 +77,18 @@ type JobAppointmentRow = {
   start_time: string | null;
   end_time: string | null;
   status: string | null;
+};
+
+type JobInvoiceSnapshotRow = {
+  id: string;
+  quote_id: string | null;
+  created_at: string | null;
+  total_cents: number | null;
+  tax_total_cents: number | null;
+  labor_total_cents: number | null;
+  materials_total_cents: number | null;
+  trip_fee_cents: number | null;
+  currency: string | null;
 };
 
 const appointmentStatusClasses: Record<string, string> = {
@@ -473,6 +486,38 @@ export default async function JobDetailPage(props: {
     callScriptQuoteId,
   });
 
+  let invoice: JobInvoiceSnapshotRow | null = null;
+  try {
+    const { data, error } = await supabase
+      .from<JobInvoiceSnapshotRow>("invoices")
+      .select(
+        `
+          id,
+          quote_id,
+          created_at,
+          total_cents,
+          tax_total_cents,
+          labor_total_cents,
+          materials_total_cents,
+          trip_fee_cents,
+          currency
+        `
+      )
+      .eq("workspace_id", workspace.id)
+      .eq("job_id", job.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[job-detail] Failed to load invoice snapshot", error);
+    } else {
+      invoice = data ?? null;
+    }
+  } catch (error) {
+    console.error("[job-detail] Invoice snapshot query failed", error);
+  }
+
+  const invoiceCreatedLabel = invoice?.created_at ? formatDate(invoice.created_at) : null;
+
   const customer =
     Array.isArray(job.customers) && job.customers.length > 0
       ? job.customers[0]
@@ -657,6 +702,13 @@ export default async function JobDetailPage(props: {
           </div>
         )}
       </HbCard>
+      <JobInvoiceSection
+        workspaceId={workspace.id}
+        jobId={job.id}
+        appliedQuoteId={acceptedQuote?.id ?? null}
+        invoice={invoice}
+        invoiceCreatedLabel={invoiceCreatedLabel}
+      />
       <JobQuotesCard quotes={quotes} quotesError={quotesError} quoteHref={quoteHref} />
       <JobRecentActivityCard jobId={job.id} workspaceId={workspace.id} />
     </div>
