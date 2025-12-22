@@ -4,9 +4,12 @@ import { z } from "zod";
 import {
   AskBobAfterCallSnapshotPayload,
   AskBobCallLiveGuidanceSnapshotPayload,
+  AskBobCallPostEnrichmentSnapshotPayload,
   AskBobContext,
   AskBobDiagnoseSnapshotPayload,
   AskBobJobAfterCallInput,
+  CallPostEnrichmentInput,
+  CallPostEnrichmentResult,
   CallLiveGuidanceInput,
   CallLiveGuidanceResult,
   CallLiveGuidanceMode,
@@ -54,7 +57,9 @@ import {
   callAskBobJobCallScript,
   callAskBobJobAfterCall,
   callAskBobLiveGuidance,
+  callAskBobCallPostEnrichment,
 } from "@/utils/openai/askbob";
+import { isTerminalTwilioDialStatus } from "@/lib/domain/calls/sessions";
 
 type DbClient = SupabaseClient<Database>;
 
@@ -135,6 +140,10 @@ export async function runAskBobTask(
 
   if (input.task === "call.live_guidance") {
     return runAskBobLiveGuidanceTask(supabase, input);
+  }
+
+  if (input.task === "call.post_enrichment") {
+    return runAskBobCallPostEnrichmentTask(supabase, input);
   }
 
   if (input.task === "materials.explain") {
@@ -633,6 +642,78 @@ export async function runAskBobLiveGuidanceTask(
   }
 }
 
+async function runAskBobCallPostEnrichmentTask(
+  supabase: DbClient,
+  input: CallPostEnrichmentInput,
+): Promise<CallPostEnrichmentResult> {
+  const workspaceId = input.workspaceId;
+  const callId = input.callId;
+  const hasNotes = Boolean(input.hasNotes);
+  const hasRecording = Boolean(input.hasRecording);
+  const hasTwilioTerminalStatus = isTerminalTwilioDialStatus(input.twilioStatus);
+  const jobId = input.jobId ?? null;
+
+  console.log("[askbob-call-post-enrichment-request]", {
+    workspaceId,
+    callId,
+    hasNotes,
+    hasRecording,
+    hasTwilioTerminalStatus,
+  });
+
+  try {
+    const modelResult = await callAskBobCallPostEnrichment(input);
+    const result = modelResult.result;
+    console.log("[askbob-call-post-enrichment-success]", {
+      workspaceId,
+      callId,
+      hasNotes,
+      hasRecording,
+      hasTwilioTerminalStatus,
+      modelLatencyMs: modelResult.latencyMs,
+      keyMomentsCount: result.keyMoments.length,
+      riskFlagsCount: result.riskFlags.length,
+      hasSuggestedOutcome: Boolean(result.suggestedOutcomeCode),
+    });
+
+    if (jobId) {
+      try {
+        await recordAskBobJobTaskSnapshot(supabase, {
+          workspaceId,
+          jobId,
+          task: "call.post_enrichment",
+          result,
+          metadata: {
+            callId,
+          },
+        });
+      } catch (snapshotError) {
+        console.error("[askbob-snapshot-upsert] call post enrichment failed", {
+          workspaceId,
+          jobId,
+          callId,
+          error: snapshotError,
+        });
+      }
+    }
+
+    return result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+    console.error("[askbob-call-post-enrichment-failure]", {
+      workspaceId,
+      callId,
+      hasNotes,
+      hasRecording,
+      hasTwilioTerminalStatus,
+      errorMessage: truncatedError,
+    });
+    throw error;
+  }
+}
+
 export async function runAskBobJobScheduleTask(
   input: AskBobJobScheduleInput
 ): Promise<AskBobJobScheduleResult> {
@@ -995,6 +1076,23 @@ function buildCallLiveGuidanceSnapshotPayload(
   };
 }
 
+function buildCallPostEnrichmentSnapshotPayload(
+  result: CallPostEnrichmentResult,
+  metadata: { callId?: string } | undefined,
+): AskBobCallPostEnrichmentSnapshotPayload {
+  return {
+    callId: metadata?.callId ?? "unknown",
+    summaryParagraph: result.summaryParagraph,
+    keyMoments: result.keyMoments,
+    suggestedReachedCustomer: result.suggestedReachedCustomer ?? null,
+    suggestedOutcomeCode: result.suggestedOutcomeCode ?? null,
+    outcomeRationale: result.outcomeRationale ?? null,
+    suggestedFollowupDraft: result.suggestedFollowupDraft,
+    riskFlags: result.riskFlags,
+    confidenceLabel: result.confidenceLabel,
+  };
+}
+
 function buildScheduleSnapshotPayload(
   result: AskBobJobScheduleSnapshotPayload,
 ): AskBobJobScheduleSnapshotPayload {
@@ -1022,7 +1120,8 @@ export async function recordAskBobJobTaskSnapshot(
       | AskBobJobFollowupResult
       | AskBobJobScheduleSnapshotPayload
       | AskBobJobAfterCallResult
-      | CallLiveGuidanceResult;
+      | CallLiveGuidanceResult
+      | CallPostEnrichmentResult;
     metadata?: {
       callId?: string;
       guidanceMode?: CallLiveGuidanceMode;
@@ -1040,6 +1139,7 @@ export async function recordAskBobJobTaskSnapshot(
     | AskBobFollowupSnapshotPayload
     | AskBobJobScheduleSnapshotPayload
     | AskBobCallLiveGuidanceSnapshotPayload
+    | AskBobCallPostEnrichmentSnapshotPayload
     | null = null;
   let summary: string | null = null;
 
@@ -1086,6 +1186,12 @@ export async function recordAskBobJobTaskSnapshot(
       const result = params.result as CallLiveGuidanceResult;
       payload = buildCallLiveGuidanceSnapshotPayload(result, params.metadata, params.jobId);
       summary = `guidance:${payload.guidanceMode}`;
+      break;
+    }
+    case "call.post_enrichment": {
+      const result = params.result as CallPostEnrichmentResult;
+      payload = buildCallPostEnrichmentSnapshotPayload(result, params.metadata);
+      summary = `moments:${payload.keyMoments.length},risk:${payload.riskFlags.length}`;
       break;
     }
   }
@@ -1195,6 +1301,17 @@ const afterCallSnapshotSchema = z.object({
   notesForTech: z.string().optional().nullable(),
   modelLatencyMs: z.number().optional().nullable(),
 });
+const callPostEnrichmentSnapshotSchema = z.object({
+  callId: z.string().min(1),
+  summaryParagraph: z.string(),
+  keyMoments: z.array(z.string()),
+  suggestedReachedCustomer: z.boolean().optional().nullable(),
+  suggestedOutcomeCode: z.string().optional().nullable(),
+  outcomeRationale: z.string().optional().nullable(),
+  suggestedFollowupDraft: z.string(),
+  riskFlags: z.array(z.string()),
+  confidenceLabel: z.enum(["low", "medium", "high"]),
+});
 
 export async function getJobAskBobSnapshotsForJob(
   supabase: DbClient,
@@ -1205,6 +1322,7 @@ export async function getJobAskBobSnapshotsForJob(
   quoteSnapshot: AskBobQuoteSnapshotPayload | null;
   followupSnapshot: AskBobFollowupSnapshotPayload | null;
   afterCallSnapshot: AskBobAfterCallSnapshotPayload | null;
+  postCallEnrichmentSnapshot: AskBobCallPostEnrichmentSnapshotPayload | null;
 }> {
   const rows = await getJobTaskSnapshotsForJob(supabase, params);
   const snapshots = {
@@ -1213,6 +1331,7 @@ export async function getJobAskBobSnapshotsForJob(
     quoteSnapshot: null,
     followupSnapshot: null,
     afterCallSnapshot: null,
+    postCallEnrichmentSnapshot: null,
   };
   const counts = {
     diagnose: 0,
@@ -1220,6 +1339,7 @@ export async function getJobAskBobSnapshotsForJob(
     quote: 0,
     followup: 0,
     afterCall: 0,
+    postCallEnrichment: 0,
   };
 
   for (const row of rows) {
@@ -1302,11 +1422,31 @@ export async function getJobAskBobSnapshotsForJob(
         }
         break;
       }
+      case "call.post_enrichment": {
+        const parsed = callPostEnrichmentSnapshotSchema.safeParse(row.payload);
+        if (parsed.success) {
+          snapshots.postCallEnrichmentSnapshot = parsed.data;
+          counts.postCallEnrichment += 1;
+        } else {
+          console.warn("[askbob-snapshot-decode-error]", {
+            workspaceId: params.workspaceId,
+            jobId: params.jobId,
+            task: row.task,
+            errors: parsed.error.errors.map((error) => error.message),
+          });
+        }
+        break;
+      }
     }
   }
 
   const totalLoaded =
-    counts.diagnose + counts.materials + counts.quote + counts.followup + counts.afterCall;
+    counts.diagnose +
+    counts.materials +
+    counts.quote +
+    counts.followup +
+    counts.afterCall +
+    counts.postCallEnrichment;
   if (totalLoaded > 0) {
     console.log("[askbob-snapshot-load]", {
       workspaceId: params.workspaceId,
@@ -1328,6 +1468,7 @@ const TASK_LABELS: Record<AskBobTask, string> = {
   "job.followup": "Suggested follow-up action",
   "job.schedule": "Scheduled appointment",
   "job.after_call": "Summarized last call",
+  "call.post_enrichment": "Summarized call recap",
 };
 
 const TASK_SHORT_LABELS: Record<AskBobTask, string> = {
@@ -1340,6 +1481,7 @@ const TASK_SHORT_LABELS: Record<AskBobTask, string> = {
   "job.followup": "follow-up",
   "job.schedule": "scheduled appointment",
   "job.after_call": "after call",
+  "call.post_enrichment": "post call recap",
 };
 
 export async function getJobAskBobHudSummary(

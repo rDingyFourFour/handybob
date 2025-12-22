@@ -80,7 +80,13 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
   it("does not use cache when the outcome is already recorded", async () => {
     window.sessionStorage.setItem(
       "askbob-call-outcome-prefill-call-prefill-existing",
-      JSON.stringify({ outcomeCode: "reached_needs_followup" }),
+      JSON.stringify({
+        callId: "call-prefill-existing",
+        workspaceId: "workspace-1",
+        suggestedOutcomeCode: "reached_needs_followup",
+        suggestedReachedCustomer: true,
+        suggestedNotes: "Follow up soon",
+      }),
     );
 
     if (!root) {
@@ -113,9 +119,11 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
     window.sessionStorage.setItem(
       "askbob-call-outcome-prefill-call-prefill-hit",
       JSON.stringify({
-        outcomeCode: "reached_needs_followup",
-        reachedCustomer: true,
-        notes: "Follow up soon",
+        callId: "call-prefill-hit",
+        workspaceId: "workspace-1",
+        suggestedOutcomeCode: "reached_needs_followup",
+        suggestedReachedCustomer: true,
+        suggestedNotes: "Follow up soon",
       }),
     );
 
@@ -133,8 +141,11 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
     expect(
       window.sessionStorage.getItem("askbob-call-outcome-prefill-call-prefill-hit"),
     ).toBeNull();
-    expect(spy).toHaveBeenCalledWith("[calls-outcome-prefill-cache-hit]", {
+    expect(spy).toHaveBeenCalledWith("[calls-outcome-prefill-suggested-hit]", {
       callId: "call-prefill-hit",
+      workspaceId: "workspace-1",
+      reason: null,
+      source: "mount",
     });
   });
 
@@ -152,8 +163,88 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
     const selectedValue = selectedOption?.value ?? "";
     expect(selectedValue).toBe("");
     expect(textarea?.dataset.editingNotes ?? "").toBe("");
-    expect(spy).toHaveBeenCalledWith("[calls-outcome-prefill-cache-miss]", {
+    expect(spy).toHaveBeenCalledWith("[calls-outcome-prefill-suggested-miss]", {
       callId: "call-prefill-miss",
+      workspaceId: "workspace-1",
+      reason: "no_payload",
+      source: "mount",
+    });
+  });
+
+  it("hydrates suggestions when the form is still untouched", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    renderCard("call-prefill-event");
+    await flushReactUpdates();
+
+    window.sessionStorage.setItem(
+      "askbob-call-outcome-prefill-call-prefill-event",
+      JSON.stringify({
+        callId: "call-prefill-event",
+        workspaceId: "workspace-1",
+        suggestedOutcomeCode: "reached_needs_followup",
+        suggestedReachedCustomer: false,
+        suggestedNotes: "Left a voicemail",
+      }),
+    );
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent("calls-outcome-prefill-suggested"));
+    });
+    await flushReactUpdates();
+
+    const select = container.querySelector<HTMLSelectElement>("select[name='outcomeCode']");
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea[name='notes']");
+    expect(select?.value).toBe("reached_needs_followup");
+    expect(textarea?.value).toBe("Left a voicemail");
+    expect(
+      window.sessionStorage.getItem("askbob-call-outcome-prefill-call-prefill-event"),
+    ).toBeNull();
+    expect(spy).toHaveBeenCalledWith("[calls-outcome-prefill-suggested-hit]", {
+      callId: "call-prefill-event",
+      workspaceId: "workspace-1",
+      reason: null,
+      source: "event",
+    });
+  });
+
+  it("does not overwrite user edits with a suggestion", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    renderCard("call-prefill-dirty");
+    await flushReactUpdates();
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea[name='notes']");
+    act(() => {
+      if (textarea) {
+        textarea.value = "User typed notes";
+        textarea.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    await flushReactUpdates();
+
+    window.sessionStorage.setItem(
+      "askbob-call-outcome-prefill-call-prefill-dirty",
+      JSON.stringify({
+        callId: "call-prefill-dirty",
+        workspaceId: "workspace-1",
+        suggestedOutcomeCode: "reached_scheduled",
+        suggestedReachedCustomer: true,
+        suggestedNotes: "Auto suggestion",
+      }),
+    );
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent("calls-outcome-prefill-suggested"));
+    });
+    await flushReactUpdates();
+
+    expect(textarea?.value).toBe("User typed notes");
+    expect(spy).toHaveBeenCalledWith("[calls-outcome-prefill-suggested-miss]", {
+      callId: "call-prefill-dirty",
+      workspaceId: "workspace-1",
+      reason: "dirty",
+      source: "event",
     });
   });
 

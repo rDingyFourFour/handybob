@@ -123,18 +123,32 @@ describe("AskBob snapshots", () => {
         modelLatencyMs: 250,
       },
     },
-    {
-      task: "job.after_call",
-      payload: {
-        afterCallSummary: "Spoke with the customer about the leak",
-        recommendedActionLabel: "Send confirmation",
-        recommendedActionSteps: ["Confirm visit window", "Log call details"],
-        suggestedChannel: "sms",
-        urgencyLevel: "normal",
-        notesForTech: "Check the attic access during the follow-up",
-        modelLatencyMs: 180,
+      {
+        task: "job.after_call",
+        payload: {
+          afterCallSummary: "Spoke with the customer about the leak",
+          recommendedActionLabel: "Send confirmation",
+          recommendedActionSteps: ["Confirm visit window", "Log call details"],
+          suggestedChannel: "sms",
+          urgencyLevel: "normal",
+          notesForTech: "Check the attic access during the follow-up",
+          modelLatencyMs: 180,
+        },
       },
-    },
+      {
+        task: "call.post_enrichment",
+        payload: {
+          callId: "call-1",
+          summaryParagraph: "Customer confirmed next steps.",
+          keyMoments: ["Confirmed appointment"],
+          suggestedReachedCustomer: true,
+          suggestedOutcomeCode: "reached_scheduled",
+          outcomeRationale: "Confirmed on call",
+          suggestedFollowupDraft: "Thanks for confirming.",
+          riskFlags: ["Access needed"],
+          confidenceLabel: "high",
+        },
+      },
   ];
 
     const state = setupSupabaseMock({
@@ -152,5 +166,8 @@ describe("AskBob snapshots", () => {
     expect(snapshots.quoteSnapshot?.lines?.[0]?.description).toBe("Service");
     expect(snapshots.followupSnapshot?.steps?.[0]?.label).toBe("Call customer");
     expect(snapshots.afterCallSnapshot?.recommendedActionLabel).toBe("Send confirmation");
+    expect(snapshots.postCallEnrichmentSnapshot?.summaryParagraph).toBe(
+      "Customer confirmed next steps.",
+    );
   });
 });

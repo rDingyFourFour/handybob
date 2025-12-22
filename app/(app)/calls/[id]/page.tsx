@@ -31,6 +31,7 @@ import {
 } from "@/lib/domain/askbob/constants";
 import { formatTwilioStatusLabel } from "@/utils/calls/twilioStatusLabel";
 import { getAutomatedCallVoiceLabel } from "@/lib/domain/askbob/automatedCallConfig";
+import { getJobAskBobSnapshotsForJob } from "@/lib/domain/askbob/service";
 import {
   buildCallAutomatedDialSnapshot,
   buildCallSessionFollowupReadiness,
@@ -40,6 +41,7 @@ import {
 } from "@/lib/domain/calls/sessions";
 import LinkCallContextCard from "./LinkCallContextCard";
 import AskBobLiveGuidanceCard from "./AskBobLiveGuidanceCard";
+import PostCallEnrichmentCard from "./PostCallEnrichmentCard";
 
 type CallRecord = {
   id: string;
@@ -325,6 +327,71 @@ export default async function CallSessionPage({
     dialSnapshot: automatedDialSnapshot,
   });
 
+  let askBobAfterCallSnapshot = null;
+  let askBobPostCallEnrichmentSnapshot = null;
+  if (jobId) {
+    try {
+      const snapshots = await getJobAskBobSnapshotsForJob(supabase, {
+        workspaceId: workspace.id,
+        jobId,
+      });
+      askBobAfterCallSnapshot = snapshots.afterCallSnapshot ?? null;
+      askBobPostCallEnrichmentSnapshot = snapshots.postCallEnrichmentSnapshot ?? null;
+    } catch (error) {
+      console.error("[calls/[id]/page] Failed to load AskBob snapshots for job", {
+        workspaceId: workspace.id,
+        jobId,
+        error,
+      });
+    }
+  }
+
+  const callHasOutcome =
+    Boolean(call.outcome_recorded_at) ||
+    Boolean(call.outcome_code) ||
+    Boolean(call.outcome_notes?.trim());
+  const callHasReachedFlag =
+    call.reached_customer === true || call.reached_customer === false;
+  const callHasNotes = Boolean(
+    call.summary?.trim() ||
+      call.ai_summary?.trim() ||
+      call.outcome_notes?.trim() ||
+      call.transcript?.trim(),
+  );
+  const callSessionEnrichment = {
+    isTerminal: automatedDialSnapshot.isTerminal,
+    hasOutcome: callHasOutcome,
+    hasReachedFlag: callHasReachedFlag,
+    hasNotes: callHasNotes,
+    hasRecordingMetadata: automatedDialSnapshot.hasRecordingMetadata,
+    hasAskBobDraft: Boolean(askBobAfterCallSnapshot?.draftMessageBody?.trim()),
+  };
+
+  console.log("[calls-session-post-call-enrichment-visible]", {
+    workspaceId: workspace.id,
+    callId: call.id,
+    direction: callDirectionNormalized,
+    isTerminal: callSessionEnrichment.isTerminal,
+    hasOutcome: callSessionEnrichment.hasOutcome,
+    hasReachedFlag: callSessionEnrichment.hasReachedFlag,
+    hasNotes: callSessionEnrichment.hasNotes,
+    hasRecordingMetadata: callSessionEnrichment.hasRecordingMetadata,
+    hasAskBobDraft: callSessionEnrichment.hasAskBobDraft,
+  });
+  const postCallEnrichmentResult =
+    askBobPostCallEnrichmentSnapshot?.callId === call.id
+      ? {
+          summaryParagraph: askBobPostCallEnrichmentSnapshot.summaryParagraph,
+          keyMoments: askBobPostCallEnrichmentSnapshot.keyMoments,
+          suggestedReachedCustomer: askBobPostCallEnrichmentSnapshot.suggestedReachedCustomer,
+          suggestedOutcomeCode: askBobPostCallEnrichmentSnapshot.suggestedOutcomeCode,
+          outcomeRationale: askBobPostCallEnrichmentSnapshot.outcomeRationale,
+          suggestedFollowupDraft: askBobPostCallEnrichmentSnapshot.suggestedFollowupDraft,
+          riskFlags: askBobPostCallEnrichmentSnapshot.riskFlags,
+          confidenceLabel: askBobPostCallEnrichmentSnapshot.confidenceLabel,
+        }
+      : null;
+
   if (isAskBobAutomatedCall) {
     console.log("[calls-session-askbob-automated-details-visible]", {
       callId: call.id,
@@ -334,10 +401,7 @@ export default async function CallSessionPage({
       voicemailEnabledKnown: voicemailEnabled !== null,
     });
   }
-  const hasExistingOutcome =
-    Boolean(call.outcome_recorded_at) ||
-    Boolean(call.outcome_code) ||
-    Boolean(call.outcome_notes?.trim());
+  const hasExistingOutcome = callHasOutcome;
   if (hasExistingOutcome) {
     console.log("[calls-session-outcome-visible]", {
       workspaceId: workspace.id,
@@ -845,6 +909,18 @@ export default async function CallSessionPage({
               />
             )}
 
+            <PostCallEnrichmentCard
+              workspaceId={workspace.id}
+              callId={call.id}
+              jobId={jobId}
+              customerId={customerId}
+              direction={call.direction ?? null}
+              isTerminal={callSessionEnrichment.isTerminal}
+              hasRecordingMetadata={callSessionEnrichment.hasRecordingMetadata}
+              hasOutcome={callSessionEnrichment.hasOutcome}
+              initialResult={postCallEnrichmentResult}
+            />
+
             <div className="space-y-1">
               <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call workspace</p>
               <h2 className="hb-heading-3 text-xl font-semibold text-white">
@@ -961,6 +1037,12 @@ export default async function CallSessionPage({
                 callReadiness={callReadiness}
                 generationSource="call_session"
                 automatedDialSnapshot={automatedDialSnapshot}
+                callSessionEnrichment={callSessionEnrichment}
+                isAskBobAutomatedCall={isAskBobAutomatedCall}
+                callDirection={call.direction ?? null}
+                reachedCustomer={call.reached_customer}
+                outcomeCode={call.outcome_code}
+                callSessionDraftBody={askBobAfterCallSnapshot?.draftMessageBody ?? null}
               />
             )}
 

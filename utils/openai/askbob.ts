@@ -19,6 +19,9 @@ import type {
   AskBobJobCallScriptResult,
   AskBobJobAfterCallInput,
   AskBobJobAfterCallResult,
+  CallPostEnrichmentInput,
+  CallPostEnrichmentResult,
+  CallPostEnrichmentConfidenceLabel,
   CallLiveGuidanceInput,
   CallLiveGuidanceResult,
   CallLiveGuidanceMode,
@@ -45,6 +48,8 @@ import type {
   AskBobCallIntent,
   AskBobCallPersonaStyle,
 } from "@/lib/domain/askbob/types";
+import { CALL_OUTCOME_CODE_VALUES } from "@/lib/domain/communications/callOutcomes";
+import { sanitizeAutomatedCallNotes } from "@/lib/domain/calls/sessions";
 
 import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
 
@@ -72,6 +77,8 @@ const MAX_MATERIAL_EXPLANATION_ITEMS = 25;
 const MAX_FOLLOWUP_STEPS = 10;
 const MAX_SCHEDULE_SUGGESTIONS = 3;
 const MAX_AFTER_CALL_STEPS = 6;
+const MAX_POST_ENRICHMENT_MOMENTS = 6;
+const MAX_POST_ENRICHMENT_RISK_FLAGS = 5;
 
 const JOB_DIAGNOSE_INSTRUCTIONS = [
   ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
@@ -317,6 +324,22 @@ const AFTER_CALL_INSTRUCTIONS = [
   SCOPE_LIMIT_GUARDRAILS,
 ].join(" ");
 
+const POST_CALL_ENRICHMENT_INSTRUCTIONS = [
+  ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
+  "You are AskBob, the HandyBob post-call enrichment assistant. Use only the call metadata and technician notes provided. Do not invent facts or outcomes that are not explicitly supported by those inputs.",
+  "Respond with strict JSON only (no surrounding prose) containing the keys: summaryParagraph, keyMoments, suggestedReachedCustomer, suggestedOutcomeCode, outcomeRationale, suggestedFollowupDraft, riskFlags, confidenceLabel.",
+  "summaryParagraph should be a concise recap (2-4 sentences) grounded in the notes and metadata. If details are missing, say so briefly without guessing.",
+  "keyMoments should be a short list of concrete events or decisions. Use an empty array if none are supported.",
+  "suggestedReachedCustomer must be true, false, or null when unknown.",
+  `suggestedOutcomeCode must be one of: ${CALL_OUTCOME_CODE_VALUES.join(", ")}. Use null if unsure.`,
+  "outcomeRationale should briefly explain why you suggested the outcome, or be null if not enough detail exists.",
+  "suggestedFollowupDraft should be plain text and ready to send. Keep it polite, neutral, and grounded in known facts only.",
+  "riskFlags should be short phrases about potential risks, constraints, or follow-up blockers. Use an empty array if none.",
+  "confidenceLabel must be low, medium, or high based on the strength of the provided notes and metadata.",
+  SAFETY_GUARDRAILS,
+  SCOPE_LIMIT_GUARDRAILS,
+].join(" ");
+
 const MESSAGE_DRAFT_INSTRUCTIONS = [
   ASKBOB_PROFESSIONAL_VOICE_FRAGMENT,
   "You are AskBob, a technician assistant for HandyBob. Respond with a JSON object only (no surrounding prose) containing the keys: body (required, a brief customer-facing message), suggestedChannel (optional, 'sms' or 'email'), and summary (optional, a short explanation of the messaging goal). Keep the tone professional and respectful, and avoid emojis, slang, and excessive exclamation points.",
@@ -400,6 +423,12 @@ type CallAskBobJobCallScriptResult = {
 
 type CallAskBobJobAfterCallResult = {
   result: AskBobJobAfterCallResult;
+  latencyMs: number;
+  modelName: string;
+};
+
+type CallAskBobCallPostEnrichmentResult = {
+  result: CallPostEnrichmentResult;
   latencyMs: number;
   modelName: string;
 };
@@ -1106,6 +1135,19 @@ function buildAutomatedCallNotesPrompt(notes?: string | null) {
   return `Call notes:\n${truncated}`;
 }
 
+function describePostEnrichmentNotesBucket(length: number): string {
+  if (length === 0) {
+    return "empty";
+  }
+  if (length <= 200) {
+    return "short";
+  }
+  if (length <= 500) {
+    return "medium";
+  }
+  return "long";
+}
+
 export async function callAskBobJobAfterCall(
   input: AskBobJobAfterCallInput,
 ): Promise<CallAskBobJobAfterCallResult> {
@@ -1284,6 +1326,188 @@ export async function callAskBobJobAfterCall(
       latencyMs,
       success: false,
       task: "job.after_call",
+      errorMessage: truncatedError,
+    });
+
+    throw error;
+  }
+}
+
+export async function callAskBobCallPostEnrichment(
+  input: CallPostEnrichmentInput,
+): Promise<CallAskBobCallPostEnrichmentResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured for AskBob.");
+  }
+
+  const notesText = input.notesText?.trim() ?? null;
+  const sanitizedNotes = notesText ? sanitizeAutomatedCallNotes(notesText) : null;
+  const notesLengthBucket = describePostEnrichmentNotesBucket(sanitizedNotes?.length ?? 0);
+  const hasNotes = Boolean(sanitizedNotes);
+
+  console.log("[askbob-call-post-enrichment-prompt]", {
+    workspaceId: input.workspaceId,
+    callId: input.callId,
+    hasNotes,
+    hasNotesLengthBucket: notesLengthBucket,
+  });
+
+  const metadataLines = [
+    `Call ID: ${input.callId}`,
+    `Direction: ${input.direction ?? "unknown"}`,
+    `From: ${input.fromNumber ?? "unknown"}`,
+    `To: ${input.toNumber ?? "unknown"}`,
+    `Twilio status: ${input.twilioStatus ?? "unknown"}`,
+    `Recording available: ${input.hasRecording ? "yes" : "no"}`,
+    `Notes present: ${input.hasNotes ? "yes" : "no"}`,
+  ];
+
+  const notesBlock = sanitizedNotes ? `Technician notes:\n${sanitizedNotes}` : null;
+  const messageParts = [`Call metadata:\n${metadataLines.join("\n")}`, notesBlock]
+    .filter((part): part is string => Boolean(part))
+    .join("\n\n");
+
+  const openai = new OpenAI({ apiKey });
+  const modelRequestStart = Date.now();
+  let modelName = DEFAULT_MODEL;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: "system", content: POST_CALL_ENRICHMENT_INSTRUCTIONS },
+        { role: "user", content: messageParts },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    modelName = completion.model ?? DEFAULT_MODEL;
+    const messageContent = completion.choices?.[0]?.message?.content;
+    const payload = extractModelPayload(messageContent, {
+      workspaceId: input.workspaceId,
+      model: modelName,
+    });
+
+    const summaryParagraph = normalizeNullableString(payload.summaryParagraph);
+    if (!summaryParagraph) {
+      throw new Error("AskBob post enrichment response is missing a summary.");
+    }
+
+    const rawKeyMoments = ensureStringArray(payload.keyMoments);
+    const { items: keyMoments, truncatedCount: keyMomentsTruncated } = limitArray(
+      rawKeyMoments,
+      MAX_POST_ENRICHMENT_MOMENTS,
+    );
+    if (keyMomentsTruncated > 0) {
+      console.log("[askbob-post-enrichment-truncated]", {
+        workspaceId: input.workspaceId,
+        callId: input.callId,
+        keyMomentsBefore: rawKeyMoments.length,
+        keyMomentsAfter: keyMoments.length,
+      });
+    }
+
+    const suggestedReachedCustomer = (() => {
+      if (typeof payload.suggestedReachedCustomer === "boolean") {
+        return payload.suggestedReachedCustomer;
+      }
+      const normalized = normalizeNullableString(payload.suggestedReachedCustomer)?.toLowerCase();
+      if (!normalized) {
+        return null;
+      }
+      if (["true", "yes", "reached"].includes(normalized)) {
+        return true;
+      }
+      if (["false", "no", "not reached", "no_answer"].includes(normalized)) {
+        return false;
+      }
+      return null;
+    })();
+
+    const suggestedOutcomeCodeRaw = normalizeNullableString(payload.suggestedOutcomeCode);
+    const suggestedOutcomeCode =
+      suggestedOutcomeCodeRaw &&
+      CALL_OUTCOME_CODE_VALUES.includes(
+        suggestedOutcomeCodeRaw as (typeof CALL_OUTCOME_CODE_VALUES)[number],
+      )
+        ? suggestedOutcomeCodeRaw
+        : null;
+
+    const outcomeRationale = normalizeNullableString(payload.outcomeRationale);
+
+    const suggestedFollowupDraft = normalizeNullableString(payload.suggestedFollowupDraft);
+    if (!suggestedFollowupDraft) {
+      throw new Error("AskBob post enrichment response is missing a follow-up draft.");
+    }
+
+    const rawRiskFlags = ensureStringArray(payload.riskFlags);
+    const { items: riskFlags, truncatedCount: riskFlagsTruncated } = limitArray(
+      rawRiskFlags,
+      MAX_POST_ENRICHMENT_RISK_FLAGS,
+    );
+    if (riskFlagsTruncated > 0) {
+      console.log("[askbob-post-enrichment-truncated]", {
+        workspaceId: input.workspaceId,
+        callId: input.callId,
+        riskFlagsBefore: rawRiskFlags.length,
+        riskFlagsAfter: riskFlags.length,
+      });
+    }
+
+    const confidenceRaw = normalizeNullableString(payload.confidenceLabel)?.toLowerCase();
+    const confidenceLabel: CallPostEnrichmentConfidenceLabel =
+      confidenceRaw === "low" || confidenceRaw === "high" || confidenceRaw === "medium"
+        ? (confidenceRaw as CallPostEnrichmentConfidenceLabel)
+        : "medium";
+
+    const latencyMs = Date.now() - modelRequestStart;
+    console.log("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: input.workspaceId,
+      callId: input.callId,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: true,
+      task: "call.post_enrichment",
+    });
+
+    const result: CallPostEnrichmentResult = {
+      summaryParagraph,
+      keyMoments,
+      suggestedReachedCustomer,
+      suggestedOutcomeCode,
+      outcomeRationale,
+      suggestedFollowupDraft,
+      riskFlags,
+      confidenceLabel,
+    };
+
+    return {
+      result,
+      latencyMs,
+      modelName,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - modelRequestStart;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const truncatedError =
+      errorMessage.length <= 200 ? errorMessage : `${errorMessage.slice(0, 197)}...`;
+
+    console.error("[askbob-model-call]", {
+      model: modelName,
+      workspaceId: input.workspaceId,
+      callId: input.callId,
+      promptLength: messageParts.length,
+      latencyMs,
+      success: false,
+      task: "call.post_enrichment",
+      errorMessage: truncatedError,
+    });
+
+    console.error("[askbob-call-post-enrichment-failure]", {
+      workspaceId: input.workspaceId,
+      callId: input.callId,
       errorMessage: truncatedError,
     });
 

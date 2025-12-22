@@ -36,6 +36,8 @@ type CachedAskBobDraft = {
   origin: string;
   jobId?: string | null;
   customerId?: string | null;
+  workspaceId?: string | null;
+  callId?: string | null;
 };
 
 const DRAFT_KEY_TTL_MS = 1000 * 60 * 30;
@@ -197,6 +199,7 @@ export default function GlobalComposer({
       return;
     }
     draftKeyHydrationRef.current = { key: initialBodyKey, attempted: true };
+    const isCallSessionOriginParam = initialOrigin === "call_session_after_call";
     const logBase = {
       origin: initialOrigin ?? null,
       hasDraftKey: true,
@@ -209,7 +212,8 @@ export default function GlobalComposer({
         console.error("[messages-global-composer] could not clear cached draft", error);
       }
     };
-    if (messageBody.trim().length > 0 || initialBodyValue.length > 0) {
+    const shouldSkipOverwrite = messageBody.trim().length > 0 || initialBodyValue.length > 0;
+    if (!isCallSessionOriginParam && shouldSkipOverwrite) {
       if (typeof window !== "undefined") {
         clearStoredDraft();
       }
@@ -277,11 +281,41 @@ export default function GlobalComposer({
       setDraftKeyHint("expired");
       return;
     }
+    if (!payload.body.trim()) {
+      clearStoredDraft();
+      console.log("[messages-compose-draftkey-cache-miss]", {
+        ...logBase,
+        reason: "invalid_payload",
+      });
+      setDraftKeyHint("invalid_payload");
+      return;
+    }
+    const isCallSessionPayload = payload.origin === "call_session_after_call";
+    if (!isCallSessionPayload && shouldSkipOverwrite) {
+      clearStoredDraft();
+      console.log("[messages-compose-draftkey-cache-miss]", {
+        ...logBase,
+        reason: "skipped_overwrite",
+      });
+      setDraftKeyHint(null);
+      return;
+    }
     clearStoredDraft();
     console.log("[messages-compose-draftkey-cache-hit]", {
       ...logBase,
       bodyLength: payload.body.length,
     });
+    if (isCallSessionPayload) {
+      const applied = !shouldSkipOverwrite;
+      console.log("[messages-compose-draftkey-origin-call-session]", {
+        ...logBase,
+        applied,
+      });
+      if (!applied) {
+        setDraftKeyHint(null);
+        return;
+      }
+    }
     startTransition(() => {
       setMessageBody(payload.body);
     });

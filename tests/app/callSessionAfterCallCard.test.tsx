@@ -1,6 +1,6 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 const mockRunAction = vi.fn();
 const mockCacheResult = vi.fn();
@@ -63,6 +63,14 @@ describe("AskBobAfterCallCard", () => {
     hasOutcomeNotes: true,
     reachedCustomer: true,
   };
+  const baseEnrichment = {
+    isTerminal: true,
+    hasOutcome: true,
+    hasReachedFlag: true,
+    hasNotes: true,
+    hasRecordingMetadata: true,
+    hasAskBobDraft: false,
+  };
 
   beforeEach(() => {
     container = document.createElement("div");
@@ -80,6 +88,7 @@ describe("AskBobAfterCallCard", () => {
       root = null;
     }
     container.remove();
+    vi.restoreAllMocks();
   });
 
   function flushReactUpdates(iterations = 5) {
@@ -239,6 +248,206 @@ describe("AskBobAfterCallCard", () => {
     expect(container.textContent).toContain("Outcome saved. You can now generate a follow-up.");
   });
 
+  it("renders post call status labels for automated or inbound calls", () => {
+    act(() => {
+      root?.render(
+        <AskBobAfterCallCard
+          callId="call-1"
+          jobId="job-1"
+          workspaceId="workspace-1"
+          customerId="customer-1"
+          hasAskBobScriptBody
+          callNotes="Script body"
+          hasHumanNotes
+          hasOutcomeSaved
+          hasOutcomeNotes
+          callReadiness={readyReadiness}
+          callSessionEnrichment={baseEnrichment}
+          isAskBobAutomatedCall
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain("Post call status");
+    expect(container.textContent).toContain("Terminal");
+    expect(container.textContent).toContain("Recorded");
+    expect(container.textContent).toContain("Present");
+  });
+
+  it("follows CTA label rules across readiness and draft states", () => {
+    act(() => {
+      root?.render(
+        <AskBobAfterCallCard
+          callId="call-1"
+          jobId="job-1"
+          workspaceId="workspace-1"
+          customerId="customer-1"
+          hasAskBobScriptBody
+          callNotes="Script body"
+          hasHumanNotes
+          hasOutcomeSaved
+          hasOutcomeNotes
+          callReadiness={notTerminalReadiness}
+          callSessionEnrichment={{ ...baseEnrichment, hasAskBobDraft: true }}
+        />,
+      );
+    });
+
+    const disabledButton = container.querySelector("button");
+    expect(disabledButton?.hasAttribute("disabled")).toBe(true);
+    expect(disabledButton?.textContent).toContain("Generate follow-up");
+
+    act(() => {
+      root?.render(
+        <AskBobAfterCallCard
+          callId="call-1"
+          jobId="job-1"
+          workspaceId="workspace-1"
+          customerId="customer-1"
+          hasAskBobScriptBody
+          callNotes="Script body"
+          hasHumanNotes
+          hasOutcomeSaved
+          hasOutcomeNotes
+          callReadiness={readyReadiness}
+        />,
+      );
+    });
+
+    const generateButton = container.querySelector("button");
+    expect(generateButton?.hasAttribute("disabled")).toBe(false);
+    expect(generateButton?.textContent).toContain("Generate follow-up");
+
+    act(() => {
+      root?.render(
+        <AskBobAfterCallCard
+          callId="call-1"
+          jobId="job-1"
+          workspaceId="workspace-1"
+          customerId="customer-1"
+          hasAskBobScriptBody
+          callNotes="Script body"
+          hasHumanNotes
+          hasOutcomeSaved
+          hasOutcomeNotes
+          callReadiness={readyReadiness}
+          callSessionEnrichment={{ ...baseEnrichment, hasAskBobDraft: true }}
+          callSessionDraftBody="Draft body"
+        />,
+      );
+    });
+
+    const regenerateButton = container.querySelector("button");
+    expect(regenerateButton?.textContent).toContain("Regenerate follow-up");
+  });
+
+  it("shows suggested channel only when readiness is ready and logs visibility", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    act(() => {
+      root?.render(
+        <AskBobAfterCallCard
+          callId="call-1"
+          jobId="job-1"
+          workspaceId="workspace-1"
+          customerId="customer-1"
+          hasAskBobScriptBody
+          callNotes="Script body"
+          hasHumanNotes
+          hasOutcomeSaved
+          hasOutcomeNotes
+          callReadiness={readyReadiness}
+          reachedCustomer
+        />,
+      );
+    });
+
+    await flushReactUpdates();
+    expect(container.textContent).toContain("Suggested channel");
+    const channelLog = logSpy.mock.calls.find(
+      (entry) => entry[0] === "[calls-after-call-suggested-channel-visible]",
+    );
+    expect(channelLog).toBeTruthy();
+    logSpy.mockRestore();
+
+    act(() => {
+      root?.render(
+        <AskBobAfterCallCard
+          callId="call-1"
+          jobId="job-1"
+          workspaceId="workspace-1"
+          customerId="customer-1"
+          hasAskBobScriptBody
+          callNotes="Script body"
+          hasHumanNotes
+          hasOutcomeSaved
+          hasOutcomeNotes
+          callReadiness={notTerminalReadiness}
+          reachedCustomer
+        />,
+      );
+    });
+
+    await flushReactUpdates();
+    expect(container.textContent).not.toContain("Suggested channel");
+  });
+
+  it("only enables open composer when readiness is ready and draft exists", async () => {
+    act(() => {
+      root?.render(
+        <AskBobAfterCallCard
+          callId="call-1"
+          jobId="job-1"
+          workspaceId="workspace-1"
+          customerId="customer-1"
+          hasAskBobScriptBody
+          callNotes="Script body"
+          hasHumanNotes
+          hasOutcomeSaved
+          hasOutcomeNotes
+          callReadiness={notTerminalReadiness}
+          callSessionDraftBody="Draft body"
+        />,
+      );
+    });
+
+    expect(container.textContent).not.toContain("Open composer with this draft");
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    act(() => {
+      root?.render(
+        <AskBobAfterCallCard
+          callId="call-1"
+          jobId="job-1"
+          workspaceId="workspace-1"
+          customerId="customer-1"
+          hasAskBobScriptBody
+          callNotes="Script body"
+          hasHumanNotes
+          hasOutcomeSaved
+          hasOutcomeNotes
+          callReadiness={readyReadiness}
+          callSessionDraftBody="Draft body"
+        />,
+      );
+    });
+
+    await flushReactUpdates();
+    const openButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Open composer"),
+    );
+    expect(openButton).toBeTruthy();
+    if (openButton) {
+      act(() => {
+        openButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+    }
+    const openComposerLogEntry = logSpy.mock.calls.find(
+      (entry) => entry[0] === "[calls-after-call-open-composer-click]",
+    );
+    expect(openComposerLogEntry).toBeTruthy();
+    logSpy.mockRestore();
+  });
+
   it("shows summary and draft once AskBob returns a result", async () => {
     mockRunAction.mockResolvedValue({
       ok: true,
@@ -271,11 +480,11 @@ describe("AskBobAfterCallCard", () => {
           hasOutcomeSaved
           hasOutcomeNotes
           callReadiness={readyReadiness}
-      />,
-    );
-  });
+        />,
+      );
+    });
 
-  const generateButton = container.querySelector("button");
+    const generateButton = container.querySelector("button");
     if (generateButton) {
       act(() => {
         generateButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -296,11 +505,16 @@ describe("AskBobAfterCallCard", () => {
         openButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       });
     }
-    expect(mockCacheDraft).toHaveBeenCalledWith({
-      body: "Hey there",
-      jobId: "job-1",
-      customerId: "customer-1",
-    });
+    expect(mockCacheDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: "Hey there",
+        jobId: "job-1",
+        customerId: "customer-1",
+        origin: "call_session_after_call",
+        workspaceId: "workspace-1",
+        callId: "call-1",
+      }),
+    );
     expect(container.textContent).toContain("Back to job");
     expect(mockRunAction).toHaveBeenCalledWith(
       expect.objectContaining({ generationSource: "call_session" }),
@@ -310,12 +524,11 @@ describe("AskBobAfterCallCard", () => {
     const openComposerLogEntry = logSpy.mock.calls.find(
       (entry) => entry[0] === "[calls-after-call-open-composer-click]",
     );
-    expect(openComposerLogEntry).toBeTruthy();
     expect(openComposerLogEntry?.[1]).toEqual({
+      workspaceId: "workspace-1",
       callId: "call-1",
-      jobId: "job-1",
-      customerId: "customer-1",
-      draftKey: "draft-key",
+      hasDraft: true,
+      draftLengthBucket: "short",
     });
     logSpy.mockRestore();
   });

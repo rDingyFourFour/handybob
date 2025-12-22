@@ -172,6 +172,7 @@ async function renderJobPage(
       quoteSnapshot: null,
       followupSnapshot: null,
       afterCallSnapshot: null,
+      postCallEnrichmentSnapshot: null,
     });
     mockLoadCallHistoryForJob.mockReset();
     mockLoadCallHistoryForJob.mockResolvedValue([]);

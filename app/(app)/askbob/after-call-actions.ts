@@ -196,12 +196,30 @@ export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Pr
   }
 
   const normalizedAutomatedCallNotes = sanitizeAutomatedCallNotes(parsed.automatedCallNotes ?? null);
+  const hasOutcome =
+    Boolean(call.outcome_recorded_at) ||
+    Boolean(call.outcome_code) ||
+    Boolean(call.outcome_notes?.trim());
+  const hasReachedFlag = call.reached_customer === true || call.reached_customer === false;
   const hasAutomatedCallNotesContext = Boolean(normalizedAutomatedCallNotes);
   const hasLatestCallOutcomeContext =
     Boolean(call.outcome_code) ||
     Boolean(call.outcome_notes?.trim()) ||
     Boolean(call.outcome_recorded_at);
   const hasCallTranscriptContext = Boolean(call.transcript?.trim());
+
+  if (isCallSessionGeneration) {
+    console.log("[askbob-after-call-call-session-context]", {
+      workspaceId: workspace.id,
+      jobId: job.id,
+      callId: call.id,
+      hasOutcome,
+      hasReachedFlag,
+      hasAutomatedCallNotesContext,
+      hasCallTranscriptContext,
+      hasLatestCallOutcomeContext,
+    });
+  }
 
   const customerRecord = Array.isArray(job.customers)
     ? job.customers[0] ?? null

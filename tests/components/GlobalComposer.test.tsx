@@ -160,4 +160,60 @@ describe("GlobalComposer draftKey hydration", () => {
       }),
     );
   });
+
+  it("hydrates call-session drafts when the composer is empty", () => {
+    const key = "call-session-key";
+    const payload = {
+      body: "Call session draft",
+      createdAtIso: new Date().toISOString(),
+      origin: "call_session_after_call",
+      jobId: "job-1",
+      customerId: "cust-1",
+      workspaceId: "workspace-1",
+      callId: "call-1",
+    };
+    window.sessionStorage.setItem(key, JSON.stringify(payload));
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    renderComposer({ initialBodyKey: key, initialOrigin: "call_session_after_call" });
+
+    const textarea = container.querySelector("textarea");
+    expect((textarea as HTMLTextAreaElement).value).toBe("Call session draft");
+    expect(window.sessionStorage.getItem(key)).toBeNull();
+    expect(logSpy).toHaveBeenCalledWith(
+      "[messages-compose-draftkey-origin-call-session]",
+      expect.objectContaining({ applied: true }),
+    );
+    logSpy.mockRestore();
+  });
+
+  it("does not overwrite call-session drafts when the composer already has text", () => {
+    const key = "call-session-skip-key";
+    const payload = {
+      body: "Call session draft",
+      createdAtIso: new Date().toISOString(),
+      origin: "call_session_after_call",
+      jobId: "job-1",
+      customerId: "cust-1",
+      workspaceId: "workspace-1",
+      callId: "call-1",
+    };
+    window.sessionStorage.setItem(key, JSON.stringify(payload));
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    renderComposer({
+      initialBodyKey: key,
+      initialOrigin: "call_session_after_call",
+      initialBody: "Existing text",
+    });
+
+    const textarea = container.querySelector("textarea");
+    expect((textarea as HTMLTextAreaElement).value).toBe("Existing text");
+    expect(window.sessionStorage.getItem(key)).toBeNull();
+    expect(logSpy).toHaveBeenCalledWith(
+      "[messages-compose-draftkey-origin-call-session]",
+      expect.objectContaining({ applied: false }),
+    );
+    logSpy.mockRestore();
+  });
 });

@@ -14,7 +14,8 @@ export type AskBobTask =
   | "job.followup"
   | "job.schedule"
   | "job.call_script"
-  | "job.after_call";
+  | "job.after_call"
+  | "call.post_enrichment";
 
 export type AskBobJobTaskSnapshotTask =
   | "job.diagnose"
@@ -23,7 +24,8 @@ export type AskBobJobTaskSnapshotTask =
   | "job.followup"
   | "job.schedule"
   | "job.after_call"
-  | "call.live_guidance";
+  | "call.live_guidance"
+  | "call.post_enrichment";
 
 export interface AskBobDiagnoseSnapshotPayload {
   sessionId: string;
@@ -78,7 +80,8 @@ export interface AskBobJobTaskSnapshot {
     | AskBobFollowupSnapshotPayload
     | AskBobJobScheduleSnapshotPayload
     | AskBobAfterCallSnapshotPayload
-    | AskBobCallLiveGuidanceSnapshotPayload;
+    | AskBobCallLiveGuidanceSnapshotPayload
+    | AskBobCallPostEnrichmentSnapshotPayload;
 }
 
 export type AskBobSection = "steps" | "materials" | "safety" | "costTime" | "escalation";
@@ -396,6 +399,45 @@ export interface AskBobJobAfterCallResult {
   rawModelOutput?: unknown;
 }
 
+export interface CallPostEnrichmentInput {
+  task: "call.post_enrichment";
+  workspaceId: string;
+  callId: string;
+  jobId?: string | null;
+  direction: string | null;
+  fromNumber: string | null;
+  toNumber: string | null;
+  twilioStatus: string | null;
+  hasRecording: boolean;
+  hasNotes: boolean;
+  notesText?: string | null;
+}
+
+export type CallPostEnrichmentConfidenceLabel = "low" | "medium" | "high";
+
+export interface CallPostEnrichmentResult {
+  summaryParagraph: string;
+  keyMoments: string[];
+  suggestedReachedCustomer: boolean | null;
+  suggestedOutcomeCode: string | null;
+  outcomeRationale: string | null;
+  suggestedFollowupDraft: string;
+  riskFlags: string[];
+  confidenceLabel: CallPostEnrichmentConfidenceLabel;
+}
+
+export interface AskBobCallPostEnrichmentSnapshotPayload {
+  callId: string;
+  summaryParagraph: string;
+  keyMoments: string[];
+  suggestedReachedCustomer: boolean | null;
+  suggestedOutcomeCode: string | null;
+  outcomeRationale: string | null;
+  suggestedFollowupDraft: string;
+  riskFlags: string[];
+  confidenceLabel: CallPostEnrichmentConfidenceLabel;
+}
+
 export interface AskBobAfterCallSnapshotPayload {
   afterCallSummary: string;
   recommendedActionLabel: string;
@@ -649,7 +691,8 @@ export type AskBobTaskInput =
   | AskBobJobScheduleInput
   | AskBobJobCallScriptInput
   | AskBobJobAfterCallInput
-  | CallLiveGuidanceInput;
+  | CallLiveGuidanceInput
+  | CallPostEnrichmentInput;
 export type AskBobTaskResult =
   | AskBobJobDiagnoseResult
   | AskBobMessageDraftResult
@@ -661,7 +704,8 @@ export type AskBobTaskResult =
   | AskBobJobScheduleResult
   | AskBobJobCallScriptResult
   | AskBobJobAfterCallResult
-  | CallLiveGuidanceResult;
+  | CallLiveGuidanceResult
+  | CallPostEnrichmentResult;
 
 // Zod schemas for validation
 

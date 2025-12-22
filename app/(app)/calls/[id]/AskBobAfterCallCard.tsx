@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -31,6 +31,19 @@ type AskBobAfterCallCardProps = {
   callReadiness: CallSessionFollowupReadiness;
   generationSource?: "call_session" | "job_step_8";
   automatedDialSnapshot?: CallAutomatedDialSnapshot | null;
+  callSessionEnrichment?: {
+    isTerminal: boolean;
+    hasOutcome: boolean;
+    hasReachedFlag: boolean;
+    hasNotes: boolean;
+    hasRecordingMetadata: boolean;
+    hasAskBobDraft: boolean;
+  } | null;
+  isAskBobAutomatedCall?: boolean;
+  callDirection?: string | null;
+  reachedCustomer?: boolean | null;
+  outcomeCode?: string | null;
+  callSessionDraftBody?: string | null;
 };
 
 const GENERAL_READINESS_MESSAGES: Partial<Record<CallSessionFollowupReadinessReason, string>> = {
@@ -57,6 +70,12 @@ export default function AskBobAfterCallCard({
   callReadiness,
   generationSource = "call_session",
   automatedDialSnapshot,
+  callSessionEnrichment,
+  isAskBobAutomatedCall = false,
+  callDirection = null,
+  reachedCustomer = null,
+  outcomeCode = null,
+  callSessionDraftBody = null,
 }: AskBobAfterCallCardProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -65,6 +84,7 @@ export default function AskBobAfterCallCard({
   const [cacheKey, setCacheKey] = useState<string | null>(null);
   const [serverNotReadyMessage, setServerNotReadyMessage] = useState<string | null>(null);
   const [outcomeSavedHintVisible, setOutcomeSavedHintVisible] = useState(false);
+  const suggestedChannelLoggedRef = useRef(false);
 
   const hasContext = useMemo(
     () => Boolean(hasAskBobScriptBody || callNotes?.trim() || hasHumanNotes || hasOutcomeNotes),
@@ -86,18 +106,99 @@ export default function AskBobAfterCallCard({
     serverNotReadyMessage ?? missingReasonMessage ?? (generalReadinessMessage || null);
   const isReadyForGenerate = callReadiness.isReady && !Boolean(serverNotReadyMessage);
   const buttonDisabled = !hasContext || isLoading || !isReadyForGenerate;
-  const shouldShowRegenerateLabel = result && isReadyForGenerate;
+  const hasDraft =
+    Boolean(result?.draftMessageBody?.trim()) ||
+    Boolean(callSessionDraftBody?.trim()) ||
+    Boolean(callSessionEnrichment?.hasAskBobDraft);
   const buttonLabel = isLoading
     ? "Generating…"
-    : shouldShowRegenerateLabel
+    : callReadiness.isReady && hasDraft
     ? "Regenerate follow-up"
     : "Generate follow-up";
+  const draftBody = result?.draftMessageBody?.trim() || callSessionDraftBody?.trim() || null;
+  const readinessState = callReadiness.isReady
+    ? "ready"
+    : callReadiness.reasons.join("|") || "not_ready";
+  const draftLengthBucket = (() => {
+    const length = draftBody?.length ?? 0;
+    if (length === 0) {
+      return "empty";
+    }
+    if (length <= 160) {
+      return "short";
+    }
+    if (length <= 500) {
+      return "medium";
+    }
+    return "long";
+  })();
+  const postCallStatusVisible = Boolean(
+    callSessionEnrichment &&
+      (isAskBobAutomatedCall || callDirection?.toLowerCase() === "inbound"),
+  );
+  const postCallStatusItems = callSessionEnrichment
+    ? [
+        {
+          label: "Call state",
+          value: callSessionEnrichment.isTerminal ? "Terminal" : "In progress",
+        },
+        {
+          label: "Outcome",
+          value: callSessionEnrichment.hasOutcome ? "Recorded" : "Missing",
+        },
+        {
+          label: "Reached flag",
+          value: callSessionEnrichment.hasReachedFlag ? "Present" : "Missing",
+        },
+        {
+          label: "Notes",
+          value: callSessionEnrichment.hasNotes ? "Present" : "Empty",
+        },
+        {
+          label: "Recording",
+          value: callSessionEnrichment.hasRecordingMetadata ? "Recorded" : "Unavailable",
+        },
+        {
+          label: "AskBob draft",
+          value: callSessionEnrichment.hasAskBobDraft ? "Present" : "Empty",
+        },
+      ]
+    : [];
+  const suggestedChannel = useMemo(() => {
+    if (!callReadiness.isReady) {
+      return null;
+    }
+    if (reachedCustomer === true) {
+      return "Call";
+    }
+    if (reachedCustomer === false) {
+      return "SMS";
+    }
+    if (outcomeCode?.startsWith("no_answer")) {
+      return "SMS";
+    }
+    return null;
+  }, [callReadiness.isReady, outcomeCode, reachedCustomer]);
 
   useEffect(() => {
     if (callReadiness.isReady) {
       setServerNotReadyMessage(null);
     }
   }, [callReadiness.isReady]);
+
+  useEffect(() => {
+    if (!suggestedChannel || suggestedChannelLoggedRef.current) {
+      return;
+    }
+    console.log("[calls-after-call-suggested-channel-visible]", {
+      workspaceId,
+      callId,
+      suggestedChannel,
+      reachedCustomer,
+      outcomeCode: outcomeCode ?? null,
+    });
+    suggestedChannelLoggedRef.current = true;
+  }, [callId, outcomeCode, reachedCustomer, suggestedChannel, workspaceId]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -127,12 +228,12 @@ export default function AskBobAfterCallCard({
     if (buttonDisabled) {
       return;
     }
-    const isRegenerate = Boolean(result);
     console.log("[calls-after-call-ui-generate-click]", {
       callId,
       workspaceId,
-      generationSource,
-      isRegenerate,
+      readinessState,
+      hasDraft,
+      label: buttonLabel,
     });
     console.log("[askbob-after-call-ui-generate-click]", {
       callId,
@@ -218,17 +319,20 @@ export default function AskBobAfterCallCard({
   };
 
   const handleOpenMessagesComposer = () => {
-    if (!result?.draftMessageBody) {
+    if (!draftBody || !callReadiness.isReady) {
       return;
     }
     const draftKey = cacheAskBobMessageDraft({
-      body: result.draftMessageBody,
+      body: draftBody,
       jobId,
       customerId,
+      origin: "call_session_after_call",
+      workspaceId,
+      callId,
     });
     const params = new URLSearchParams({
       compose: "1",
-      origin: "askbob-after-call",
+      origin: "call_session_after_call",
       jobId,
     });
     if (customerId) {
@@ -242,13 +346,13 @@ export default function AskBobAfterCallCard({
       jobId,
       customerId,
       callId,
-      draftLength: result.draftMessageBody.length,
+      draftLength: draftBody.length,
     });
     console.log("[calls-after-call-open-composer-click]", {
+      workspaceId,
       callId,
-      jobId,
-      customerId,
-      draftKey: draftKey ?? null,
+      hasDraft: Boolean(draftBody),
+      draftLengthBucket,
     });
     router.push(`/messages?${params.toString()}`);
   };
@@ -270,6 +374,28 @@ export default function AskBobAfterCallCard({
       </div>
 
       <div className="space-y-2">
+        {postCallStatusVisible && (
+          <div className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-950/50 p-3 text-xs text-slate-300">
+            <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.3em] text-slate-500">
+              <span>Post call status</span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {postCallStatusItems.map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center justify-between rounded-lg border border-slate-900/60 bg-slate-950/60 px-2 py-1"
+                >
+                  <span className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
+                    {item.label}
+                  </span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
+                    {item.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <HbButton
           variant="primary"
           size="md"
@@ -293,31 +419,38 @@ export default function AskBobAfterCallCard({
             Outcome saved. You can now generate a follow-up.
           </p>
         )}
+        {callReadiness.isReady && suggestedChannel && (
+          <p className="text-xs text-slate-400">
+            Suggested channel: <span className="font-semibold text-slate-100">{suggestedChannel}</span>
+          </p>
+        )}
         {errorMessage && <p className="text-sm text-rose-400">{errorMessage}</p>}
       </div>
 
-      {result && (
+      {(result || (callReadiness.isReady && draftBody)) && (
         <div className="space-y-3 rounded-2xl border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-200">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call summary</p>
-            <p className="text-sm text-slate-200">{result.afterCallSummary}</p>
-          </div>
+          {result && (
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call summary</p>
+              <p className="text-sm text-slate-200">{result.afterCallSummary}</p>
+            </div>
+          )}
 
           <div>
             <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-500">
               <span>Draft message</span>
-              {result.draftMessageBody && (
+              {draftBody && (
                 <span className="text-[11px] text-slate-400">
-                  {result.draftMessageBody.length} characters
+                  {draftBody.length} characters
                 </span>
               )}
             </div>
-            {result.draftMessageBody ? (
+            {draftBody ? (
               <pre
                 className="w-full rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-sm leading-relaxed text-slate-200 whitespace-pre-wrap break-words"
                 style={{ overflowWrap: "anywhere" }}
               >
-                {result.draftMessageBody}
+                {draftBody}
               </pre>
             ) : (
               <p className="text-xs text-slate-500">AskBob did not propose a message draft.</p>
@@ -325,15 +458,15 @@ export default function AskBobAfterCallCard({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {result.draftMessageBody && (
-                <HbButton
-                  size="sm"
-                  variant="secondary"
-                  className="flex-1"
-                  onClick={handleOpenMessagesComposer}
-                >
-                  Open composer with this draft
-                </HbButton>
+            {callReadiness.isReady && draftBody && (
+              <HbButton
+                size="sm"
+                variant="secondary"
+                className="flex-1"
+                onClick={handleOpenMessagesComposer}
+              >
+                Open composer with this draft
+              </HbButton>
             )}
             {backToJobHref && (
               <HbButton

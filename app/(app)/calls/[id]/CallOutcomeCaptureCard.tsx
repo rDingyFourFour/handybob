@@ -1,6 +1,7 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useActionState } from "react";
 
 import HbButton from "@/components/ui/hb-button";
@@ -17,7 +18,10 @@ import {
   CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
 } from "@/utils/calls/callOutcomeMessages";
 import { SaveCallOutcomeResponse, saveCallOutcomeAction } from "../actions/saveCallOutcome";
-import { readAndClearCallOutcomePrefill } from "@/utils/askbob/callOutcomePrefillCache";
+import {
+  readAndClearCallOutcomePrefill,
+  type CallOutcomePrefillPayload,
+} from "@/utils/askbob/callOutcomePrefillCache";
 import type { CallAutomatedDialSnapshot } from "@/lib/domain/calls/sessions";
 
 const NOTES_MAX_LENGTH = 1000;
@@ -29,6 +33,18 @@ const REACH_OPTIONS: Array<{ value: boolean | null; label: string }> = [
 ];
 
 const PREFILL_CACHE_LOGGED = new Set<string>();
+const PREFILL_CACHE_APPLIED = new Set<string>();
+
+function hasPrefillPayloadSuggestion(payload: CallOutcomePrefillPayload | null) {
+  if (!payload) {
+    return false;
+  }
+  return (
+    payload.suggestedReachedCustomer !== null ||
+    Boolean(payload.suggestedOutcomeCode) ||
+    Boolean(payload.suggestedNotes?.trim())
+  );
+}
 
 type SavedOutcome = {
   reachedCustomer: boolean | null;
@@ -36,6 +52,12 @@ type SavedOutcome = {
   notes: string | null;
   recordedAt: string | null;
   legacyOutcome: CallOutcome | null;
+};
+
+type EditingState = {
+  reachedCustomer: boolean | null;
+  outcomeCode: CallOutcomeCode | null;
+  notes: string;
 };
 
 type ActionStateTuple = [
@@ -123,40 +145,51 @@ export default function CallOutcomeCaptureCard({
     Boolean(isAutomatedCallContext && automatedDialSnapshot?.isTerminal && !hasExistingOutcome);
   const showInProgressCallBanner =
     Boolean(isAutomatedCallContext && automatedDialSnapshot?.isInProgress && !hasExistingOutcome);
-  const [isEditing, setIsEditing] = useState(!hasExistingOutcome);
-  const [prefillRecord] = useState(() => {
-    if (hasExistingOutcome || typeof window === "undefined") {
-      return { payload: null, status: null };
+  const initialNotesValue = initialNotes ?? "";
+  const [initialPrefillPayload] = useState<CallOutcomePrefillPayload | null>(() => {
+    if (typeof window === "undefined" || hasExistingOutcome) {
+      return null;
     }
-    const payload = readAndClearCallOutcomePrefill(callId);
-    const hasPayload =
-      payload &&
-      (payload.reachedCustomer !== undefined ||
-        payload.outcomeCode ||
-        payload.notes);
-    const status = hasPayload ? "hit" : "miss";
-    if (status && !PREFILL_CACHE_LOGGED.has(callId)) {
-      console.log(`[calls-outcome-prefill-cache-${status}]`, { callId });
-      PREFILL_CACHE_LOGGED.add(callId);
-    }
-    return {
-      payload: hasPayload ? payload : null,
-      status,
-    };
+    return readAndClearCallOutcomePrefill(callId);
   });
-  const [editingState, setEditingState] = useState<{
-    reachedCustomer: boolean | null;
-    outcomeCode: CallOutcomeCode | null;
-    notes: string;
-  }>(() => {
+  const initialPrefillSuggestion =
+    !hasExistingOutcome &&
+    initialPrefillPayload &&
+    initialPrefillPayload.workspaceId === workspaceId &&
+    hasPrefillPayloadSuggestion(initialPrefillPayload)
+      ? {
+          reachedCustomer: initialPrefillPayload.suggestedReachedCustomer ?? null,
+          outcomeCode: initialPrefillPayload.suggestedOutcomeCode ?? null,
+          notes: initialPrefillPayload.suggestedNotes ?? "",
+        }
+      : null;
+  const initialPrefillApplied = Boolean(initialPrefillSuggestion);
+  const [isEditing, setIsEditing] = useState(!hasExistingOutcome);
+  const [editingState, setEditingState] = useState<EditingState>(() => {
+    if (initialPrefillSuggestion) {
+      return initialPrefillSuggestion;
+    }
     return {
-      reachedCustomer: prefillRecord.payload?.reachedCustomer ?? initialReachedCustomer,
-      outcomeCode: prefillRecord.payload?.outcomeCode ?? initialOutcomeCode,
-      notes: prefillRecord.payload?.notes ?? initialNotes ?? "",
+      reachedCustomer: initialReachedCustomer,
+      outcomeCode: initialOutcomeCode,
+      notes: initialNotesValue,
     };
   });
   const dirtyRef = useRef(false);
+  const editingStateRef = useRef(editingState);
+  const isEditingRef = useRef(isEditing);
+  const outcomeSelectRef = useRef<HTMLSelectElement | null>(null);
+  const notesRef = useRef<HTMLTextAreaElement | null>(null);
   const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
+  const setEditingStateWithRef = (nextState: EditingState | ((prev: EditingState) => EditingState)) => {
+    setEditingState((prev) => {
+      const resolved = typeof nextState === "function"
+        ? (nextState as (prev: EditingState) => EditingState)(prev)
+        : nextState;
+      editingStateRef.current = resolved;
+      return resolved;
+    });
+  };
   const lastActionStateRef = useRef<SaveCallOutcomeResponse | null>(null);
 
   const hookTuple = useActionState<SaveCallOutcomeResponse, FormData | null | undefined>(
@@ -171,6 +204,14 @@ export default function CallOutcomeCaptureCard({
       : actionState?.code === "db_constraint_rejects_value"
       ? CALL_OUTCOME_DB_CONSTRAINT_MISMATCH_MESSAGE
       : actionState?.error ?? null;
+
+  useLayoutEffect(() => {
+    editingStateRef.current = editingState;
+  }, [editingState]);
+
+  useEffect(() => {
+    isEditingRef.current = isEditing;
+  }, [isEditing]);
 
   useEffect(() => {
     if (!actionState || actionState === lastActionStateRef.current) {
@@ -236,10 +277,115 @@ export default function CallOutcomeCaptureCard({
   ]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (hasExistingOutcome) {
+      return;
+    }
+    const logStatus = (status: "hit" | "miss", reason: string | null, source: "mount" | "event") => {
+      const key = `${callId}:${status}:${reason ?? "none"}:${source}`;
+      if (PREFILL_CACHE_LOGGED.has(key)) {
+        return;
+      }
+      console.log(`[calls-outcome-prefill-suggested-${status}]`, {
+        callId,
+        workspaceId,
+        reason,
+        source,
+      });
+      PREFILL_CACHE_LOGGED.add(key);
+    };
+    if (!initialPrefillApplied) {
+      if (!initialPrefillPayload) {
+        logStatus("miss", "no_payload", "mount");
+      } else if (initialPrefillPayload.workspaceId !== workspaceId) {
+        logStatus("miss", "workspace_mismatch", "mount");
+      } else if (!hasPrefillPayloadSuggestion(initialPrefillPayload)) {
+        logStatus("miss", "empty_payload", "mount");
+      } else {
+        logStatus("miss", "changed", "mount");
+      }
+    } else {
+      logStatus("hit", null, "mount");
+      PREFILL_CACHE_APPLIED.add(callId);
+    }
+    const attemptPrefill = (source: "event") => {
+      if (PREFILL_CACHE_APPLIED.has(callId)) {
+        return;
+      }
+      const payload = readAndClearCallOutcomePrefill(callId);
+      if (!payload) {
+        logStatus("miss", "no_payload", source);
+        return;
+      }
+      if (payload.workspaceId !== workspaceId) {
+        logStatus("miss", "workspace_mismatch", source);
+        return;
+      }
+      if (!hasPrefillPayloadSuggestion(payload)) {
+        logStatus("miss", "empty_payload", source);
+        return;
+      }
+      const currentState = editingStateRef.current;
+      const initialReachedValue = initialReachedCustomer ?? null;
+      const currentReachedValue = currentState.reachedCustomer ?? null;
+      const initialOutcomeValue = initialOutcomeCode ?? "";
+      const currentOutcomeValue =
+        outcomeSelectRef.current?.value ?? (currentState.outcomeCode ?? "");
+      const currentNotesValue = notesRef.current?.value ?? currentState.notes;
+      const hasUserEdits =
+        dirtyRef.current ||
+        currentReachedValue !== initialReachedValue ||
+        currentOutcomeValue !== initialOutcomeValue ||
+        currentNotesValue !== initialNotesValue;
+      const canApply = !hasUserEdits;
+      if (!canApply) {
+        logStatus("miss", "dirty", source);
+        return;
+      }
+      const nextOutcomeCode = payload.suggestedOutcomeCode ?? null;
+      const nextNotes = payload.suggestedNotes ?? "";
+      flushSync(() => {
+        setEditingStateWithRef({
+          reachedCustomer: payload.suggestedReachedCustomer ?? null,
+          outcomeCode: nextOutcomeCode,
+          notes: nextNotes,
+        });
+      });
+      if (outcomeSelectRef.current) {
+        outcomeSelectRef.current.value = nextOutcomeCode ?? "";
+      }
+      if (notesRef.current) {
+        notesRef.current.value = nextNotes;
+      }
+      if (!isEditingRef.current) {
+        setIsEditing(true);
+      }
+      logStatus("hit", null, source);
+      PREFILL_CACHE_APPLIED.add(callId);
+    };
+    const handler = () => attemptPrefill("event");
+    window.addEventListener("calls-outcome-prefill-suggested", handler);
+    return () => {
+      window.removeEventListener("calls-outcome-prefill-suggested", handler);
+    };
+  }, [
+    callId,
+    workspaceId,
+    hasExistingOutcome,
+    initialNotesValue,
+    initialOutcomeCode,
+    initialReachedCustomer,
+    initialPrefillApplied,
+    initialPrefillPayload,
+  ]);
+
+  useEffect(() => {
     if (!isEditing) {
       dirtyRef.current = false;
       startTransition(() => {
-        setEditingState({
+        setEditingStateWithRef({
           reachedCustomer: savedOutcome.reachedCustomer,
           outcomeCode: savedOutcome.outcomeCode,
           notes: savedOutcome.notes ?? "",
@@ -295,7 +441,7 @@ export default function CallOutcomeCaptureCard({
   };
   const handleReachSelection = (value: boolean | null) => {
     markDirty();
-    setEditingState((prev) => ({ ...prev, reachedCustomer: value }));
+    setEditingStateWithRef((prev) => ({ ...prev, reachedCustomer: value }));
   };
 
   return (
@@ -399,10 +545,11 @@ export default function CallOutcomeCaptureCard({
               <span className="text-xs uppercase tracking-[0.3em] text-slate-500">Outcome code</span>
               <select
                 name="outcomeCode"
+                ref={outcomeSelectRef}
                 value={editingState.outcomeCode ?? ""}
                 onChange={(event) => {
                   markDirty();
-                  setEditingState((prev) => ({
+                  setEditingStateWithRef((prev) => ({
                     ...prev,
                     outcomeCode: (event.target.value as CallOutcomeCode) || null,
                   }));
@@ -423,11 +570,12 @@ export default function CallOutcomeCaptureCard({
               <span className="text-xs uppercase tracking-[0.3em] text-slate-500">Notes (optional)</span>
               <textarea
                 name="notes"
+                ref={notesRef}
                 rows={3}
                 value={editingState.notes}
                 onChange={(event) => {
                   markDirty();
-                  setEditingState((prev) => ({ ...prev, notes: event.target.value }));
+                  setEditingStateWithRef((prev) => ({ ...prev, notes: event.target.value }));
                 }}
                 data-editing-notes={editingState.notes}
                 className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 focus:border-slate-600 focus:outline-none"

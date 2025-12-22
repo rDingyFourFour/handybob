@@ -364,6 +364,7 @@ export default async function JobDetailPage(props: {
     quoteSnapshot: null,
     followupSnapshot: null,
     afterCallSnapshot: null,
+    postCallEnrichmentSnapshot: null,
   };
   try {
     askBobSnapshots = await getJobAskBobSnapshotsForJob(supabase, {
