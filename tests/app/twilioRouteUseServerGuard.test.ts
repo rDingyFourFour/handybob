@@ -9,11 +9,14 @@ const inboundRoutePath = join(projectRoot, "app/(app)/twilio/voice/inbound/route
 describe("Twilio route handler use server guard", () => {
   it("status callback route is routable and does not declare use server", () => {
     const statusRouteContents = readFileSync(statusRoutePath, "utf8");
+    const signatureHeaderDeclarationMatches =
+      statusRouteContents.match(/const\s+TWILIO_SIGNATURE_HEADER\s*=/g) ?? [];
 
     expect(statusRouteContents).not.toContain("use server");
     expect(statusRouteContents).toContain("export const runtime");
     expect(statusRouteContents).toContain("export const dynamic");
     expect(statusRouteContents).toContain("export async function POST");
+    expect(signatureHeaderDeclarationMatches).toHaveLength(1);
   });
 
   it("inbound voice route does not declare use server", () => {

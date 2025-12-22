@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { updateCallSessionTwilioStatus } from "@/lib/domain/calls/sessions";
 import {
-  TWILIO_SIGNATURE_HEADER,
   verifyTwilioSignature,
   formDataToRecord,
 } from "@/lib/domain/twilio/signature";
