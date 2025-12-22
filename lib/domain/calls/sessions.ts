@@ -576,9 +576,13 @@ export async function markCallSessionDialRequested(
   };
 }
 
+export type CreateCallSessionResult =
+  | { success: true; call: CallSessionRow }
+  | { success: false; error: unknown };
+
 export async function createCallSessionForJobQuote(
-  params: CreateCallSessionForJobQuoteParams
-): Promise<CallSessionRow> {
+  params: CreateCallSessionForJobQuoteParams,
+): Promise<CreateCallSessionResult> {
   const { supabase, workspaceId, userId, jobId, customerId, fromNumber, toNumber, scriptBody } =
     params;
   const { summaryOverride } = params;
@@ -608,14 +612,14 @@ export async function createCallSessionForJobQuote(
     .single();
 
   if (error) {
-    throw error;
+    return { success: false, error };
   }
 
   if (!data) {
-    throw new Error("Failed to create call session");
+    return { success: false, error: new Error("Failed to create call session") };
   }
 
-  return data;
+  return { success: true, call: data };
 }
 
 export async function ensureInboundCallSession(

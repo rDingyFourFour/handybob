@@ -354,13 +354,14 @@ describe("startAskBobAutomatedCall", () => {
       scriptSummary: "Follow-up script",
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: "failure",
       code: "twilio_not_configured",
       message: "Calls aren’t configured yet; please set up telephony to continue.",
       callId: "call-123",
       twilioStatus: "failed",
     });
+    expect(result.diagnostics).toBeTruthy();
     expect(markDialRequestedSpy).toHaveBeenCalledTimes(1);
     expect(setDialResultSpy).toHaveBeenCalledTimes(1);
     expect(setDialResultSpy.mock.calls[0][0]).toMatchObject({
@@ -427,13 +428,14 @@ describe("startAskBobAutomatedCall", () => {
       scriptSummary: "Follow-up script",
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: "failure",
       code: "twilio_call_failed",
       message: "We couldn’t start the automated call right now. Please try again.",
       callId: "call-123",
       twilioStatus: "failed",
     });
+    expect(result.diagnostics).toBeTruthy();
     expect(setDialResultSpy).toHaveBeenCalledTimes(1);
     expect(setDialResultSpy.mock.calls[0][0]).toMatchObject({
       callId: "call-123",
@@ -442,6 +444,124 @@ describe("startAskBobAutomatedCall", () => {
       errorCode: "30001",
       errorMessage: "Failure",
     });
+  });
+
+  it("returns callId and stage-specific failure when speech plan persistence fails", async () => {
+    const supabaseState = setupSupabaseMock({
+      jobs: {
+        data: [
+          {
+            id: "job-1",
+            workspace_id: "workspace-1",
+            customer_id: "customer-1",
+          },
+        ],
+        error: null,
+      },
+      workspaces: {
+        data: [
+          {
+            business_phone: "+15550001111",
+          },
+        ],
+        error: null,
+      },
+      calls: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: "call-123",
+              workspace_id: "workspace-1",
+              job_id: "job-1",
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+    supabaseState.supabase.auth = {
+      getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
+    };
+    createServerClientMock.mockReturnValue(supabaseState.supabase);
+    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+    updateSpeechPlanSpy.mockRejectedValueOnce(new Error("Speech plan failed"));
+
+    const result = await startAskBobAutomatedCall({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      customerId: "customer-1",
+      customerPhone: "+15550002222",
+      scriptBody: "Hello there",
+      scriptSummary: "Follow-up script",
+    });
+
+    expect(result).toMatchObject({
+      status: "failure",
+      code: "call_speech_plan_failed",
+      callId: "call-123",
+    });
+    expect(result.code).not.toBe("call_creation_failed");
+    expect(result.diagnostics).toBeTruthy();
+    expect(typeof result.diagnostics).toBe("object");
+  });
+
+  it("returns call_creation_failed with Supabase diagnostics when session creation fails", async () => {
+    const supabaseState = setupSupabaseMock({
+      jobs: {
+        data: [
+          {
+            id: "job-1",
+            workspace_id: "workspace-1",
+            customer_id: "customer-1",
+          },
+        ],
+        error: null,
+      },
+      workspaces: {
+        data: [
+          {
+            business_phone: "+15550001111",
+          },
+        ],
+        error: null,
+      },
+      calls: [
+        { data: [], error: null },
+        {
+          data: null,
+          error: {
+            message: "Insert failed",
+            code: "23505",
+            details: "duplicate key",
+            hint: "conflict",
+          },
+        },
+      ],
+    });
+    supabaseState.supabase.auth = {
+      getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
+    };
+    createServerClientMock.mockReturnValue(supabaseState.supabase);
+    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+
+    const result = await startAskBobAutomatedCall({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      customerId: "customer-1",
+      customerPhone: "+15550002222",
+      scriptBody: "Hello there",
+      scriptSummary: "Follow-up script",
+    });
+
+    expect(result).toMatchObject({
+      status: "failure",
+      code: "call_creation_failed",
+      message: "We couldn’t start the automated call right now. Please try again.",
+    });
+    expect(result.callId).toBeUndefined();
+    expect(result.diagnostics?.supabase?.code).toBe("23505");
+    expect(result.diagnostics?.supabase?.message).toBe("Insert failed");
   });
 
   it.each(["queued", "initiated", "ringing"])(
@@ -537,11 +657,12 @@ describe("startAskBobAutomatedCall", () => {
       scriptSummary: "Follow-up script",
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: "failure",
       code: "missing_customer_phone",
       message: "Add a customer phone number before placing an automated call.",
     });
+    expect(result.diagnostics).toBeTruthy();
     expect(supabaseState.queries.calls?.insert).toBeUndefined();
   });
 
@@ -584,11 +705,12 @@ describe("startAskBobAutomatedCall", () => {
       scriptSummary: "Follow-up script",
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: "failure",
       code: "wrong_workspace",
       message: "This job does not belong to your workspace.",
     });
+    expect(result.diagnostics).toBeTruthy();
   });
 
   it("creates a fresh session when the previous call failed", async () => {

@@ -11,16 +11,19 @@ export const dynamic = "force-dynamic";
 export default async function AskBobPage({
   searchParams,
 }: {
-  searchParams?: { [key: string]: string | string[] | undefined };
+  searchParams?: Promise<Record<string, string | string[] | undefined> | null>;
 }) {
-  const originParam = typeof searchParams?.origin === "string" ? searchParams.origin : null;
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const originParam =
+    typeof resolvedSearchParams.origin === "string" ? resolvedSearchParams.origin : null;
   const titleParam =
-    typeof searchParams?.title === "string" && searchParams.title.trim()
-      ? searchParams.title.trim()
+    typeof resolvedSearchParams.title === "string" && resolvedSearchParams.title.trim()
+      ? resolvedSearchParams.title.trim()
       : "";
   const descriptionParam =
-    typeof searchParams?.description === "string" && searchParams.description.trim()
-      ? searchParams.description.trim()
+    typeof resolvedSearchParams.description === "string" &&
+    resolvedSearchParams.description.trim()
+      ? resolvedSearchParams.description.trim()
       : "";
   let defaultPrompt: string | undefined;
   if (originParam === "jobs-new") {

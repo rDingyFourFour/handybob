@@ -156,7 +156,7 @@ export async function createCallWorkspaceAction(formData: FormData) {
       toNumber,
     });
 
-    const call = await createCallSessionForJobQuote({
+    const callResult = await createCallSessionForJobQuote({
       supabase,
       workspaceId: workspace.id,
       userId: user.id,
@@ -167,6 +167,13 @@ export async function createCallWorkspaceAction(formData: FormData) {
       quoteId,
       scriptBody,
     });
+
+    if (!callResult.success) {
+      console.error("[calls/new/action] Failed to create call session", callResult.error);
+      redirect("/calls/new?error=call_creation_failed");
+    }
+
+    const call = callResult.call;
 
     console.log("[calls/new/action] Created call session", {
       callId: call.id,

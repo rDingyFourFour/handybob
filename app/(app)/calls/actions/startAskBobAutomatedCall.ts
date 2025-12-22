@@ -68,6 +68,7 @@ export type StartAskBobAutomatedCallFailure = {
   callId?: string;
   twilioStatus?: string | null;
   twilioCallSid?: string | null;
+  diagnostics?: SerializedDiagnostics;
 };
 
 export type StartAskBobAutomatedCallResult =
@@ -81,26 +82,110 @@ function normalizeCandidate(value?: string | null) {
   return trimmed && trimmed.length > 0 ? trimmed : null;
 }
 
+type SerializedDiagnostics = {
+  name?: string;
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+  stack?: string;
+  supabase?: {
+    code?: string;
+    message?: string;
+    details?: string;
+    hint?: string;
+  };
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function extractSupabaseDiagnostics(value: unknown): SerializedDiagnostics["supabase"] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const code =
+    typeof value.code === "string" || typeof value.code === "number" ? String(value.code) : undefined;
+  const message = typeof value.message === "string" ? value.message : undefined;
+  const details = typeof value.details === "string" ? value.details : undefined;
+  const hint = typeof value.hint === "string" ? value.hint : undefined;
+  if (!code && !message && !details && !hint) {
+    return null;
+  }
+  return { code, message, details, hint };
+}
+
+function serializeDiagnostics(error: unknown): SerializedDiagnostics {
+  const diagnostics: SerializedDiagnostics = {};
+  if (error instanceof Error) {
+    diagnostics.name = error.name;
+    diagnostics.message = error.message;
+    if (process.env.NODE_ENV !== "production") {
+      diagnostics.stack = error.stack;
+    }
+  } else if (typeof error === "string") {
+    diagnostics.message = error;
+  } else if (isRecord(error)) {
+    if (typeof error.name === "string") {
+      diagnostics.name = error.name;
+    }
+    if (typeof error.message === "string") {
+      diagnostics.message = error.message;
+    }
+    if (typeof error.code === "string" || typeof error.code === "number") {
+      diagnostics.code = String(error.code);
+    }
+  }
+
+  const supabaseDiagnostics =
+    extractSupabaseDiagnostics(error) ||
+    (isRecord(error) && "supabaseError" in error ? extractSupabaseDiagnostics(error.supabaseError) : null);
+  if (supabaseDiagnostics) {
+    diagnostics.supabase = supabaseDiagnostics;
+    if (!diagnostics.message && supabaseDiagnostics.message) {
+      diagnostics.message = supabaseDiagnostics.message;
+    }
+    if (!diagnostics.code && supabaseDiagnostics.code) {
+      diagnostics.code = supabaseDiagnostics.code;
+    }
+  }
+
+  if (!diagnostics.message) {
+    diagnostics.message = "Unknown error.";
+  }
+
+  return diagnostics;
+}
+
 export async function startAskBobAutomatedCall(
   payload: StartAskBobAutomatedCallPayload,
 ): Promise<StartAskBobAutomatedCallResult> {
-  const logFailure = (reason: string, extra: Record<string, unknown> = {}) => {
+  const logFailure = (
+    reason: string,
+    diagnostics?: SerializedDiagnostics,
+    extra: Record<string, unknown> = {},
+  ) => {
     console.log("[askbob-automated-call-ui-failure]", {
       reason,
       workspaceId: payload.workspaceId,
       jobId: payload.jobId,
+      diagnostics: diagnostics ?? null,
       ...extra,
     });
   };
 
   const parsed = StartAskBobAutomatedCallSchema.safeParse(payload);
   if (!parsed.success) {
-    logFailure("invalid_payload", { errors: parsed.error.flatten() });
-    return {
-      status: "failure",
-      code: "invalid_payload",
+    return buildFailureResponse({
+      reason: "invalid_payload",
       message: "We couldn’t start this call with the provided information.",
-    };
+      diagnostics: {
+        message: "Invalid payload.",
+        details: JSON.stringify(parsed.error.flatten()),
+      },
+      logExtra: { errors: parsed.error.flatten() },
+    });
   }
 
   const params = parsed.data;
@@ -121,7 +206,7 @@ export async function startAskBobAutomatedCall(
 
   const emitActionFailureTelemetry = (
     reason: string,
-    diagnostics: string,
+    diagnostics: SerializedDiagnostics,
     callId?: string | null,
   ) => {
     console.log("[askbob-automated-call-action-failure]", {
@@ -142,29 +227,56 @@ export async function startAskBobAutomatedCall(
     });
   };
 
+  const buildFailureResponse = ({
+    reason,
+    message,
+    diagnostics,
+    callId,
+    twilioStatus,
+    twilioCallSid,
+    logExtra,
+  }: {
+    reason: StartAskBobAutomatedCallFailure["code"];
+    message: string;
+    diagnostics: SerializedDiagnostics;
+    callId?: string | null;
+    twilioStatus?: string | null;
+    twilioCallSid?: string | null;
+    logExtra?: Record<string, unknown>;
+  }): StartAskBobAutomatedCallFailure => {
+    logFailure(reason, diagnostics, { callId: callId ?? null, ...logExtra });
+    emitActionFailureTelemetry(reason, diagnostics, callId ?? null);
+    return {
+      status: "failure",
+      code: reason,
+      message,
+      callId: callId ?? undefined,
+      twilioStatus,
+      twilioCallSid,
+      diagnostics,
+    };
+  };
+
   emitActionRequestTelemetry();
 
   if (!normalizedCustomerPhone) {
-    logFailure("missing_customer_phone");
-    emitActionFailureTelemetry(
-      "missing_customer_phone",
-      "Customer phone is required to place an automated call.",
-    );
-    return {
-      status: "failure",
-      code: "missing_customer_phone",
+    return buildFailureResponse({
+      reason: "missing_customer_phone",
       message: "Add a customer phone number before placing an automated call.",
-    };
+      diagnostics: {
+        message: "Customer phone is required to place an automated call.",
+      },
+    });
   }
 
   if (!normalizedScriptBody) {
-    logFailure("missing_script");
-    emitActionFailureTelemetry("missing_script", "A call script body is required.");
-    return {
-      status: "failure",
-      code: "missing_script",
+    return buildFailureResponse({
+      reason: "missing_script",
       message: "Generate a script before placing an automated call.",
-    };
+      diagnostics: {
+        message: "A call script body is required.",
+      },
+    });
   }
 
   const supabase = await createServerClient();
@@ -173,62 +285,70 @@ export async function startAskBobAutomatedCall(
   } = await supabase.auth.getUser();
 
   if (!user) {
-    logFailure("unauthenticated");
-    emitActionFailureTelemetry("unauthenticated", "User must be signed in to place calls.");
-    return {
-      status: "failure",
-      code: "unauthenticated",
+    return buildFailureResponse({
+      reason: "unauthenticated",
       message: "Please sign in to place automated calls.",
-    };
+      diagnostics: {
+        message: "User must be signed in to place calls.",
+      },
+    });
   }
 
   const { workspace } = await getCurrentWorkspace({ supabase });
   if (!workspace) {
-    logFailure("workspace_required");
-    emitActionFailureTelemetry("workspace_required", "Workspace context is required.");
-    return {
-      status: "failure",
-      code: "workspace_required",
+    return buildFailureResponse({
+      reason: "workspace_required",
       message: "Workspace access is required to place automated calls.",
-    };
+      diagnostics: {
+        message: "Workspace context is required.",
+      },
+    });
   }
 
   if (workspace.id !== params.workspaceId) {
-    logFailure("wrong_workspace");
-    emitActionFailureTelemetry("wrong_workspace", "Job belongs to a different workspace.");
-    return {
-      status: "failure",
-      code: "wrong_workspace",
+    return buildFailureResponse({
+      reason: "wrong_workspace",
       message: "This job does not belong to your workspace.",
-    };
+      diagnostics: {
+        message: "Job belongs to a different workspace.",
+      },
+    });
   }
 
-  const { data: jobRow } = await supabase
+  const { data: jobRow, error: jobError } = await supabase
     .from("jobs")
     .select("id, customer_id")
     .eq("id", params.jobId)
     .eq("workspace_id", workspace.id)
     .maybeSingle();
 
-  if (!jobRow) {
-    logFailure("job_not_found");
-    emitActionFailureTelemetry("job_not_found", "Job not found in workspace.");
-    return {
-      status: "failure",
-      code: "job_not_found",
+  if (jobError) {
+    return buildFailureResponse({
+      reason: "job_lookup_failed",
       message: "We couldn’t find that job in this workspace.",
-    };
+      diagnostics: serializeDiagnostics(jobError),
+    });
+  }
+
+  if (!jobRow) {
+    return buildFailureResponse({
+      reason: "job_not_found",
+      message: "We couldn’t find that job in this workspace.",
+      diagnostics: {
+        message: "Job not found in workspace.",
+      },
+    });
   }
 
   const resolvedCustomerId = jobRow.customer_id ?? params.customerId ?? null;
   if (!resolvedCustomerId) {
-    logFailure("missing_customer");
-    emitActionFailureTelemetry("missing_customer", "A customer is required to place an automated call.");
-    return {
-      status: "failure",
-      code: "missing_customer",
+    return buildFailureResponse({
+      reason: "missing_customer",
       message: "Link a customer to this job before placing an automated call.",
-    };
+      diagnostics: {
+        message: "A customer is required to place an automated call.",
+      },
+    });
   }
 
   const logGuardOutcome = (
@@ -242,6 +362,9 @@ export async function startAskBobAutomatedCall(
     });
   };
 
+  let call: CallSessionRow | null = null;
+  let callId: string | null = null;
+
   const existingCallResponse = await supabase
     .from("calls")
     .select("id, twilio_call_sid, twilio_status")
@@ -252,7 +375,11 @@ export async function startAskBobAutomatedCall(
     .limit(1);
 
   if (existingCallResponse.error) {
-    throw existingCallResponse.error;
+    return buildFailureResponse({
+      reason: "call_creation_failed",
+      message: "We couldn’t start the automated call right now. Please try again.",
+      diagnostics: serializeDiagnostics(existingCallResponse.error),
+    });
   }
 
   const existingCallData = existingCallResponse.data;
@@ -344,19 +471,33 @@ export async function startAskBobAutomatedCall(
     callEntry: CallSessionRow,
     failureReason: StartAskBobAutomatedCallFailure["code"],
     userMessage: string,
-    diagnostics: string,
+    diagnostics: SerializedDiagnostics,
     twilioErrorCode?: string | null,
     twilioErrorMessage?: string | null,
   ): Promise<StartAskBobAutomatedCallFailure> => {
-    await setTwilioDialResultForCallSession({
-      supabase,
-      workspaceId: workspace.id,
-      callId: callEntry.id,
-      twilioStatus: "failed",
-      errorCode: twilioErrorCode ?? null,
-      errorMessage: twilioErrorMessage ?? diagnostics,
-    });
-    emitActionFailureTelemetry(failureReason, diagnostics, callEntry.id);
+    try {
+      await setTwilioDialResultForCallSession({
+        supabase,
+        workspaceId: workspace.id,
+        callId: callEntry.id,
+        twilioStatus: "failed",
+        errorCode: twilioErrorCode ?? null,
+        errorMessage: twilioErrorMessage ?? diagnostics.message,
+      });
+    } catch (error) {
+      return buildFailureResponse({
+        reason: "call_metadata_update_failed",
+        message: "We couldn’t save the call status after the dial attempt.",
+        diagnostics: serializeDiagnostics(error),
+        callId: callEntry.id,
+        twilioStatus: "failed",
+        logExtra: {
+          originalReason: failureReason,
+          originalDiagnostics: diagnostics,
+        },
+      });
+    }
+
     console.log("[calls-automated-dial-failure]", {
       callId: callEntry.id,
       workspaceId: callEntry.workspace_id,
@@ -365,116 +506,135 @@ export async function startAskBobAutomatedCall(
       diagnostics,
       twilioErrorCode,
     });
-    return {
-      status: "failure",
-      code: failureReason,
+    return buildFailureResponse({
+      reason: failureReason,
       message: userMessage,
+      diagnostics,
       callId: callEntry.id,
       twilioStatus: "failed",
-    };
+      logExtra: { twilioErrorCode },
+    });
   };
 
+  const callResult = await createCallSessionForJobQuote({
+    supabase,
+    workspaceId: workspace.id,
+    userId: user.id,
+    jobId: params.jobId,
+    customerId: resolvedCustomerId,
+    fromNumber,
+    toNumber: normalizedCustomerPhone,
+    quoteId: null,
+    scriptBody: scriptBodyPayload,
+    summaryOverride,
+  });
+
+  if (!callResult.success) {
+    return buildFailureResponse({
+      reason: "call_creation_failed",
+      message: "We couldn’t start the automated call right now. Please try again.",
+      diagnostics: serializeDiagnostics(callResult.error),
+    });
+  }
+
+  call = callResult.call;
+  callId = call.id;
+
+  console.log("[calls-automated-call-session-created]", {
+    callId,
+    workspaceId: call.workspace_id,
+    jobId: call.job_id,
+  });
+
+  let initGateResult: Awaited<ReturnType<typeof markCallSessionDialRequested>>;
   try {
-    let call: CallSessionRow | null = null;
-    if (!call) {
-      call = await createCallSessionForJobQuote({
-        supabase,
-        workspaceId: workspace.id,
-        userId: user.id,
-        jobId: params.jobId,
-        customerId: resolvedCustomerId,
-        fromNumber,
-        toNumber: normalizedCustomerPhone,
-        quoteId: null,
-        scriptBody: scriptBodyPayload,
-        summaryOverride,
-      });
+    initGateResult = await markCallSessionDialRequested({
+      supabase,
+      workspaceId: workspace.id,
+      callId,
+    });
+  } catch (error) {
+    return buildFailureResponse({
+      reason: "call_dial_request_failed",
+      message: "We couldn’t queue the automated call right now. Please try again.",
+      diagnostics: serializeDiagnostics(error),
+      callId,
+    });
+  }
 
-      console.log("[calls-automated-call-session-created]", {
-        callId: call.id,
-        workspaceId: call.workspace_id,
-        jobId: call.job_id,
-      });
+  if (initGateResult.outcome === "already_in_progress") {
+    logGuardOutcome("rejected_due_to_in_progress_call", {
+      callId,
+      twilioStatus: call.twilio_status ?? null,
+    });
+    return {
+      status: "already_in_progress",
+      code: "already_in_progress",
+      message: "Call is already in progress. Open call session.",
+      callId,
+      twilioStatus: call.twilio_status ?? null,
+      twilioCallSid: call.twilio_call_sid ?? null,
+    };
+  }
 
-      const initGateResult = await markCallSessionDialRequested({
-        supabase,
-        workspaceId: workspace.id,
-        callId: call.id,
-      });
+  if (initGateResult.outcome !== "allowed_to_dial") {
+    return buildFailureResponse({
+      reason: "call_dial_request_failed",
+      message: "We couldn’t queue the automated call right now. Please try again.",
+      diagnostics: {
+        message: "Call session guard did not allow dial.",
+        details: JSON.stringify({ outcome: initGateResult.outcome }),
+      },
+      callId,
+      logExtra: { guardOutcome: initGateResult.outcome },
+    });
+  }
 
-      if (initGateResult.outcome === "already_in_progress") {
-        logGuardOutcome("rejected_due_to_in_progress_call", {
-          callId: call.id,
-          twilioStatus: call.twilio_status ?? null,
-        });
-        return {
-          status: "already_in_progress",
-          code: "already_in_progress",
-          message: "Call is already in progress. Open call session.",
-          callId: call.id,
-          twilioStatus: call.twilio_status ?? null,
-          twilioCallSid: call.twilio_call_sid ?? null,
-        };
-      }
+  if (!outboundFromNumber) {
+    return recordDialFailure(
+      call,
+      "twilio_not_configured",
+      "Calls aren’t configured yet; please set up telephony to continue.",
+      { message: "No outbound phone number is configured for this workspace." },
+    );
+  }
 
-      if (initGateResult.outcome !== "allowed_to_dial") {
-        logFailure("call_session_guard_error", {
-          callId: call.id,
-          workspaceId: workspace.id,
-          guardOutcome: initGateResult.outcome,
-        });
-        throw new Error("call_session_guard_error");
-      }
-    }
+  if (!statusCallbackBaseUrl) {
+    return recordDialFailure(
+      call,
+      "twilio_not_configured",
+      "Calls aren’t configured yet; please set up telephony to continue.",
+      { message: "Unable to resolve the Twilio status callback URL." },
+    );
+  }
 
-    if (!call) {
-      throw new Error("call_session_missing");
-    }
+  if (!recordingCallbackBaseUrl) {
+    return recordDialFailure(
+      call,
+      "twilio_not_configured",
+      "Calls aren’t configured yet; please set up telephony to continue.",
+      { message: "Unable to resolve the Twilio recording callback URL." },
+    );
+  }
 
-    if (!outboundFromNumber) {
-      return recordDialFailure(
-        call,
-        "twilio_not_configured",
-        "Calls aren’t configured yet; please set up telephony to continue.",
-        "No outbound phone number is configured for this workspace.",
-      );
-    }
+  if (!outboundVoiceUrl) {
+    return recordDialFailure(
+      call,
+      "twilio_not_configured",
+      "Calls aren’t configured yet; please set up telephony to continue.",
+      { message: "Unable to resolve the Twilio outbound voice URL." },
+    );
+  }
 
-    if (!statusCallbackBaseUrl) {
-      return recordDialFailure(
-        call,
-        "twilio_not_configured",
-        "Calls aren’t configured yet; please set up telephony to continue.",
-        "Unable to resolve the Twilio status callback URL.",
-      );
-    }
+  const outboundVoiceUrlWithParams = `${outboundVoiceUrl}?callId=${encodeURIComponent(
+    callId,
+  )}&workspaceId=${encodeURIComponent(workspace.id)}`;
 
-    if (!recordingCallbackBaseUrl) {
-      return recordDialFailure(
-        call,
-        "twilio_not_configured",
-        "Calls aren’t configured yet; please set up telephony to continue.",
-        "Unable to resolve the Twilio recording callback URL.",
-      );
-    }
-
-    if (!outboundVoiceUrl) {
-      return recordDialFailure(
-        call,
-        "twilio_not_configured",
-        "Calls aren’t configured yet; please set up telephony to continue.",
-        "Unable to resolve the Twilio outbound voice URL.",
-      );
-    }
-
-    const outboundVoiceUrlWithParams = `${outboundVoiceUrl}?callId=${encodeURIComponent(
-      call.id,
-    )}&workspaceId=${encodeURIComponent(workspace.id)}`;
-
+  try {
     await updateCallSessionAutomatedSpeechPlan({
       supabase,
       workspaceId: workspace.id,
-      callId: call.id,
+      callId,
       plan: {
         voice: voiceSelection,
         greetingStyle: greetingStyleSelection,
@@ -482,22 +642,33 @@ export async function startAskBobAutomatedCall(
         scriptSummary: titleSource,
       },
     });
-    console.log("[askbob-automated-call-speechplan-saved]", {
-      workspaceId: workspace.id,
-      callId: call.id,
-      voice: voiceSelection,
-      greetingStyle: greetingStyleSelection,
-      allowVoicemail: allowVoicemailSelection,
+  } catch (error) {
+    return buildFailureResponse({
+      reason: "call_speech_plan_failed",
+      message: "We couldn’t save the call script settings. Please try again.",
+      diagnostics: serializeDiagnostics(error),
+      callId,
     });
+  }
 
-    const metadata = { callId: call.id, workspaceId: workspace.id };
-    console.log("[calls-automated-dial-attempt]", {
-      callId: call.id,
-      workspaceId: call.workspace_id,
-      jobId: call.job_id,
-    });
+  console.log("[askbob-automated-call-speechplan-saved]", {
+    workspaceId: workspace.id,
+    callId,
+    voice: voiceSelection,
+    greetingStyle: greetingStyleSelection,
+    allowVoicemail: allowVoicemailSelection,
+  });
 
-    const dialResult = await dialTwilioCall({
+  const metadata = { callId, workspaceId: workspace.id };
+  console.log("[calls-automated-dial-attempt]", {
+    callId,
+    workspaceId: call.workspace_id,
+    jobId: call.job_id,
+  });
+
+  let dialResult: Awaited<ReturnType<typeof dialTwilioCall>>;
+  try {
+    dialResult = await dialTwilioCall({
       toPhone: normalizedCustomerPhone,
       fromPhone: outboundFromNumber,
       callbackUrl: statusCallbackBaseUrl,
@@ -507,58 +678,73 @@ export async function startAskBobAutomatedCall(
       recordingCallbackUrl: recordingCallbackBaseUrl,
       twimlUrl: outboundVoiceUrlWithParams,
     });
+  } catch (error) {
+    return buildFailureResponse({
+      reason: "twilio_call_failed",
+      message: "We couldn’t start the automated call right now. Please try again.",
+      diagnostics: serializeDiagnostics(error),
+      callId,
+    });
+  }
 
-    if (!dialResult.success) {
-      const failureReason =
-        dialResult.code === "twilio_not_configured" ? "twilio_not_configured" : "twilio_call_failed";
-      const userMessage =
-        failureReason === "twilio_not_configured"
-          ? "Calls aren’t configured yet; please set up telephony to continue."
-          : "We couldn’t start the automated call right now. Please try again.";
-      return recordDialFailure(
-        call,
-        failureReason,
-        userMessage,
-        dialResult.message,
-        dialResult.twilioErrorCode ?? null,
-        dialResult.twilioErrorMessage ?? null,
-      );
-    }
+  if (!dialResult.success) {
+    const failureReason =
+      dialResult.code === "twilio_not_configured" ? "twilio_not_configured" : "twilio_call_failed";
+    const userMessage =
+      failureReason === "twilio_not_configured"
+        ? "Calls aren’t configured yet; please set up telephony to continue."
+        : "We couldn’t start the automated call right now. Please try again.";
+    const failureDiagnostics: SerializedDiagnostics = {
+      message: dialResult.message,
+      code: dialResult.code,
+      details: JSON.stringify({
+        twilioErrorCode: dialResult.twilioErrorCode ?? null,
+        twilioErrorMessage: dialResult.twilioErrorMessage ?? null,
+      }),
+    };
+    return recordDialFailure(
+      call,
+      failureReason,
+      userMessage,
+      failureDiagnostics,
+      dialResult.twilioErrorCode ?? null,
+      dialResult.twilioErrorMessage ?? null,
+    );
+  }
 
+  try {
     await setTwilioDialResultForCallSession({
       supabase,
       workspaceId: workspace.id,
-      callId: call.id,
+      callId,
       twilioStatus: "initiated",
       twilioCallSid: dialResult.twilioCallSid,
     });
-
-    console.log("[calls-automated-dial-success]", {
-      callId: call.id,
-      workspaceId: call.workspace_id,
-      jobId: call.job_id,
-      twilioStatus: "initiated",
-    });
-
-    emitActionSuccessTelemetry(call.id, dialResult.twilioCallSid);
-
-    return {
-      status: "success",
-      code: "call_started",
-      message: successLabel,
-      callId: call.id,
-      label: successLabel,
-      twilioStatus: dialResult.initialStatus,
-      twilioCallSid: dialResult.twilioCallSid,
-    };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logFailure("call_creation_failed", { error: errorMessage });
-    emitActionFailureTelemetry("call_creation_failed", errorMessage);
-    return {
-      status: "failure",
-      code: "call_creation_failed",
-      message: "We couldn’t start the automated call right now. Please try again.",
-    };
+    return buildFailureResponse({
+      reason: "call_metadata_update_failed",
+      message: "We couldn’t save the call status after starting the call.",
+      diagnostics: serializeDiagnostics(error),
+      callId,
+    });
   }
+
+  console.log("[calls-automated-dial-success]", {
+    callId,
+    workspaceId: call.workspace_id,
+    jobId: call.job_id,
+    twilioStatus: "initiated",
+  });
+
+  emitActionSuccessTelemetry(callId, dialResult.twilioCallSid);
+
+  return {
+    status: "success",
+    code: "call_started",
+    message: successLabel,
+    callId,
+    label: successLabel,
+    twilioStatus: dialResult.initialStatus,
+    twilioCallSid: dialResult.twilioCallSid,
+  };
 }

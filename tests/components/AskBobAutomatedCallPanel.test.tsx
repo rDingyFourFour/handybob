@@ -185,6 +185,43 @@ describe("AskBobAutomatedCallPanel", () => {
     expect(container.querySelector("a[href=\"/calls/call-123\"]")).toBeTruthy();
   });
 
+  it("prefers diagnostics messaging over generic fallback", async () => {
+    mockStartCallAction.mockResolvedValue({
+      status: "failure" as const,
+      code: "twilio_call_failed",
+      message: "",
+      callId: "call-123",
+      diagnostics: {
+        message: "Twilio rejected the dial request.",
+      },
+    });
+
+    await act(async () => {
+      root?.render(
+        <AskBobAutomatedCallPanel
+          workspaceId="workspace-1"
+          jobId="job-1"
+          customerPhoneNumber="+15550001234"
+          customerDisplayName="Customer"
+          callScriptBody="Hello preview"
+          callScriptSummary="Summary"
+          jobTitle="Title"
+          jobDescription="Description"
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const button = findPrimaryButton(container);
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Twilio rejected the dial request.");
+    expect(container.textContent).not.toContain("[object Object]");
+  });
+
   it("shows the already started confirmation for idempotent responses", async () => {
     const idempotentPayload = {
       status: "success" as const,

@@ -44,6 +44,45 @@ const truncatePreview = (value: string, limit: number) => {
   return `${value.slice(0, limit)}…`;
 };
 
+const normalizeDiagnostics = (value: unknown) => {
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name : undefined;
+    const message = typeof record.message === "string" ? record.message : undefined;
+    const code = typeof record.code === "string" ? record.code : undefined;
+    const details = typeof record.details === "string" ? record.details : undefined;
+    return {
+      name,
+      message: message ?? "Unexpected error.",
+      code,
+      details,
+    };
+  }
+  if (typeof value === "string") {
+    return { message: value };
+  }
+  return { message: "Unexpected error." };
+};
+
+const resolveFailureMessage = (result: StartAskBobAutomatedCallResult | null) => {
+  if (!result || result.status !== "failure") {
+    return null;
+  }
+  if (result.message) {
+    return result.message;
+  }
+  if (result.diagnostics && typeof result.diagnostics === "object") {
+    const diagnosticsMessage =
+      "message" in result.diagnostics && typeof result.diagnostics.message === "string"
+        ? result.diagnostics.message
+        : null;
+    if (diagnosticsMessage) {
+      return diagnosticsMessage;
+    }
+  }
+  return "Couldn’t place the call. Try again.";
+};
+
 function formatRecordingDuration(seconds?: number | null) {
   if (seconds == null) {
     return null;
@@ -637,14 +676,30 @@ const previewText = scriptPreview
       setCallSessionId(actionResult.callId ?? null);
       setTwilioStatus(actionResult.twilioStatus ?? null);
       setResultTwilioCallSid(actionResult.twilioCallSid ?? null);
-      setStatusMessage(actionResult.message ?? null);
 
       if (actionResult.status === "success") {
+        setStatusMessage(actionResult.message ?? null);
         setStatus("success");
         onAutomatedCallSuccess?.(actionResult.label);
       } else if (actionResult.status === "already_in_progress") {
+        setStatusMessage(actionResult.message ?? null);
         setStatus("already_in_progress");
       } else {
+        const failureMessage = resolveFailureMessage(actionResult);
+        setStatusMessage(failureMessage);
+        const diagnosticsPayload = actionResult.diagnostics
+          ? normalizeDiagnostics(actionResult.diagnostics)
+          : normalizeDiagnostics({
+              message: failureMessage ?? actionResult.message ?? "Automated call failed.",
+              code: actionResult.code ?? null,
+            });
+        console.log("[askbob-automated-call-ui-failure]", {
+          workspaceId,
+          jobId,
+          callId: actionResult.callId ?? null,
+          reason: actionResult.code ?? "unknown_failure",
+          diagnostics: diagnosticsPayload,
+        });
         setStatus("failure");
       }
     } catch (error) {
@@ -652,6 +707,13 @@ const previewText = scriptPreview
       setStatus("failure");
       setStatusMessage(errorMessage);
       setResultTwilioCallSid(null);
+      console.log("[askbob-automated-call-ui-failure]", {
+        workspaceId,
+        jobId,
+        callId: null,
+        reason: "unexpected_error",
+        diagnostics: normalizeDiagnostics(error),
+      });
       actionResult = {
         status: "failure",
         code: "unexpected_error",
