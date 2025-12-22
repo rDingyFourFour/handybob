@@ -114,6 +114,70 @@ describe("CallSessionPage automated call view", () => {
     expect(detailEvents).toHaveLength(1);
   });
 
+  it("renders Twilio status, recording, and outcome-required banners when gates are met", async () => {
+    const metadata = {
+      voice: "Samantha",
+      greetingStyle: "Professional",
+      allowVoicemail: true,
+      scriptSummary: "Follow-up script",
+    };
+    const summary = `${ASKBOB_AUTOMATED_SCRIPT_PREFIX} Follow-up script${SPEECH_PLAN_METADATA_MARKER}${JSON.stringify(
+      metadata,
+    )}`;
+
+    supabaseState.responses.calls = {
+      data: [
+        {
+          id: "call-auto-strip",
+          workspace_id: "workspace-1",
+          created_at: "2024-01-03T12:00:00.000Z",
+          job_id: "job-1",
+          customer_id: "customer-1",
+          direction: "outbound",
+          from_number: "+10000000004",
+          to_number: "+10000000005",
+          outcome: null,
+          outcome_notes: null,
+          outcome_recorded_at: null,
+          outcome_code: null,
+          reached_customer: null,
+          summary,
+          ai_summary: null,
+          transcript: null,
+          twilio_call_sid: "CA456",
+          twilio_status: "completed",
+          twilio_status_updated_at: "2024-01-03T12:00:05.000Z",
+          twilio_error_message: null,
+          twilio_error_code: null,
+          twilio_recording_url: "https://example.com/recording.mp3",
+          twilio_recording_sid: "RE123",
+          twilio_recording_duration_seconds: 32,
+          twilio_recording_received_at: "2024-01-03T12:01:05.000Z",
+        },
+      ],
+      error: null,
+    };
+    supabaseState.responses.customers = {
+      data: [{ id: "customer-1", name: "Test Customer", phone: "+10000000005" }],
+      error: null,
+    };
+    supabaseState.responses.jobs = {
+      data: [
+        { id: "job-1", title: "Automation job", status: "open", customer_id: "customer-1", customers: [] },
+      ],
+      error: null,
+    };
+    supabaseState.responses.quotes = { data: [], error: null };
+    supabaseState.responses.messages = { data: [], error: null };
+
+    const element = await CallSessionPage({ params: Promise.resolve({ id: "call-auto-strip" }) });
+    const markup = renderToStaticMarkup(element);
+
+    expect(markup).toContain("Automated call");
+    expect(markup).toContain("Twilio status");
+    expect(markup).toContain("Recording available");
+    expect(markup).toContain("Call ended. Record outcome to generate a follow-up.");
+  });
 
   it("hides the automated call strip and notes card when metadata is absent", async () => {
     supabaseState.responses.calls = {
@@ -157,6 +221,9 @@ describe("CallSessionPage automated call view", () => {
     const markup = renderToStaticMarkup(element);
 
     expect(markup).not.toContain("Automated call");
+    expect(markup).not.toContain("Twilio status");
+    expect(markup).not.toContain("Recording");
+    expect(markup).not.toContain("Call ended. Record outcome to generate a follow-up.");
     expect(markup).not.toContain("Automated call notes");
     const detailEvents = consoleLogSpy.mock.calls.filter(
       (args) => args[0] === "[calls-session-askbob-automated-details-visible]",

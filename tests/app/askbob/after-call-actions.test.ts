@@ -172,6 +172,63 @@ describe("runAskBobJobAfterCallAction", () => {
     expect(runAskBobTaskMock).not.toHaveBeenCalled();
   });
 
+  it("blocks call_session generation when the reached flag is missing", async () => {
+    const missingReachedCall = {
+      ...callRow,
+      reached_customer: null,
+      outcome_code: "reached_needs_followup",
+      outcome_notes: "Follow-up note",
+      outcome_recorded_at: new Date().toISOString(),
+    };
+    supabaseState.responses.calls = { data: [missingReachedCall], error: null };
+
+    const response = await runAskBobJobAfterCallAction({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      callId: "call-1",
+      generationSource: "call_session",
+    });
+
+    expect(response.ok).toBe(false);
+    expect(response.code).toBe("not_ready_missing_reached_flag");
+    expect(runAskBobTaskMock).not.toHaveBeenCalled();
+  });
+
+  it("runs call_session generation when readiness is satisfied and logs telemetry", async () => {
+    const readyCall = {
+      ...callRow,
+      twilio_status: "completed",
+      outcome_code: "reached_needs_followup",
+      outcome_notes: "Follow-up note",
+      outcome_recorded_at: new Date().toISOString(),
+      reached_customer: true,
+    };
+    supabaseState.responses.calls = { data: [readyCall], error: null };
+    runAskBobTaskMock.mockResolvedValue({
+      afterCallSummary: "Summary",
+      recommendedActionLabel: "Next step",
+      recommendedActionSteps: ["Do thing"],
+      suggestedChannel: "sms",
+      urgencyLevel: "normal",
+      modelLatencyMs: 123,
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const response = await runAskBobJobAfterCallAction({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      callId: "call-1",
+      generationSource: "call_session",
+    });
+
+    expect(response.ok).toBe(true);
+    expect(runAskBobTaskMock).toHaveBeenCalledOnce();
+    expect(
+      logSpy.mock.calls.some((args) => args[0] === "[askbob-after-call-ui-success]"),
+    ).toBe(true);
+    logSpy.mockRestore();
+  });
+
   it("allows job_step_8 generation even when the call is not terminal", async () => {
     const pendingCall = {
       ...callRow,

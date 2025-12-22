@@ -171,6 +171,135 @@ describe("startAskBobAutomatedCall", () => {
     logSpy.mockRestore();
   });
 
+  it("persists the dial requested marker before dialing Twilio", async () => {
+    const supabaseState = setupSupabaseMock({
+      jobs: {
+        data: [
+          {
+            id: "job-1",
+            workspace_id: "workspace-1",
+            customer_id: "customer-1",
+          },
+        ],
+        error: null,
+      },
+      workspaces: {
+        data: [
+          {
+            business_phone: "+15550001111",
+          },
+        ],
+        error: null,
+      },
+      calls: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: "call-123",
+              workspace_id: "workspace-1",
+              job_id: "job-1",
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+    supabaseState.supabase.auth = {
+      getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
+    };
+    createServerClientMock.mockReturnValue(supabaseState.supabase);
+    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+    mockDialTwilioCall.mockResolvedValueOnce({
+      success: true,
+      twilioCallSid: "twilio-abc",
+      initialStatus: "queued",
+    });
+
+    const result = await startAskBobAutomatedCall({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      customerId: "customer-1",
+      customerPhone: "+15550002222",
+      scriptBody: "Hello there",
+      scriptSummary: "Follow-up script",
+    });
+
+    expect(result.status).toBe("success");
+    expect(markDialRequestedSpy).toHaveBeenCalledTimes(1);
+    expect(mockDialTwilioCall).toHaveBeenCalledTimes(1);
+    const markOrder = markDialRequestedSpy.mock.invocationCallOrder[0];
+    const dialOrder = mockDialTwilioCall.mock.invocationCallOrder[0];
+    expect(markOrder).toBeLessThan(dialOrder);
+  });
+
+  it("returns already_in_progress when the dial request guard blocks a new session", async () => {
+    const supabaseState = setupSupabaseMock({
+      jobs: {
+        data: [
+          {
+            id: "job-1",
+            workspace_id: "workspace-1",
+            customer_id: "customer-1",
+          },
+        ],
+        error: null,
+      },
+      workspaces: {
+        data: [
+          {
+            business_phone: "+15550001111",
+          },
+        ],
+        error: null,
+      },
+      calls: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: "call-guarded",
+              workspace_id: "workspace-1",
+              job_id: "job-1",
+              twilio_status: "ringing",
+              twilio_call_sid: "twilio-guarded",
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+    supabaseState.supabase.auth = {
+      getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
+    };
+    createServerClientMock.mockReturnValue(supabaseState.supabase);
+    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+    markDialRequestedSpy.mockResolvedValueOnce({
+      outcome: "already_in_progress",
+      callId: "call-guarded",
+      currentStatus: "ringing",
+    });
+
+    const result = await startAskBobAutomatedCall({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      customerId: "customer-1",
+      customerPhone: "+15550002222",
+      scriptBody: "Hello there",
+      scriptSummary: "Follow-up script",
+    });
+
+    expect(result).toEqual({
+      status: "already_in_progress",
+      code: "already_in_progress",
+      message: "Call is already in progress. Open call session.",
+      callId: "call-guarded",
+      twilioStatus: "ringing",
+      twilioCallSid: "twilio-guarded",
+    });
+    expect(mockDialTwilioCall).not.toHaveBeenCalled();
+  });
+
   it("returns a failure when Twilio is not configured", async () => {
     const supabaseState = setupSupabaseMock({
       jobs: {
@@ -239,6 +368,79 @@ describe("startAskBobAutomatedCall", () => {
       workspaceId: "workspace-1",
       twilioStatus: "failed",
       errorMessage: "Missing config",
+    });
+  });
+
+  it("persists failure metadata when Twilio call fails", async () => {
+    const supabaseState = setupSupabaseMock({
+      jobs: {
+        data: [
+          {
+            id: "job-1",
+            workspace_id: "workspace-1",
+            customer_id: "customer-1",
+          },
+        ],
+        error: null,
+      },
+      workspaces: {
+        data: [
+          {
+            business_phone: "+15550001111",
+          },
+        ],
+        error: null,
+      },
+      calls: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: "call-123",
+              workspace_id: "workspace-1",
+              job_id: "job-1",
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+    supabaseState.supabase.auth = {
+      getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
+    };
+    createServerClientMock.mockReturnValue(supabaseState.supabase);
+    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+    mockDialTwilioCall.mockResolvedValueOnce({
+      success: false,
+      code: "twilio_call_failed",
+      message: "Twilio failure",
+      twilioErrorCode: "30001",
+      twilioErrorMessage: "Failure",
+    });
+
+    const result = await startAskBobAutomatedCall({
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      customerId: "customer-1",
+      customerPhone: "+15550002222",
+      scriptBody: "Hello there",
+      scriptSummary: "Follow-up script",
+    });
+
+    expect(result).toEqual({
+      status: "failure",
+      code: "twilio_call_failed",
+      message: "We couldn’t start the automated call right now. Please try again.",
+      callId: "call-123",
+      twilioStatus: "failed",
+    });
+    expect(setDialResultSpy).toHaveBeenCalledTimes(1);
+    expect(setDialResultSpy.mock.calls[0][0]).toMatchObject({
+      callId: "call-123",
+      workspaceId: "workspace-1",
+      twilioStatus: "failed",
+      errorCode: "30001",
+      errorMessage: "Failure",
     });
   });
 
