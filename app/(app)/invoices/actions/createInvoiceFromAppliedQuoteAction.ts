@@ -247,6 +247,7 @@ export async function createInvoiceFromAppliedQuoteAction(
       job_id: job.id,
       quote_id: appliedQuote.id,
       user_id: user.id,
+      invoice_status: "draft",
       status: "draft",
       subtotal: subtotalValue,
       tax: taxValue,

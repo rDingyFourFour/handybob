@@ -83,6 +83,10 @@ type JobInvoiceSnapshotRow = {
   id: string;
   quote_id: string | null;
   created_at: string | null;
+  invoice_status: string | null;
+  sent_at: string | null;
+  paid_at: string | null;
+  voided_at: string | null;
   total_cents: number | null;
   tax_total_cents: number | null;
   labor_total_cents: number | null;
@@ -495,6 +499,10 @@ export default async function JobDetailPage(props: {
           id,
           quote_id,
           created_at,
+          invoice_status,
+          sent_at,
+          paid_at,
+          voided_at,
           total_cents,
           tax_total_cents,
           labor_total_cents,
