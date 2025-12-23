@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import { formatCurrency } from "@/utils/timeline/formatters";
-import { createInvoiceFromAppliedQuoteAction } from "@/app/(app)/invoices/actions/createInvoiceFromAppliedQuoteAction";
+import { createInvoiceFromAcceptedQuoteAction } from "@/app/(app)/invoices/actions/createInvoiceFromAcceptedQuoteAction";
 import { updateInvoiceStatusAction } from "@/app/(app)/invoices/actions/updateInvoiceStatusAction";
 import { normalizeInvoiceStatus, type InvoiceStatus } from "@/lib/domain/invoicesLifecycle";
 
@@ -18,11 +18,9 @@ type InvoiceSnapshotRow = {
   sent_at: string | null;
   paid_at: string | null;
   voided_at: string | null;
-  total_cents: number | null;
-  tax_total_cents: number | null;
-  labor_total_cents: number | null;
-  materials_total_cents: number | null;
-  trip_fee_cents: number | null;
+  snapshot_total_cents: number | null;
+  snapshot_tax_cents: number | null;
+  snapshot_subtotal_cents: number | null;
   currency: string | null;
 };
 
@@ -40,16 +38,20 @@ type InvoiceStatusActionState = Awaited<ReturnType<typeof updateInvoiceStatusAct
 type Props = {
   workspaceId: string;
   jobId: string;
-  appliedQuoteId: string | null;
+  acceptedQuoteId: string | null;
   invoice: InvoiceSnapshotRow | null;
   invoiceCreatedLabel: string | null;
 };
 
 const ERROR_COPY: Record<string, string> = {
   already_exists: "An invoice already exists for this job.",
-  missing_applied_quote: "Accept a quote before creating an invoice.",
+  quote_not_accepted: "Accept the quote before creating an invoice.",
+  quote_not_found: "We couldn’t find that quote. Refresh and try again.",
+  job_not_found: "We couldn’t find this job. Refresh and try again.",
+  forbidden: "You no longer have access to create invoices here.",
   unauthorized: "You no longer have access to create invoices here.",
-  unknown: "We couldn’t create the invoice. Please try again.",
+  invalid_input: "We couldn’t create the invoice. Refresh and try again.",
+  unknown_error: "We couldn’t create the invoice. Please try again.",
 };
 
 const STATUS_LABELS: Record<InvoiceStatus, string> = {
@@ -98,13 +100,13 @@ function buildLifecycleState(invoice: InvoiceSnapshotRow | null) {
 export default function JobInvoiceSection({
   workspaceId,
   jobId,
-  appliedQuoteId,
+  acceptedQuoteId,
   invoice,
   invoiceCreatedLabel,
 }: Props) {
   const router = useRouter();
   const [actionState, formAction, isSubmitting] = useActionState<InvoiceActionState, FormData>(
-    createInvoiceFromAppliedQuoteAction,
+    createInvoiceFromAcceptedQuoteAction,
     null,
   );
   const [statusActionState, statusFormAction, statusSubmitting] = useActionState<
@@ -114,7 +116,7 @@ export default function JobInvoiceSection({
   const [lifecycleState, setLifecycleState] = useState(() => buildLifecycleState(invoice));
 
   const hasInvoice = Boolean(invoice?.id);
-  const hasAcceptedQuote = Boolean(appliedQuoteId);
+  const hasAcceptedQuote = Boolean(acceptedQuoteId);
 
   const statusLabel = useMemo(
     () => STATUS_LABELS[lifecycleState.status],
@@ -134,8 +136,8 @@ export default function JobInvoiceSection({
   );
 
   useEffect(() => {
-    console.log("[invoice-job-section-visible]", { jobId, hasAcceptedQuote, hasInvoice });
-  }, [jobId, hasAcceptedQuote, hasInvoice]);
+    console.log("[job-invoice-section-visible]", { workspaceId, jobId });
+  }, [workspaceId, jobId]);
 
   useEffect(() => {
     setLifecycleState(buildLifecycleState(invoice));
@@ -176,7 +178,9 @@ export default function JobInvoiceSection({
   }, [statusActionState, invoice, workspaceId, jobId]);
 
   const errorMessage =
-    actionState && !actionState.success ? ERROR_COPY[actionState.code] ?? ERROR_COPY.unknown : null;
+    actionState && !actionState.success
+      ? ERROR_COPY[actionState.code] ?? ERROR_COPY.unknown_error
+      : null;
   const statusErrorMessage =
     statusActionState && !statusActionState.success
       ? STATUS_ACTION_ERROR_COPY[statusActionState.code] ?? STATUS_ACTION_ERROR_COPY.db_error
@@ -186,14 +190,22 @@ export default function JobInvoiceSection({
       ? `Invoice marked as ${STATUS_LABELS[statusActionState.newStatus]}.`
       : null;
 
+  const handleCreateClick = () => {
+    console.log("[job-invoice-create-click]", {
+      workspaceId,
+      jobId,
+      quoteId: acceptedQuoteId ?? null,
+    });
+  };
+
   const handleStatusSubmit = (targetStatus: InvoiceStatus) => () => {
-      console.log("[invoices-status-ui-submit]", {
-        workspaceId,
-        jobId,
-        invoiceId: invoice?.id ?? null,
-        targetStatus,
-      });
-    };
+    console.log("[invoices-status-ui-submit]", {
+      workspaceId,
+      jobId,
+      invoiceId: invoice?.id ?? null,
+      targetStatus,
+    });
+  };
 
   return (
     <HbCard className="space-y-3">
@@ -232,7 +244,7 @@ export default function JobInvoiceSection({
           <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
             Accepted quote
           </span>
-          <span>Quote {appliedQuoteId?.slice(0, 8)}</span>
+          <span>Quote {acceptedQuoteId?.slice(0, 8)}</span>
         </div>
       ) : null}
 
@@ -249,7 +261,8 @@ export default function JobInvoiceSection({
         <form action={formAction} className="space-y-2">
           <input type="hidden" name="workspaceId" value={workspaceId} />
           <input type="hidden" name="jobId" value={jobId} />
-          <HbButton type="submit" size="sm" disabled={isSubmitting}>
+          <input type="hidden" name="quoteId" value={acceptedQuoteId ?? ""} />
+          <HbButton type="submit" size="sm" disabled={isSubmitting} onClick={handleCreateClick}>
             {isSubmitting ? "Creating invoice..." : "Create invoice from accepted quote"}
           </HbButton>
         </form>
@@ -269,7 +282,7 @@ export default function JobInvoiceSection({
           <div className="grid gap-2 md:grid-cols-2">
             <div className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Total</p>
-              <p className="text-lg font-semibold">{formatCents(invoice?.total_cents)}</p>
+              <p className="text-lg font-semibold">{formatCents(invoice?.snapshot_total_cents)}</p>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Created</p>

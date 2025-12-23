@@ -167,11 +167,9 @@ describe("Job detail invoice section", () => {
       id: "invoice-1",
       quote_id: "quote-1",
       created_at: new Date().toISOString(),
-      total_cents: 9900,
-      tax_total_cents: 900,
-      labor_total_cents: 9000,
-      materials_total_cents: 0,
-      trip_fee_cents: 0,
+      snapshot_total_cents: 9900,
+      snapshot_tax_cents: 900,
+      snapshot_subtotal_cents: 9000,
       currency: "USD",
     };
 

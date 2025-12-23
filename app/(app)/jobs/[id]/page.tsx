@@ -31,6 +31,10 @@ import {
   type CallSummarySignals,
 } from "@/lib/domain/askbob/callHistory";
 import { getLatestCallOutcomeForJob } from "@/lib/domain/calls/latestCallOutcome";
+import {
+  getInvoiceForJob,
+  type InvoiceSnapshotRow as JobInvoiceSnapshotRow,
+} from "@/lib/domain/invoices/getInvoiceForJob";
 
 type JobRecord = {
   id: string;
@@ -77,22 +81,6 @@ type JobAppointmentRow = {
   start_time: string | null;
   end_time: string | null;
   status: string | null;
-};
-
-type JobInvoiceSnapshotRow = {
-  id: string;
-  quote_id: string | null;
-  created_at: string | null;
-  invoice_status: string | null;
-  sent_at: string | null;
-  paid_at: string | null;
-  voided_at: string | null;
-  total_cents: number | null;
-  tax_total_cents: number | null;
-  labor_total_cents: number | null;
-  materials_total_cents: number | null;
-  trip_fee_cents: number | null;
-  currency: string | null;
 };
 
 const appointmentStatusClasses: Record<string, string> = {
@@ -499,34 +487,16 @@ export default async function JobDetailPage(props: {
 
   let invoice: JobInvoiceSnapshotRow | null = null;
   try {
-    const { data, error } = await supabase
-      .from<JobInvoiceSnapshotRow>("invoices")
-      .select(
-        `
-          id,
-          quote_id,
-          created_at,
-          invoice_status,
-          sent_at,
-          paid_at,
-          voided_at,
-          total_cents,
-          tax_total_cents,
-          labor_total_cents,
-          materials_total_cents,
-          trip_fee_cents,
-          currency
-        `
-      )
-      .eq("workspace_id", workspace.id)
-      .eq("job_id", job.id)
-      .maybeSingle();
+    const { invoice: invoiceRow, error } = await getInvoiceForJob({
+      supabase,
+      workspaceId: workspace.id,
+      jobId: job.id,
+    });
 
     if (error) {
       console.error("[job-detail] Failed to load invoice snapshot", error);
-    } else {
-      invoice = data ?? null;
     }
+    invoice = invoiceRow ?? null;
   } catch (error) {
     console.error("[job-detail] Invoice snapshot query failed", error);
   }
@@ -717,13 +687,13 @@ export default async function JobDetailPage(props: {
           </div>
         )}
       </HbCard>
-      <JobInvoiceSection
-        workspaceId={workspace.id}
-        jobId={job.id}
-        appliedQuoteId={acceptedQuote?.id ?? null}
-        invoice={invoice}
-        invoiceCreatedLabel={invoiceCreatedLabel}
-      />
+        <JobInvoiceSection
+          workspaceId={workspace.id}
+          jobId={job.id}
+          acceptedQuoteId={acceptedQuote?.id ?? null}
+          invoice={invoice}
+          invoiceCreatedLabel={invoiceCreatedLabel}
+        />
       <JobQuotesCard quotes={quotes} quotesError={quotesError} quoteHref={quoteHref} />
       <JobRecentActivityCard jobId={job.id} workspaceId={workspace.id} />
     </div>

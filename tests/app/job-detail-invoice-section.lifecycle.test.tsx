@@ -2,7 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockCreateInvoiceFromAppliedQuoteAction = vi.fn();
+const mockCreateInvoiceFromAcceptedQuoteAction = vi.fn();
 const mockUpdateInvoiceStatusAction = vi.fn();
 
 vi.mock("next/navigation", () => ({
@@ -16,9 +16,9 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-vi.mock("@/app/(app)/invoices/actions/createInvoiceFromAppliedQuoteAction", () => ({
-  createInvoiceFromAppliedQuoteAction: (...args: unknown[]) =>
-    mockCreateInvoiceFromAppliedQuoteAction(...args),
+vi.mock("@/app/(app)/invoices/actions/createInvoiceFromAcceptedQuoteAction", () => ({
+  createInvoiceFromAcceptedQuoteAction: (...args: unknown[]) =>
+    mockCreateInvoiceFromAcceptedQuoteAction(...args),
 }));
 
 vi.mock("@/app/(app)/invoices/actions/updateInvoiceStatusAction", () => ({
@@ -35,11 +35,9 @@ const BASE_INVOICE = {
   sent_at: null,
   paid_at: null,
   voided_at: null,
-  total_cents: 9900,
-  tax_total_cents: 900,
-  labor_total_cents: 9000,
-  materials_total_cents: 0,
-  trip_fee_cents: 0,
+  snapshot_total_cents: 9900,
+  snapshot_tax_cents: 900,
+  snapshot_subtotal_cents: 9000,
   currency: "USD",
 };
 
@@ -51,7 +49,7 @@ describe("JobInvoiceSection lifecycle controls", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    mockCreateInvoiceFromAppliedQuoteAction.mockReset();
+    mockCreateInvoiceFromAcceptedQuoteAction.mockReset();
     mockUpdateInvoiceStatusAction.mockReset();
     vi.spyOn(console, "log").mockImplementation(() => {});
   });
@@ -68,7 +66,7 @@ describe("JobInvoiceSection lifecycle controls", () => {
   async function renderSection(params?: {
     invoiceOverride?: Partial<typeof BASE_INVOICE>;
     invoice?: typeof BASE_INVOICE | null;
-    appliedQuoteId?: string | null;
+    acceptedQuoteId?: string | null;
   }) {
     if (!root) {
       throw new Error("missing root");
@@ -77,14 +75,14 @@ describe("JobInvoiceSection lifecycle controls", () => {
       params && "invoice" in params
         ? params.invoice
         : { ...BASE_INVOICE, ...(params?.invoiceOverride ?? {}) };
-    const appliedQuoteId =
-      params && "appliedQuoteId" in params ? params.appliedQuoteId ?? null : "quote-1";
+    const acceptedQuoteId =
+      params && "acceptedQuoteId" in params ? params.acceptedQuoteId ?? null : "quote-1";
     await act(async () => {
       root?.render(
         <JobInvoiceSection
           workspaceId="workspace-1"
           jobId="job-1"
-          appliedQuoteId={appliedQuoteId}
+          acceptedQuoteId={acceptedQuoteId}
           invoice={invoice}
           invoiceCreatedLabel="Jan 1, 2025"
         />,
@@ -228,7 +226,7 @@ describe("JobInvoiceSection lifecycle controls", () => {
   });
 
   it("disables invoice creation when no accepted quote exists", async () => {
-    await renderSection({ invoice: null, appliedQuoteId: null });
+    await renderSection({ invoice: null, acceptedQuoteId: null });
     await flushReactUpdates();
 
     expect(container.innerHTML).toContain("Accept a quote to create an invoice.");
@@ -238,7 +236,7 @@ describe("JobInvoiceSection lifecycle controls", () => {
   });
 
   it("enables invoice creation when an accepted quote exists", async () => {
-    await renderSection({ invoice: null, appliedQuoteId: "quote-1" });
+    await renderSection({ invoice: null, acceptedQuoteId: "quote-1" });
     await flushReactUpdates();
 
     const button = findButton("Create invoice from accepted quote");
