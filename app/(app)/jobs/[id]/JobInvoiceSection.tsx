@@ -47,7 +47,7 @@ type Props = {
 
 const ERROR_COPY: Record<string, string> = {
   already_exists: "An invoice already exists for this job.",
-  missing_applied_quote: "Apply a quote before creating an invoice.",
+  missing_applied_quote: "Accept a quote before creating an invoice.",
   unauthorized: "You no longer have access to create invoices here.",
   unknown: "We couldn’t create the invoice. Please try again.",
 };
@@ -114,7 +114,7 @@ export default function JobInvoiceSection({
   const [lifecycleState, setLifecycleState] = useState(() => buildLifecycleState(invoice));
 
   const hasInvoice = Boolean(invoice?.id);
-  const hasAppliedQuote = Boolean(appliedQuoteId);
+  const hasAcceptedQuote = Boolean(appliedQuoteId);
 
   const statusLabel = useMemo(
     () => STATUS_LABELS[lifecycleState.status],
@@ -134,8 +134,8 @@ export default function JobInvoiceSection({
   );
 
   useEffect(() => {
-    console.log("[invoice-job-section-visible]", { jobId, hasAppliedQuote, hasInvoice });
-  }, [jobId, hasAppliedQuote, hasInvoice]);
+    console.log("[invoice-job-section-visible]", { jobId, hasAcceptedQuote, hasInvoice });
+  }, [jobId, hasAcceptedQuote, hasInvoice]);
 
   useEffect(() => {
     setLifecycleState(buildLifecycleState(invoice));
@@ -227,16 +227,30 @@ export default function JobInvoiceSection({
         </div>
       ) : null}
 
-      {!hasAppliedQuote ? (
-        <p className="text-sm text-slate-400">Apply a quote to generate an invoice.</p>
+      {hasAcceptedQuote ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-400">
+          <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
+            Accepted quote
+          </span>
+          <span>Quote {appliedQuoteId?.slice(0, 8)}</span>
+        </div>
       ) : null}
 
-      {hasAppliedQuote && !hasInvoice ? (
+      {!hasAcceptedQuote && !hasInvoice ? (
+        <div className="space-y-2">
+          <p className="text-sm text-slate-400">Accept a quote to create an invoice.</p>
+          <HbButton type="button" size="sm" disabled>
+            Create invoice from accepted quote
+          </HbButton>
+        </div>
+      ) : null}
+
+      {hasAcceptedQuote && !hasInvoice ? (
         <form action={formAction} className="space-y-2">
           <input type="hidden" name="workspaceId" value={workspaceId} />
           <input type="hidden" name="jobId" value={jobId} />
           <HbButton type="submit" size="sm" disabled={isSubmitting}>
-            {isSubmitting ? "Creating invoice..." : "Create invoice"}
+            {isSubmitting ? "Creating invoice..." : "Create invoice from accepted quote"}
           </HbButton>
         </form>
       ) : null}

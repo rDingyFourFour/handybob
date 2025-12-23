@@ -146,8 +146,8 @@ describe("Job detail invoice section", () => {
 
     const markup = await renderJobDetail();
 
-    expect(markup).toContain("Apply a quote to generate an invoice.");
-    expect(markup).not.toContain("Create invoice");
+    expect(markup).toContain("Accept a quote to create an invoice.");
+    expect(markup).toContain("Create invoice from accepted quote");
   });
 
   it("shows the create invoice CTA when an applied quote exists", async () => {
@@ -159,7 +159,7 @@ describe("Job detail invoice section", () => {
 
     const markup = await renderJobDetail();
 
-    expect(markup).toContain("Create invoice");
+    expect(markup).toContain("Create invoice from accepted quote");
   });
 
   it("renders the invoice snapshot totals when an invoice exists", async () => {
@@ -215,7 +215,7 @@ describe("Job detail invoice section", () => {
     expect(firstMarkup).toContain("$99.00");
     expect(firstMarkup).not.toContain("$250.00");
     expect(firstMarkup).toContain("View invoice");
-    expect(firstMarkup).not.toContain("Create invoice");
+    expect(firstMarkup).not.toContain("Create invoice from accepted quote");
 
     expect(secondMarkup).toContain("Invoice created");
     expect(secondMarkup).toContain("$99.00");

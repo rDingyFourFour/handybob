@@ -5,9 +5,9 @@ import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
-import { formatCurrency } from "@/utils/timeline/formatters";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
+import QuotesListClient, { type QuoteRowType } from "@/components/quotes/QuotesListClient";
 
 type QuoteRow = {
   id: string;
@@ -18,10 +18,6 @@ type QuoteRow = {
   client_message_template?: string | null;
   smart_quote_used?: boolean | null;
 };
-
-const smartQuoteBadgeClasses =
-  "inline-flex items-center gap-2 rounded-full border px-3 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] bg-amber-500/10 border-amber-400/40 text-amber-300";
-const smartQuoteBadgeDotClasses = "h-1.5 w-1.5 rounded-full bg-amber-300";
 
 export default async function QuotesPage() {
   let supabase;
@@ -94,14 +90,38 @@ export default async function QuotesPage() {
     });
   }
 
-  function formatDate(value: string | null) {
-    if (!value) return null;
+  const dateFormatter = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  const currencyFormatter = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const formatDateLabel = (value: string | null) => {
+    if (!value) return "—";
     const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-  }
+    if (Number.isNaN(parsed.getTime())) return "—";
+    return dateFormatter.format(parsed);
+  };
+  const formatTotalLabel = (value: number | null) => {
+    if (value == null) return "—";
+    const numeric = Number(value);
+    if (Number.isNaN(numeric)) return "—";
+    return `$${currencyFormatter.format(numeric)}`;
+  };
 
-  const shortId = (value: string) => value.slice(0, 8);
+  const initialQuotes: QuoteRowType[] = quotes.map((quote) => ({
+    id: quote.id,
+    status: quote.status ?? null,
+    totalLabel: formatTotalLabel(quote.total),
+    createdLabel: formatDateLabel(quote.created_at),
+    jobId: quote.job_id ?? null,
+    clientMessageTemplate: quote.client_message_template ?? null,
+    smartQuoteUsed: Boolean(quote.smart_quote_used),
+  }));
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -128,88 +148,8 @@ export default async function QuotesPage() {
           <h2 className="hb-card-heading text-lg font-semibold">Something went wrong</h2>
           <p className="hb-muted text-sm">We couldn’t load this page. Try again or go back.</p>
         </HbCard>
-      ) : quotes.length === 0 ? (
-        <HbCard className="space-y-3">
-          <h2 className="hb-card-heading text-lg font-semibold">No quotes yet</h2>
-          <p className="hb-muted text-sm">You can create one using the button above.</p>
-          <HbButton as={Link} href="/jobs/new" size="sm">
-            Go to jobs
-          </HbButton>
-        </HbCard>
       ) : (
-        <HbCard className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="hb-card-heading text-lg font-semibold">All quotes</h2>
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-              Showing {quotes.length} quote{quotes.length === 1 ? "" : "s"}
-            </p>
-          </div>
-          <div className="space-y-2">
-            {quotes.map((quote) => {
-              const totalLabel = quote.total != null ? formatCurrency(quote.total) : "—";
-              const createdLabel = formatDate(quote.created_at) ?? "—";
-              const jobIdShort = quote.job_id ? quote.job_id.slice(0, 8) : null;
-              return (
-                <article
-                  key={quote.id}
-                  className="rounded-2xl border border-slate-800/60 bg-slate-900/60 px-4 py-3 transition hover:border-slate-600"
-                >
-                  <div className="grid gap-3 text-sm text-slate-400 md:grid-cols-[minmax(0,1fr)_130px_120px_140px_140px]">
-                    <div>
-                      <p className="text-base font-semibold text-slate-100">Quote {shortId(quote.id)}</p>
-                      {quote.client_message_template && (
-                        <p className="text-xs text-slate-500 truncate">
-                          {quote.client_message_template.slice(0, 80)}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-slate-100 flex flex-wrap items-center gap-2">
-                        {quote.status ?? "draft"}
-                        {quote.smart_quote_used ? (
-                          <span className={smartQuoteBadgeClasses}>
-                            <span className={smartQuoteBadgeDotClasses} />
-                            Smart Quote
-                          </span>
-                        ) : null}
-                      </p>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Status:</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-100">{totalLabel}</p>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Total:</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-slate-100">
-                        Job: {jobIdShort ? jobIdShort : "No job linked"}
-                      </p>
-                      {quote.job_id ? (
-                        <Link
-                          href={`/jobs/${quote.job_id}`}
-                          className="text-xs uppercase tracking-[0.3em] text-sky-300 hover:text-sky-200"
-                        >
-                          View job
-                        </Link>
-                      ) : (
-                        <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Job: N/A</p>
-                      )}
-                    </div>
-                    <div className="space-y-1 text-right">
-                      <p className="text-slate-100">{createdLabel}</p>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Created:</p>
-                      <Link
-                        href={`/quotes/${quote.id}`}
-                        className="text-xs uppercase tracking-[0.3em] text-sky-300 hover:text-sky-200"
-                      >
-                        View quote
-                      </Link>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </HbCard>
+        <QuotesListClient initialQuotes={initialQuotes} />
       )}
     </div>
   );

@@ -148,6 +148,7 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
 
   const title = quote.job_id ? `Quote for job ${quote.job_id.slice(0, 8)}` : "Quote details";
   const statusLabel = quote.status ?? "draft";
+  const isAccepted = quote.status?.toLowerCase() === "accepted";
   const isAiQuote = !!quote.smart_quote_used;
   const logPayload = {
     quoteId: quote.id,
@@ -173,12 +174,15 @@ export default async function QuoteDetailPage(props: { params: Promise<{ id: str
     <div className="hb-shell pt-20 pb-8 space-y-6">
       <QuoteDetailsCard
         quoteId={quote.id}
+        workspaceId={workspace.id}
         title={title}
         statusLabel={statusLabel}
         createdLabel={formatServerDateLabel(quote.created_at)}
         updatedLabel={formatServerDateLabel(quote.updated_at)}
         jobTitle={quote.job_id ? `Job ${quote.job_id.slice(0, 8)}` : null}
         customerDisplayName={null}
+        jobId={quote.job_id ?? null}
+        isAccepted={isAccepted}
         isAiQuote={isAiQuote}
         headerActions={headerActions}
         lineItems={lineItems}

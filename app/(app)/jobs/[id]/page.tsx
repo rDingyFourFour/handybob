@@ -485,6 +485,13 @@ export default async function JobDetailPage(props: {
   });
   const callScriptQuoteId = materialsQuoteId ?? quotes[0]?.id ?? null;
   const acceptedQuote = quotes.find((quote) => quote.status?.toLowerCase() === "accepted") ?? null;
+  if (acceptedQuote) {
+    console.log("[job-detail-accepted-quote-visible]", {
+      workspaceId: workspace.id,
+      jobId: job.id,
+      quoteId: acceptedQuote.id,
+    });
+  }
   console.log("[call-script-ui-job] job call script quote candidate", {
     jobId: job.id,
     callScriptQuoteId,

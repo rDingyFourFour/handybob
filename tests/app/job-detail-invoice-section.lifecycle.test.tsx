@@ -65,17 +65,26 @@ describe("JobInvoiceSection lifecycle controls", () => {
     vi.restoreAllMocks();
   });
 
-  async function renderSection(invoiceOverride?: Partial<typeof BASE_INVOICE>) {
+  async function renderSection(params?: {
+    invoiceOverride?: Partial<typeof BASE_INVOICE>;
+    invoice?: typeof BASE_INVOICE | null;
+    appliedQuoteId?: string | null;
+  }) {
     if (!root) {
       throw new Error("missing root");
     }
-    const invoice = { ...BASE_INVOICE, ...invoiceOverride };
+    const invoice =
+      params && "invoice" in params
+        ? params.invoice
+        : { ...BASE_INVOICE, ...(params?.invoiceOverride ?? {}) };
+    const appliedQuoteId =
+      params && "appliedQuoteId" in params ? params.appliedQuoteId ?? null : "quote-1";
     await act(async () => {
       root?.render(
         <JobInvoiceSection
           workspaceId="workspace-1"
           jobId="job-1"
-          appliedQuoteId="quote-1"
+          appliedQuoteId={appliedQuoteId}
           invoice={invoice}
           invoiceCreatedLabel="Jan 1, 2025"
         />,
@@ -133,7 +142,7 @@ describe("JobInvoiceSection lifecycle controls", () => {
       voidedAt: null,
     });
 
-    await renderSection({ invoice_status: "draft" });
+    await renderSection({ invoiceOverride: { invoice_status: "draft" } });
     await flushReactUpdates();
 
     expect(container.innerHTML).toContain("Mark as sent");
@@ -161,8 +170,10 @@ describe("JobInvoiceSection lifecycle controls", () => {
     });
 
     await renderSection({
-      invoice_status: "sent",
-      sent_at: "2025-01-02T00:00:00.000Z",
+      invoiceOverride: {
+        invoice_status: "sent",
+        sent_at: "2025-01-02T00:00:00.000Z",
+      },
     });
     await flushReactUpdates();
 
@@ -179,8 +190,10 @@ describe("JobInvoiceSection lifecycle controls", () => {
 
   it("shows terminal hint for paid invoices", async () => {
     await renderSection({
-      invoice_status: "paid",
-      paid_at: "2025-01-03T00:00:00.000Z",
+      invoiceOverride: {
+        invoice_status: "paid",
+        paid_at: "2025-01-03T00:00:00.000Z",
+      },
     });
     await flushReactUpdates();
 
@@ -202,7 +215,7 @@ describe("JobInvoiceSection lifecycle controls", () => {
       voidedAt: "2025-01-04T00:00:00.000Z",
     });
 
-    await renderSection({ invoice_status: "draft" });
+    await renderSection({ invoiceOverride: { invoice_status: "draft" } });
     await flushReactUpdates();
 
     await submitButton("Void invoice");
@@ -212,5 +225,24 @@ describe("JobInvoiceSection lifecycle controls", () => {
     expect(container.innerHTML).toContain("Void");
     expect(container.innerHTML).toContain("Invoice is void and cannot be changed.");
     expect(container.innerHTML).toContain("$99.00");
+  });
+
+  it("disables invoice creation when no accepted quote exists", async () => {
+    await renderSection({ invoice: null, appliedQuoteId: null });
+    await flushReactUpdates();
+
+    expect(container.innerHTML).toContain("Accept a quote to create an invoice.");
+    const button = findButton("Create invoice from accepted quote");
+    expect(button).toBeDefined();
+    expect(button?.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("enables invoice creation when an accepted quote exists", async () => {
+    await renderSection({ invoice: null, appliedQuoteId: "quote-1" });
+    await flushReactUpdates();
+
+    const button = findButton("Create invoice from accepted quote");
+    expect(button).toBeDefined();
+    expect(button?.hasAttribute("disabled")).toBe(false);
   });
 });

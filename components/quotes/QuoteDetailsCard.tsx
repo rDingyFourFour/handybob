@@ -1,11 +1,13 @@
 "use client";
 
-import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { ReactNode, useActionState, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import type { AskBobLineExplanation } from "@/lib/domain/askbob/types";
 import { ExplainQuoteWithAskBobResult, explainQuoteWithAskBobAction } from "@/app/(app)/quotes/askbob-explain-actions";
+import { acceptQuoteAction, type AcceptQuoteResult } from "@/app/(app)/quotes/actions/acceptQuoteAction";
 
 type QuoteLineItem = {
   description?: string;
@@ -14,19 +16,22 @@ type QuoteLineItem = {
 
 type QuoteDetailsCardProps = {
   quoteId: string;
+  workspaceId: string;
   title?: string | null;
   statusLabel?: string | null;
   createdLabel?: string | null;
   updatedLabel?: string | null;
   jobTitle?: string | null;
   customerDisplayName?: string | null;
+  jobId?: string | null;
+  isAccepted?: boolean;
   isAiQuote?: boolean;
   headerActions?: ReactNode;
   lineItems?: QuoteLineItem[] | null;
   clientMessageTemplate?: string | null;
   publicToken?: string | null;
   subtotal?: number | null;
-    tax?: number | null;
+  tax?: number | null;
   total?: number | null;
   acceptedAt?: string | null;
   paidAt?: string | null;
@@ -44,12 +49,15 @@ const COLLAPSED_HINT_KEY = "hb_quote_details_collapsed_hint_seen";
 
 export default function QuoteDetailsCard({
   quoteId,
+  workspaceId,
   title,
   statusLabel,
   createdLabel,
   updatedLabel,
   jobTitle,
   customerDisplayName,
+  jobId,
+  isAccepted,
   isAiQuote,
   headerActions,
   lineItems,
@@ -66,6 +74,7 @@ export default function QuoteDetailsCard({
   onExplainWithAskBob,
   children,
 }: QuoteDetailsCardProps) {
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [showCollapsedHint, setShowCollapsedHint] = useState(false);
   const [askBobExplanationState, setAskBobExplanationState] = useState<string | null | undefined>(
@@ -78,6 +87,10 @@ export default function QuoteDetailsCard({
   const [askBobError, setAskBobError] = useState<string | null>(null);
   const [showLineDetails, setShowLineDetails] = useState(false);
   const [showOriginalMessage, setShowOriginalMessage] = useState(false);
+  const [acceptState, acceptAction, acceptPending] = useActionState<
+    AcceptQuoteResult | null,
+    FormData
+  >(acceptQuoteAction, null);
 
   const toggleLabel = useMemo(
     () => (collapsed ? "Show quote details ▼" : "Hide quote details ▲"),
@@ -116,6 +129,20 @@ export default function QuoteDetailsCard({
     }
   }, [askBobExplanationState]);
 
+  useEffect(() => {
+    if (!acceptState) return;
+    console.log("[quotes-accept-ui-result]", {
+      workspaceId,
+      quoteId,
+      jobId: jobId ?? null,
+      ok: acceptState.ok,
+      code: acceptState.code,
+    });
+    if (acceptState.ok) {
+      router.refresh();
+    }
+  }, [acceptState, workspaceId, quoteId, jobId, router]);
+
   const markHintSeen = () => {
     if (typeof window === "undefined") {
       return;
@@ -132,6 +159,14 @@ export default function QuoteDetailsCard({
       markHintSeen();
     }
     setCollapsed((value) => !value);
+  };
+
+  const handleAcceptSubmit = () => {
+    console.log("[quotes-accept-ui-click]", {
+      workspaceId,
+      quoteId,
+      jobId: jobId ?? null,
+    });
   };
 
   const handleExplainWithAskBob = useCallback(async () => {
@@ -177,6 +212,17 @@ export default function QuoteDetailsCard({
       ? `for ${customerDisplayName}`
       : null;
   const displayTitle = title?.trim() ? title : `Quote ${quoteId.slice(0, 8)}`;
+  const acceptedFromState = Boolean(acceptState?.ok);
+  const hasAccepted = Boolean(isAccepted) || acceptedFromState;
+  const acceptSuccessMessage = acceptState?.ok
+    ? acceptState.code === "already_accepted"
+      ? "This quote is already accepted."
+      : "Quote accepted."
+    : null;
+  const acceptErrorMessage =
+    acceptState && !acceptState.ok
+      ? acceptState.message ?? "We couldn’t accept this quote. Please try again."
+      : null;
 
   return (
     <HbCard className="space-y-5">
@@ -210,6 +256,19 @@ export default function QuoteDetailsCard({
                   Smart Quote
                 </span>
               )}
+              {hasAccepted ? (
+                <span className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-emerald-200">
+                  Accepted
+                </span>
+              ) : (
+                <form action={acceptAction} onSubmit={handleAcceptSubmit} className="flex">
+                  <input type="hidden" name="workspaceId" value={workspaceId} />
+                  <input type="hidden" name="quoteId" value={quoteId} />
+                  <HbButton type="submit" size="sm" disabled={acceptPending}>
+                    {acceptPending ? "Accepting..." : "Accept quote"}
+                  </HbButton>
+                </form>
+              )}
               {headerActions}
               <button
                 type="button"
@@ -223,6 +282,16 @@ export default function QuoteDetailsCard({
           </div>
         </div>
       </header>
+      {acceptSuccessMessage ? (
+        <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100">
+          {acceptSuccessMessage}
+        </div>
+      ) : null}
+      {acceptErrorMessage ? (
+        <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-sm text-rose-100">
+          {acceptErrorMessage}
+        </div>
+      ) : null}
       {!collapsed && (
         <div className="space-y-5">
           <div className="space-y-2 text-sm text-slate-300">
