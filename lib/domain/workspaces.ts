@@ -2,8 +2,6 @@
 "// Entry points: `getCurrentWorkspace`, `requireOwner`, `getWorkspaceProfile`, and slug helpers rely on the current user's workspace membership."
 import crypto from "crypto";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { redirect } from "next/navigation";
-
 import { buildLog } from "@/utils/debug/buildLog";
 import { createServerClient } from "@/utils/supabase/server";
 
@@ -13,6 +11,13 @@ export type WorkspaceContext = {
   user: User;
   workspace: { id: string; name: string | null; owner_id: string | null; slug?: string | null };
   role: "owner" | "staff";
+};
+
+export type WorkspaceContextResult = {
+  user: User | null;
+  workspace: WorkspaceContext["workspace"] | null;
+  role: WorkspaceContext["role"] | null;
+  reason?: "unauthenticated" | "no_membership";
 };
 
 export type WorkspaceProfile = {
@@ -29,6 +34,7 @@ export type WorkspaceProfile = {
 
 type WorkspaceOptions = {
   supabase?: SupabaseClient;
+  allowAutoCreateWorkspace?: boolean;
 };
 
 /**
@@ -37,14 +43,15 @@ type WorkspaceOptions = {
  */
 export async function getCurrentWorkspace(
   options: WorkspaceOptions = {}
-): Promise<WorkspaceContext> {
+): Promise<WorkspaceContextResult> {
+  // Redirects are forbidden here; route boundaries must decide how to handle auth failures.
   const supabase = options.supabase ?? await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login");
+    return { user: null, workspace: null, role: null, reason: "unauthenticated" };
   }
 
   const { data: membership } = await supabase
@@ -76,6 +83,10 @@ export async function getCurrentWorkspace(
     };
   }
 
+  if (options.allowAutoCreateWorkspace === false) {
+    return { user, workspace: null, role: null, reason: "no_membership" };
+  }
+
   const slug = await generateUniqueWorkspaceSlug({
     supabase,
     name: "My workspace",
@@ -98,6 +109,12 @@ export async function getCurrentWorkspace(
   };
 }
 
+export async function requireWorkspaceOrNull(
+  options: WorkspaceOptions = {}
+): Promise<WorkspaceContextResult> {
+  return getCurrentWorkspace(options);
+}
+
 // Throw for non-owner roles—used by workspace/automation/pricing config to keep owner-only settings gated.
 export function requireOwner(context: WorkspaceContext) {
   if (context.role !== "owner") {
@@ -108,6 +125,9 @@ export function requireOwner(context: WorkspaceContext) {
 export async function getWorkspaceProfile(options: WorkspaceOptions = {}) {
   const supabase = options.supabase ?? await createServerClient();
   const { workspace } = await getCurrentWorkspace({ supabase });
+  if (!workspace) {
+    throw new Error("Workspace context unavailable");
+  }
 
   const { data } = await supabase
     .from("workspaces")

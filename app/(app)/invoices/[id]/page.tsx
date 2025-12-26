@@ -105,11 +105,11 @@ function formatFollowupChannel(value: string | null | undefined) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function formatRelativeFollowupDate(value: string | null | undefined) {
+function formatRelativeFollowupDate(value: string | null | undefined, now: Date) {
   if (!value) return null;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
-  const diffMs = Date.now() - parsed.getTime();
+  const diffMs = now.getTime() - parsed.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
   if (diffDays <= 0) {
     return "today";
@@ -124,6 +124,7 @@ export default async function InvoiceDetailPage(props: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await props.params;
+  const shellClass = "hb-shell pt-20 pb-8 space-y-6";
 
   let supabase;
   try {
@@ -133,33 +134,29 @@ export default async function InvoiceDetailPage(props: {
     redirect("/");
   }
 
-  let workspace;
-  try {
-    const workspaceContext = await getCurrentWorkspace({ supabase });
-    workspace = workspaceContext.workspace;
-  } catch (error) {
-    console.error("[invoice-detail] Failed to resolve workspace:", error);
+  const workspaceResult = await getCurrentWorkspace({
+    supabase,
+    allowAutoCreateWorkspace: false,
+  });
+
+  if (workspaceResult.reason === "unauthenticated") {
+    redirect("/login");
+  }
+
+  if (!workspaceResult.workspace) {
     return (
-      <div className="hb-shell pt-20 pb-8 space-y-6">
+      <div className={shellClass}>
         <HbCard className="space-y-3">
-          <h1 className="hb-heading-1 text-2xl font-semibold">Unable to load invoice</h1>
-          <p className="hb-muted text-sm">We couldn’t determine your workspace. Please try again.</p>
+          <h1 className="hb-heading-1 text-2xl font-semibold">Access denied</h1>
+          <p className="hb-muted text-sm">You don’t have access to this workspace’s invoices.</p>
         </HbCard>
       </div>
     );
   }
 
-  if (!workspace) {
-    return (
-      <div className="hb-shell pt-20 pb-8 space-y-6">
-        <HbCard className="space-y-3">
-          <h1 className="hb-heading-1 text-2xl font-semibold">Unable to load invoice</h1>
-          <p className="hb-muted text-sm">Workspace context is missing. Please try again later.</p>
-        </HbCard>
-      </div>
-    );
-  }
+  const workspace = workspaceResult.workspace;
 
+  // Avoid redirects here to keep the server render deterministic and hydration-safe.
   let invoice: InvoiceDetailRow | null = null;
   try {
     const { data, error } = await supabase
@@ -213,7 +210,7 @@ export default async function InvoiceDetailPage(props: {
 
   if (!invoice) {
     return (
-      <div className="hb-shell pt-20 pb-8 space-y-6">
+      <div className={shellClass}>
         <HbCard className="space-y-3">
           <h1 className="hb-heading-1 text-2xl font-semibold">Invoice not found</h1>
           <p className="hb-muted text-sm">We couldn’t find that invoice. Please go back and try again.</p>
@@ -330,8 +327,9 @@ export default async function InvoiceDetailPage(props: {
     quoteId,
     recommendedChannel: followupRecommendation.recommendedChannel,
   });
+  const renderNow = new Date();
   const lastFollowupChannel = formatFollowupChannel(lastFollowupMessage?.channel);
-  const lastFollowupRelative = formatRelativeFollowupDate(lastFollowupMessage?.created_at);
+  const lastFollowupRelative = formatRelativeFollowupDate(lastFollowupMessage?.created_at, renderNow);
   const relativeLabel = lastFollowupRelative
     ? `${lastFollowupRelative.charAt(0).toUpperCase()}${lastFollowupRelative.slice(1)}`
     : "Recently";
@@ -368,7 +366,7 @@ export default async function InvoiceDetailPage(props: {
           dueLabelForTiming ? ` (${dueLabelForTiming})` : ""
         }`
       : null;
-  const now = new Date();
+  const now = renderNow;
   const dueDate = invoice.due_at ? new Date(invoice.due_at) : null;
   const msPerDay = 1000 * 60 * 60 * 24;
   const rawDaysDiff = dueDate ? (dueDate.getTime() - now.getTime()) / msPerDay : null;
@@ -392,7 +390,7 @@ export default async function InvoiceDetailPage(props: {
   const isOverdueUnpaid = Boolean(dueDate && dueDate.getTime() < now.getTime() && !isPaid);
 
   return (
-    <div className="hb-shell pt-20 pb-8 space-y-6">
+    <div className={shellClass}>
       <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="space-y-1">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Invoice details</p>
