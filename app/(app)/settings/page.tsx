@@ -6,6 +6,7 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
+import SignOutButton from "@/app/(app)/settings/SignOutButton";
 
 type WorkspaceDetail = {
   id: string;
@@ -52,7 +53,7 @@ export default async function SettingsHomePage() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/");
+    redirect("/login");
   }
 
   let workspaceContext;
@@ -218,6 +219,19 @@ export default async function SettingsHomePage() {
             Follow-up drafts default to the channels above and mention your workspace branding.
           </p>
         </HbCard>
+
+        {user && (
+          <HbCard className="space-y-4">
+            <div>
+              <h2 className="hb-card-heading text-xl font-semibold text-slate-100">Account</h2>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Access</p>
+            </div>
+            <p className="text-sm text-slate-300">
+              Signing out will return you to the login screen.
+            </p>
+            <SignOutButton userId={user.id} workspaceId={workspace.id} />
+          </HbCard>
+        )}
       </div>
 
       {workspaceLoadError && (

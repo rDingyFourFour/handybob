@@ -80,3 +80,13 @@ if (typeof globalThis.FormData === "undefined") {
 if (typeof globalThis.IS_REACT_ACT_ENVIRONMENT === "undefined") {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 }
+
+const originalEmitWarning = process.emitWarning;
+process.emitWarning = (warning, ...args) => {
+  const message =
+    typeof warning === "string" ? warning : warning instanceof Error ? warning.message : "";
+  if (message.includes("punycode") && message.includes("deprecated")) {
+    return;
+  }
+  return originalEmitWarning(warning, ...args);
+};

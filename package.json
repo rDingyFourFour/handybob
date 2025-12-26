@@ -19,7 +19,7 @@
     "_start_note": "long-lived server for production, not run automatically",
     "lint": "eslint",
     "_lint_note": "static analysis; can take noticeable time on large repos",
-    "test": "vitest",
+    "test": "NODE_OPTIONS=--no-deprecation vitest",
     "_test_note": "runs unit tests; may take a while depending on suite"
   },
   "dependencies": {
