@@ -8,7 +8,7 @@ import {
 } from "@/lib/domain/askbob/speechPlan";
 
 const createServerClientMock = vi.fn();
-const mockGetCurrentWorkspace = vi.fn();
+const mockResolveWorkspaceContext = vi.fn();
 const mockDialTwilioCall = vi.fn();
 const mockParseEnvConfig = vi.fn();
 const setDialResultSpy = vi.spyOn(callSessionsModule, "setTwilioDialResultForCallSession");
@@ -19,9 +19,15 @@ vi.mock("@/utils/supabase/server", () => ({
   createServerClient: () => createServerClientMock(),
 }));
 
-vi.mock("@/lib/domain/workspaces", () => ({
-  getCurrentWorkspace: () => mockGetCurrentWorkspace(),
-}));
+vi.mock("@/lib/domain/workspaces", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/domain/workspaces")>(
+    "@/lib/domain/workspaces",
+  );
+  return {
+    ...actual,
+    resolveWorkspaceContext: () => mockResolveWorkspaceContext(),
+  };
+});
 
 vi.mock("@/schemas/env", () => ({
   parseEnvConfig: () => mockParseEnvConfig(),
@@ -109,7 +115,16 @@ describe("startAskBobAutomatedCall", () => {
       getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
     };
     createServerClientMock.mockReturnValue(supabaseState.supabase);
-    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
+    });
     mockDialTwilioCall.mockResolvedValueOnce({
       success: true,
       twilioCallSid: "twilio-abc",
@@ -209,7 +224,16 @@ describe("startAskBobAutomatedCall", () => {
       getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
     };
     createServerClientMock.mockReturnValue(supabaseState.supabase);
-    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
+    });
     mockDialTwilioCall.mockResolvedValueOnce({
       success: true,
       twilioCallSid: "twilio-abc",
@@ -273,7 +297,16 @@ describe("startAskBobAutomatedCall", () => {
       getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
     };
     createServerClientMock.mockReturnValue(supabaseState.supabase);
-    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
+    });
     markDialRequestedSpy.mockResolvedValueOnce({
       outcome: "already_in_progress",
       callId: "call-guarded",
@@ -338,7 +371,16 @@ describe("startAskBobAutomatedCall", () => {
       getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
     };
     createServerClientMock.mockReturnValue(supabaseState.supabase);
-    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
+    });
     mockDialTwilioCall.mockResolvedValueOnce({
       success: false,
       code: "twilio_not_configured",
@@ -410,7 +452,16 @@ describe("startAskBobAutomatedCall", () => {
       getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
     };
     createServerClientMock.mockReturnValue(supabaseState.supabase);
-    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
+    });
     mockDialTwilioCall.mockResolvedValueOnce({
       success: false,
       code: "twilio_call_failed",
@@ -484,7 +535,16 @@ describe("startAskBobAutomatedCall", () => {
       getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
     };
     createServerClientMock.mockReturnValue(supabaseState.supabase);
-    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
+    });
     updateSpeechPlanSpy.mockRejectedValueOnce(new Error("Speech plan failed"));
 
     const result = await startAskBobAutomatedCall({
@@ -543,7 +603,16 @@ describe("startAskBobAutomatedCall", () => {
       getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
     };
     createServerClientMock.mockReturnValue(supabaseState.supabase);
-    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
+    });
 
     const result = await startAskBobAutomatedCall({
       workspaceId: "workspace-1",
@@ -605,7 +674,16 @@ describe("startAskBobAutomatedCall", () => {
           getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
         };
         createServerClientMock.mockReturnValue(supabaseState.supabase);
-        mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+        mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
+    });
 
         const result = await startAskBobAutomatedCall({
           workspaceId: "workspace-1",
@@ -647,7 +725,16 @@ describe("startAskBobAutomatedCall", () => {
       getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
     };
     createServerClientMock.mockReturnValue(supabaseState.supabase);
-    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
+    });
 
     const result = await startAskBobAutomatedCall({
       workspaceId: "workspace-1",
@@ -695,7 +782,16 @@ describe("startAskBobAutomatedCall", () => {
       getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
     };
     createServerClientMock.mockReturnValue(supabaseState.supabase);
-    mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-2" } });
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-2",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-2" },
+        role: "owner",
+      },
+    });
 
     const result = await startAskBobAutomatedCall({
       workspaceId: "workspace-1",
@@ -707,7 +803,7 @@ describe("startAskBobAutomatedCall", () => {
 
     expect(result).toMatchObject({
       status: "failure",
-      code: "wrong_workspace",
+      code: "forbidden",
       message: "This job does not belong to your workspace.",
     });
     expect(result.diagnostics).toBeTruthy();
@@ -763,7 +859,16 @@ describe("startAskBobAutomatedCall", () => {
         getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
       };
       createServerClientMock.mockReturnValue(supabaseState.supabase);
-      mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+      mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
+    });
       mockDialTwilioCall.mockResolvedValueOnce({
         success: true,
         twilioCallSid: "twilio-xyz",
@@ -833,7 +938,16 @@ describe("startAskBobAutomatedCall", () => {
         getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
       };
       createServerClientMock.mockReturnValue(supabaseState.supabase);
-      mockGetCurrentWorkspace.mockResolvedValue({ workspace: { id: "workspace-1" } });
+      mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
+    });
 
       const result = await startAskBobAutomatedCall({
         workspaceId: "workspace-1",

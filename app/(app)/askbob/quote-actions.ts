@@ -1,7 +1,7 @@
 "use server";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import { runAskBobTask } from "@/lib/domain/askbob/service";
 import type {
   AskBobQuoteGenerateInput,
@@ -29,6 +29,16 @@ export type QuoteGenerateActionResult = {
   jobId: string;
   suggestion: SmartQuoteSuggestion;
   modelLatencyMs: number;
+} | {
+  ok: false;
+  code:
+    | "unauthenticated"
+    | "forbidden"
+    | "workspace_not_found"
+    | "invalid_input"
+    | "job_not_found"
+    | "unknown";
+  message: string;
 };
 
 export async function runAskBobQuoteGenerateAction(
@@ -43,18 +53,47 @@ export async function runAskBobQuoteGenerateAction(
   const hasMaterialsSummaryForQuote = Boolean(payload.materialsSummary?.trim());
 
   if (!trimmedJobId) {
-    throw new Error("Job ID is required to generate a quote.");
+    return {
+      ok: false,
+      code: "invalid_input",
+      message: "Job ID is required to generate a quote.",
+    };
   }
   if (!trimmedPrompt) {
-    throw new Error("A short prompt describing the quote is required.");
+    return {
+      ok: false,
+      code: "invalid_input",
+      message: "A short prompt describing the quote is required.",
+    };
   }
 
   const supabase = await createServerClient();
-  const { workspace, user } = await getCurrentWorkspace({ supabase });
+  const workspaceResult = await resolveWorkspaceContext({
+    supabase,
+    allowAutoCreateWorkspace: false,
+  });
 
-  if (!workspace || !user) {
-    throw new Error("Workspace context is unavailable.");
+  if (!workspaceResult.ok) {
+    const code =
+      workspaceResult.code === "unauthenticated"
+        ? "unauthenticated"
+        : workspaceResult.code === "workspace_not_found"
+        ? "workspace_not_found"
+        : workspaceResult.code === "no_membership"
+        ? "forbidden"
+        : "workspace_not_found";
+    console.error("[askbob-quote-ui-failure] workspace unavailable", {
+      jobId: trimmedJobId,
+      reason: code,
+    });
+    return {
+      ok: false,
+      code,
+      message: "Workspace context is unavailable.",
+    };
   }
+
+  const { workspace, user } = workspaceResult.membership;
 
   const { data: job } = await supabase
     .from("jobs")
@@ -64,7 +103,7 @@ export async function runAskBobQuoteGenerateAction(
     .maybeSingle();
 
   if (!job) {
-    throw new Error("Job not found.");
+    return { ok: false, code: "job_not_found", message: "Job not found." };
   }
 
   const context: AskBobTaskContext = {
@@ -131,6 +170,10 @@ export async function runAskBobQuoteGenerateAction(
       jobId: job.id,
       errorMessage: truncatedMessage,
     });
-    throw error;
+    return {
+      ok: false,
+      code: "unknown",
+      message: "AskBob couldn’t generate a quote. Please try again.",
+    };
   }
 }

@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import { updateCallSessionAutomatedNotes } from "@/lib/domain/calls/sessions";
 
 const SaveAutomatedCallNotesSchema = z.object({
@@ -23,8 +23,9 @@ type SaveAutomatedCallNotesSuccess = {
 type SaveAutomatedCallNotesFailure = {
   ok: false;
   code:
-    | "workspace_unavailable"
-    | "wrong_workspace"
+    | "unauthenticated"
+    | "forbidden"
+    | "workspace_not_found"
     | "invalid_payload"
     | "call_not_found"
     | "update_failed";
@@ -56,16 +57,38 @@ export async function saveAutomatedCallNotesAction(
 
   const { workspaceId, callId, notes } = parsed.data;
   const supabase = await createServerClient();
-  const { workspace, user } = await getCurrentWorkspace({ supabase });
+  const workspaceResult = await resolveWorkspaceContext({
+    supabase,
+    allowAutoCreateWorkspace: false,
+  });
 
-  if (!workspace || !user) {
-    return { ok: false, code: "workspace_unavailable", error: "Workspace context is unavailable." };
+  if (!workspaceResult.ok) {
+    const code =
+      workspaceResult.code === "unauthenticated"
+        ? "unauthenticated"
+        : workspaceResult.code === "workspace_not_found"
+        ? "workspace_not_found"
+        : workspaceResult.code === "no_membership"
+        ? "forbidden"
+        : "workspace_not_found";
+    return {
+      ok: false,
+      code,
+      error:
+        code === "unauthenticated"
+          ? "Please sign in to save call notes."
+          : code === "forbidden"
+          ? "You do not have access to this workspace."
+          : "Workspace context is unavailable.",
+    };
   }
+
+  const { workspace } = workspaceResult.membership;
 
   if (workspace.id !== workspaceId) {
     return {
       ok: false,
-      code: "wrong_workspace",
+      code: "forbidden",
       error: "The call does not belong to the requested workspace.",
     };
   }

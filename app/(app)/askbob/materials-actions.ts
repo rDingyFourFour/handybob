@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import { runAskBobTask } from "@/lib/domain/askbob/service";
 import type {
   AskBobMaterialsGenerateInput,
@@ -73,35 +73,78 @@ export type MaterialsGenerateActionResult = {
   jobId: string;
   suggestion: SmartQuoteSuggestion;
   modelLatencyMs: number;
+} | {
+  ok: false;
+  code:
+    | "unauthenticated"
+    | "forbidden"
+    | "workspace_not_found"
+    | "invalid_input"
+    | "job_not_found"
+    | "unknown";
+  message: string;
 };
 
 export async function runAskBobMaterialsGenerateAction(
   payload: z.input<typeof materialsGeneratePayloadSchema>
 ): Promise<MaterialsGenerateActionResult> {
-  const parsedPayload = materialsGeneratePayloadSchema.parse(payload);
+  const parsedPayload = materialsGeneratePayloadSchema.safeParse(payload);
+  if (!parsedPayload.success) {
+    console.error("[askbob-materials-ui-failure] invalid payload", {
+      issues: parsedPayload.error.issues.map((issue) => issue.message),
+    });
+    return {
+      ok: false,
+      code: "invalid_input",
+      message: "We couldn’t generate materials with the provided details.",
+    };
+  }
 
   const supabase = await createServerClient();
-  const { workspace, user } = await getCurrentWorkspace({ supabase });
+  const workspaceResult = await resolveWorkspaceContext({
+    supabase,
+    allowAutoCreateWorkspace: false,
+  });
 
-  if (!workspace || !user) {
-    throw new Error("Workspace context is unavailable.");
+  if (!workspaceResult.ok) {
+    const code =
+      workspaceResult.code === "unauthenticated"
+        ? "unauthenticated"
+        : workspaceResult.code === "workspace_not_found"
+        ? "workspace_not_found"
+        : workspaceResult.code === "no_membership"
+        ? "forbidden"
+        : "workspace_not_found";
+    console.error("[askbob-materials-ui-failure] workspace unavailable", {
+      jobId: payload.jobId ?? null,
+      reason: code,
+    });
+    return {
+      ok: false,
+      code,
+      message: "Workspace context is unavailable.",
+    };
   }
+
+  const { workspace, user } = workspaceResult.membership;
 
   const { data: job } = await supabase
     .from("jobs")
     .select("id, customer_id")
-    .eq("id", parsedPayload.jobId)
+    .eq("id", parsedPayload.data.jobId)
     .eq("workspace_id", workspace.id)
     .maybeSingle();
 
   if (!job) {
-    throw new Error("Job not found.");
+    return { ok: false, code: "job_not_found", message: "Job not found." };
   }
 
-  const { prompt: trimmedPrompt, extraDetails: trimmedExtraDetails, jobTitle } = parsedPayload;
+  const { prompt: trimmedPrompt, extraDetails: trimmedExtraDetails, jobTitle } = parsedPayload.data;
   const normalizedJobTitle = jobTitle ?? null;
-  const hasDiagnosisContextForMaterials = Boolean(parsedPayload.diagnosisSummary);
-  const hasJobDescriptionContextForMaterials = Boolean(parsedPayload.hasJobDescriptionContextForMaterials);
+  const hasDiagnosisContextForMaterials = Boolean(parsedPayload.data.diagnosisSummary);
+  const hasJobDescriptionContextForMaterials = Boolean(
+    parsedPayload.data.hasJobDescriptionContextForMaterials
+  );
 
   console.log("[askbob-materials-ui-request]", {
     workspaceId: workspace.id,
@@ -163,6 +206,10 @@ export async function runAskBobMaterialsGenerateAction(
       error: truncatedMessage,
     });
 
-    throw error;
+    return {
+      ok: false,
+      code: "unknown",
+      message: "AskBob couldn’t generate materials. Please try again.",
+    };
   }
 }

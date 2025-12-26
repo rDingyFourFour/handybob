@@ -13,6 +13,28 @@ export type WorkspaceContext = {
   role: "owner" | "staff";
 };
 
+export type WorkspaceResolutionFailureCode =
+  | "unauthenticated"
+  | "no_membership"
+  | "workspace_not_found"
+  | "unknown";
+
+export type WorkspaceResolutionSuccess = {
+  ok: true;
+  workspaceId: string;
+  userId: string;
+  membership: WorkspaceContext;
+};
+
+export type WorkspaceResolutionFailure = {
+  ok: false;
+  code: WorkspaceResolutionFailureCode;
+  diagnostics?: { message?: string };
+  user?: User | null;
+};
+
+export type WorkspaceResolutionResult = WorkspaceResolutionSuccess | WorkspaceResolutionFailure;
+
 export type WorkspaceContextResult = {
   user: User | null;
   workspace: WorkspaceContext["workspace"] | null;
@@ -37,21 +59,29 @@ type WorkspaceOptions = {
   allowAutoCreateWorkspace?: boolean;
 };
 
-/**
- * Returns the current user + workspace membership, creating a default workspace
- * if the user has none. Keeps a single source of truth for workspace scoping.
- */
-export async function getCurrentWorkspace(
+export async function resolveWorkspaceContext(
   options: WorkspaceOptions = {}
-): Promise<WorkspaceContextResult> {
-  // Redirects are forbidden here; route boundaries must decide how to handle auth failures.
+): Promise<WorkspaceResolutionResult> {
   const supabase = options.supabase ?? await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user: User | null = null;
+
+  try {
+    const {
+      data: { user: fetchedUser },
+    } = await supabase.auth.getUser();
+    user = fetchedUser;
+  } catch (error) {
+    return {
+      ok: false,
+      code: "unknown",
+      diagnostics: {
+        message: error instanceof Error ? error.message : "Failed to resolve user.",
+      },
+    };
+  }
 
   if (!user) {
-    return { user: null, workspace: null, role: null, reason: "unauthenticated" };
+    return { ok: false, code: "unauthenticated", user: null };
   }
 
   const { data: membership } = await supabase
@@ -67,24 +97,35 @@ export async function getCurrentWorkspace(
     : membership?.workspace;
 
   if (workspaceRow && membership) {
-    // Role meanings:
-    // - owner: can manage workspace-level settings (billing, automation, pricing, membership) and all data.
-    // - staff: can work with jobs/customers/quotes/invoices/appointments/messages/calls/media but not admin settings.
-    // Membership lookup ensures RLS enforces workspace_id in every downstream query/action. user_id is only used for attribution.
+    const workspace = workspaceRow as {
+      id: string;
+      name: string | null;
+      owner_id: string | null;
+      slug?: string | null;
+    };
     return {
-      user,
-      workspace: workspaceRow as {
-        id: string;
-        name: string | null;
-        owner_id: string | null;
-        slug?: string | null;
+      ok: true,
+      workspaceId: workspace.id,
+      userId: user.id,
+      membership: {
+        user,
+        workspace,
+        role: (membership.role as "owner" | "staff") ?? "staff",
       },
-      role: (membership.role as "owner" | "staff") ?? "staff",
+    };
+  }
+
+  if (membership && !workspaceRow) {
+    return {
+      ok: false,
+      code: "workspace_not_found",
+      diagnostics: { message: "Workspace membership is missing a workspace row." },
+      user,
     };
   }
 
   if (options.allowAutoCreateWorkspace === false) {
-    return { user, workspace: null, role: null, reason: "no_membership" };
+    return { ok: false, code: "no_membership", user };
   }
 
   const slug = await generateUniqueWorkspaceSlug({
@@ -99,13 +140,93 @@ export async function getCurrentWorkspace(
     .single();
 
   if (error || !workspace) {
-    throw error ?? new Error("Failed to create default workspace");
+    return {
+      ok: false,
+      code: "unknown",
+      diagnostics: { message: error?.message ?? "Failed to create default workspace." },
+      user,
+    };
   }
 
   return {
-    user,
-    workspace,
-    role: "owner",
+    ok: true,
+    workspaceId: workspace.id,
+    userId: user.id,
+    membership: {
+      user,
+      workspace,
+      role: "owner",
+    },
+  };
+}
+
+export type WorkspaceRouteOutcome = {
+  redirectToLogin: boolean;
+  showAccessDenied: boolean;
+  message: string;
+};
+
+export function mapWorkspaceResultToRouteOutcome(
+  result: WorkspaceResolutionResult
+): WorkspaceRouteOutcome | null {
+  if (result.ok) {
+    return null;
+  }
+
+  if (result.code === "unauthenticated") {
+    return {
+      redirectToLogin: true,
+      showAccessDenied: false,
+      message: "Please sign in to access this workspace.",
+    };
+  }
+
+  if (result.code === "no_membership") {
+    return {
+      redirectToLogin: false,
+      showAccessDenied: true,
+      message: "You don’t have access to this workspace.",
+    };
+  }
+
+  if (result.code === "workspace_not_found") {
+    return {
+      redirectToLogin: false,
+      showAccessDenied: true,
+      message: "We couldn’t find that workspace.",
+    };
+  }
+
+  return {
+    redirectToLogin: false,
+    showAccessDenied: true,
+    message: "We couldn’t resolve workspace access right now.",
+  };
+}
+
+/**
+ * Returns the current user + workspace membership, creating a default workspace
+ * if the user has none. Keeps a single source of truth for workspace scoping.
+ */
+export async function getCurrentWorkspace(
+  options: WorkspaceOptions = {}
+): Promise<WorkspaceContextResult> {
+  // Redirects are forbidden here; route boundaries must decide how to handle auth failures.
+  const result = await resolveWorkspaceContext(options);
+
+  if (!result.ok) {
+    return {
+      user: result.user ?? null,
+      workspace: null,
+      role: null,
+      reason: result.code === "unauthenticated" ? "unauthenticated" : "no_membership",
+    };
+  }
+
+  return {
+    user: result.membership.user,
+    workspace: result.membership.workspace,
+    role: result.membership.role,
   };
 }
 

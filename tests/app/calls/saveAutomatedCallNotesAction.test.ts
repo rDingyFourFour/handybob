@@ -2,21 +2,21 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 
 import { saveAutomatedCallNotesAction } from "@/app/(app)/calls/actions/saveAutomatedCallNotesAction";
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import { updateCallSessionAutomatedNotes } from "@/lib/domain/calls/sessions";
 
 vi.mock("@/utils/supabase/server", () => ({
   createServerClient: vi.fn(),
 }));
 vi.mock("@/lib/domain/workspaces", () => ({
-  getCurrentWorkspace: vi.fn(),
+  resolveWorkspaceContext: vi.fn(),
 }));
 vi.mock("@/lib/domain/calls/sessions", () => ({
   updateCallSessionAutomatedNotes: vi.fn(),
 }));
 
 const mockCreateServerClient = createServerClient as unknown as ReturnType<typeof vi.fn>;
-const mockGetCurrentWorkspace = getCurrentWorkspace as unknown as ReturnType<typeof vi.fn>;
+const mockResolveWorkspaceContext = resolveWorkspaceContext as unknown as ReturnType<typeof vi.fn>;
 const mockUpdateCallSessionAutomatedNotes = updateCallSessionAutomatedNotes as unknown as ReturnType<typeof vi.fn>;
 
 let supabaseClient: Record<string, unknown>;
@@ -24,9 +24,15 @@ let supabaseClient: Record<string, unknown>;
 beforeEach(() => {
   supabaseClient = {};
   mockCreateServerClient.mockResolvedValue(supabaseClient);
-  mockGetCurrentWorkspace.mockResolvedValue({
-    user: { id: "user-1" },
-    workspace: { id: "workspace-1" },
+  mockResolveWorkspaceContext.mockResolvedValue({
+    ok: true,
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    membership: {
+      user: { id: "user-1" },
+      workspace: { id: "workspace-1" },
+      role: "owner",
+    },
   });
   mockUpdateCallSessionAutomatedNotes.mockReset();
 });
@@ -43,10 +49,16 @@ describe("saveAutomatedCallNotesAction", () => {
     expect(mockUpdateCallSessionAutomatedNotes).not.toHaveBeenCalled();
   });
 
-  it("returns wrong_workspace when the workspace context does not match", async () => {
-    mockGetCurrentWorkspace.mockResolvedValueOnce({
-      user: { id: "user-1" },
-      workspace: { id: "workspace-2" },
+  it("returns forbidden when the workspace context does not match", async () => {
+    mockResolveWorkspaceContext.mockResolvedValueOnce({
+      ok: true,
+      workspaceId: "workspace-2",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-2" },
+        role: "owner",
+      },
     });
     const response = await saveAutomatedCallNotesAction({
       workspaceId: "workspace-1",
@@ -54,7 +66,7 @@ describe("saveAutomatedCallNotesAction", () => {
       notes: "Note",
     });
     expect(response.ok).toBe(false);
-    expect(response.code).toBe("wrong_workspace");
+    expect(response.code).toBe("forbidden");
     expect(mockUpdateCallSessionAutomatedNotes).not.toHaveBeenCalled();
   });
 

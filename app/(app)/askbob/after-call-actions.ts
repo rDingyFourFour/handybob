@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import { runAskBobTask } from "@/lib/domain/askbob/service";
 import {
   loadCallHistoryForJob,
@@ -101,11 +101,33 @@ type CallRow = {
 export async function runAskBobJobAfterCallAction(payload: AfterCallPayload): Promise<AfterCallActionResult> {
   const parsed = afterCallPayloadSchema.parse(payload);
   const supabase = await createServerClient();
-  const { workspace, user } = await getCurrentWorkspace({ supabase });
+  const workspaceResult = await resolveWorkspaceContext({
+    supabase,
+    allowAutoCreateWorkspace: false,
+  });
 
-  if (!workspace || !user) {
-    return { ok: false, code: "workspace_unavailable" };
+  if (!workspaceResult.ok) {
+    const failureCode =
+      workspaceResult.code === "unauthenticated"
+        ? "unauthenticated"
+        : workspaceResult.code === "workspace_not_found"
+        ? "workspace_not_found"
+        : workspaceResult.code === "no_membership"
+        ? "forbidden"
+        : "workspace_not_found";
+    console.error("[askbob-after-call-ui-failure] workspace context unavailable", {
+      workspaceId: parsed.workspaceId,
+      jobId: parsed.jobId,
+      reason: failureCode,
+    });
+    return {
+      ok: false,
+      code: failureCode,
+      message: "Workspace context is unavailable.",
+    };
   }
+
+  const { workspace, user } = workspaceResult.membership;
 
   const generationSource: GenerationSource = parsed.generationSource ?? "job_step_8";
   const isCallSessionGeneration = generationSource === "call_session";

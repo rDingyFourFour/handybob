@@ -32,6 +32,8 @@ describe("CallRecordingLink", () => {
       workspaceId: "workspace-1",
       recordingLinkType: "proxy",
     });
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 });

@@ -191,6 +191,11 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
         hasJobDescriptionContextForMaterials: Boolean(normalizedJobDescription),
       });
 
+      if (!result.ok) {
+        setError(result.message ?? "AskBob couldn’t generate materials. Please try again.");
+        return;
+      }
+
       setSuggestion(result.suggestion);
       const summary = summarizeMaterialsSuggestion(result.suggestion);
       const trimmedSummary = summary?.trim();

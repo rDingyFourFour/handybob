@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import {
   INVOICE_STATUS_VALUES,
   guardInvoiceStatusTransition,
@@ -37,7 +37,9 @@ type UpdateInvoiceStatusResult =
       success: false;
       code:
         | "invalid_input"
-        | "unauthorized"
+        | "unauthenticated"
+        | "forbidden"
+        | "workspace_not_found"
         | "not_found"
         | "workspace_mismatch"
         | "job_mismatch"
@@ -92,41 +94,36 @@ export async function updateInvoiceStatusAction(
     return failureResponse("db_error", "db_error");
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const workspaceResult = await resolveWorkspaceContext({
+    supabase,
+    allowAutoCreateWorkspace: false,
+  });
+  if (!workspaceResult.ok) {
+    const code =
+      workspaceResult.code === "unauthenticated"
+        ? "unauthenticated"
+        : workspaceResult.code === "workspace_not_found"
+        ? "workspace_not_found"
+        : workspaceResult.code === "no_membership"
+        ? "forbidden"
+        : "workspace_not_found";
     console.error("[invoices-status-action-failure]", {
       workspaceId,
       jobId,
       invoiceId,
-      reasonCode: "unauthorized",
+      reasonCode: code,
     });
-    return failureResponse("unauthorized", "unauthorized");
+    return failureResponse(code, code);
   }
 
-  let workspace;
-  try {
-    workspace = (await getCurrentWorkspace({ supabase })).workspace;
-  } catch (error) {
-    console.error("[invoices-status-action-failure]", {
-      workspaceId,
-      jobId,
-      invoiceId,
-      reasonCode: "unauthorized",
-      error,
-    });
-    return failureResponse("unauthorized", "unauthorized");
-  }
-
-  if (!workspace || workspace.id !== workspaceId) {
+  const { workspace } = workspaceResult.membership;
+  if (workspace.id !== workspaceId) {
     console.error("[invoices-status-action-failure]", {
       workspaceId,
       jobId,
       invoiceId,
       reasonCode: "workspace_mismatch",
-      workspaceFound: workspace?.id ?? null,
+      workspaceFound: workspace.id ?? null,
     });
     return failureResponse("workspace_mismatch", "workspace_mismatch");
   }

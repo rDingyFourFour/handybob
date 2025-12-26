@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 
 const createServerClientMock = vi.fn();
-const mockGetCurrentWorkspace = vi.fn();
+const mockResolveWorkspaceContext = vi.fn();
 const mockGetJobAskBobHudSummary = vi.fn();
 const mockGetJobAskBobSnapshotsForJob = vi.fn();
 const mockLoadCallHistoryForJob = vi.fn();
@@ -52,9 +52,15 @@ vi.mock("@/utils/supabase/server", () => ({
   createServerClient: () => createServerClientMock(),
 }));
 
-vi.mock("@/lib/domain/workspaces", () => ({
-  getCurrentWorkspace: () => mockGetCurrentWorkspace(),
-}));
+vi.mock("@/lib/domain/workspaces", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/domain/workspaces")>(
+    "@/lib/domain/workspaces",
+  );
+  return {
+    ...actual,
+    resolveWorkspaceContext: () => mockResolveWorkspaceContext(),
+  };
+});
 
 vi.mock("@/lib/domain/askbob/service", () => ({
   getJobAskBobHudSummary: (...args: unknown[]) => mockGetJobAskBobHudSummary(...args),
@@ -152,11 +158,16 @@ async function renderJobPage(
     };
     createServerClientMock.mockReset();
     createServerClientMock.mockReturnValue(supabaseState.supabase);
-    mockGetCurrentWorkspace.mockReset();
-    mockGetCurrentWorkspace.mockResolvedValue({
-      workspace: { id: "workspace-1" },
-      user: { id: "user-1" },
-      role: "owner",
+    mockResolveWorkspaceContext.mockReset();
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
     });
     mockGetJobAskBobHudSummary.mockReset();
     mockGetJobAskBobHudSummary.mockResolvedValue({
@@ -255,6 +266,28 @@ async function renderJobPage(
       expect(lastJobAskBobFlowProps?.afterCallCacheKey).toBe(entry.expectedKey);
       expect(lastJobAskBobFlowProps?.afterCallCacheCallId).toBe(entry.expectedCallId);
     }
+  });
+
+  it("redirects to login when unauthenticated", async () => {
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: false,
+      code: "unauthenticated",
+    });
+
+    await renderJobPage(Promise.resolve({}));
+
+    expect(mockRedirect).toHaveBeenCalledWith("/login");
+  });
+
+  it("renders access denied shell when membership is missing", async () => {
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: false,
+      code: "no_membership",
+    });
+
+    const markup = await renderJobPage(Promise.resolve({}));
+
+    expect(markup).toContain("Access denied");
   });
 
   it("never touches searchParams before awaiting it", async () => {

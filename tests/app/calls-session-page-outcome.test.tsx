@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 
 const createServerClientMock = vi.fn();
-const mockGetCurrentWorkspace = vi.fn();
+const mockResolveWorkspaceContext = vi.fn();
 const mockPush = vi.fn();
 
 vi.mock("next/navigation", () => ({
@@ -15,9 +15,15 @@ vi.mock("@/utils/supabase/server", () => ({
   createServerClient: () => createServerClientMock(),
 }));
 
-vi.mock("@/lib/domain/workspaces", () => ({
-  getCurrentWorkspace: () => mockGetCurrentWorkspace(),
-}));
+vi.mock("@/lib/domain/workspaces", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/domain/workspaces")>(
+    "@/lib/domain/workspaces",
+  );
+  return {
+    ...actual,
+    resolveWorkspaceContext: () => mockResolveWorkspaceContext(),
+  };
+});
 
 import CallSessionPage from "@/app/(app)/calls/[id]/page";
 import { ASKBOB_AUTOMATED_SCRIPT_PREFIX } from "@/lib/domain/askbob/constants";
@@ -40,9 +46,15 @@ describe("CallSessionPage outcome card", () => {
   beforeEach(() => {
     supabaseState = setupSupabaseMock();
     createServerClientMock.mockReturnValue(supabaseState.supabase);
-    mockGetCurrentWorkspace.mockResolvedValue({
-      workspace: { id: "workspace-1" },
-      user: { id: "user-1" },
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
     });
     logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   });

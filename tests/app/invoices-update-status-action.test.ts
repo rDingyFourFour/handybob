@@ -3,15 +3,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 
 const createServerClientMock = vi.fn();
-const mockGetCurrentWorkspace = vi.fn();
+const mockResolveWorkspaceContext = vi.fn();
 
 vi.mock("@/utils/supabase/server", () => ({
   createServerClient: () => createServerClientMock(),
 }));
 
-vi.mock("@/lib/domain/workspaces", () => ({
-  getCurrentWorkspace: () => mockGetCurrentWorkspace(),
-}));
+vi.mock("@/lib/domain/workspaces", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/domain/workspaces")>(
+    "@/lib/domain/workspaces",
+  );
+  return {
+    ...actual,
+    resolveWorkspaceContext: () => mockResolveWorkspaceContext(),
+  };
+});
 
 import { updateInvoiceStatusAction } from "@/app/(app)/invoices/actions/updateInvoiceStatusAction";
 
@@ -30,15 +36,18 @@ describe("updateInvoiceStatusAction", () => {
 
   beforeEach(() => {
     supabaseState = setupSupabaseMock();
-    supabaseState.supabase.auth = {
-      getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-1" } } }),
-    };
     createServerClientMock.mockReset();
     createServerClientMock.mockReturnValue(supabaseState.supabase);
-    mockGetCurrentWorkspace.mockReset();
-    mockGetCurrentWorkspace.mockResolvedValue({
-      workspace: { id: "workspace-1" },
-      user: { id: "user-1" },
+    mockResolveWorkspaceContext.mockReset();
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
     });
   });
 

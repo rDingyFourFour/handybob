@@ -30,7 +30,9 @@ describe("AutomatedCallNotesCard", () => {
 
   afterEach(() => {
     if (root) {
-      root.unmount();
+      act(() => {
+        root.unmount();
+      });
       root = null;
     }
     container.remove();

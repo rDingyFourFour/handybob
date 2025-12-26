@@ -1,9 +1,10 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { mapWorkspaceResultToRouteOutcome, resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import CallSummaryStatus from "@/components/call-summary-status";
 import CallStatusRefreshButton from "@/components/calls/CallStatusRefreshButton";
 import AutomatedCallNotesCard from "./AutomatedCallNotesCard";
@@ -239,9 +240,20 @@ export default async function CallSessionPage({
   }
 
   const supabase = await createServerClient();
-  const workspaceContext = await getCurrentWorkspace({ supabase });
-  const workspace = workspaceContext.workspace;
+  const workspaceResult = await resolveWorkspaceContext({
+    supabase,
+    allowAutoCreateWorkspace: false,
+  });
+  const routeOutcome = mapWorkspaceResultToRouteOutcome(workspaceResult);
+  if (routeOutcome?.redirectToLogin) {
+    redirect("/login");
+    return null;
+  }
+  if (routeOutcome?.showAccessDenied) {
+    return <MessageCard title="Access denied" body={routeOutcome.message} />;
+  }
 
+  const workspace = workspaceResult.ok ? workspaceResult.membership.workspace : null;
   if (!workspace) {
     return (
       <MessageCard

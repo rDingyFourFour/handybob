@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import { getAppliedQuoteForJob } from "@/lib/domain/quotes/appliedQuote";
 import { buildInvoiceSnapshot, validateAppliedQuoteForJob } from "@/lib/domain/invoicesSnapshot";
 
@@ -23,7 +23,9 @@ type CreateInvoiceResult = {
   code:
     | "ok"
     | "invalid_input"
-    | "unauthorized"
+    | "unauthenticated"
+    | "forbidden"
+    | "workspace_not_found"
     | "job_workspace_mismatch"
     | "missing_applied_quote"
     | "quote_workspace_mismatch"
@@ -103,26 +105,27 @@ export async function createInvoiceFromAppliedQuoteAction(
     return failureResponse({ code: "unknown", jobId });
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    console.error("[invoices-create-failure]", { workspaceId, jobId, reason: "unauthorized" });
-    return failureResponse({ code: "unauthorized", jobId });
+  const workspaceResult = await resolveWorkspaceContext({
+    supabase,
+    allowAutoCreateWorkspace: false,
+  });
+  if (!workspaceResult.ok) {
+    const code =
+      workspaceResult.code === "unauthenticated"
+        ? "unauthenticated"
+        : workspaceResult.code === "workspace_not_found"
+        ? "workspace_not_found"
+        : workspaceResult.code === "no_membership"
+        ? "forbidden"
+        : "workspace_not_found";
+    console.error("[invoices-create-failure]", { workspaceId, jobId, reason: code });
+    return failureResponse({ code, jobId });
   }
 
-  let workspace;
-  try {
-    workspace = (await getCurrentWorkspace({ supabase })).workspace;
-  } catch (error) {
-    console.error("[invoices-create-failure]", { workspaceId, jobId, reason: "unauthorized", error });
-    return failureResponse({ code: "unauthorized", jobId });
-  }
-
-  if (!workspace || workspace.id !== workspaceId) {
-    console.error("[invoices-create-failure]", { workspaceId, jobId, reason: "unauthorized" });
-    return failureResponse({ code: "unauthorized", jobId });
+  const { workspace, user } = workspaceResult.membership;
+  if (workspace.id !== workspaceId) {
+    console.error("[invoices-create-failure]", { workspaceId, jobId, reason: "forbidden" });
+    return failureResponse({ code: "forbidden", jobId });
   }
 
   const { data: job, error: jobError } = await supabase

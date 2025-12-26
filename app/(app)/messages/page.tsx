@@ -4,7 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { mapWorkspaceResultToRouteOutcome, resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import {
@@ -216,25 +216,24 @@ export default async function MessagesPage({
     });
   }
 
-  let user;
-  try {
-    const {
-      data: { user: currentUser },
-    } = await supabase.auth.getUser();
-    user = currentUser;
-  } catch (error) {
-    console.error("[messages] Failed to fetch auth user:", error);
-  }
-
-  if (!user) {
-    redirect("/");
-    return null;
-  }
-
   let workspace;
   try {
-    const workspaceResult = await getCurrentWorkspace({ supabase });
-    workspace = workspaceResult.workspace;
+    const workspaceResult = await resolveWorkspaceContext({
+      supabase,
+      allowAutoCreateWorkspace: false,
+    });
+    const routeOutcome = mapWorkspaceResultToRouteOutcome(workspaceResult);
+    if (routeOutcome?.redirectToLogin) {
+      redirect("/login");
+      return null;
+    }
+    if (routeOutcome?.showAccessDenied) {
+      return renderShellCard({
+        title: "Access denied",
+        subtitle: routeOutcome.message,
+      });
+    }
+    workspace = workspaceResult.ok ? workspaceResult.membership.workspace : null;
   } catch (error) {
     console.error("[messages] Failed to resolve workspace:", error);
     return renderShellCard({

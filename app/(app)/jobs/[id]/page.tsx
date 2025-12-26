@@ -6,7 +6,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { mapWorkspaceResultToRouteOutcome, resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import { formatCurrency, formatFriendlyDateTime } from "@/utils/timeline/formatters";
@@ -262,25 +262,23 @@ export default async function JobDetailPage(props: {
     return fallbackCard("Job unavailable", "Could not connect to Supabase. Please try again.");
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/");
-    return null;
-  }
-
   let workspace;
   try {
-    const workspaceResult = await getCurrentWorkspace({ supabase });
-    workspace = workspaceResult.workspace;
+    const workspaceResult = await resolveWorkspaceContext({
+      supabase,
+      allowAutoCreateWorkspace: false,
+    });
+    const routeOutcome = mapWorkspaceResultToRouteOutcome(workspaceResult);
+    if (routeOutcome?.redirectToLogin) {
+      redirect("/login");
+      return null;
+    }
+    if (routeOutcome?.showAccessDenied) {
+      return fallbackCard("Access denied", routeOutcome.message);
+    }
+    workspace = workspaceResult.ok ? workspaceResult.membership.workspace : null;
   } catch (error) {
     console.error("[job-detail] Failed to resolve workspace", error);
-    return fallbackCard("Job unavailable", "Unable to resolve workspace. Please try again.");
-  }
-
-  if (!workspace) {
     return fallbackCard("Job unavailable", "Unable to resolve workspace. Please try again.");
   }
 

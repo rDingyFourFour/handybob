@@ -262,6 +262,11 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
         hasDiagnosisSummary: hasDiagnosisContextForQuote,
       });
 
+      if (!result.ok) {
+        setError(result.message ?? "AskBob couldn’t generate a quote. Please try again.");
+        return;
+      }
+
       setSuggestion(result.suggestion);
       onQuoteSuccess?.();
     } catch (error) {

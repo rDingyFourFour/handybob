@@ -4,20 +4,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 
 const createServerClientMock = vi.fn();
-const mockGetCurrentWorkspace = vi.fn();
+const mockResolveWorkspaceContext = vi.fn();
+const mockRedirect = vi.fn();
 
 vi.mock("@/utils/supabase/server", () => ({
   createServerClient: () => createServerClientMock(),
 }));
 
-vi.mock("@/lib/domain/workspaces", () => ({
-  getCurrentWorkspace: () => mockGetCurrentWorkspace(),
-}));
+vi.mock("@/lib/domain/workspaces", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/domain/workspaces")>(
+    "@/lib/domain/workspaces",
+  );
+  return {
+    ...actual,
+    resolveWorkspaceContext: () => mockResolveWorkspaceContext(),
+  };
+});
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     refresh: () => {},
   }),
+  redirect: (url: string) => mockRedirect(url),
 }));
 
 import CallSessionPage from "@/app/(app)/calls/[id]/page";
@@ -28,9 +36,16 @@ describe("CallSessionPage inbound flow", () => {
   beforeEach(() => {
     supabaseState = setupSupabaseMock();
     createServerClientMock.mockReturnValue(supabaseState.supabase);
-    mockGetCurrentWorkspace.mockResolvedValue({
-      workspace: { id: "workspace-1" },
-      user: { id: "user-1" },
+    mockRedirect.mockReset();
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1" },
+        workspace: { id: "workspace-1" },
+        role: "owner",
+      },
     });
   });
 
@@ -121,5 +136,28 @@ describe("CallSessionPage inbound flow", () => {
 
     expect(markup).toContain("Link call context");
     expect(markup).toContain("Coaching for Roof repair");
+  });
+
+  it("redirects to login when unauthenticated", async () => {
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: false,
+      code: "unauthenticated",
+    });
+
+    await CallSessionPage({ params: Promise.resolve({ id: "call-1" }) });
+
+    expect(mockRedirect).toHaveBeenCalledWith("/login");
+  });
+
+  it("renders access denied when membership is missing", async () => {
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: false,
+      code: "no_membership",
+    });
+
+    const element = await CallSessionPage({ params: Promise.resolve({ id: "call-1" }) });
+    const markup = renderToStaticMarkup(element);
+
+    expect(markup).toContain("Access denied");
   });
 });

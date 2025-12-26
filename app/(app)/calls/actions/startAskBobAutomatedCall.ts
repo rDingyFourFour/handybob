@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { parseEnvConfig } from "@/schemas/env";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import {
   TWILIO_CALL_RECORDING_CALLBACK_PATH,
   TWILIO_CALL_STATUS_CALLBACK_PATH,
@@ -280,34 +280,38 @@ export async function startAskBobAutomatedCall(
   }
 
   const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const workspaceResult = await resolveWorkspaceContext({
+    supabase,
+    allowAutoCreateWorkspace: false,
+  });
+  if (!workspaceResult.ok) {
+    const failureReason =
+      workspaceResult.code === "unauthenticated"
+        ? "unauthenticated"
+        : workspaceResult.code === "workspace_not_found"
+        ? "workspace_not_found"
+        : workspaceResult.code === "no_membership"
+        ? "forbidden"
+        : "unknown";
     return buildFailureResponse({
-      reason: "unauthenticated",
-      message: "Please sign in to place automated calls.",
+      reason: failureReason,
+      message:
+        failureReason === "unauthenticated"
+          ? "Please sign in to place automated calls."
+          : failureReason === "forbidden"
+          ? "Workspace access is required to place automated calls."
+          : "We couldn’t resolve workspace access for this call.",
       diagnostics: {
-        message: "User must be signed in to place calls.",
+        message: workspaceResult.diagnostics?.message ?? "Workspace context is required.",
       },
     });
   }
 
-  const { workspace } = await getCurrentWorkspace({ supabase });
-  if (!workspace) {
-    return buildFailureResponse({
-      reason: "workspace_required",
-      message: "Workspace access is required to place automated calls.",
-      diagnostics: {
-        message: "Workspace context is required.",
-      },
-    });
-  }
+  const { workspace, user } = workspaceResult.membership;
 
   if (workspace.id !== params.workspaceId) {
     return buildFailureResponse({
-      reason: "wrong_workspace",
+      reason: "forbidden",
       message: "This job does not belong to your workspace.",
       diagnostics: {
         message: "Job belongs to a different workspace.",

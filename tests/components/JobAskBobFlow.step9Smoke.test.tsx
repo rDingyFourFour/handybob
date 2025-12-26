@@ -87,7 +87,9 @@ describe("JobAskBobFlow Step 9 smoke", () => {
 
   afterEach(() => {
     if (root) {
-      root.unmount();
+      act(() => {
+        root.unmount();
+      });
       root = null;
     }
     container.remove();

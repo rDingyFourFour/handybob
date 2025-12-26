@@ -1,7 +1,7 @@
 "use server";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import { runAskBobTask } from "@/lib/domain/askbob/service";
 import type { CallHistoryRecord } from "@/lib/domain/askbob/callHistory";
 import {
@@ -77,11 +77,29 @@ export async function runAskBobJobFollowupAction(payload: JobFollowupPayload) {
   const hasLatestCallOutcomeCode = Boolean(latestCallOutcome?.outcomeCode);
 
   const supabase = await createServerClient();
-  const { workspace, user } = await getCurrentWorkspace({ supabase });
+  const workspaceResult = await resolveWorkspaceContext({
+    supabase,
+    allowAutoCreateWorkspace: false,
+  });
 
-  if (!workspace || !user) {
-    return { ok: false, error: "workspace_unavailable" };
+  if (!workspaceResult.ok) {
+    const code =
+      workspaceResult.code === "unauthenticated"
+        ? "unauthenticated"
+        : workspaceResult.code === "workspace_not_found"
+        ? "workspace_not_found"
+        : workspaceResult.code === "no_membership"
+        ? "forbidden"
+        : "workspace_not_found";
+    console.error("[askbob-job-followup-ui-failure] workspace context unavailable", {
+      workspaceId: parsed.workspaceId,
+      jobId: parsed.jobId,
+      reason: code,
+    });
+    return { ok: false, error: code };
   }
+
+  const { workspace, user } = workspaceResult.membership;
 
   if (workspace.id !== parsed.workspaceId) {
     console.error("[askbob-job-followup-ui-failure] workspace mismatch", {

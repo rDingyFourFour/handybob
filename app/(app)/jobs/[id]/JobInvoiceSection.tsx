@@ -49,7 +49,8 @@ const ERROR_COPY: Record<string, string> = {
   quote_not_found: "We couldn’t find that quote. Refresh and try again.",
   job_not_found: "We couldn’t find this job. Refresh and try again.",
   forbidden: "You no longer have access to create invoices here.",
-  unauthorized: "You no longer have access to create invoices here.",
+  unauthenticated: "You no longer have access to create invoices here.",
+  workspace_not_found: "We couldn’t find that workspace. Please sign in again.",
   invalid_input: "We couldn’t create the invoice. Refresh and try again.",
   unknown_error: "We couldn’t create the invoice. Please try again.",
 };
@@ -67,7 +68,9 @@ const STATUS_ACTION_ERROR_COPY: Record<string, string> = {
   workspace_mismatch: "This invoice belongs to a different workspace.",
   job_mismatch: "This invoice doesn’t match this job.",
   db_error: "We couldn’t update the invoice status. Try again.",
-  unauthorized: "You no longer have access to update invoices.",
+  unauthenticated: "You no longer have access to update invoices.",
+  forbidden: "You no longer have access to update invoices.",
+  workspace_not_found: "We couldn’t find that workspace. Please sign in again.",
   invalid_input: "We couldn’t update the invoice status with that request.",
 };
 

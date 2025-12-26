@@ -27,7 +27,9 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
 
   afterEach(() => {
     if (root) {
-      root.unmount();
+      act(() => {
+        root.unmount();
+      });
       root = null;
     }
     container.remove();

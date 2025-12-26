@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import { createInvoiceFromAcceptedQuote } from "@/lib/domain/invoices/createInvoiceFromAcceptedQuote";
 
 type CreateInvoiceActionResult = {
@@ -60,40 +60,38 @@ export async function createInvoiceFromAcceptedQuoteAction(
     return { success: false, code: "unknown_error" };
   }
 
-  const { data: authData } = await supabase.auth.getUser();
-  const user = authData?.user ?? null;
-  if (!user) {
+  const workspaceResult = await resolveWorkspaceContext({
+    supabase,
+    allowAutoCreateWorkspace: false,
+  });
+  if (!workspaceResult.ok) {
+    const code =
+      workspaceResult.code === "unauthenticated"
+        ? "unauthenticated"
+        : workspaceResult.code === "workspace_not_found"
+        ? "workspace_not_found"
+        : workspaceResult.code === "no_membership"
+        ? "forbidden"
+        : "workspace_not_found";
     console.error("[invoice-create-from-accepted-quote-failure]", {
       workspaceId,
       jobId,
       quoteId,
-      code: "unauthorized",
+      code,
     });
-    return { success: false, code: "unauthorized" };
+    return { success: false, code };
   }
 
-  let workspace;
-  try {
-    workspace = (await getCurrentWorkspace({ supabase })).workspace;
-  } catch (error) {
-    console.error("[invoice-create-from-accepted-quote-failure]", {
-      workspaceId,
-      jobId,
-      quoteId,
-      code: "unauthorized",
-      error,
-    });
-    return { success: false, code: "unauthorized" };
-  }
+  const { workspace, user } = workspaceResult.membership;
 
-  if (!workspace || workspace.id !== workspaceId) {
+  if (workspace.id !== workspaceId) {
     console.error("[invoice-create-from-accepted-quote-failure]", {
       workspaceId,
       jobId,
       quoteId,
-      code: "unauthorized",
+      code: "forbidden",
     });
-    return { success: false, code: "unauthorized" };
+    return { success: false, code: "forbidden" };
   }
 
   const { data: job, error: jobError } = await supabase

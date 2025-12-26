@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
 
 export type AcceptQuoteResult = {
   ok: boolean;
@@ -11,7 +11,9 @@ export type AcceptQuoteResult = {
     | "accepted"
     | "already_accepted"
     | "invalid_input"
-    | "unauthorized"
+    | "unauthenticated"
+    | "forbidden"
+    | "workspace_not_found"
     | "not_found"
     | "wrong_workspace"
     | "accepted_conflict"
@@ -90,48 +92,40 @@ export async function acceptQuoteAction(
     });
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const workspaceResult = await resolveWorkspaceContext({
+    supabase,
+    allowAutoCreateWorkspace: false,
+  });
+  if (!workspaceResult.ok) {
+    const code =
+      workspaceResult.code === "unauthenticated"
+        ? "unauthenticated"
+        : workspaceResult.code === "workspace_not_found"
+        ? "workspace_not_found"
+        : workspaceResult.code === "no_membership"
+        ? "forbidden"
+        : "workspace_not_found";
     console.error("[quotes-accept-action-failure]", {
       workspaceId,
       quoteId,
-      reason: "unauthorized",
+      reason: code,
     });
     return failureResult({
-      code: "unauthorized",
+      code,
       message: "You no longer have access to accept this quote.",
       quoteId,
     });
   }
 
-  let workspace;
-  try {
-    workspace = (await getCurrentWorkspace({ supabase })).workspace;
-  } catch (error) {
+  const { workspace } = workspaceResult.membership;
+  if (workspace.id !== workspaceId) {
     console.error("[quotes-accept-action-failure]", {
       workspaceId,
       quoteId,
-      reason: "unauthorized",
-      error,
+      reason: "forbidden",
     });
     return failureResult({
-      code: "unauthorized",
-      message: "You no longer have access to accept this quote.",
-      quoteId,
-    });
-  }
-
-  if (!workspace || workspace.id !== workspaceId) {
-    console.error("[quotes-accept-action-failure]", {
-      workspaceId,
-      quoteId,
-      reason: "unauthorized",
-    });
-    return failureResult({
-      code: "unauthorized",
+      code: "forbidden",
       message: "You no longer have access to accept this quote.",
       quoteId,
     });

@@ -83,7 +83,9 @@ describe("JobAskBobFlow after-call cache hydration", () => {
 
   afterEach(() => {
     if (root) {
-      root.unmount();
+      act(() => {
+        root.unmount();
+      });
       root = null;
     }
     container.remove();

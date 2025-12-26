@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import { createServerClient } from "@/utils/supabase/server";
-import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import { runAskBobTask } from "@/lib/domain/askbob/service";
 import { CallLiveGuidanceResult } from "@/lib/domain/askbob/types";
 import {
@@ -178,21 +178,34 @@ export async function callLiveGuidanceAction(
   });
 
   const supabase = await createServerClient();
-  const workspaceContext = await getCurrentWorkspace({ supabase });
-  const workspace = workspaceContext.workspace;
+  const workspaceResult = await resolveWorkspaceContext({
+    supabase,
+    allowAutoCreateWorkspace: false,
+  });
 
-  if (!workspace) {
+  if (!workspaceResult.ok) {
+    const code =
+      workspaceResult.code === "unauthenticated"
+        ? "unauthenticated"
+        : workspaceResult.code === "workspace_not_found"
+        ? "workspace_not_found"
+        : workspaceResult.code === "no_membership"
+        ? "forbidden"
+        : "workspace_not_found";
     console.error("[askbob-call-live-guidance-failure] workspace missing", {
       workspaceId,
       callId,
       source: "askbob.call-live-guidance",
+      reason: code,
     });
     return {
       success: false,
-      code: "workspace_context_unavailable",
+      code,
       message: "Unable to resolve workspace context.",
     };
   }
+
+  const workspace = workspaceResult.membership.workspace;
 
   if (workspace.id !== workspaceId) {
     console.error("[askbob-call-live-guidance-failure] workspace mismatch", {

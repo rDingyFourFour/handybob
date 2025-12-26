@@ -79,13 +79,7 @@ function createQuery(table: string, state: SupabaseMockState): SupabaseQuery {
       const response = ensureResponse(state, table);
       return Promise.resolve(response);
     }),
-    limit: vi.fn(async () => {
-      const error = state.limitErrors[table];
-      if (error) {
-        return Promise.reject(error);
-      }
-      return Promise.resolve(ensureResponse(state, table));
-    }),
+    limit: vi.fn(() => query),
     then: vi.fn((onFulfilled, onRejected) => {
       const error = state.limitErrors[table];
       const response = ensureResponse(state, table);
