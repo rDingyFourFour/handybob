@@ -4,7 +4,8 @@ import { z } from "zod";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
-import { ensureInvoicePublicToken, getInvoicePublicLink } from "@/lib/domain/invoices/publicInvoice";
+import { getInvoicePublicLink } from "@/lib/domain/invoices/publicInvoice";
+import { ensureInvoicePublicToken } from "@/lib/domain/invoices/publicInvoice.server";
 import {
   buildInvoiceLifecycleUpdate,
   guardInvoiceStatusTransition,

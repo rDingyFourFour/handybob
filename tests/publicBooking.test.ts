@@ -17,6 +17,7 @@ type CustomerRow = {
   name: string;
   email?: string;
   phone?: string;
+  address?: string;
   workspace_id: string;
   user_id: string;
 };
@@ -26,14 +27,20 @@ type JobRow = {
   status: string;
   user_id: string;
   workspace_id: string;
+  customer_id?: string | null;
   title?: string;
-  description?: string;
+  description_raw?: string;
 };
 
 type LeadFormSubmissionRow = {
   id?: string;
   workspace_id: string;
-  data: Record<string, string>;
+  customer_id?: string | null;
+  job_id?: string | null;
+  ip_hash?: string | null;
+  user_agent?: string | null;
+  blocked_reason?: string | null;
+  honeypot_tripped?: boolean;
 };
 
 type SupabaseMockState = {
@@ -100,7 +107,7 @@ function makeSupabaseMock(initial?: Partial<SupabaseMockState>) {
             select: () => ({
               eq: () => ({
                 or: () => ({
-                  limit: async () => ({ data: [] }),
+                  limit: async () => ({ data: state.customers }),
                 }),
               }),
             }),
@@ -113,20 +120,46 @@ function makeSupabaseMock(initial?: Partial<SupabaseMockState>) {
                 },
               }),
             }),
-            update: () => ({
-              eq: () => ({
-                eq: () => ({}),
+            update: (payload: Partial<CustomerRow>) => ({
+              eq: (_col: string, value: string) => ({
+                eq: () => {
+                  const index = state.customers.findIndex((customer) => customer.id === value);
+                  if (index >= 0) {
+                    state.customers[index] = { ...state.customers[index], ...payload };
+                  }
+                  return {};
+                },
               }),
             }),
           };
         case "jobs":
           return {
+            select: () => ({
+              eq: () => ({
+                eq: () => ({
+                  order: () => ({
+                    limit: async () => ({ data: state.jobs }),
+                  }),
+                }),
+              }),
+            }),
             insert: (payload: JobRow) => ({
               select: () => ({
                 single: async () => {
                   const row: JobRow = { ...payload, id: `job_${state.jobs.length + 1}` };
                   state.jobs.push(row);
                   return { data: row, error: null };
+                },
+              }),
+            }),
+            update: (payload: Partial<JobRow>) => ({
+              eq: (_col: string, value: string) => ({
+                eq: () => {
+                  const index = state.jobs.findIndex((job) => job.id === value);
+                  if (index >= 0) {
+                    state.jobs[index] = { ...state.jobs[index], ...payload };
+                  }
+                  return {};
                 },
               }),
             }),
@@ -149,6 +182,16 @@ let supabaseMock = makeSupabaseMock();
 
 vi.mock("@/utils/supabase/admin", () => ({
   createAdminClient: () => supabaseMock,
+}));
+
+const mockCreateServerClient = vi.fn(() => ({
+  auth: {
+    getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
+  },
+}));
+
+vi.mock("@/utils/supabase/server", () => ({
+  createServerClient: () => mockCreateServerClient(),
 }));
 
 let mockHeaders = {
@@ -193,6 +236,8 @@ describe("submitPublicBooking", () => {
     const result = await submitPublicBooking("demo", { status: "idle" }, formData);
 
     expect(result.status).toBe("success");
+    expect(result.jobId).toBeTruthy();
+    expect(result.customerId).toBeTruthy();
     expect(supabaseMock.state.customers).toHaveLength(1);
     expect(supabaseMock.state.jobs).toHaveLength(1);
     expect(supabaseMock.state.jobs[0]).toMatchObject({
@@ -201,5 +246,45 @@ describe("submitPublicBooking", () => {
       workspace_id: "ws_1",
     });
     expect(supabaseMock.state.lead_form_submissions).toHaveLength(1);
+  });
+
+  it("reuses an existing customer match when email is already on file", async () => {
+    supabaseMock = makeSupabaseMock({
+      customers: [
+        {
+          id: "cust_1",
+          name: "Existing Customer",
+          email: "jane@example.com",
+          phone: "+15551112222",
+          workspace_id: "ws_1",
+          user_id: "user_1",
+        },
+      ],
+    });
+
+    const formData = new FormData();
+    formData.set("name", "Jane Doe");
+    formData.set("email", "jane@example.com");
+    formData.set("description", "Repair a leaking pipe under the sink.");
+    formData.set("urgency", "this_week");
+
+    const result = await submitPublicBooking("demo", { status: "idle" }, formData);
+
+    expect(result.status).toBe("success");
+    expect(result.customerId).toBe("cust_1");
+    expect(supabaseMock.state.customers).toHaveLength(1);
+    expect(supabaseMock.state.jobs).toHaveLength(1);
+    expect(supabaseMock.state.jobs[0].customer_id).toBe("cust_1");
+  });
+
+  it("fails with a stable error code when required fields are missing", async () => {
+    const formData = new FormData();
+    formData.set("email", "jane@example.com");
+
+    const result = await submitPublicBooking("demo", { status: "idle" }, formData);
+
+    expect(result.status).toBe("error");
+    expect(result.errorCode).toBe("invalid_input");
+    expect(supabaseMock.state.jobs).toHaveLength(0);
   });
 });

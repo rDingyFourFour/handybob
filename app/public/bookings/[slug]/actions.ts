@@ -15,12 +15,24 @@ import { classifyJobWithAi } from "@/lib/domain/jobs";
 import { runLeadAutomations } from "@/lib/domain/automation";
 import { sendCustomerMessageEmail } from "@/utils/email/sendCustomerMessage";
 import { validatePublicLeadSubmission } from "@/schemas/publicLead";
+import {
+  buildPublicLeadDescription,
+  buildPublicLeadTitle,
+  normalizePublicLeadUrgency,
+  upsertPublicLeadCustomer,
+  upsertPublicLeadJob,
+} from "@/lib/domain/publicLeads";
+import { createServerClient } from "@/utils/supabase/server";
 
 export type ActionState = {
   status: "idle" | "error" | "success";
   errors?: Partial<Record<"name" | "email" | "description", string>>;
   message?: string | null;
   successName?: string | null;
+  jobId?: string | null;
+  customerId?: string | null;
+  redirectTo?: string | null;
+  errorCode?: string | null;
 };
 
 type WorkspaceRow = {
@@ -31,14 +43,6 @@ type WorkspaceRow = {
   brand_name: string | null;
   public_lead_form_enabled?: boolean | null;
   auto_confirmation_email_enabled?: boolean | null;
-};
-
-type CustomerRow = {
-  id: string;
-  name: string | null;
-  email: string | null;
-  phone: string | null;
-  address: string | null;
 };
 
 export async function submitPublicBooking(
@@ -66,7 +70,12 @@ export async function submitPublicBooking(
   });
 
   if (!validation.success) {
-    return { status: "error", message: validation.error };
+    console.warn("[public-booking-submit]", {
+      status: "error",
+      errorCode: "invalid_input",
+      workspaceSlug,
+    });
+    return { status: "error", message: validation.error, errorCode: "invalid_input" };
   }
 
   const {
@@ -95,7 +104,12 @@ export async function submitPublicBooking(
     .maybeSingle<WorkspaceRow>();
 
   if (!workspace || workspace.public_lead_form_enabled === false) {
-    return { status: "error", message: "This booking link is not active." };
+    console.warn("[public-booking-submit]", {
+      status: "error",
+      errorCode: "inactive_form",
+      workspaceSlug,
+    });
+    return { status: "error", message: "This booking link is not active.", errorCode: "inactive_form" };
   }
 
   if (await isRateLimited(supabase, workspace.id, ipHash)) {
@@ -105,72 +119,111 @@ export async function submitPublicBooking(
       userAgent,
       blockedReason: "rate_limited",
     });
-    return { status: "error", message: "Something went wrong, please try again later." };
+    console.warn("[public-booking-submit]", {
+      status: "error",
+      errorCode: "rate_limited",
+      workspaceId: workspace.id,
+    });
+    return {
+      status: "error",
+      message: "Something went wrong, please try again later.",
+      errorCode: "rate_limited",
+    };
   }
 
-  const customer = await findOrCreateCustomer({
+  const customer = await upsertPublicLeadCustomer({
     supabase,
     workspace,
-    name,
-    email,
-    phone,
-    address: contactAddress,
+    contact: {
+      name,
+      email,
+      phone,
+      address: contactAddress,
+    },
   });
 
   if (!customer) {
-    return { status: "error", message: "We could not save your request. Please try again." };
+    console.warn("[public-booking-submit]", {
+      status: "error",
+      errorCode: "customer_create_failed",
+      workspaceId: workspace.id,
+    });
+    return {
+      status: "error",
+      message: "We could not save your request. Please try again.",
+      errorCode: "customer_create_failed",
+    };
   }
 
-  const mergedDescription = buildDescription(description, {
+  const mergedDescription = buildPublicLeadDescription(description, {
     address: contactAddress,
-    preferredTime: contactPreferredTime,
-    specificDate: contactSpecificDate,
+    preferredTime: contactPreferredTime || null,
+    specificDate: contactSpecificDate || null,
     name,
     email,
     phone,
   });
-  const jobTitle = buildTitle(description);
-  const normalizedUrgency = normalizeUrgency(selectedUrgency, contactSpecificDate);
+  const jobTitle = buildPublicLeadTitle(description);
+  const normalizedUrgency = normalizePublicLeadUrgency(
+    selectedUrgency === "specific_date" && contactSpecificDate ? "flexible" : selectedUrgency,
+  );
 
-  const { data: job, error } = await supabase
-    .from("jobs")
-    .insert({
-      user_id: workspace.owner_id,
-      workspace_id: workspace.id,
-      customer_id: customer.id,
-      title: jobTitle,
-      description_raw: mergedDescription,
-      status: "lead",
-      source: "web_form",
-      urgency: normalizedUrgency,
-      spam_suspected: spamSuspected,
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    console.warn("[public-booking] Failed to create job:", error.message);
-    return { status: "error", message: "We could not save your request. Please try again." };
+  let jobId: string | null = null;
+  try {
+    const jobResult = await upsertPublicLeadJob({
+      supabase,
+      workspace,
+      customerId: customer.id,
+      job: {
+        description: mergedDescription,
+        title: jobTitle,
+        urgency: normalizedUrgency,
+        source: "web_form",
+        spamSuspected,
+      },
+    });
+    jobId = jobResult.jobId;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown";
+    console.warn("[public-booking] Failed to create job:", message);
+    console.warn("[public-booking-submit]", {
+      status: "error",
+      errorCode: "job_create_failed",
+      workspaceId: workspace.id,
+      customerId: customer.id,
+    });
+    return {
+      status: "error",
+      message: "We could not save your request. Please try again.",
+      errorCode: "job_create_failed",
+    };
   }
 
   await logSubmission(supabase, {
     workspaceId: workspace.id,
     customerId: customer.id,
-    jobId: job?.id ?? null,
+    jobId,
     ipHash,
     userAgent,
     blockedReason: spamSuspected ? "honeypot" : null,
   });
 
   if (spamSuspected) {
-    return { status: "success" }; // silently drop bots without leaking details
+    console.log("[public-booking-submit]", {
+      status: "success",
+      workspaceId: workspace.id,
+      jobId: null,
+      customerId: null,
+      spamSuspected: true,
+    });
+    return { status: "success" };
   }
 
   // AI classification (best-effort, non-blocking)
-  if (job?.id) {
+  if (jobId) {
     try {
       const classification = await classifyJobWithAi({
-        jobId: job.id,
+        jobId,
         userId: workspace.owner_id,
         workspaceId: workspace.id,
         title: jobTitle,
@@ -181,7 +234,7 @@ export async function submitPublicBooking(
         await runLeadAutomations({
           userId: workspace.owner_id,
           workspaceId: workspace.id,
-          jobId: job.id,
+          jobId,
           title: jobTitle,
           customerName: customer.name ?? null,
           summary: mergedDescription,
@@ -215,77 +268,31 @@ export async function submitPublicBooking(
   }
 
   const firstName = name.split(" ")[0] || name;
-  return { status: "success", successName: firstName };
-}
-
-async function findOrCreateCustomer({
-  supabase,
-  workspace,
-  name,
-  email,
-  phone,
-  address,
-}: {
-  supabase: ReturnType<typeof createAdminClient>;
-  workspace: WorkspaceRow;
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-}) {
-  const filters = [];
-  const normalizedEmail = email.toLowerCase();
-  const normalizedPhone = phone || null;
-  if (normalizedEmail) filters.push(`email.ilike.${normalizedEmail}`);
-  if (normalizedPhone) filters.push(`phone.eq.${normalizedPhone}`);
-
-  let existing: CustomerRow | null = null;
-  if (filters.length > 0) {
-    const { data } = await supabase
-      .from("customers")
-      .select("id, name, email, phone, address")
-      .eq("workspace_id", workspace.id)
-      .or(filters.join(","))
-      .limit(1);
-    existing = (data?.[0] as CustomerRow | undefined) ?? null;
+  let redirectTo: string | null = null;
+  try {
+    const authSupabase = await createServerClient();
+    const { data } = await authSupabase.auth.getUser();
+    if (data?.user?.id && data.user.id === workspace.owner_id && jobId) {
+      redirectTo = `/jobs/${jobId}`;
+    }
+  } catch (error) {
+    console.warn("[public-booking] Failed to resolve session:", error instanceof Error ? error.message : error);
   }
 
-  if (existing) {
-    const update: Partial<CustomerRow> = {
-      name: existing.name || name || null,
-      email: existing.email || normalizedEmail || null,
-      phone: existing.phone || normalizedPhone,
-      address: existing.address || address || null,
-    };
+  console.log("[public-booking-submit]", {
+    status: "success",
+    workspaceId: workspace.id,
+    jobId,
+    customerId: customer.id,
+  });
 
-    await supabase
-      .from("customers")
-      .update(update)
-      .eq("id", existing.id)
-      .eq("workspace_id", workspace.id);
-
-    return { ...existing, ...update, id: existing.id };
-  }
-
-  const { data: inserted, error } = await supabase
-    .from("customers")
-    .insert({
-      user_id: workspace.owner_id,
-      workspace_id: workspace.id,
-      name,
-      email: normalizedEmail || null,
-      phone: normalizedPhone,
-      address: address || null,
-    })
-    .select("id, name, email, phone, address")
-    .single();
-
-  if (error) {
-    console.warn("[public-booking] Failed to create customer:", error.message);
-    return null;
-  }
-
-  return inserted as CustomerRow;
+  return {
+    status: "success",
+    successName: firstName,
+    jobId,
+    customerId: customer.id,
+    redirectTo,
+  };
 }
 
 async function isRateLimited(
@@ -324,45 +331,6 @@ async function logSubmission(
     blocked_reason: entry.blockedReason,
     honeypot_tripped: entry.blockedReason === "honeypot",
   });
-}
-
-function buildTitle(description: string) {
-  const condensed = description.replace(/\s+/g, " ").trim();
-  if (!condensed) return "Website inquiry";
-  return condensed.length > 80 ? `${condensed.slice(0, 77)}...` : condensed;
-}
-
-function buildDescription(
-  description: string,
-  extras: {
-    address: string;
-    preferredTime: string;
-    specificDate: string;
-    name: string;
-    email: string;
-    phone: string;
-  },
-) {
-  const lines = [
-    description,
-    extras.address ? `Address: ${extras.address}` : null,
-    extras.specificDate ? `Requested date: ${extras.specificDate}` : null,
-    extras.preferredTime ? `Preferred time: ${extras.preferredTime}` : null,
-    [extras.name, extras.email, extras.phone].some(Boolean)
-      ? `Contact: ${[extras.name, extras.email, extras.phone].filter(Boolean).join(" • ")}`
-      : null,
-  ].filter(Boolean);
-
-  return lines.join("\n\n");
-}
-
-function normalizeUrgency(raw: string, specificDate: string) {
-  const value = raw.toLowerCase();
-  if (value === "today") return "today";
-  if (value === "this_week") return "this_week";
-  if (value === "flexible") return "flexible";
-  if (value === "specific_date" && specificDate) return "flexible";
-  return "flexible";
 }
 
 function getClientIp(h: Awaited<ReturnType<typeof headers>>) {

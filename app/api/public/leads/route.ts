@@ -6,6 +6,13 @@ import { inferAttentionSignals } from "@/lib/domain/calls";
 import { runLeadAutomations } from "@/lib/domain/automation";
 import { logAuditEvent } from "@/utils/audit/log";
 import { createAdminClient } from "@/utils/supabase/admin";
+import {
+  buildPublicLeadDescription,
+  buildPublicLeadTitle,
+  normalizePublicLeadUrgency,
+  upsertPublicLeadCustomer,
+  upsertPublicLeadJob,
+} from "@/lib/domain/publicLeads";
 
 // Public lead capture flow (single source of truth for booking form behavior):
 // 1) A visitor opens a workspace-scoped public URL, e.g. /public/workspaces/{slug}/lead.
@@ -33,13 +40,6 @@ type WorkspaceRow = {
   brand_name: string | null;
   slug: string;
   public_lead_form_enabled?: boolean | null;
-};
-
-type CustomerRow = {
-  id: string;
-  name: string | null;
-  email: string | null;
-  phone: string | null;
 };
 
 export async function POST(req: NextRequest) {
@@ -73,11 +73,27 @@ export async function POST(req: NextRequest) {
 
   const cleanedDescription = (description || "").trim();
   if (!cleanedDescription || cleanedDescription.length < 10) {
-    return NextResponse.json({ error: "Please share a bit more about the job (at least 10 characters)." }, { status: 400 });
+    console.warn("[public-lead-submit]", {
+      status: "error",
+      errorCode: "invalid_description",
+      workspaceSlug,
+    });
+    return NextResponse.json(
+      { error: "Please share a bit more about the job (at least 10 characters)." },
+      { status: 400 },
+    );
   }
 
   if (!name || (!email && !phone)) {
-    return NextResponse.json({ error: "Name plus either email or phone is required." }, { status: 400 });
+    console.warn("[public-lead-submit]", {
+      status: "error",
+      errorCode: "missing_contact",
+      workspaceSlug,
+    });
+    return NextResponse.json(
+      { error: "Name plus either email or phone is required." },
+      { status: 400 },
+    );
   }
 
   const clientIp = getClientIp(req);
@@ -94,6 +110,11 @@ export async function POST(req: NextRequest) {
       blockedReason: "rate_limited",
       honeypotTripped: honeypotHit,
     });
+    console.warn("[public-lead-submit]", {
+      status: "error",
+      errorCode: "rate_limited",
+      workspaceId: workspace.id,
+    });
     return NextResponse.json(
       { error: "Too many attempts. Please try again in a few minutes." },
       { status: 429 }
@@ -108,6 +129,13 @@ export async function POST(req: NextRequest) {
       blockedReason: honeypotHit ? "honeypot" : "link_filter",
       honeypotTripped: honeypotHit,
     });
+    console.log("[public-lead-submit]", {
+      status: "success",
+      workspaceId: workspace.id,
+      jobId: null,
+      customerId: null,
+      spamSuspected: true,
+    });
     // Respond success to avoid teaching bots about the honeypot.
     return NextResponse.json({ ok: true, accepted: true });
   }
@@ -115,10 +143,11 @@ export async function POST(req: NextRequest) {
   try {
     // Sequence (happy path): normalize payload -> resolve workspace by slug (scopes workspace_id) -> enforce public_lead_form_enabled -> spam checks (honeypot, link filter, rate limit) -> upsert customer scoped to workspace -> insert lead job scoped to workspace -> log submission -> AI classify job -> trigger automations if emergency -> audit log entry.
     // Failure modes: invalid input, disabled form, spam/rate limits, DB errors during upsert/insert, AI/automation failures (non-blocking) all return 4xx/5xx or early OK for honeypot to avoid teaching bots.
-    const urgencyNormalized = normalizeUrgency(urgency);
-    const mergedDescription = buildDescription(cleanedDescription, {
+    const urgencyNormalized = normalizePublicLeadUrgency(urgency);
+    const mergedDescription = buildPublicLeadDescription(cleanedDescription, {
       address,
-      preferredTime: preferredTime || specificDate || null,
+      preferredTime: preferredTime || null,
+      specificDate: specificDate || null,
       name,
       email,
       phone,
@@ -132,14 +161,33 @@ export async function POST(req: NextRequest) {
       hasJob: false,
     });
 
-    const customer = await upsertCustomer(supabase, workspace, { name, email, phone });
-    const jobId = await upsertLead(supabase, workspace, customer, {
-      description: mergedDescription,
-      urgency: urgencyNormalized,
-      category: signals.category,
-      priority: signals.priority,
-      attentionScore: signals.attentionScore,
-      attentionReason: signals.reason,
+    const customer = await upsertPublicLeadCustomer({
+      supabase,
+      workspace,
+      contact: { name, email, phone, address },
+    });
+    const jobResult = await upsertPublicLeadJob({
+      supabase,
+      workspace,
+      customerId: customer?.id ?? null,
+      job: {
+        description: mergedDescription,
+        urgency: urgencyNormalized,
+        category: signals.category,
+        priority: signals.priority ?? "normal",
+        attentionScore: signals.attentionScore,
+        attentionReason: signals.reason,
+        source: "public_form",
+      },
+    });
+    const jobId = jobResult.jobId;
+    const jobTitle = buildPublicLeadTitle(cleanedDescription);
+
+    console.log("[public-lead-submit]", {
+      status: "success",
+      workspaceId: workspace.id,
+      jobId,
+      customerId: customer?.id ?? null,
     });
 
     await logSubmission(supabase, {
@@ -156,7 +204,7 @@ export async function POST(req: NextRequest) {
       jobId,
       userId: workspace.owner_id,
       workspaceId: workspace.id,
-      title: buildTitle(cleanedDescription),
+      title: jobTitle,
       description: mergedDescription,
     });
 
@@ -165,7 +213,7 @@ export async function POST(req: NextRequest) {
         userId: workspace.owner_id,
         workspaceId: workspace.id,
         jobId,
-        title: buildTitle(cleanedDescription),
+        title: jobTitle,
         customerName: customer?.name ?? null,
         summary: mergedDescription,
         aiUrgency: classification.ai_urgency,
@@ -182,10 +230,15 @@ export async function POST(req: NextRequest) {
       metadata: { source: "public_form" },
     });
 
-    return NextResponse.json({ ok: true, jobId });
+    return NextResponse.json({ ok: true, jobId, customerId: customer?.id ?? null });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown";
     console.error("[public-lead] Failed to save submission:", message);
+    console.warn("[public-lead-submit]", {
+      status: "error",
+      errorCode: "save_failed",
+      workspaceId: workspace.id,
+    });
 
     await logSubmission(supabase, {
       workspaceId: workspace.id,
@@ -299,152 +352,6 @@ async function checkRateLimit(
   return typeof count === "number" && count >= RATE_LIMIT_MAX;
 }
 
-async function upsertCustomer(
-  supabase: ReturnType<typeof createAdminClient>,
-  workspace: WorkspaceRow,
-  contact: { name: string | null; email: string | null; phone: string | null },
-) {
-  const email = contact.email?.toLowerCase() || null;
-  const phone = contact.phone?.trim() || null;
-
-  const filters = [];
-  if (email) filters.push(`email.ilike.${email}`);
-  if (phone) filters.push(`phone.eq.${phone}`);
-
-  let existing: CustomerRow | null = null;
-  if (filters.length > 0) {
-    const { data } = await supabase
-      .from("customers")
-      .select("id, name, email, phone")
-      .eq("workspace_id", workspace.id)
-      .or(filters.join(","))
-      .limit(1);
-    existing = (data?.[0] as CustomerRow | undefined) ?? null;
-  }
-
-  if (existing) {
-    const update: Partial<CustomerRow> = {
-      name: existing.name || contact.name || null,
-      email: existing.email || email,
-      phone: existing.phone || phone,
-    };
-
-    await supabase
-      .from("customers")
-      .update(update)
-      .eq("id", existing.id)
-      .eq("workspace_id", workspace.id);
-
-    return { ...existing, ...update };
-  }
-
-  const { data: inserted, error } = await supabase
-    .from("customers")
-    .insert({
-      user_id: workspace.owner_id,
-      workspace_id: workspace.id,
-      name: contact.name,
-      email,
-      phone,
-    })
-    .select("id, name, email, phone")
-    .single();
-
-  if (error) {
-    console.warn("[public-lead] Failed to create customer:", error.message);
-    return existing;
-  }
-
-  return inserted as CustomerRow;
-}
-
-async function upsertLead(
-  supabase: ReturnType<typeof createAdminClient>,
-  workspace: WorkspaceRow,
-  customer: CustomerRow | null,
-  job: {
-    description: string;
-    urgency: string;
-    category: string | null;
-    priority: string | null;
-    attentionScore: number;
-    attentionReason: string;
-  },
-) {
-  const openJob = await findOpenLeadForCustomer(supabase, workspace.id, customer?.id);
-  const title = buildTitle(job.description);
-
-  if (openJob) {
-    const { error } = await supabase
-      .from("jobs")
-      .update({
-        title: openJob.title || title,
-        description_raw: job.description,
-        urgency: job.urgency,
-        category: job.category ?? null,
-        priority: job.priority ?? "normal",
-        attention_score: job.attentionScore,
-        attention_reason: job.attentionReason,
-      })
-      .eq("id", openJob.id)
-      .eq("workspace_id", workspace.id);
-
-    if (error) {
-      console.warn("[public-lead] Failed to update existing lead:", error.message);
-    }
-
-    return openJob.id;
-  }
-
-  const { data: inserted, error } = await supabase
-    .from("jobs")
-    .insert({
-      user_id: workspace.owner_id,
-      workspace_id: workspace.id,
-      customer_id: customer?.id ?? null,
-      title,
-      description_raw: job.description,
-      urgency: job.urgency,
-      category: job.category ?? null,
-      priority: job.priority ?? "normal",
-      attention_score: job.attentionScore,
-      attention_reason: job.attentionReason,
-      status: "lead",
-      source: "public_form",
-    })
-    .select("id")
-    .single();
-
-  if (error || !inserted?.id) {
-    throw new Error(error?.message || "Failed to create lead");
-  }
-
-  return inserted.id as string;
-}
-
-async function findOpenLeadForCustomer(
-  supabase: ReturnType<typeof createAdminClient>,
-  workspaceId: string,
-  customerId: string | null | undefined,
-) {
-  if (!customerId) return null;
-
-  const CLOSED = ["completed", "cancelled", "closed", "lost", "done"];
-  const { data } = await supabase
-    .from("jobs")
-    .select("id, status, title")
-    .eq("workspace_id", workspaceId)
-    .eq("customer_id", customerId)
-    .order("created_at", { ascending: false })
-    .limit(5);
-
-  const jobs = (data ?? []) as { id: string; status: string | null; title: string | null }[];
-  return jobs.find((job) => {
-    const status = (job.status || "").toLowerCase();
-    return !CLOSED.includes(status) && status === "lead";
-  }) ?? null;
-}
-
 async function logSubmission(
   supabase: ReturnType<typeof createAdminClient>,
   entry: {
@@ -472,27 +379,6 @@ async function logSubmission(
   }
 }
 
-function buildDescription(
-  description: string,
-  extras: { address: string | null; preferredTime: string | null; name: string | null; email: string | null; phone: string | null },
-) {
-  const lines = [
-    description,
-    extras.address ? `Address: ${extras.address}` : null,
-    extras.preferredTime ? `Preferred timing: ${extras.preferredTime}` : null,
-    extras.name || extras.email || extras.phone
-      ? `Contact: ${[extras.name, extras.email, extras.phone].filter(Boolean).join(" • ")}`
-      : null,
-  ].filter(Boolean);
-
-  return lines.join("\n\n");
-}
-
-function buildTitle(description: string) {
-  const condensed = description.replace(/\s+/g, " ").trim();
-  return condensed.slice(0, 80) || "Lead";
-}
-
 function getClientIp(req: NextRequest) {
   const header = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? "";
   return header.split(",").map((v) => v.trim()).find(Boolean) || null;
@@ -501,13 +387,6 @@ function getClientIp(req: NextRequest) {
 function hashValue(value: string) {
   const salt = process.env.LEAD_FORM_IP_SALT || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   return crypto.createHash("sha256").update(`${value}:${salt}`).digest("hex");
-}
-
-function normalizeUrgency(raw: string | null) {
-  const value = (raw || "").toLowerCase();
-  if (["today", "this_week", "flexible"].includes(value)) return value;
-  if (value === "asap" || value === "emergency") return "today";
-  return "flexible";
 }
 
 function containsSuspiciousLinks(text: string) {

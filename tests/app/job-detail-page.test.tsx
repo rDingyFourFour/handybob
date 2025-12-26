@@ -268,6 +268,16 @@ async function renderJobPage(
     }
   });
 
+  it("passes job title and description into the AskBob flow", async () => {
+    lastJobAskBobFlowProps = null;
+
+    await renderJobPage(Promise.resolve({}));
+
+    expect(lastJobAskBobFlowProps).not.toBeNull();
+    expect(lastJobAskBobFlowProps?.jobTitle).toBe(JOB_RECORD.title);
+    expect(lastJobAskBobFlowProps?.jobDescription).toBe(JOB_RECORD.description_raw);
+  });
+
   it("redirects to login when unauthenticated", async () => {
     mockResolveWorkspaceContext.mockResolvedValue({
       ok: false,

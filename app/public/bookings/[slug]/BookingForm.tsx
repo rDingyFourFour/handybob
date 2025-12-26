@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import { useFormState, useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 
 import { submitPublicBooking, type ActionState } from "./actions";
 
@@ -9,7 +11,16 @@ type Props = {
   workspaceName: string;
 };
 
-const initialState: ActionState = { status: "idle", errors: {}, message: null, successName: null };
+const initialState: ActionState = {
+  status: "idle",
+  errors: {},
+  message: null,
+  successName: null,
+  jobId: null,
+  customerId: null,
+  redirectTo: null,
+  errorCode: null,
+};
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -25,6 +36,13 @@ export function BookingForm({ workspaceSlug, workspaceName }: Props) {
     submitPublicBooking.bind(null, workspaceSlug),
     initialState
   );
+  const router = useRouter();
+
+  useEffect(() => {
+    if (state.status === "success" && state.redirectTo) {
+      router.replace(state.redirectTo);
+    }
+  }, [router, state.redirectTo, state.status]);
 
   if (state.status === "success") {
     return (

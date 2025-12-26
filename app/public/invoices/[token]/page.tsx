@@ -1,7 +1,7 @@
 // Public invoice page: uses the invoice token + admin client; exposes only customer-visible fields without auth.
 import crypto from "crypto";
 
-import { getPublicInvoiceByToken } from "@/lib/domain/invoices/publicInvoice";
+import { getPublicInvoiceByToken } from "@/lib/domain/invoices/publicInvoice.server";
 
 export const dynamic = "force-dynamic";
 
