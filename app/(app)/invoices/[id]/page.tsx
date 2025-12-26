@@ -6,8 +6,10 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { formatCurrency } from "@/utils/timeline/formatters";
+import { publicInvoiceUrl } from "@/utils/urls/public";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
+import CopyInvoicePublicLinkButton from "@/app/(app)/invoices/[id]/CopyInvoicePublicLinkButton";
 import {
   calculateDaysSinceDate,
   computeFollowupDueInfo,
@@ -53,7 +55,7 @@ type InvoiceDetailRow = {
   issued_at: string | null;
   due_at: string | null;
   paid_at: string | null;
-  public_token: string | null;
+  invoice_public_token: string | null;
   line_items: LineItem[] | null;
   customer_name: string | null;
   customer_email: string | null;
@@ -174,7 +176,7 @@ export default async function InvoiceDetailPage(props: {
           issued_at,
           due_at,
           paid_at,
-          public_token,
+          invoice_public_token,
           line_items,
           customer_name,
           customer_email,
@@ -284,7 +286,7 @@ export default async function InvoiceDetailPage(props: {
   const jobHref = rawJob?.id ? `/jobs/${rawJob.id}` : null;
   const customerHref = customerId ? `/customers/${customerId}` : null;
   const quoteHref = invoice.quote?.id ? `/quotes/${invoice.quote.id}` : null;
-  const publicUrl = invoice.public_token ? `/public/invoices/${invoice.public_token}` : null;
+  const publicUrl = invoice.invoice_public_token ? publicInvoiceUrl(invoice.invoice_public_token) : null;
 
   const invoiceSentDate = getInvoiceSentDate({
     issuedAt: invoice.issued_at,
@@ -497,9 +499,12 @@ export default async function InvoiceDetailPage(props: {
           {publicUrl && (
             <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
               <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Customer view</p>
-              <Link href={publicUrl} className="text-sm font-semibold text-sky-300 hover:text-sky-200">
-                Open public invoice
-              </Link>
+              <div className="flex flex-wrap items-center gap-3">
+                <Link href={publicUrl} className="text-sm font-semibold text-sky-300 hover:text-sky-200">
+                  Open public invoice
+                </Link>
+                <CopyInvoicePublicLinkButton url={publicUrl} />
+              </div>
             </div>
           )}
         </HbCard>

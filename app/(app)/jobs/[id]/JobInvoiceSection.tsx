@@ -8,6 +8,7 @@ import HbButton from "@/components/ui/hb-button";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import { createInvoiceFromAcceptedQuoteAction } from "@/app/(app)/invoices/actions/createInvoiceFromAcceptedQuoteAction";
 import { updateInvoiceStatusAction } from "@/app/(app)/invoices/actions/updateInvoiceStatusAction";
+import { sendInvoiceAction } from "@/app/(app)/invoices/actions/sendInvoiceAction";
 import { normalizeInvoiceStatus, type InvoiceStatus } from "@/lib/domain/invoicesLifecycle";
 
 type InvoiceSnapshotRow = {
@@ -22,6 +23,7 @@ type InvoiceSnapshotRow = {
   snapshot_tax_cents: number | null;
   snapshot_subtotal_cents: number | null;
   currency: string | null;
+  customer_email: string | null;
 };
 
 type InvoiceActionState = {
@@ -34,6 +36,7 @@ type InvoiceActionState = {
 } | null;
 
 type InvoiceStatusActionState = Awaited<ReturnType<typeof updateInvoiceStatusAction>> | null;
+type InvoiceSendActionState = Awaited<ReturnType<typeof sendInvoiceAction>> | null;
 
 type Props = {
   workspaceId: string;
@@ -72,6 +75,18 @@ const STATUS_ACTION_ERROR_COPY: Record<string, string> = {
   forbidden: "You no longer have access to update invoices.",
   workspace_not_found: "We couldn’t find that workspace. Please sign in again.",
   invalid_input: "We couldn’t update the invoice status with that request.",
+};
+
+const SEND_ACTION_ERROR_COPY: Record<string, string> = {
+  invalid_input: "We couldn’t send the invoice. Refresh and try again.",
+  unauthenticated: "You no longer have access to send invoices.",
+  forbidden: "You no longer have access to send invoices.",
+  workspace_not_found: "We couldn’t find that workspace. Please sign in again.",
+  not_found: "We couldn’t find this invoice. Refresh and try again.",
+  invoice_not_sendable: "This invoice can’t be sent right now.",
+  missing_customer_email: "Add a customer email to send this invoice.",
+  email_send_failed: "We couldn’t send the email. Please try again.",
+  db_error: "We couldn’t send the invoice. Please try again.",
 };
 
 function formatCents(value: number | null | undefined) {
@@ -116,6 +131,10 @@ export default function JobInvoiceSection({
     InvoiceStatusActionState,
     FormData
   >(updateInvoiceStatusAction, null);
+  const [sendActionState, sendFormAction, sendSubmitting] = useActionState<
+    InvoiceSendActionState,
+    FormData
+  >(sendInvoiceAction, null);
   const [lifecycleState, setLifecycleState] = useState(() => buildLifecycleState(invoice));
 
   const hasInvoice = Boolean(invoice?.id);
@@ -180,6 +199,13 @@ export default function JobInvoiceSection({
     });
   }, [statusActionState, invoice, workspaceId, jobId]);
 
+  useEffect(() => {
+    if (!sendActionState) return;
+    if (sendActionState.success) {
+      router.refresh();
+    }
+  }, [sendActionState, router]);
+
   const errorMessage =
     actionState && !actionState.success
       ? ERROR_COPY[actionState.code] ?? ERROR_COPY.unknown_error
@@ -192,6 +218,15 @@ export default function JobInvoiceSection({
     statusActionState && statusActionState.success
       ? `Invoice marked as ${STATUS_LABELS[statusActionState.newStatus]}.`
       : null;
+  const sendErrorMessage =
+    sendActionState && !sendActionState.success
+      ? SEND_ACTION_ERROR_COPY[sendActionState.code] ?? SEND_ACTION_ERROR_COPY.db_error
+      : null;
+  const sendSuccessMessage =
+    sendActionState && sendActionState.success ? "Invoice sent to the customer." : null;
+
+  const hasCustomerEmail = Boolean(invoice?.customer_email?.trim());
+  const canSendInvoice = hasInvoice && lifecycleState.status === "draft";
 
   const handleCreateClick = () => {
     console.log("[job-invoice-create-click]", {
@@ -236,9 +271,21 @@ export default function JobInvoiceSection({
         </div>
       ) : null}
 
+      {sendErrorMessage ? (
+        <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-sm text-rose-100">
+          {sendErrorMessage}
+        </div>
+      ) : null}
+
       {statusSuccessMessage ? (
         <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100">
           {statusSuccessMessage}
+        </div>
+      ) : null}
+
+      {sendSuccessMessage ? (
+        <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100">
+          {sendSuccessMessage}
         </div>
       ) : null}
 
@@ -296,19 +343,19 @@ export default function JobInvoiceSection({
             <div className="flex flex-wrap items-center gap-2">
               {lifecycleState.status === "draft" ? (
                 <>
-                  <form
-                    action={statusFormAction}
-                    onSubmit={handleStatusSubmit("sent")}
-                    className="flex"
-                  >
-                    <input type="hidden" name="workspaceId" value={workspaceId} />
-                    <input type="hidden" name="jobId" value={jobId} />
-                    <input type="hidden" name="invoiceId" value={invoice.id} />
-                    <input type="hidden" name="targetStatus" value="sent" />
-                    <HbButton type="submit" size="sm" disabled={statusSubmitting}>
-                      {statusSubmitting ? "Updating..." : "Mark as sent"}
-                    </HbButton>
-                  </form>
+                  {canSendInvoice && hasCustomerEmail ? (
+                    <form action={sendFormAction} className="flex">
+                      <input type="hidden" name="workspaceId" value={workspaceId} />
+                      <input type="hidden" name="invoiceId" value={invoice.id} />
+                      <input type="hidden" name="source" value="job_detail" />
+                      <HbButton type="submit" size="sm" disabled={sendSubmitting}>
+                        {sendSubmitting ? "Sending..." : "Send invoice"}
+                      </HbButton>
+                    </form>
+                  ) : null}
+                  {canSendInvoice && !hasCustomerEmail ? (
+                    <p className="text-xs text-slate-400">Add a customer email to send this invoice.</p>
+                  ) : null}
                   <form
                     action={statusFormAction}
                     onSubmit={handleStatusSubmit("void")}

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockCreateInvoiceFromAcceptedQuoteAction = vi.fn();
 const mockUpdateInvoiceStatusAction = vi.fn();
+const mockSendInvoiceAction = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -25,6 +26,10 @@ vi.mock("@/app/(app)/invoices/actions/updateInvoiceStatusAction", () => ({
   updateInvoiceStatusAction: (...args: unknown[]) => mockUpdateInvoiceStatusAction(...args),
 }));
 
+vi.mock("@/app/(app)/invoices/actions/sendInvoiceAction", () => ({
+  sendInvoiceAction: (...args: unknown[]) => mockSendInvoiceAction(...args),
+}));
+
 import JobInvoiceSection from "@/app/(app)/jobs/[id]/JobInvoiceSection";
 
 const BASE_INVOICE = {
@@ -39,6 +44,7 @@ const BASE_INVOICE = {
   snapshot_tax_cents: 900,
   snapshot_subtotal_cents: 9000,
   currency: "USD",
+  customer_email: "customer@example.com",
 };
 
 describe("JobInvoiceSection lifecycle controls", () => {
@@ -51,6 +57,7 @@ describe("JobInvoiceSection lifecycle controls", () => {
     root = createRoot(container);
     mockCreateInvoiceFromAcceptedQuoteAction.mockReset();
     mockUpdateInvoiceStatusAction.mockReset();
+    mockSendInvoiceAction.mockReset();
     vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
@@ -130,30 +137,22 @@ describe("JobInvoiceSection lifecycle controls", () => {
     });
   }
 
-  it("shows draft controls and updates to sent", async () => {
-    mockUpdateInvoiceStatusAction.mockResolvedValueOnce({
+  it("shows send CTA and confirms send success", async () => {
+    mockSendInvoiceAction.mockResolvedValueOnce({
       success: true,
-      code: "ok",
-      invoiceId: "invoice-1",
-      jobId: "job-1",
-      newStatus: "sent",
-      sentAt: "2025-01-02T00:00:00.000Z",
-      paidAt: null,
-      voidedAt: null,
     });
 
     await renderSection({ invoiceOverride: { invoice_status: "draft" } });
     await flushReactUpdates();
 
-    expect(container.innerHTML).toContain("Mark as sent");
+    expect(container.innerHTML).toContain("Send invoice");
     expect(container.innerHTML).toContain("Void invoice");
     expect(container.innerHTML).not.toContain("Mark as paid");
 
-    await submitButton("Mark as sent");
+    await submitButton("Send invoice");
     await flushReactUpdates();
 
-    expect(container.innerHTML).toContain("Invoice marked as Sent.");
-    expect(container.innerHTML).toContain("Sent");
+    expect(container.innerHTML).toContain("Invoice sent to the customer.");
     expect(container.innerHTML).toContain("$99.00");
   });
 
@@ -179,6 +178,7 @@ describe("JobInvoiceSection lifecycle controls", () => {
 
     expect(container.innerHTML).toContain("Mark as paid");
     expect(container.innerHTML).toContain("Void invoice");
+    expect(container.innerHTML).not.toContain("Send invoice");
 
     await submitButton("Mark as paid");
     await flushReactUpdates();
@@ -225,6 +225,14 @@ describe("JobInvoiceSection lifecycle controls", () => {
     expect(container.innerHTML).toContain("Void");
     expect(container.innerHTML).toContain("Invoice is void and cannot be changed.");
     expect(container.innerHTML).toContain("$99.00");
+  });
+
+  it("shows missing email hint when no customer email is present", async () => {
+    await renderSection({ invoiceOverride: { customer_email: null } });
+    await flushReactUpdates();
+
+    expect(container.innerHTML).toContain("Add a customer email to send this invoice.");
+    expect(container.innerHTML).not.toContain("Send invoice");
   });
 
   it("disables invoice creation when no accepted quote exists", async () => {

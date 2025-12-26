@@ -15,6 +15,7 @@ export type InvoiceSnapshotRow = {
   sent_at: string | null;
   paid_at: string | null;
   voided_at: string | null;
+  customer_email: string | null;
 };
 
 export async function getInvoiceForJob(args: {
@@ -41,7 +42,8 @@ export async function getInvoiceForJob(args: {
           invoice_status,
           sent_at,
           paid_at,
-          voided_at
+          voided_at,
+          customer_email
         `
       )
       .eq("workspace_id", workspaceId)

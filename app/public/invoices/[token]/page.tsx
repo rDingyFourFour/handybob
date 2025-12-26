@@ -1,19 +1,62 @@
 // Public invoice page: uses the invoice token + admin client; exposes only customer-visible fields without auth.
-import Image from "next/image";
-import { notFound } from "next/navigation";
+import crypto from "crypto";
 
-import { createAdminClient } from "@/utils/supabase/admin";
+import { getPublicInvoiceByToken } from "@/lib/domain/invoices/publicInvoice";
 
 export const dynamic = "force-dynamic";
 
+const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
 
-type MediaItem = {
-  id: string;
-  file_name: string | null;
-  mime_type: string | null;
-  caption?: string | null;
-  signed_url: string | null;
-};
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return DATE_FORMATTER.format(parsed);
+}
+
+function formatCurrency(cents: number | null | undefined, currency: string | null | undefined) {
+  if (cents == null) return "—";
+  const normalizedCurrency = currency?.trim() || "USD";
+  const amount = cents / 100;
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: normalizedCurrency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `$${amount.toFixed(2)}`;
+  }
+}
+
+function formatAmount(amount: number | null | undefined, currency: string | null | undefined) {
+  if (amount == null) return "—";
+  const normalizedCurrency = currency?.trim() || "USD";
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: normalizedCurrency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `$${amount.toFixed(2)}`;
+  }
+}
+
+function safeInvoiceReference(invoiceNumber: number | null, invoiceId: string) {
+  if (invoiceNumber != null) {
+    return `Invoice #${invoiceNumber}`;
+  }
+  const hash = crypto.createHash("sha256").update(invoiceId).digest("hex").slice(0, 8);
+  return `Invoice INV-${hash.toUpperCase()}`;
+}
 
 export default async function PublicInvoicePage({
   params: paramsPromise,
@@ -22,178 +65,100 @@ export default async function PublicInvoicePage({
 }) {
   // Accept params as a promise and derive the token once.
   const { token } = await paramsPromise;
-  // Server-only: resolve invoice via admin client by public_token; no auth required on public link.
-  const supabase = createAdminClient();
-
-  const { data: invoice } = await supabase
-    .from("invoices")
-    .select(
-      `
-        *,
-        quotes (
-          id,
-          stripe_payment_link_url,
-          jobs (
-            title
-          )
-        ),
-        workspaces (
-          name,
-          brand_name,
-          brand_tagline,
-          business_email,
-          business_phone,
-          business_address
-        )
-      `
-    )
-    .eq("public_token", token)
-    .single();
-
+  // Server-only: resolve invoice via admin client by public token; no auth required on public link.
+  const invoice = await getPublicInvoiceByToken(token);
   if (!invoice) {
-    return notFound();
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 bg-slate-950">
+        <div className="hb-card max-w-xl w-full space-y-4">
+          <div>
+            <h1>Invoice not found</h1>
+            <p className="hb-muted text-sm">
+              We couldn’t locate this invoice. Please check the link or contact the sender.
+            </p>
+          </div>
+          <p className="hb-muted text-[10px] text-center">
+            Powered by HandyBob – full support office in an app.
+          </p>
+        </div>
+      </div>
+    );
   }
 
-  const jobTitle = invoice.quotes?.jobs
-    ? Array.isArray(invoice.quotes.jobs)
-      ? invoice.quotes.jobs[0]?.title
-      : invoice.quotes.jobs.title
-    : null;
   const workspace = invoice.workspaces; // public-safe: only brand/phone/email/address, no internal secrets
-
-  const payUrl =
-    invoice.status !== "paid"
-      ? invoice.stripe_payment_link_url || invoice.quotes?.stripe_payment_link_url
-      : null;
-
-  const lineItems = (invoice.line_items as { scope?: string }[] | null) ?? [];
-  const scope = lineItems[0]?.scope ?? null;
-
-  const { data: mediaRows } = await supabase
-    .from("media")
-    .select("id, file_name, mime_type, caption, storage_path, bucket_id, url")
-    .eq("invoice_id", invoice.id)
-    .eq("is_public", true)
-    .order("created_at", { ascending: false });
-
-  const mediaItems: MediaItem[] = await Promise.all(
-    (mediaRows ?? []).map(async (media) => {
-      const path = media.storage_path || "";
-      if (!path) {
-        return { id: media.id, file_name: media.file_name, mime_type: media.mime_type, caption: media.caption, signed_url: media.url ?? null };
-      }
-      const bucketId = media.bucket_id || "job-media";
-      const { data: signed } = await supabase.storage.from(bucketId).createSignedUrl(path, 60 * 60);
-      return {
-        id: media.id,
-        file_name: media.file_name,
-        mime_type: media.mime_type,
-        caption: media.caption,
-        signed_url: signed?.signedUrl ?? media.url ?? null,
-      };
-    }),
-  );
+  const lineItems = Array.isArray(invoice.line_items) ? invoice.line_items : [];
+  const hasLineItems = lineItems.length > 0;
+  const invoiceReference = safeInvoiceReference(invoice.invoice_number, invoice.id);
+  const createdLabel = formatDate(invoice.created_at);
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-slate-950">
       <div className="hb-card max-w-xl w-full space-y-4">
-        <div>
-          <h1>Invoice</h1>
-          <p className="hb-muted">
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Invoice</p>
+          <h1>{invoiceReference}</h1>
+          <p className="hb-muted text-sm">
             From: {workspace?.brand_name || workspace?.name || "HandyBob contractor"}
           </p>
-          <p className="hb-muted">
-            Job: {jobTitle || "Handyman work"}
-          </p>
+          <p className="hb-muted text-sm">Created {createdLabel}</p>
         </div>
 
-        <div className="space-y-1">
-          <h3>Total</h3>
-          <p className="text-2xl font-semibold">
-            ${Number(invoice.total ?? 0).toFixed(2)}
-          </p>
-          <p className="hb-muted text-sm">
-            Status: {invoice.status}
-          </p>
-          {invoice.due_at && (
-            <p className="hb-muted text-sm">
-              Due {new Date(invoice.due_at).toLocaleDateString()}
-            </p>
-          )}
-          {scope && (
-            <p className="hb-muted text-sm">
-              Work: {scope}
-            </p>
-          )}
+        <div className="space-y-2 rounded border border-slate-800 bg-slate-900/70 p-3 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs uppercase tracking-[0.3em] text-slate-500">Totals</span>
+            <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+              {invoice.invoice_status ? invoice.invoice_status : "draft"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-slate-200">
+            <span>Subtotal</span>
+            <span>{formatCurrency(invoice.snapshot_subtotal_cents, invoice.currency)}</span>
+          </div>
+          <div className="flex items-center justify-between text-slate-200">
+            <span>Tax</span>
+            <span>{formatCurrency(invoice.snapshot_tax_cents, invoice.currency)}</span>
+          </div>
+          <div className="flex items-center justify-between text-base font-semibold text-slate-100">
+            <span>Total</span>
+            <span>{formatCurrency(invoice.snapshot_total_cents, invoice.currency)}</span>
+          </div>
         </div>
 
-        {invoice.status === "paid" ? (
-          <p className="text-sm text-emerald-400">Paid. Thank you!</p>
-        ) : payUrl ? (
-          <a
-            href={payUrl as string}
-            className="hb-button w-full text-center"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Pay now
-          </a>
-        ) : (
-          <p className="hb-muted text-xs">
-            Payment is not available online for this invoice. Contact your contractor if you have questions.
-          </p>
-        )}
-
-        {mediaItems.length > 0 && (
-          <div className="space-y-2 pt-2">
-            <h3>Media</h3>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {mediaItems.map((media) => {
-                const isImage = media.mime_type?.startsWith("image/");
-                return (
-                  <div key={media.id} className="rounded-lg border border-slate-800 bg-slate-900/70">
-                    <div className="relative aspect-video bg-slate-950/60">
-                      {media.signed_url ? (
-                        isImage ? (
-                          <Image
-                            src={media.signed_url}
-                            alt={media.file_name || "Media"}
-                            fill
-                            className="object-cover"
-                            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-                            unoptimized
-                          />
-                        ) : (
-                          <div className="flex h-full flex-col items-center justify-center gap-2 p-3 text-center text-xs">
-                            <div className="rounded-full border border-slate-800 px-3 py-1 uppercase tracking-wide text-slate-200">
-                              {(media.file_name?.split(".").pop() || "file").toUpperCase()}
-                            </div>
-                            <a
-                              href={media.signed_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="hb-button-ghost text-[11px]"
-                            >
-                              Open
-                            </a>
-                          </div>
-                        )
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-xs text-slate-500">
-                          Preview unavailable
-                        </div>
-                      )}
+        {hasLineItems ? (
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Line items</p>
+            <div className="space-y-2 text-sm text-slate-200">
+              {lineItems.map((item, index) => (
+                <div
+                  key={`${item.description ?? "item"}-${index}`}
+                  className="rounded-lg border border-slate-800 bg-slate-900/70 p-3"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-semibold text-slate-100">
+                        {item.description ?? `Item ${index + 1}`}
+                      </p>
+                      <p className="hb-muted text-xs">
+                        Qty {item.quantity ?? "—"} · Rate{" "}
+                        {item.unit_price != null
+                          ? formatAmount(item.unit_price, invoice.currency)
+                          : "—"}
+                      </p>
                     </div>
-                    <div className="p-2 text-xs">
-                      <p className="font-semibold truncate">{media.file_name || "Media"}</p>
-                      {media.caption && <p className="hb-muted truncate">{media.caption}</p>}
+                    <div className="text-right text-slate-100">
+                      {item.total != null ? formatAmount(item.total, invoice.currency) : "—"}
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           </div>
-        )}
+        ) : invoice.snapshot_summary ? (
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Summary</p>
+            <p className="text-sm text-slate-200">{invoice.snapshot_summary}</p>
+          </div>
+        ) : null}
 
         <div className="rounded border border-slate-800 bg-slate-900/70 p-3 text-sm">
           <p className="font-semibold text-slate-100">Business info</p>
