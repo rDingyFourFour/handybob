@@ -35,6 +35,7 @@ type PublicLeadJobInput = {
 };
 
 const CLOSED_JOB_STATUSES = ["completed", "cancelled", "closed", "lost", "done"];
+const DEFAULT_ATTENTION_SCORE = 0;
 
 export function buildPublicLeadTitle(description: string) {
   const condensed = description.replace(/\s+/g, " ").trim();
@@ -147,6 +148,7 @@ export async function upsertPublicLeadJob(params: {
   const { supabase, workspace, customerId, job } = params;
   const openJob = await findOpenLeadForCustomer(supabase, workspace.id, customerId);
   const title = job.title?.trim() || buildPublicLeadTitle(job.description);
+  const resolvedAttentionScore = job.attentionScore ?? DEFAULT_ATTENTION_SCORE;
 
   if (openJob) {
     const updatePayload: Record<string, unknown> = {
@@ -154,11 +156,15 @@ export async function upsertPublicLeadJob(params: {
       description_raw: job.description,
       urgency: job.urgency ?? null,
       category: job.category ?? null,
-      attention_score: job.attentionScore ?? null,
-      attention_reason: job.attentionReason ?? null,
       customer_id: openJob.customer_id ?? customerId ?? null,
     };
 
+    if (job.attentionScore != null) {
+      updatePayload.attention_score = job.attentionScore;
+    }
+    if (job.attentionReason != null) {
+      updatePayload.attention_reason = job.attentionReason;
+    }
     if (job.priority != null) {
       updatePayload.priority = job.priority;
     }
@@ -189,7 +195,7 @@ export async function upsertPublicLeadJob(params: {
     source: job.source,
     urgency: job.urgency ?? null,
     category: job.category ?? null,
-    attention_score: job.attentionScore ?? null,
+    attention_score: resolvedAttentionScore,
     attention_reason: job.attentionReason ?? null,
     spam_suspected: job.spamSuspected ?? null,
   };

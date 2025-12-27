@@ -9,6 +9,7 @@ const mockGetCurrentWorkspace = vi.fn();
 const mockRedirect = vi.fn();
 const mockReplace = vi.fn();
 const mockSignOut = vi.fn();
+const mockUpdatePublicBookingStatus = vi.fn();
 
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => mockRedirect(url),
@@ -38,6 +39,10 @@ vi.mock("@/utils/supabase/client", () => ({
   }),
 }));
 
+vi.mock("@/app/(app)/settings/publicBookingActions", () => ({
+  updatePublicBookingStatus: (...args: unknown[]) => mockUpdatePublicBookingStatus(...args),
+}));
+
 import SettingsHomePage from "@/app/(app)/settings/page";
 
 describe("SettingsHomePage sign-out", () => {
@@ -51,6 +56,7 @@ describe("SettingsHomePage sign-out", () => {
     mockRedirect.mockReset();
     mockReplace.mockReset();
     mockSignOut.mockReset();
+    mockUpdatePublicBookingStatus.mockReset();
     createServerClientMock.mockReset();
     mockGetCurrentWorkspace.mockReset();
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -68,7 +74,10 @@ describe("SettingsHomePage sign-out", () => {
     vi.restoreAllMocks();
   });
 
-  async function renderSettings({ slug = "test-workspace" }: { slug?: string | null } = {}) {
+  async function renderSettings({
+    slug = "test-workspace",
+    publicLeadEnabled = true,
+  }: { slug?: string | null; publicLeadEnabled?: boolean } = {}) {
     const supabaseState = setupSupabaseMock({
       workspaces: {
         data: [
@@ -80,6 +89,7 @@ describe("SettingsHomePage sign-out", () => {
             brand_name: "Test workspace",
             brand_tagline: "Local service",
             business_phone: "+15555555555",
+            public_lead_form_enabled: publicLeadEnabled,
           },
         ],
         error: null,
@@ -134,6 +144,8 @@ describe("SettingsHomePage sign-out", () => {
     const link = container.querySelector('a[href="/public/bookings/test-workspace"]');
     expect(link).not.toBeNull();
     expect(findButton("Copy link")).toBeDefined();
+    expect(findButton("Open")).toBeDefined();
+    expect(container.textContent).toContain("Active");
   });
 
   it("renders a placeholder when the workspace slug is missing", async () => {
@@ -142,6 +154,97 @@ describe("SettingsHomePage sign-out", () => {
 
     expect(container.textContent).toContain("Add a workspace slug to enable booking links.");
     expect(findButton("Copy link")).toBeUndefined();
+  });
+
+  it("copies and opens the booking link with telemetry", async () => {
+    const clipboardWrite = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText: clipboardWrite } });
+    const openSpy = vi.fn();
+    Object.assign(window, { open: openSpy });
+
+    await renderSettings({ slug: "test-workspace" });
+    await flushReactUpdates();
+
+    const copyButton = findButton("Copy link");
+    const openButton = findButton("Open");
+    expect(copyButton).toBeDefined();
+    expect(openButton).toBeDefined();
+
+    await act(async () => {
+      copyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushReactUpdates();
+
+    expect(clipboardWrite).toHaveBeenCalledWith("/public/bookings/test-workspace");
+
+    await act(async () => {
+      openButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(openSpy).toHaveBeenCalledWith(
+      "/public/bookings/test-workspace",
+      "_blank",
+      "noopener,noreferrer",
+    );
+
+    const logCalls = vi.mocked(console.log).mock.calls;
+    expect(
+      logCalls.some(
+        ([label, payload]) =>
+          label === "[bookings-public-link-visible]" &&
+          payload.workspaceId === "workspace-1" &&
+          payload.workspaceSlug === "test-workspace",
+      ),
+    ).toBe(true);
+    expect(
+      logCalls.some(
+        ([label, payload]) =>
+          label === "[bookings-public-link-copy-click]" &&
+          payload.workspaceId === "workspace-1" &&
+          payload.workspaceSlug === "test-workspace",
+      ),
+    ).toBe(true);
+    expect(
+      logCalls.some(
+        ([label, payload]) =>
+          label === "[bookings-public-link-open-click]" &&
+          payload.workspaceId === "workspace-1" &&
+          payload.workspaceSlug === "test-workspace",
+      ),
+    ).toBe(true);
+  });
+
+  it("updates the bookings status badge after toggling", async () => {
+    mockUpdatePublicBookingStatus.mockResolvedValue({
+      status: "success",
+      enabled: true,
+      message: null,
+      code: null,
+    });
+
+    await renderSettings({ slug: "test-workspace", publicLeadEnabled: false });
+    await flushReactUpdates();
+
+    expect(container.textContent).toContain("Inactive");
+
+    const toggleButton = findButton("Enable bookings");
+    expect(toggleButton).toBeDefined();
+
+    await act(async () => {
+      const form = toggleButton?.closest("form");
+      if (!form) {
+        throw new Error("missing bookings toggle form");
+      }
+      if (typeof (form as HTMLFormElement).requestSubmit === "function") {
+        (form as HTMLFormElement).requestSubmit(toggleButton as HTMLButtonElement);
+      } else {
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      }
+    });
+    await flushReactUpdates();
+
+    expect(container.textContent).toContain("Active");
+    expect(container.textContent).toContain("Bookings");
   });
 
   it("renders Sign out and navigates on success", async () => {

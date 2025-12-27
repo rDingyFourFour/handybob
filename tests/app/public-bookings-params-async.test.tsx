@@ -67,10 +67,12 @@ describe("public bookings async params", () => {
 
     expect(markup).toContain("Booking request");
     expect(markup).toContain("BookingForm mock");
+    expect(markup).toContain('data-testid="public-booking-shell"');
+    expect(markup).toContain("/public/bookings/test");
     expect(guardedParams.getDirectAccessCount()).toBe(0);
   });
 
-  it("renders the inactive state when workspace is missing", async () => {
+  it("renders the not found state when workspace is missing", async () => {
     const supabaseState = setupSupabaseMock({
       workspaces: { data: [], error: null },
     });
@@ -81,7 +83,38 @@ describe("public bookings async params", () => {
       await PublicBookingPage({ params: guardedParams.promise }),
     );
 
+    expect(markup).toContain("We couldn’t find this booking page");
+    expect(markup).toContain('data-testid="public-booking-shell"');
+    expect(markup).toContain("/public/bookings/missing");
+    expect(guardedParams.getDirectAccessCount()).toBe(0);
+  });
+
+  it("renders the inactive state when workspace is disabled", async () => {
+    const supabaseState = setupSupabaseMock({
+      workspaces: {
+        data: [
+          {
+            id: "workspace-1",
+            slug: "sleepy",
+            name: "Sleepy Workspace",
+            brand_name: "Sleepy Brand",
+            brand_tagline: "Trusted help for your home.",
+            public_lead_form_enabled: false,
+          },
+        ],
+        error: null,
+      },
+    });
+    createAdminClientMock.mockReturnValue(supabaseState.supabase);
+
+    const guardedParams = createGuardedParams({ slug: "sleepy" });
+    const markup = renderToStaticMarkup(
+      await PublicBookingPage({ params: guardedParams.promise }),
+    );
+
     expect(markup).toContain("This booking link is not active");
+    expect(markup).toContain('data-testid="public-booking-shell"');
+    expect(markup).toContain("/public/bookings/sleepy");
     expect(guardedParams.getDirectAccessCount()).toBe(0);
   });
 });

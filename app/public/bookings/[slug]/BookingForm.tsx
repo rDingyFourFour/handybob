@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState, useEffect } from "react";
+import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 
 import { submitPublicBooking, type ActionState } from "./actions";
@@ -32,7 +32,7 @@ function SubmitButton() {
 }
 
 export function BookingForm({ workspaceSlug, workspaceName }: Props) {
-  const [state, formAction] = useFormState(
+  const [state, formAction] = useActionState(
     submitPublicBooking.bind(null, workspaceSlug),
     initialState
   );

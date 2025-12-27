@@ -17,6 +17,7 @@ type WorkspaceDetail = {
   brand_name: string | null;
   brand_tagline: string | null;
   business_phone: string | null;
+  public_lead_form_enabled?: boolean | null;
 };
 
 function fallbackCard(title: string, body: string) {
@@ -72,7 +73,7 @@ export default async function SettingsHomePage() {
   try {
     const { data, error } = await supabase
       .from<WorkspaceDetail>("workspaces")
-      .select("id, name, owner_id, slug, brand_name, brand_tagline, business_phone")
+      .select("id, name, owner_id, slug, brand_name, brand_tagline, business_phone, public_lead_form_enabled")
       .eq("id", workspace.id)
       .maybeSingle();
     if (error) {
@@ -107,6 +108,8 @@ export default async function SettingsHomePage() {
     workspaceRow?.business_phone ?? "Add a phone label in Workspace settings.";
   const workspaceInitial = workspaceDisplayName?.trim().charAt(0).toUpperCase() ?? "W";
   const workspaceSlug = workspaceRow?.slug ?? workspace.slug ?? null;
+  const publicBookingEnabled = workspaceRow?.public_lead_form_enabled !== false;
+  const canManageBookings = workspaceContext.role === "owner";
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-8">
@@ -222,7 +225,12 @@ export default async function SettingsHomePage() {
           </p>
         </HbCard>
 
-        <PublicBookingLinkCard slug={workspaceSlug} />
+        <PublicBookingLinkCard
+          slug={workspaceSlug}
+          workspaceId={workspace.id}
+          enabled={publicBookingEnabled}
+          canManage={canManageBookings}
+        />
 
         {user && (
           <HbCard className="space-y-4">

@@ -184,6 +184,7 @@ export async function submitPublicBooking(
     });
     jobId = jobResult.jobId;
   } catch (error) {
+    const diagnostics = buildJobCreateDiagnostics(error);
     const message = error instanceof Error ? error.message : "unknown";
     console.warn("[public-booking] Failed to create job:", message);
     console.warn("[public-booking-submit]", {
@@ -191,6 +192,7 @@ export async function submitPublicBooking(
       errorCode: "job_create_failed",
       workspaceId: workspace.id,
       customerId: customer.id,
+      diagnostics,
     });
     return {
       status: "error",
@@ -215,6 +217,7 @@ export async function submitPublicBooking(
       jobId: null,
       customerId: null,
       spamSuspected: true,
+      hasAttentionScore: false,
     });
     return { status: "success" };
   }
@@ -284,6 +287,7 @@ export async function submitPublicBooking(
     workspaceId: workspace.id,
     jobId,
     customerId: customer.id,
+    hasAttentionScore: true,
   });
 
   return {
@@ -341,4 +345,17 @@ function getClientIp(h: Awaited<ReturnType<typeof headers>>) {
 function hashValue(value: string) {
   const salt = process.env.LEAD_FORM_IP_SALT || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   return crypto.createHash("sha256").update(`${value}:${salt}`).digest("hex");
+}
+
+function buildJobCreateDiagnostics(error: unknown) {
+  if (!error) return "job_insert_failed";
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  if (normalized.includes("not-null constraint")) {
+    return "db_constraint_violation";
+  }
+  if (normalized.includes("duplicate key")) {
+    return "db_conflict";
+  }
+  return "job_insert_failed";
 }
