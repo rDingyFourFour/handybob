@@ -125,10 +125,6 @@ describe("BookingForm", () => {
       status: "error",
       errors: { name: "Name is required." },
       message: "We could not save your request. Please try again.",
-      successName: null,
-      jobId: null,
-      customerId: null,
-      redirectTo: null,
       errorCode: "invalid_input",
     });
 
@@ -145,16 +141,15 @@ describe("BookingForm", () => {
     ).toBe(false);
   });
 
-  it("redirects after a successful submission", async () => {
+  it("renders confirmation content and resets the form", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     mockSubmitPublicBooking.mockResolvedValueOnce({
       status: "success",
-      errors: {},
-      message: null,
-      successName: "Jamie",
+      workspaceId: "workspace-1",
       jobId: "job-1",
       customerId: "cust-1",
-      redirectTo: "/public/bookings/demo/thanks",
-      errorCode: null,
+      isOwnerHandoffEligible: false,
+      redirectTo: null,
     });
 
     await renderForm();
@@ -163,7 +158,63 @@ describe("BookingForm", () => {
     await submitForm();
     await flushReactUpdates();
 
-    expect(container.textContent).toContain("Thanks Jamie");
-    expect(mockReplace).toHaveBeenCalledWith("/public/bookings/demo/thanks");
+    expect(container.textContent).toContain("Request received");
+    expect(container.textContent).toContain("What to expect next");
+    expect(container.textContent).toContain("We'll confirm the details and timing.");
+    expect(container.textContent).toContain("We'll follow up if anything is unclear.");
+    expect(container.textContent).toContain("You'll get a scheduling update soon.");
+
+    const confirmationLogs = logSpy.mock.calls.filter(
+      ([label]) => label === "[public-booking-confirmation-visible]",
+    );
+    expect(confirmationLogs).toHaveLength(1);
+
+    const resetButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Submit another request"),
+    );
+    expect(resetButton).toBeTruthy();
+    await act(async () => {
+      resetButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushReactUpdates();
+
+    expect(container.querySelector("form")).not.toBeNull();
+  });
+
+  it("shows the owner handoff CTA and routes on click", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    mockSubmitPublicBooking.mockResolvedValueOnce({
+      status: "success",
+      workspaceId: "workspace-1",
+      jobId: "job-2",
+      customerId: "cust-2",
+      isOwnerHandoffEligible: true,
+      redirectTo: "/jobs/job-2",
+    });
+
+    await renderForm();
+    fillRequiredFields();
+
+    await submitForm();
+    await flushReactUpdates();
+
+    const handoffButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Open in AskBob"),
+    );
+    expect(handoffButton).toBeTruthy();
+
+    await act(async () => {
+      handoffButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(mockReplace).toHaveBeenCalledWith("/jobs/job-2");
+    expect(
+      logSpy.mock.calls.some(
+        ([label, payload]) =>
+          label === "[public-booking-owner-handoff-click]" &&
+          payload.workspaceId === "workspace-1" &&
+          payload.jobId === "job-2",
+      ),
+    ).toBe(true);
   });
 });

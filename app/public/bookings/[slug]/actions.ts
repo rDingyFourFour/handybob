@@ -3,7 +3,7 @@
 // Security/multi-tenant notes:
 // - Public requests carry only the workspace slug. We resolve the workspace first, then scope ALL writes by workspace_id.
 // - If the public form is disabled, we abort before any customer/job insert.
-// - No workspace member data is returned to the client; responses are generic and ID-free.
+// - No workspace member data is returned to the client; responses include IDs for deterministic confirmation only.
 // - Spam controls: honeypot + hashed-IP rate limit; optional CAPTCHA can be added here before inserts.
 // - lead_form_submissions is used for abuse audit (workspace_id + ip_hash) without exposing internal details.
 
@@ -18,22 +18,38 @@ import { validatePublicLeadSubmission } from "@/schemas/publicLead";
 import {
   buildPublicLeadDescription,
   buildPublicLeadTitle,
+  isPublicLeadJobInsertGuardError,
   normalizePublicLeadUrgency,
   upsertPublicLeadCustomer,
   upsertPublicLeadJob,
 } from "@/lib/domain/publicLeads";
 import { createServerClient } from "@/utils/supabase/server";
 
-export type ActionState = {
-  status: "idle" | "error" | "success";
-  errors?: Partial<Record<"name" | "email" | "description", string>>;
-  message?: string | null;
-  successName?: string | null;
-  jobId?: string | null;
-  customerId?: string | null;
-  redirectTo?: string | null;
-  errorCode?: string | null;
+export type ActionSuccess = {
+  status: "success";
+  workspaceId: string;
+  jobId: string;
+  customerId: string;
+  isOwnerHandoffEligible: boolean;
+  redirectTo: string | null;
 };
+
+export type ActionError = {
+  status: "error";
+  errors?: Partial<Record<"name" | "email" | "description", string>>;
+  message: string | null;
+  errorCode: string;
+};
+
+export type ActionIdle = {
+  status: "idle";
+  errors?: Partial<Record<"name" | "email" | "description", string>>;
+  message: string | null;
+  errorCode: string | null;
+};
+
+export type ActionState = ActionIdle | ActionError | ActionSuccess;
+type ActionResult = ActionError | ActionSuccess;
 
 type WorkspaceRow = {
   id: string;
@@ -49,7 +65,7 @@ export async function submitPublicBooking(
   workspaceSlug: string,
   _prevState: ActionState,
   formData: FormData
-): Promise<ActionState> {
+): Promise<ActionResult> {
   const hdrs = await headers();
   const ip = getClientIp(hdrs);
   const ipHash = ip ? hashValue(ip) : null;
@@ -75,7 +91,17 @@ export async function submitPublicBooking(
       errorCode: "invalid_input",
       workspaceSlug,
     });
-    return { status: "error", message: validation.error, errorCode: "invalid_input" };
+    logSubmitFailure({
+      workspaceId: null,
+      customerId: null,
+      errorCode: "invalid_input",
+      diagnostics: validation.error,
+    });
+    return {
+      status: "error",
+      message: validation.error,
+      errorCode: "invalid_input",
+    };
   }
 
   const {
@@ -109,7 +135,16 @@ export async function submitPublicBooking(
       errorCode: "inactive_form",
       workspaceSlug,
     });
-    return { status: "error", message: "This booking link is not active.", errorCode: "inactive_form" };
+    logSubmitFailure({
+      workspaceId: workspace?.id ?? null,
+      customerId: null,
+      errorCode: "inactive_form",
+    });
+    return {
+      status: "error",
+      message: "This booking link is not active.",
+      errorCode: "inactive_form",
+    };
   }
 
   if (await isRateLimited(supabase, workspace.id, ipHash)) {
@@ -123,6 +158,11 @@ export async function submitPublicBooking(
       status: "error",
       errorCode: "rate_limited",
       workspaceId: workspace.id,
+    });
+    logSubmitFailure({
+      workspaceId: workspace.id,
+      customerId: null,
+      errorCode: "rate_limited",
     });
     return {
       status: "error",
@@ -147,6 +187,11 @@ export async function submitPublicBooking(
       status: "error",
       errorCode: "customer_create_failed",
       workspaceId: workspace.id,
+    });
+    logSubmitFailure({
+      workspaceId: workspace.id,
+      customerId: null,
+      errorCode: "customer_create_failed",
     });
     return {
       status: "error",
@@ -194,6 +239,33 @@ export async function submitPublicBooking(
       customerId: customer.id,
       diagnostics,
     });
+    logSubmitFailure({
+      workspaceId: workspace.id,
+      customerId: customer.id,
+      errorCode: "job_create_failed",
+      diagnostics,
+    });
+    return {
+      status: "error",
+      message: "We could not save your request. Please try again.",
+      errorCode: "job_create_failed",
+    };
+  }
+
+  if (!jobId) {
+    console.warn("[public-booking-submit]", {
+      status: "error",
+      errorCode: "job_create_failed",
+      workspaceId: workspace.id,
+      customerId: customer.id,
+      diagnostics: "missing_job_id",
+    });
+    logSubmitFailure({
+      workspaceId: workspace.id,
+      customerId: customer.id,
+      errorCode: "job_create_failed",
+      diagnostics: "missing_job_id",
+    });
     return {
       status: "error",
       message: "We could not save your request. Please try again.",
@@ -214,12 +286,26 @@ export async function submitPublicBooking(
     console.log("[public-booking-submit]", {
       status: "success",
       workspaceId: workspace.id,
-      jobId: null,
-      customerId: null,
+      jobId,
+      customerId: customer.id,
       spamSuspected: true,
       hasAttentionScore: false,
     });
-    return { status: "success" };
+    const spamSuccess: ActionSuccess = {
+      status: "success",
+      workspaceId: workspace.id,
+      jobId,
+      customerId: customer.id,
+      isOwnerHandoffEligible: false,
+      redirectTo: null,
+    };
+    console.log("[public-booking-submit-success]", {
+      workspaceId: workspace.id,
+      jobId,
+      customerId: customer.id,
+      isOwnerHandoffEligible: spamSuccess.isOwnerHandoffEligible,
+    });
+    return spamSuccess;
   }
 
   // AI classification (best-effort, non-blocking)
@@ -270,13 +356,17 @@ export async function submitPublicBooking(
     });
   }
 
-  const firstName = name.split(" ")[0] || name;
   let redirectTo: string | null = null;
+  let isOwnerHandoffEligible = false;
   try {
     const authSupabase = await createServerClient();
     const { data } = await authSupabase.auth.getUser();
     if (data?.user?.id && data.user.id === workspace.owner_id && jobId) {
-      redirectTo = `/jobs/${jobId}`;
+      const candidate = `/jobs/${jobId}`;
+      if (isValidHandoffTarget(candidate)) {
+        redirectTo = candidate;
+        isOwnerHandoffEligible = true;
+      }
     }
   } catch (error) {
     console.warn("[public-booking] Failed to resolve session:", error instanceof Error ? error.message : error);
@@ -290,13 +380,21 @@ export async function submitPublicBooking(
     hasAttentionScore: true,
   });
 
-  return {
+  const successState: ActionSuccess = {
     status: "success",
-    successName: firstName,
+    workspaceId: workspace.id,
     jobId,
     customerId: customer.id,
-    redirectTo,
+    isOwnerHandoffEligible,
+    redirectTo: isOwnerHandoffEligible ? redirectTo : null,
   };
+  console.log("[public-booking-submit-success]", {
+    workspaceId: workspace.id,
+    jobId,
+    customerId: customer.id,
+    isOwnerHandoffEligible: successState.isOwnerHandoffEligible,
+  });
+  return successState;
 }
 
 async function isRateLimited(
@@ -349,6 +447,9 @@ function hashValue(value: string) {
 
 function buildJobCreateDiagnostics(error: unknown) {
   if (!error) return "job_insert_failed";
+  if (isPublicLeadJobInsertGuardError(error)) {
+    return "missing_required_job_fields";
+  }
   const message = error instanceof Error ? error.message : String(error);
   const normalized = message.toLowerCase();
   if (normalized.includes("not-null constraint")) {
@@ -358,4 +459,22 @@ function buildJobCreateDiagnostics(error: unknown) {
     return "db_conflict";
   }
   return "job_insert_failed";
+}
+
+function logSubmitFailure(entry: {
+  workspaceId: string | null;
+  customerId: string | null;
+  errorCode: string;
+  diagnostics?: string | null;
+}) {
+  console.warn("[public-booking-submit-failure]", {
+    workspaceId: entry.workspaceId,
+    customerId: entry.customerId,
+    errorCode: entry.errorCode,
+    diagnostics: entry.diagnostics ?? null,
+  });
+}
+
+function isValidHandoffTarget(target: string | null) {
+  return Boolean(target && target.startsWith("/jobs/"));
 }

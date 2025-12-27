@@ -36,6 +36,53 @@ type PublicLeadJobInput = {
 
 const CLOSED_JOB_STATUSES = ["completed", "cancelled", "closed", "lost", "done"];
 const DEFAULT_ATTENTION_SCORE = 0;
+const PUBLIC_LEAD_REQUIRED_JOB_FIELDS = [
+  "attention_score",
+  "workspace_id",
+  "customer_id",
+  "title",
+  "description_raw",
+  "status",
+  "source",
+  "user_id",
+] as const;
+
+export type PublicLeadJobInsertPayload = {
+  user_id: string;
+  workspace_id: string;
+  customer_id: string | null;
+  title: string;
+  description_raw: string;
+  status: string;
+  source: string;
+  attention_score: number;
+  urgency: string | null;
+  category: string | null;
+  attention_reason: string | null;
+  spam_suspected: boolean | null;
+  priority?: string;
+};
+
+export class PublicLeadJobInsertGuardError extends Error {
+  code = "missing_required_job_fields" as const;
+  missingFields: string[];
+
+  constructor(missingFields: string[]) {
+    super("Missing required job fields for public lead insert.");
+    this.name = "PublicLeadJobInsertGuardError";
+    this.missingFields = missingFields;
+  }
+}
+
+export function isPublicLeadJobInsertGuardError(
+  error: unknown
+): error is PublicLeadJobInsertGuardError {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      (error as { code?: string }).code === "missing_required_job_fields",
+  );
+}
 
 export function buildPublicLeadTitle(description: string) {
   const condensed = description.replace(/\s+/g, " ").trim();
@@ -75,6 +122,52 @@ export function normalizePublicLeadUrgency(raw?: string | null) {
   if (value === "next_week") return "next_week";
   if (value === "asap" || value === "emergency") return "today";
   return "flexible";
+}
+
+export function buildPublicLeadJobInsertPayload(params: {
+  workspace: PublicLeadWorkspace;
+  customerId?: string | null;
+  job: PublicLeadJobInput;
+  title?: string;
+  attentionScore?: number;
+}): PublicLeadJobInsertPayload {
+  const { workspace, customerId, job, title, attentionScore } = params;
+  const resolvedTitle = title ?? (job.title?.trim() || buildPublicLeadTitle(job.description));
+  const resolvedAttentionScore = attentionScore ?? job.attentionScore ?? DEFAULT_ATTENTION_SCORE;
+
+  const requiredPayload = {
+    user_id: workspace.owner_id,
+    workspace_id: workspace.id,
+    customer_id: customerId ?? null,
+    title: resolvedTitle,
+    description_raw: job.description,
+    status: "lead",
+    source: job.source,
+    attention_score: resolvedAttentionScore,
+  };
+
+  const optionalPayload: Omit<PublicLeadJobInsertPayload, keyof typeof requiredPayload> = {
+    urgency: job.urgency ?? null,
+    category: job.category ?? null,
+    attention_reason: job.attentionReason ?? null,
+    spam_suspected: job.spamSuspected ?? null,
+  };
+
+  if (job.priority != null) {
+    optionalPayload.priority = job.priority;
+  }
+
+  return { ...requiredPayload, ...optionalPayload };
+}
+
+function assertPublicLeadInsertPayload(payload: Record<string, unknown>) {
+  const missingFields = PUBLIC_LEAD_REQUIRED_JOB_FIELDS.filter(
+    (field) => payload[field] == null,
+  );
+
+  if (missingFields.length > 0) {
+    throw new PublicLeadJobInsertGuardError(missingFields);
+  }
 }
 
 export async function upsertPublicLeadCustomer(params: {
@@ -185,24 +278,14 @@ export async function upsertPublicLeadJob(params: {
     return { jobId: openJob.id, wasUpdated: true };
   }
 
-  const insertPayload: Record<string, unknown> = {
-    user_id: workspace.owner_id,
-    workspace_id: workspace.id,
-    customer_id: customerId ?? null,
+  const insertPayload = buildPublicLeadJobInsertPayload({
+    workspace,
+    customerId,
+    job,
     title,
-    description_raw: job.description,
-    status: "lead",
-    source: job.source,
-    urgency: job.urgency ?? null,
-    category: job.category ?? null,
-    attention_score: resolvedAttentionScore,
-    attention_reason: job.attentionReason ?? null,
-    spam_suspected: job.spamSuspected ?? null,
-  };
-
-  if (job.priority != null) {
-    insertPayload.priority = job.priority;
-  }
+    attentionScore: resolvedAttentionScore,
+  });
+  assertPublicLeadInsertPayload(insertPayload);
 
   const { data: inserted, error } = await supabase
     .from("jobs")

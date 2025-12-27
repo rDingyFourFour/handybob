@@ -23,13 +23,13 @@ const shouldStubPublicBooking =
   isProductionBuildPhase && DISABLE_PUBLIC_BOOKING_FOR_BUILD;
 
 type PublicBookingShellProps = {
-  slugLabel: string;
+  slug: string;
   brand: string;
   tagline: string | null;
   content: ReactNode;
 };
 
-function PublicBookingShell({ slugLabel, brand, tagline, content }: PublicBookingShellProps) {
+function PublicBookingShell({ slug, brand, tagline, content }: PublicBookingShellProps) {
   return (
     <div
       className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-50"
@@ -40,10 +40,11 @@ function PublicBookingShell({ slugLabel, brand, tagline, content }: PublicBookin
           <div>
             <div className="text-xs uppercase tracking-wide text-amber-300">Booking request</div>
             <h1 className="text-2xl font-semibold text-slate-50">{brand}</h1>
-            {tagline && <p className="hb-muted text-sm">{tagline}</p>}
+            <p className="hb-muted text-sm">{tagline}</p>
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-300">
-            Booking link: {slugLabel}
+            <div>Booking link format: /public/bookings/{`{workspaceSlug}`}</div>
+            <div>Current slug: {slug || "none"}</div>
           </div>
         </div>
       </header>
@@ -74,101 +75,74 @@ async function PublicBookingPageMain({
 }: {
   params?: Promise<{ slug?: string | null } | null>;
 }) {
-  const resolvedParams = (await params) ?? {};
-  const slug = typeof resolvedParams.slug === "string" ? resolvedParams.slug.trim() : "";
+  const { slug: rawSlug } = (await params) ?? {};
+  const slug = typeof rawSlug === "string" ? rawSlug.trim() : "";
   const supabase = createAdminClient();
-  const slugLabel = `/public/bookings/${slug || "unknown"}`;
+
+  const workspace = slug
+    ? (
+        await supabase
+          .from("workspaces")
+          .select("id, slug, name, brand_name, brand_tagline, public_lead_form_enabled")
+          .eq("slug", slug)
+          .maybeSingle<WorkspacePublicProfile>()
+      ).data
+    : null;
+
+  const hasWorkspace = Boolean(workspace);
+  const enabled = hasWorkspace ? workspace?.public_lead_form_enabled !== false : false;
+  const brand = workspace?.brand_name || workspace?.name || "HandyBob Booking";
+  const tagline = workspace?.brand_tagline || "Request an appointment";
+
+  console.log("[public-booking-page-rendered]", {
+    slug: slug || null,
+    hasWorkspace,
+    ...(hasWorkspace ? { enabled } : {}),
+  });
 
   if (!slug) {
-    console.log("[public-booking-page-view]", {
-      slug: null,
-      workspaceFound: false,
-      enabled: false,
-    });
     return (
       <PublicBookingShell
-        slugLabel={slugLabel}
-        brand="Booking request"
-        tagline="Trusted help for your home."
-        content={renderNotFoundState()}
+        slug={slug}
+        brand={brand}
+        tagline={tagline}
+        content={renderPublicBookingState({ type: "not-found" })}
       />
     );
   }
-  const { data: workspace } = await supabase
-    .from("workspaces")
-    .select("id, slug, name, brand_name, brand_tagline, public_lead_form_enabled")
-    .eq("slug", slug)
-    .maybeSingle<WorkspacePublicProfile>();
 
   if (!workspace) {
-    console.log("[public-booking-page-view]", {
-      slug,
-      workspaceFound: false,
-      enabled: false,
-    });
     return (
       <PublicBookingShell
-        slugLabel={slugLabel}
-        brand="Booking request"
-        tagline="Trusted help for your home."
-        content={renderNotFoundState()}
+        slug={slug}
+        brand={brand}
+        tagline={tagline}
+        content={renderPublicBookingState({ type: "not-found" })}
       />
     );
   }
-
-  const enabled = workspace.public_lead_form_enabled !== false;
-
-  const brand = workspace.brand_name || workspace.name || "Contractor";
-  const tagline = workspace.brand_tagline || "Trusted help for your home.";
-
-  console.log("[public-booking-page-view]", {
-    slug: workspace.slug,
-    workspaceFound: true,
-    enabled,
-  });
 
   if (!enabled) {
     return (
       <PublicBookingShell
-        slugLabel={slugLabel}
+        slug={slug}
         brand={brand}
         tagline={tagline}
-        content={renderInactiveState()}
+        content={renderPublicBookingState({ type: "inactive" })}
       />
     );
   }
 
   return (
     <PublicBookingShell
-      slugLabel={slugLabel}
+      slug={slug}
       brand={brand}
       tagline={tagline}
-      content={
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-xl shadow-black/30 backdrop-blur">
-            <BookingForm workspaceSlug={workspace.slug} workspaceName={brand} />
-          </div>
-
-          <aside className="space-y-4">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg shadow-black/20">
-              <h3 className="font-semibold text-slate-100">What happens next</h3>
-              <ul className="mt-3 space-y-2 text-sm text-slate-300">
-                <li>• We review your request and reach out to confirm details.</li>
-                <li>• Emergencies are prioritized automatically.</li>
-                <li>• A quick description helps us prep the right tools.</li>
-              </ul>
-            </div>
-
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg shadow-black/20">
-              <h3 className="font-semibold text-slate-100">Quick tips</h3>
-              <ul className="mt-3 space-y-2 text-sm text-slate-300">
-                <li>• Include photos when we follow up for faster scheduling.</li>
-                <li>• If you picked a date, we’ll try to match it or propose the closest slot.</li>
-              </ul>
-            </div>
-          </aside>
-        </div>
-      }
+      content={renderPublicBookingState({
+        type: "enabled",
+        slug: workspace.slug,
+        brand,
+      })}
     />
   );
 }
@@ -177,24 +151,67 @@ const PublicBookingPage = shouldStubPublicBooking ? PublicBookingStub : PublicBo
 
 export default PublicBookingPage;
 
-function renderInactiveState() {
-  return (
-    <div className="mx-auto max-w-2xl space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-6 text-center shadow-xl shadow-black/30">
-      <h2 className="text-2xl font-semibold">This booking link is not active</h2>
-      <p className="hb-muted">
-        Please copy the link from inside the app and make sure bookings are enabled for this workspace.
-      </p>
-    </div>
-  );
-}
+type PublicBookingState =
+  | { type: "not-found" }
+  | { type: "inactive" }
+  | { type: "enabled"; slug: string; brand: string };
 
-function renderNotFoundState() {
+function renderPublicBookingState(state: PublicBookingState) {
   return (
-    <div className="mx-auto max-w-2xl space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-6 text-center shadow-xl shadow-black/30">
-      <h2 className="text-2xl font-semibold">We couldn’t find this booking page</h2>
-      <p className="hb-muted">
-        The slug is invalid or no longer active. Please copy the link from inside the app and try again.
-      </p>
-    </div>
+    <section className="space-y-6" data-testid="public-booking-state">
+      {state.type === "not-found" && (
+        <div className="mx-auto max-w-2xl space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-6 text-center shadow-xl shadow-black/30">
+          <h2 className="text-2xl font-semibold">Link not found</h2>
+          <p className="hb-muted">
+            This booking link is invalid or has expired. Please check the URL and try again.
+          </p>
+        </div>
+      )}
+
+      {state.type === "inactive" && (
+        <div className="mx-auto max-w-2xl space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-6 text-center shadow-xl shadow-black/30">
+          <h2 className="text-2xl font-semibold">This booking link is not active</h2>
+          <p className="hb-muted">
+            Please contact the business for an updated link or check back after bookings are enabled.
+          </p>
+        </div>
+      )}
+
+      {state.type === "enabled" && (
+        <>
+          <p className="text-sm text-slate-300">You&apos;re booking with {state.brand}.</p>
+          <p className="text-xs text-slate-400">
+            This is a request form and does not guarantee a booking time.
+          </p>
+          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+            <div
+              className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-xl shadow-black/30 backdrop-blur"
+              data-testid="public-booking-form-container"
+            >
+              <BookingForm workspaceSlug={state.slug} workspaceName={state.brand} />
+            </div>
+
+            <aside className="space-y-4">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg shadow-black/20">
+                <h3 className="font-semibold text-slate-100">What happens next</h3>
+                <ul className="mt-3 space-y-2 text-sm text-slate-300">
+                  <li>• We review your request and reach out to confirm details.</li>
+                  <li>• Emergencies are prioritized automatically.</li>
+                  <li>• A quick description helps us prep the right tools.</li>
+                </ul>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg shadow-black/20">
+                <h3 className="font-semibold text-slate-100">Quick tips</h3>
+                <ul className="mt-3 space-y-2 text-sm text-slate-300">
+                  <li>• Include photos when we follow up for faster scheduling.</li>
+                  <li>• If you picked a date, we’ll try to match it or propose the closest slot.</li>
+                </ul>
+              </div>
+            </aside>
+          </div>
+        </>
+      )}
+    </section>
   );
 }

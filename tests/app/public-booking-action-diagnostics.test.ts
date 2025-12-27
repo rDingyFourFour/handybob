@@ -99,6 +99,8 @@ describe("submitPublicBooking diagnostics", () => {
 
     expect(result.status).toBe("success");
     expect(result.jobId).toBe("job-1");
+    expect(result.isOwnerHandoffEligible).toBe(false);
+    expect(result.redirectTo).toBeNull();
     const logCalls = vi.mocked(console.log).mock.calls;
     expect(
       logCalls.some(
@@ -106,6 +108,16 @@ describe("submitPublicBooking diagnostics", () => {
           label === "[public-booking-submit]" &&
           payload.workspaceId === "workspace-1" &&
           payload.hasAttentionScore === true,
+      ),
+    ).toBe(true);
+    expect(
+      logCalls.some(
+        ([label, payload]) =>
+          label === "[public-booking-submit-success]" &&
+          payload.workspaceId === "workspace-1" &&
+          payload.jobId === "job-1" &&
+          payload.customerId === "cust-1" &&
+          payload.isOwnerHandoffEligible === false,
       ),
     ).toBe(true);
   });
@@ -151,6 +163,16 @@ describe("submitPublicBooking diagnostics", () => {
           label === "[public-booking-submit]" &&
           payload.workspaceId === "workspace-1" &&
           payload.customerId === "cust-1" &&
+          payload.diagnostics === "db_constraint_violation",
+      ),
+    ).toBe(true);
+    expect(
+      warnCalls.some(
+        ([label, payload]) =>
+          label === "[public-booking-submit-failure]" &&
+          payload.workspaceId === "workspace-1" &&
+          payload.customerId === "cust-1" &&
+          payload.errorCode === "job_create_failed" &&
           payload.diagnostics === "db_constraint_violation",
       ),
     ).toBe(true);

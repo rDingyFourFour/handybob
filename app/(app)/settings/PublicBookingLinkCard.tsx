@@ -146,7 +146,7 @@ export default function PublicBookingLinkCard({
             </div>
           ) : (
             <p className="mt-2 text-sm text-slate-400">
-              Add a workspace slug to enable booking links.
+              Set a workspace slug to enable a shareable booking link.
             </p>
           )}
         </div>

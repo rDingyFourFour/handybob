@@ -152,7 +152,7 @@ describe("SettingsHomePage sign-out", () => {
     await renderSettings({ slug: null });
     await flushReactUpdates();
 
-    expect(container.textContent).toContain("Add a workspace slug to enable booking links.");
+    expect(container.textContent).toContain("Set a workspace slug to enable a shareable booking link.");
     expect(findButton("Copy link")).toBeUndefined();
   });
 

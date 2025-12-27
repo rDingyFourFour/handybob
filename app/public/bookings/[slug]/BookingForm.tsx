@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 
 import { submitPublicBooking, type ActionState } from "./actions";
+import { PublicBookingConfirmation } from "./PublicBookingConfirmation";
 
 type Props = {
   workspaceSlug: string;
@@ -15,10 +16,6 @@ const initialState: ActionState = {
   status: "idle",
   errors: {},
   message: null,
-  successName: null,
-  jobId: null,
-  customerId: null,
-  redirectTo: null,
   errorCode: null,
 };
 
@@ -31,34 +28,82 @@ function SubmitButton() {
   );
 }
 
-export function BookingForm({ workspaceSlug, workspaceName }: Props) {
+export function BookingForm({ workspaceSlug }: Props) {
+  const [resetKey, setResetKey] = useState(0);
+
+  return (
+    <div className="space-y-4" data-testid="public-booking-form-wrapper">
+      <BookingFormContent
+        key={resetKey}
+        workspaceSlug={workspaceSlug}
+        onReset={() => setResetKey((value) => value + 1)}
+      />
+    </div>
+  );
+}
+
+type BookingFormContentProps = {
+  workspaceSlug: string;
+  onReset: () => void;
+};
+
+function BookingFormContent({ workspaceSlug, onReset }: BookingFormContentProps) {
   const [state, formAction] = useActionState(
     submitPublicBooking.bind(null, workspaceSlug),
     initialState
   );
   const router = useRouter();
+  const confirmationLoggedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (state.status === "success" && state.redirectTo) {
-      router.replace(state.redirectTo);
+    if (state.status !== "success") {
+      return;
     }
-  }, [router, state.redirectTo, state.status]);
+    const logKey = `${state.jobId}:${state.customerId}`;
+    if (confirmationLoggedRef.current === logKey) {
+      return;
+    }
+    confirmationLoggedRef.current = logKey;
+    console.log("[public-booking-confirmation-visible]", {
+      workspaceId: state.workspaceId,
+      jobId: state.jobId,
+      customerId: state.customerId,
+      isOwnerHandoffEligible: state.isOwnerHandoffEligible,
+    });
+  }, [state]);
+
+  function handleOwnerHandoff() {
+    if (state.status !== "success" || !state.redirectTo) {
+      return;
+    }
+    console.log("[public-booking-owner-handoff-click]", {
+      workspaceId: state.workspaceId,
+      jobId: state.jobId,
+    });
+    try {
+      router.replace(state.redirectTo);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown";
+      console.warn("[public-booking-owner-handoff-failure]", {
+        workspaceId: state.workspaceId,
+        jobId: state.jobId,
+        reason,
+      });
+    }
+  }
 
   if (state.status === "success") {
     return (
-      <div className="space-y-3 text-center">
-        <h2 className="text-2xl font-semibold text-slate-50">
-          Thanks {state.successName || "there"}, we’ve received your request for {workspaceName}.
-        </h2>
-        <p className="hb-muted">
-          We’ll review it and get back to you soon — most requests are answered within a few business hours.
-        </p>
-      </div>
+      <PublicBookingConfirmation
+        isOwnerHandoffEligible={state.isOwnerHandoffEligible && Boolean(state.redirectTo)}
+        onOwnerHandoff={handleOwnerHandoff}
+        onReset={onReset}
+      />
     );
   }
 
   return (
-    <form key={state.status} action={formAction} className="space-y-4">
+    <form action={formAction} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         <div>
           <label className="hb-label" htmlFor="name">Full name *</label>

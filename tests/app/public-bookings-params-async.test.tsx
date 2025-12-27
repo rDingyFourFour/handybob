@@ -65,10 +65,11 @@ describe("public bookings async params", () => {
       await PublicBookingPage({ params: guardedParams.promise }),
     );
 
-    expect(markup).toContain("Booking request");
+    expect(markup).toContain("Test Brand");
     expect(markup).toContain("BookingForm mock");
     expect(markup).toContain('data-testid="public-booking-shell"');
-    expect(markup).toContain("/public/bookings/test");
+    expect(markup).toContain("Booking link format: /public/bookings/{workspaceSlug}");
+    expect(markup).toContain("Current slug: test");
     expect(guardedParams.getDirectAccessCount()).toBe(0);
   });
 
@@ -83,9 +84,10 @@ describe("public bookings async params", () => {
       await PublicBookingPage({ params: guardedParams.promise }),
     );
 
-    expect(markup).toContain("We couldn’t find this booking page");
+    expect(markup).toContain("Link not found");
     expect(markup).toContain('data-testid="public-booking-shell"');
-    expect(markup).toContain("/public/bookings/missing");
+    expect(markup).toContain("Booking link format: /public/bookings/{workspaceSlug}");
+    expect(markup).toContain("Current slug: missing");
     expect(guardedParams.getDirectAccessCount()).toBe(0);
   });
 
@@ -114,7 +116,8 @@ describe("public bookings async params", () => {
 
     expect(markup).toContain("This booking link is not active");
     expect(markup).toContain('data-testid="public-booking-shell"');
-    expect(markup).toContain("/public/bookings/sleepy");
+    expect(markup).toContain("Booking link format: /public/bookings/{workspaceSlug}");
+    expect(markup).toContain("Current slug: sleepy");
     expect(guardedParams.getDirectAccessCount()).toBe(0);
   });
 });
