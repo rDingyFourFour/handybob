@@ -196,16 +196,19 @@ function buildStatusHelperText(status: AppointmentStatus, time: string | null) {
   return `Scheduled for ${timing}`;
 }
 
-export default async function AppointmentDetailPage(props: {
+export default async function AppointmentDetailPage({
+  params,
+  searchParams,
+}: {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const { id } = await props.params;
-  const searchParams = await props.searchParams;
-  const showSuccessHint = searchParams?.created === "true";
-  const statusUpdateParam = Array.isArray(searchParams?.statusUpdated)
-    ? searchParams?.statusUpdated[0]
-    : searchParams?.statusUpdated;
+  const { id } = await params;
+  const resolvedSearchParams = await searchParams;
+  const showSuccessHint = resolvedSearchParams?.created === "true";
+  const statusUpdateParam = Array.isArray(resolvedSearchParams?.statusUpdated)
+    ? resolvedSearchParams?.statusUpdated[0]
+    : resolvedSearchParams?.statusUpdated;
   const validStatusUpdates: AppointmentStatus[] = ["completed", "no_show", "cancelled", "canceled"];
   const statusUpdated = validStatusUpdates.includes(statusUpdateParam as AppointmentStatus)
     ? (statusUpdateParam as AppointmentStatus)

@@ -4,7 +4,7 @@ import {
   isProductionBuildPhase,
 } from "@/utils/env/buildFlags";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { BookingForm } from "./BookingForm";
+import { BookingForm } from "@/app/public/bookings/[slug]/BookingForm";
 
 type WorkspacePublicProfile = {
   id: string;
@@ -23,7 +23,10 @@ const shouldStubPublicBooking =
 
 function PublicBookingStub() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
+    <div
+      className="min-h-screen flex items-center justify-center bg-slate-950 px-4"
+      data-testid="public-booking-shell"
+    >
       <div className="hb-card max-w-xl text-center space-y-3">
         <h1 className="text-2xl font-semibold">Public booking temporarily disabled for build diagnostics</h1>
         <p className="hb-muted text-sm">
@@ -34,43 +37,41 @@ function PublicBookingStub() {
   );
 }
 
-async function PublicBookingPageMain({ params }: { params: { slug: string } }) {
+async function PublicBookingPageMain({
+  params,
+}: {
+  params?: Promise<{ slug?: string | null } | null>;
+}) {
+  const resolvedParams = (await params) ?? {};
+  const slug = typeof resolvedParams.slug === "string" ? resolvedParams.slug.trim() : "";
   const supabase = createAdminClient();
+  if (!slug) {
+    return renderInactiveState();
+  }
   const { data: workspace } = await supabase
     .from("workspaces")
     .select("id, slug, name, brand_name, brand_tagline, public_lead_form_enabled")
-    .eq("slug", params.slug)
+    .eq("slug", slug)
     .maybeSingle<WorkspacePublicProfile>();
 
   if (!workspace) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-4">
-        <div className="hb-card max-w-xl text-center space-y-2">
-          <h1 className="text-2xl font-semibold">This booking link is not active</h1>
-          <p className="hb-muted">Please contact the business directly to request service.</p>
-        </div>
-      </div>
-    );
+    return renderInactiveState();
   }
 
   const disabled = workspace.public_lead_form_enabled === false;
 
   if (disabled) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-4">
-        <div className="hb-card max-w-xl text-center space-y-2">
-          <h1 className="text-2xl font-semibold">This booking link is not active</h1>
-          <p className="hb-muted">Please contact the business directly to request service.</p>
-        </div>
-      </div>
-    );
+    return renderInactiveState();
   }
 
   const brand = workspace.brand_name || workspace.name || "Contractor";
   const tagline = workspace.brand_tagline || "Trusted help for your home.";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-50">
+    <div
+      className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-50"
+      data-testid="public-booking-shell"
+    >
       <header className="border-b border-slate-800 bg-slate-950/60 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-5">
           <div>
@@ -117,3 +118,17 @@ async function PublicBookingPageMain({ params }: { params: { slug: string } }) {
 const PublicBookingPage = shouldStubPublicBooking ? PublicBookingStub : PublicBookingPageMain;
 
 export default PublicBookingPage;
+
+function renderInactiveState() {
+  return (
+    <div
+      className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-4"
+      data-testid="public-booking-shell"
+    >
+      <div className="hb-card max-w-xl text-center space-y-2">
+        <h1 className="text-2xl font-semibold">This booking link is not active</h1>
+        <p className="hb-muted">Please contact the business directly to request service.</p>
+      </div>
+    </div>
+  );
+}

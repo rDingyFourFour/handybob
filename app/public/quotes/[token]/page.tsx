@@ -17,8 +17,13 @@ type MediaItem = {
 export default async function PublicQuotePage({
   params,
 }: {
-  params: { token: string };
+  params?: Promise<{ token?: string | null } | null>;
 }) {
+  const resolvedParams = (await params) ?? {};
+  const token = typeof resolvedParams.token === "string" ? resolvedParams.token.trim() : "";
+  if (!token) {
+    return notFound();
+  }
   // Server-only: use admin client to resolve quote by public_token; no RLS/auth required on public links.
   const supabase = createAdminClient();
 
@@ -45,7 +50,7 @@ export default async function PublicQuotePage({
       )
     `
     )
-    .eq("public_token", params.token)
+    .eq("public_token", token)
     .single();
 
   if (!quote) {

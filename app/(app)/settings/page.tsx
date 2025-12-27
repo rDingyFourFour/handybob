@@ -7,6 +7,7 @@ import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import SignOutButton from "@/app/(app)/settings/SignOutButton";
+import PublicBookingLinkCard from "@/app/(app)/settings/PublicBookingLinkCard";
 
 type WorkspaceDetail = {
   id: string;
@@ -105,6 +106,7 @@ export default async function SettingsHomePage() {
   const workspacePhoneLabel =
     workspaceRow?.business_phone ?? "Add a phone label in Workspace settings.";
   const workspaceInitial = workspaceDisplayName?.trim().charAt(0).toUpperCase() ?? "W";
+  const workspaceSlug = workspaceRow?.slug ?? workspace.slug ?? null;
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-8">
@@ -219,6 +221,8 @@ export default async function SettingsHomePage() {
             Follow-up drafts default to the channels above and mention your workspace branding.
           </p>
         </HbCard>
+
+        <PublicBookingLinkCard slug={workspaceSlug} />
 
         {user && (
           <HbCard className="space-y-4">

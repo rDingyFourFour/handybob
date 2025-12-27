@@ -7,15 +7,17 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import QuoteFormShell from "./QuoteFormShell";
 
-export default async function NewQuotePage(props: {
-  searchParams: Promise<{
+export default async function NewQuotePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{
     error?: string;
     jobId?: string;
     description?: string;
     source?: string;
-  }>;
+  } | null>;
 }) {
-  const searchParams = await props.searchParams;
+  const resolvedSearchParams = (await searchParams) ?? {};
   let supabase;
   try {
     supabase = await createServerClient();
@@ -51,14 +53,16 @@ export default async function NewQuotePage(props: {
     redirect("/");
   }
 
-  const hasJobIdError = searchParams?.error === "job_id_required";
-  const jobIdPrefill = searchParams?.jobId ?? "";
+  const hasJobIdError = resolvedSearchParams.error === "job_id_required";
+  const jobIdPrefill = resolvedSearchParams.jobId ?? "";
   const sourceFromQuery =
-    typeof searchParams?.source === "string" ? searchParams.source : undefined;
+    typeof resolvedSearchParams.source === "string" ? resolvedSearchParams.source : undefined;
   const jobIdFromQuery =
-    typeof searchParams?.jobId === "string" ? searchParams.jobId : undefined;
+    typeof resolvedSearchParams.jobId === "string" ? resolvedSearchParams.jobId : undefined;
   const descriptionFromQuery =
-    typeof searchParams?.description === "string" ? searchParams.description : undefined;
+    typeof resolvedSearchParams.description === "string"
+      ? resolvedSearchParams.description
+      : undefined;
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">

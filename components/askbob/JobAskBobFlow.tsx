@@ -125,6 +125,7 @@ type JobAskBobFlowProps = {
   customerPhoneNumber?: string | null;
   jobDescription?: string | null;
   jobTitle?: string | null;
+  jobStatus?: string | null;
   askBobLastTaskLabel?: string | null;
   askBobLastUsedAtDisplay?: string | null;
   askBobLastUsedAtIso?: string | null;
@@ -164,6 +165,7 @@ export default function JobAskBobFlow({
   customerPhoneNumber,
   jobDescription,
   jobTitle,
+  jobStatus,
   askBobLastTaskLabel,
   askBobLastUsedAtDisplay,
   askBobLastUsedAtIso,
@@ -502,8 +504,26 @@ export default function JobAskBobFlow({
 
   const promptSeed = jobDescription ?? "";
   const normalizedJobTitle = jobTitle?.trim() ?? "";
+  const leadLogRef = useRef(false);
+  const normalizedJobStatus = jobStatus?.trim().toLowerCase() ?? "";
   const router = useRouter();
   const callScriptOrigin = "askbob-call-assist";
+
+  useEffect(() => {
+    if (leadLogRef.current) {
+      return;
+    }
+    if (normalizedJobStatus !== "lead") {
+      return;
+    }
+    leadLogRef.current = true;
+    console.log("[askbob-lead-job-flow-mounted]", {
+      workspaceId,
+      jobId,
+      hasJobTitle: Boolean(normalizedJobTitle),
+      hasJobDescription: Boolean(jobDescription?.trim()),
+    });
+  }, [jobDescription, jobId, normalizedJobStatus, normalizedJobTitle, workspaceId]);
 
   const handleStartCallWithScript = useCallback(
     (payload: StartCallWithScriptPayload) => {

@@ -68,7 +68,7 @@ describe("SettingsHomePage sign-out", () => {
     vi.restoreAllMocks();
   });
 
-  async function renderSettings() {
+  async function renderSettings({ slug = "test-workspace" }: { slug?: string | null } = {}) {
     const supabaseState = setupSupabaseMock({
       workspaces: {
         data: [
@@ -76,7 +76,7 @@ describe("SettingsHomePage sign-out", () => {
             id: "workspace-1",
             name: "Test workspace",
             owner_id: "user-1",
-            slug: "test-workspace",
+            slug,
             brand_name: "Test workspace",
             brand_tagline: "Local service",
             business_phone: "+15555555555",
@@ -101,7 +101,7 @@ describe("SettingsHomePage sign-out", () => {
     createServerClientMock.mockReturnValue(supabaseState.supabase);
     mockGetCurrentWorkspace.mockResolvedValue({
       user: { id: "user-1" },
-      workspace: { id: "workspace-1", name: "Test workspace", owner_id: "user-1" },
+      workspace: { id: "workspace-1", name: "Test workspace", owner_id: "user-1", slug },
       role: "owner",
     });
 
@@ -126,6 +126,23 @@ describe("SettingsHomePage sign-out", () => {
       (button) => button.textContent?.trim() === label,
     );
   }
+
+  it("shows the public booking link when a slug exists", async () => {
+    await renderSettings({ slug: "test-workspace" });
+    await flushReactUpdates();
+
+    const link = container.querySelector('a[href="/public/bookings/test-workspace"]');
+    expect(link).not.toBeNull();
+    expect(findButton("Copy link")).toBeDefined();
+  });
+
+  it("renders a placeholder when the workspace slug is missing", async () => {
+    await renderSettings({ slug: null });
+    await flushReactUpdates();
+
+    expect(container.textContent).toContain("Add a workspace slug to enable booking links.");
+    expect(findButton("Copy link")).toBeUndefined();
+  });
 
   it("renders Sign out and navigates on success", async () => {
     mockSignOut.mockResolvedValue({ error: null });

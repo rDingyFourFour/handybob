@@ -229,21 +229,27 @@ function onlyStringParam(value?: string | string[] | null) {
   return null;
 }
 
-export default async function JobDetailPage(props: {
+export default async function JobDetailPage({
+  params,
+  searchParams,
+}: {
   params: Promise<{ id: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined> | null>;
 }) {
-  const { id } = await props.params;
-  // searchParams is delivered as a Promise in this route, so await it before using any fields.
-  const searchParams: Record<string, string | string[] | undefined> =
-    (await props.searchParams) ?? {};
-  const afterCallCacheKey = normalizeParam(onlyStringParam(searchParams.afterCallKey ?? null));
-  const callIdParam = normalizeParam(onlyStringParam(searchParams.callId ?? null));
+  const { id } = await params;
+  const resolvedSearchParams: Record<string, string | string[] | undefined> =
+    (await searchParams) ?? {};
+  const afterCallCacheKey = normalizeParam(
+    onlyStringParam(resolvedSearchParams.afterCallKey ?? null),
+  );
+  const callIdParam = normalizeParam(onlyStringParam(resolvedSearchParams.callId ?? null));
   const afterCallCallId = callIdParam;
-  const afterCallForceFlag = normalizeParam(onlyStringParam(searchParams.afterCallForce ?? null));
+  const afterCallForceFlag = normalizeParam(
+    onlyStringParam(resolvedSearchParams.afterCallForce ?? null),
+  );
   const forcedAfterCallCallId = afterCallForceFlag === "1" ? callIdParam : null;
   const forcedAfterCallHasTranscript =
-    normalizeParam(onlyStringParam(searchParams.hasCallTranscript ?? null)) === "1";
+    normalizeParam(onlyStringParam(resolvedSearchParams.hasCallTranscript ?? null)) === "1";
 
   if (!id || !id.trim()) {
     notFound();
@@ -513,6 +519,15 @@ export default async function JobDetailPage(props: {
   const displayJobTitle = job.title ?? "Untitled job";
   const askBobJobTitle = job.title?.trim() ?? "";
   const createdLabel = formatDate(job.created_at);
+  if ((job.status || "").toLowerCase() === "lead") {
+    console.log("[jobs-detail-lead-job-loaded]", {
+      workspaceId: workspace.id,
+      jobId: job.id,
+      hasTitle: Boolean(job.title?.trim()),
+      hasDescriptionRaw: Boolean(job.description_raw?.trim()),
+      hasCustomerId: Boolean(job.customer_id),
+    });
+  }
   const quoteParams = new URLSearchParams();
   quoteParams.set("jobId", job.id);
   quoteParams.set("source", "job");
@@ -613,6 +628,7 @@ export default async function JobDetailPage(props: {
             customerPhoneNumber={customerPhoneNumber ?? null}
             jobDescription={job.description_raw ?? null}
             jobTitle={askBobJobTitle}
+            jobStatus={job.status ?? null}
             askBobLastTaskLabel={askBobLastTaskLabel}
             askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
             askBobLastUsedAtIso={askBobLastUsedAtIso}

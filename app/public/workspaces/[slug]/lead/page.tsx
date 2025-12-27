@@ -18,14 +18,23 @@ type WorkspacePublicProfile = {
 
 export const dynamic = "force-dynamic";
 
-export default async function PublicLeadPage({ params }: { params: { slug: string } }) {
+export default async function PublicLeadPage({
+  params,
+}: {
+  params?: Promise<{ slug?: string | null } | null>;
+}) {
+  const resolvedParams = (await params) ?? {};
+  const slug = typeof resolvedParams.slug === "string" ? resolvedParams.slug.trim() : "";
+  if (!slug) {
+    return notFound();
+  }
   const supabase = createAdminClient();
   const { data: workspace } = await supabase
     .from("workspaces")
     .select(
       "id, slug, name, brand_name, brand_tagline, business_email, business_phone, business_address, public_lead_form_enabled"
     )
-    .eq("slug", params.slug)
+    .eq("slug", slug)
     .maybeSingle<WorkspacePublicProfile>();
 
   if (!workspace) {
