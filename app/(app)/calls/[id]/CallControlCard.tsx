@@ -44,6 +44,7 @@ type CallControlCardModel = {
   };
   timelineRows: TimelineRow[];
   primaryCta: PrimaryCta;
+  primaryCtaExplanation: string;
   secondaryActions: {
     jobHref: string | null;
     callsHref: string;
@@ -364,6 +365,9 @@ export default function CallControlCard({ model }: CallControlCardProps) {
       <div className="space-y-2 rounded-xl border border-slate-800/60 bg-slate-950/60 p-3">
         <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Primary</p>
         {primaryButton}
+        <div data-testid="call-session-primary-cta-explanation">
+          <p className="text-xs text-slate-400">{model.primaryCtaExplanation}</p>
+        </div>
       </div>
 
       <div className="space-y-2 rounded-xl border border-slate-800/60 bg-slate-950/60 p-3">

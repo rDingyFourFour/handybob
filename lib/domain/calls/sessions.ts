@@ -126,9 +126,23 @@ export type CallSessionFollowupReadinessReason =
   | "missing_reached_flag"
   | "no_call_session";
 
+export type CallSessionPrimaryCtaReasonCode =
+  | "start_automated_call"
+  | "ready"
+  | "not_terminal"
+  | "missing_outcome"
+  | "missing_reached_flag"
+  | "missing_followup_context"
+  | "missing_job_link"
+  | "draft_ready"
+  | "draft_missing_body"
+  | "draft_missing_job"
+  | "no_call_session";
+
 export type CallSessionFollowupReadiness = {
   isReady: boolean;
   reasons: CallSessionFollowupReadinessReason[];
+  ctaReasonCode: CallSessionPrimaryCtaReasonCode;
 };
 
 type CallSessionReadinessInput = {
@@ -147,7 +161,7 @@ export function buildCallSessionFollowupReadiness({
   dialSnapshot,
 }: CallSessionReadinessInput): CallSessionFollowupReadiness {
   if (!call) {
-    return { isReady: false, reasons: ["no_call_session"] };
+    return { isReady: false, reasons: ["no_call_session"], ctaReasonCode: "no_call_session" };
   }
   const status = call.twilio_status?.trim() ?? null;
   const isTerminal =
@@ -169,7 +183,58 @@ export function buildCallSessionFollowupReadiness({
   if (isTerminal && !hasReachedFlag) {
     reasons.push("missing_reached_flag");
   }
-  return { isReady: reasons.length === 0, reasons };
+  const ctaReasonCode = reasons.includes("not_terminal")
+    ? "not_terminal"
+    : reasons.includes("missing_outcome")
+    ? "missing_outcome"
+    : reasons.includes("missing_reached_flag")
+    ? "missing_reached_flag"
+    : "ready";
+  return { isReady: reasons.length === 0, reasons, ctaReasonCode };
+}
+
+export function mapCtaReasonCodeToExplanation(
+  reasonCode: CallSessionPrimaryCtaReasonCode,
+  ctaKind?: string,
+): string {
+  switch (reasonCode) {
+    case "start_automated_call":
+      return "Ready to open the automated call panel.";
+    case "ready":
+      if (ctaKind === "open-composer") {
+        return "Draft ready. Open the composer to review and send.";
+      }
+      return "Ready to generate follow-up.";
+    case "not_terminal":
+      return "Call in progress. We'll unlock next steps when it finishes.";
+    case "missing_outcome":
+      return "Outcome required. Save the outcome to unlock follow-up.";
+    case "missing_reached_flag":
+      return "Reach status required. Confirm whether the customer was reached.";
+    case "missing_followup_context":
+      return "Add a call summary or outcome notes to generate follow-up.";
+    case "missing_job_link":
+      if (ctaKind === "open-composer") {
+        return "Link a job to open the composer.";
+      }
+      if (ctaKind === "start-automated-call") {
+        return "Link a job to open the automated call panel.";
+      }
+      return "Link a job to continue.";
+    case "draft_ready":
+      return "Draft ready. Open the composer to review and send.";
+    case "draft_missing_body":
+      return "Draft still processing. Check back in a moment.";
+    case "draft_missing_job":
+      return "Link a job to open the composer.";
+    case "no_call_session":
+      return "Call details are unavailable. Refresh to continue.";
+    default: {
+      const _exhaustiveCheck: never = reasonCode;
+      void _exhaustiveCheck;
+      return "Review the call details to continue.";
+    }
+  }
 }
 
 type CallSessionForSnapshot = {

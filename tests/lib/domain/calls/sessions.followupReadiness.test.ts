@@ -15,6 +15,7 @@ describe("buildCallSessionFollowupReadiness", () => {
     });
     expect(readiness.isReady).toBe(true);
     expect(readiness.reasons).toEqual([]);
+    expect(readiness.ctaReasonCode).toBe("ready");
   });
 
   it("reports not_terminal when the Twilio status is still in flight", () => {
@@ -28,6 +29,7 @@ describe("buildCallSessionFollowupReadiness", () => {
     });
     expect(readiness.isReady).toBe(false);
     expect(readiness.reasons).toContain("not_terminal");
+    expect(readiness.ctaReasonCode).toBe("not_terminal");
   });
 
   it("reports missing_outcome when no outcome data is present even if the call is terminal", () => {
@@ -41,6 +43,7 @@ describe("buildCallSessionFollowupReadiness", () => {
     });
     expect(readiness.isReady).toBe(false);
     expect(readiness.reasons).toContain("missing_outcome");
+    expect(readiness.ctaReasonCode).toBe("missing_outcome");
   });
 
   it("reports missing_reached_flag when no reached_customer flag has been set", () => {
@@ -55,11 +58,13 @@ describe("buildCallSessionFollowupReadiness", () => {
     });
     expect(readiness.isReady).toBe(false);
     expect(readiness.reasons).toContain("missing_reached_flag");
+    expect(readiness.ctaReasonCode).toBe("missing_reached_flag");
   });
 
   it("reports no_call_session when no call is provided", () => {
     const readiness = buildCallSessionFollowupReadiness({ call: null });
     expect(readiness.isReady).toBe(false);
     expect(readiness.reasons).toEqual(["no_call_session"]);
+    expect(readiness.ctaReasonCode).toBe("no_call_session");
   });
 });

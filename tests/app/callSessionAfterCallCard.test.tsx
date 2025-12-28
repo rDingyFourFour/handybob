@@ -33,14 +33,20 @@ describe("AskBobAfterCallCard", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
 
-  const readyReadiness: CallSessionFollowupReadiness = { isReady: true, reasons: [] };
+  const readyReadiness: CallSessionFollowupReadiness = {
+    isReady: true,
+    reasons: [],
+    ctaReasonCode: "ready",
+  };
   const notTerminalReadiness: CallSessionFollowupReadiness = {
     isReady: false,
     reasons: ["not_terminal"],
+    ctaReasonCode: "not_terminal",
   };
   const missingOutcomeReadiness: CallSessionFollowupReadiness = {
     isReady: false,
     reasons: ["missing_outcome"],
+    ctaReasonCode: "missing_outcome",
   };
   const terminalMissingOutcomeSnapshot: CallAutomatedDialSnapshot = {
     callId: "call-1",

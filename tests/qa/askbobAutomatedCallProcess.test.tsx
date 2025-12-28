@@ -54,11 +54,13 @@ const baseAutomatedSnapshot: CallAutomatedDialSnapshot = {
 const notReadyReadiness: CallSessionFollowupReadiness = {
   isReady: false,
   reasons: ["missing_outcome"],
+  ctaReasonCode: "missing_outcome",
 };
 
 const readyReadiness: CallSessionFollowupReadiness = {
   isReady: true,
   reasons: [],
+  ctaReasonCode: "ready",
 };
 
 function TestHarness({

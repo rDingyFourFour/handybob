@@ -15,14 +15,11 @@ import JobCallScriptPanel, {
   type PhoneMessageSummary,
 } from "@/app/(app)/jobs/[id]/JobCallScriptPanel";
 import {
-  computeFollowupDueInfo,
   deriveFollowupRecommendation,
   type FollowupRecommendation,
 } from "@/lib/domain/communications/followupRecommendations";
 import { normalizeCallOutcome } from "@/lib/domain/communications/callOutcomes";
 import type { CallOutcomeCode } from "@/lib/domain/communications/callOutcomes";
-import { findMatchingFollowupMessage } from "@/lib/domain/communications/followupMessages";
-import { markFollowupDoneAction } from "../actions/markFollowupDone";
 import AskBobCallContextStrip from "./AskBobCallContextStrip";
 import AskBobAfterCallCard from "./AskBobAfterCallCard";
 import CallOutcomeCaptureCard from "./CallOutcomeCaptureCard";
@@ -37,6 +34,7 @@ import { getJobAskBobSnapshotsForJob } from "@/lib/domain/askbob/service";
 import {
   buildCallAutomatedDialSnapshot,
   buildCallSessionFollowupReadiness,
+  mapCtaReasonCodeToExplanation,
   getCallSessionAutomatedSpeechPlan,
   getCallSessionJobAndCustomer,
   sanitizeAutomatedCallNotes,
@@ -75,9 +73,6 @@ type CallRecord = {
   ai_summary?: string | null;
   transcript?: string | null;
 };
-
-const CALL_FROM_PLACEHOLDER = "workspace-default";
-const CALL_TO_PLACEHOLDER = "unknown";
 
 type JobSummary = {
   id: string;
@@ -191,33 +186,6 @@ function calculateDaysSince(value?: string | null): number | null {
   }
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
-
-function formatFollowupTimingText(days: number | null): string {
-  if (days === null) {
-    return "Suggested timing: soon.";
-  }
-  if (days === 0) {
-    return "Suggested timing: send this today.";
-  }
-  if (days === 1) {
-    return "Suggested timing: send this tomorrow.";
-  }
-  return `Suggested timing: in about ${days} days.`;
-}
-
-function previewMessageText(message: MessageRecord | null): string | null {
-  if (!message) {
-    return null;
-  }
-  const source = (message.body && message.body.trim()) || (message.subject && message.subject.trim());
-  if (!source) {
-    return null;
-  }
-  const cleaned = source.replace(/\s+/g, " ");
-  return cleaned.length > 120 ? `${cleaned.slice(0, 117)}…` : cleaned;
-}
-
-type StepStatus = "complete" | "current" | "upcoming";
 
 const TIMELINE_NOT_YET_LABEL = "Not yet";
 
@@ -337,9 +305,6 @@ export default async function CallSessionPage({
   const callToLabel = call.to_number?.trim() || "Unknown";
   const callDirectionNormalized = (call.direction ?? "outbound").toLowerCase();
   const isInboundCall = callDirectionNormalized === "inbound";
-  const fromNeedsConfig =
-    !call.from_number?.trim() || call.from_number === CALL_FROM_PLACEHOLDER;
-  const toNeedsConfig = !call.to_number?.trim() || call.to_number === CALL_TO_PLACEHOLDER;
   const callSummaryRow = call.summary?.trim() ?? null;
   const askBobScriptSource = getAskBobCallScriptSource(call.ai_summary ?? null, callSummaryRow);
   const askBobScriptBody = getAskBobCallScriptBody(call.ai_summary ?? null, callSummaryRow);
@@ -610,80 +575,8 @@ export default async function CallSessionPage({
     modelChannelSuggestion: null,
   });
   const shouldSkipFollowup = followupRecommendation?.shouldSkipFollowup ?? false;
-  const followupTimingText = formatFollowupTimingText(
-    followupRecommendation?.recommendedDelayDays ?? null,
-  );
-  const recommendedChannel = followupRecommendation?.recommendedChannel ?? null;
-  const matchingFollowupMessage = followupRecommendation
-    ? findMatchingFollowupMessage({
-        messages,
-        recommendedChannel,
-        jobId,
-        quoteId: callScriptQuoteId,
-      })
-    : null;
-  const hasRecommendedFollowupAlready = Boolean(matchingFollowupMessage);
-  const matchingFollowupPreview = previewMessageText(matchingFollowupMessage);
-  const followupMessageLink = matchingFollowupMessage
-    ? `/messages/${matchingFollowupMessage.id}`
-    : "/messages";
-  const recommendedChannelAction = (() => {
-    switch (recommendedChannel) {
-      case "sms":
-        return "send an SMS follow-up";
-      case "email":
-        return "send a short email follow-up";
-      case "phone":
-        return "place a follow-up phone call";
-      default:
-        return "send a follow-up";
-    }
-  })();
-  const recommendedTimingLabel = followupRecommendation?.recommendedTimingLabel ?? "No follow-up recommended";
-  const dueInfo = computeFollowupDueInfo({
-    quoteCreatedAt: callScriptQuoteCandidate?.created_at ?? null,
-    callCreatedAt: call.created_at,
-    invoiceDueAt: null,
-    recommendedDelayDays: followupRecommendation?.recommendedDelayDays ?? null,
-  });
-  const dueTextClass =
-    dueInfo.dueStatus === "overdue"
-      ? "text-amber-200"
-      : dueInfo.dueStatus === "due-today"
-      ? "text-emerald-200"
-      : dueInfo.dueStatus === "scheduled"
-      ? "text-slate-300"
-    : "text-slate-500";
 
   const latestPhoneMessageBody = latestPhoneMessage?.body?.trim();
-  const hasSummary = Boolean(latestPhoneMessageBody);
-  const notesStarted = Boolean(latestPhoneMessage?.outcome?.trim() || hasSummary);
-  const followupHandled = hasRecommendedFollowupAlready || shouldSkipFollowup;
-  const scriptReady = Boolean(callScriptQuoteId);
-
-  const step1Status: StepStatus = scriptReady ? "complete" : "current";
-  let step2Status: StepStatus = scriptReady ? "current" : "upcoming";
-  let step3Status: StepStatus = "upcoming";
-
-  if (notesStarted) {
-    step2Status = followupHandled ? "complete" : "current";
-  }
-  if (followupHandled && hasSummary) {
-    step2Status = "complete";
-    step3Status = "complete";
-  }
-
-  const stepperSteps = [
-    { label: "Review call script", status: step1Status },
-    { label: "Capture call outcome", status: step2Status },
-    { label: "Summarize and send follow-up", status: step3Status },
-  ] as const;
-
-  const stepStatusClasses: Record<StepStatus, string> = {
-    complete: "border border-emerald-200 bg-emerald-200/5 text-emerald-200",
-    current: "border border-emerald-200 bg-slate-900 text-white",
-    upcoming: "border border-slate-800 text-slate-500",
-  };
   console.log("[calls/[id]] followup recommendation", {
     callId: call.id,
     jobId: job?.id ?? null,
@@ -864,47 +757,80 @@ export default async function CallSessionPage({
   const shouldStartAutomatedCall = isAskBobAutomatedCall && !hasDialRequestedMarker;
   const shouldRefreshStatus = hasDialRequestedMarker && !automatedDialSnapshot.isTerminal;
 
-  const primaryCta = (() => {
+  const { primaryCta, ctaReasonCode } = (() => {
     if (shouldStartAutomatedCall) {
       const jobLink = jobId ? `/jobs/${jobId}?step=9` : null;
       return {
-        kind: "start-automated-call",
-        label: "Open automated call panel",
-        href: jobLink ?? undefined,
-        disabled: !jobLink,
+        primaryCta: {
+          kind: "start-automated-call",
+          label: "Open automated call panel",
+          href: jobLink ?? undefined,
+          disabled: !jobLink,
+        },
+        ctaReasonCode: jobLink ? "start_automated_call" : "missing_job_link",
       };
     }
     if (shouldRefreshStatus) {
-      return { kind: "refresh-status", label: "Refresh status", disabled: false };
+      return {
+        primaryCta: { kind: "refresh-status", label: "Refresh status", disabled: false },
+        ctaReasonCode: callReadiness.ctaReasonCode,
+      };
     }
     if (automatedDialSnapshot.isTerminal && hasOutcomeGap) {
+      const outcomeReason = callReadiness.reasons.includes("missing_outcome")
+        ? "missing_outcome"
+        : "missing_reached_flag";
       return {
-        kind: "capture-outcome",
-        label: "Capture outcome",
-        workspaceNavigate: { tab: "after", hash: "#call-outcome-capture" },
+        primaryCta: {
+          kind: "capture-outcome",
+          label: "Capture outcome",
+          workspaceNavigate: { tab: "after", hash: "#call-outcome-capture" },
+        },
+        ctaReasonCode: outcomeReason,
       };
     }
     if (callReadiness.isReady && !hasAfterCallDraft && canGenerateAfterCall) {
       return {
-        kind: "generate-followup",
-        label: "Generate follow-up",
-        workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
+        primaryCta: {
+          kind: "generate-followup",
+          label: "Generate follow-up",
+          workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
+        },
+        ctaReasonCode: "ready",
       };
     }
     if (hasAfterCallDraft) {
+      const isComposerEnabled = Boolean(afterCallDraftBody && jobId);
+      const draftReasonCode = isComposerEnabled
+        ? "draft_ready"
+        : afterCallDraftBody
+        ? "draft_missing_job"
+        : "draft_missing_body";
       return {
-        kind: "open-composer",
-        label: "Open composer",
-        disabled: !afterCallDraftBody || !jobId,
+        primaryCta: {
+          kind: "open-composer",
+          label: "Open composer",
+          disabled: !isComposerEnabled,
+        },
+        ctaReasonCode: draftReasonCode,
       };
     }
+    const fallbackReasonCode = callReadiness.isReady
+      ? hasAfterCallCard
+        ? "missing_followup_context"
+        : "missing_job_link"
+      : callReadiness.ctaReasonCode;
     return {
-      kind: "generate-followup",
-      label: "Generate follow-up",
-      disabled: true,
-      workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
+      primaryCta: {
+        kind: "generate-followup",
+        label: "Generate follow-up",
+        disabled: true,
+        workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
+      },
+      ctaReasonCode: fallbackReasonCode,
     };
   })();
+  const primaryCtaExplanation = mapCtaReasonCodeToExplanation(ctaReasonCode, primaryCta.kind);
 
   const callControlModel = {
     workspaceId: workspace.id,
@@ -918,6 +844,7 @@ export default async function CallSessionPage({
     },
     timelineRows: callControlTimelineRows,
     primaryCta,
+    primaryCtaExplanation,
     secondaryActions: {
       jobHref: jobId ? `/jobs/${jobId}` : null,
       callsHref: "/calls",
@@ -933,6 +860,12 @@ export default async function CallSessionPage({
       body: afterCallDraftBody,
     },
   };
+  console.log("[calls-session-primary-cta-visible]", {
+    workspaceId: workspace.id,
+    callId: call.id,
+    ctaKind: primaryCta.kind,
+    ctaReasonCode,
+  });
 
   const showNoScriptPanel = !callScriptQuoteId;
   const prepareTab = (
@@ -1121,7 +1054,7 @@ export default async function CallSessionPage({
           )}
         </div>
         <p className="text-sm text-slate-200">{callSummary}</p>
-        {followupRecommendation?.shouldSkipFollowup && (
+        {shouldSkipFollowup && (
           <p className="text-xs text-slate-400">
             No further follow-up recommended based on this outcome.
           </p>
@@ -1284,9 +1217,8 @@ export default async function CallSessionPage({
 
         <CallControlCard model={callControlModel} />
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <div className="space-y-6">
-            <HbCard className="space-y-6">
+        <div className="space-y-6">
+          <HbCard className="space-y-6">
               <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-300">
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Created</p>
@@ -1435,222 +1367,6 @@ export default async function CallSessionPage({
               during={duringTab}
               after={afterTab}
             />
-          </div>
-
-          <div className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-            <div className="flex items-center justify-between">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Agent tools</p>
-            </div>
-            <p className="text-sm text-slate-400">
-              This call session is linked to the job and quote above. Use the guided workspace to walk the call,
-              capture a summary, and trigger follow-ups, and use the activity stream to review what has already
-              been sent.
-            </p>
-            {followupRecommendation && !shouldSkipFollowup && (
-              <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-100">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                    {hasRecommendedFollowupAlready
-                      ? "Next suggested step: follow-up created"
-                      : "Next suggested step"}
-                  </p>
-                  {followupRecommendation.recommendedChannel && (
-                    <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] text-slate-300">
-                      {followupRecommendation.recommendedChannel.toUpperCase()}
-                    </span>
-                  )}
-                </div>
-                {hasRecommendedFollowupAlready ? (
-                  <>
-                    <p className="text-sm font-semibold text-slate-100">
-                      A {recommendedChannelAction} follow-up already exists in Messages for this job/quote.
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      Review or send it from there when you’re ready.
-                    </p>
-                    {matchingFollowupPreview && (
-                      <p className="text-[11px] italic text-slate-500">
-                        Preview: {matchingFollowupPreview}
-                      </p>
-                    )}
-                    <p className="text-xs text-slate-400">
-                      Original timing recommendation: {recommendedTimingLabel}.
-                    </p>
-                    <p className={`text-xs font-semibold ${dueTextClass}`}>
-                      Next follow-up: {dueInfo.dueLabel}
-                    </p>
-                    <p className="text-xs text-slate-400">{followupRecommendation.primaryActionLabel}</p>
-                    <p className="text-xs text-slate-400">{followupTimingText}</p>
-                    <p className="text-xs text-slate-400">{followupRecommendation.rationale}</p>
-                    <Link
-                      href={followupMessageLink}
-                      className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-                    >
-                      Open Messages
-                    </Link>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm font-semibold text-slate-100">
-                      Recommended next action: {recommendedChannelAction}.
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      Recommended timing: {recommendedTimingLabel}
-                    </p>
-                    <p className={`text-xs font-semibold ${dueTextClass}`}>
-                      Next follow-up: {dueInfo.dueLabel}
-                    </p>
-                    <p className="text-xs text-slate-400">{followupRecommendation.primaryActionLabel}</p>
-                    <p className="text-xs text-slate-400">{followupTimingText}</p>
-                    <p className="text-xs text-slate-400">{followupRecommendation.rationale}</p>
-                    <p className="text-xs text-slate-400">
-                      If you accept this, HandyBob will create a draft in Messages for you to review.
-                    </p>
-                    <form action={markFollowupDoneAction} className="text-right">
-                      <input type="hidden" name="callId" value={call.id} />
-                      <input type="hidden" name="workspaceId" value={workspace.id} />
-                      <input type="hidden" name="jobId" value={jobId ?? ""} />
-                      <input type="hidden" name="quoteId" value={callScriptQuoteId ?? ""} />
-                      <button
-                        type="submit"
-                        className="text-sm font-semibold text-emerald-200 hover:text-emerald-100"
-                      >
-                        Mark follow-up done
-                      </button>
-                    </form>
-                    <Link
-                      href="/messages"
-                      className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-                    >
-                      Prepare follow-up message
-                    </Link>
-                  </>
-                )}
-              </div>
-            )}
-            <div className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-100">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call endpoints</p>
-              <div className="flex items-center justify-between text-sm text-slate-300">
-                <span>From</span>
-                <span className="font-semibold text-slate-100">{callFromLabel}</span>
-              </div>
-              {fromNeedsConfig && (
-                <p className="text-xs text-amber-200">
-                  Telephony settings aren’t configured yet; this call is currently a logged record only.
-                </p>
-              )}
-              <div className="flex items-center justify-between text-sm text-slate-300">
-                <span>To</span>
-                <span className="font-semibold text-slate-100">{callToLabel}</span>
-              </div>
-              {toNeedsConfig && (
-                <p className="text-xs text-amber-200">
-                  Add a customer phone number or configure the workspace number to make this call actionable later.
-                </p>
-              )}
-            </div>
-            {job && (
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Guided call checklist</p>
-                <ol className="mt-2 space-y-1 text-sm text-slate-200">
-                  <li className="flex gap-2">
-                    <span className="font-semibold text-slate-400">1.</span>
-                    <span>Review the AI-prepared script.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="font-semibold text-slate-400">2.</span>
-                    <span>Click Start guided call when you’re ready to talk.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="font-semibold text-slate-400">3.</span>
-                    <span>Log the outcome and let the assistant draft a follow-up.</span>
-                  </li>
-                </ol>
-              </div>
-            )}
-            <div className="border-t border-slate-800 pt-4 space-y-4">
-              <div className="space-y-2">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Guided call workspace</p>
-                <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.1em]">
-                  {stepperSteps.map((step, index) => (
-                    <span
-                      key={`${step.label}-${step.status}`}
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold ${stepStatusClasses[step.status]}`}
-                    >
-                      <span className="text-[10px]">{index + 1}.</span>
-                      <span className="whitespace-nowrap text-xs">{step.label}</span>
-                    </span>
-                  ))}
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Use the Prepare, During, and After tabs to walk the call and finalize follow-up.
-                </p>
-                {job ? (
-                  <>
-                    <p className="text-sm text-slate-400">
-                      {callScriptQuoteId
-                        ? "Review the guided script in Prepare, capture notes in During, then save the outcome in After."
-                        : "No quote detected for this job; attach one so guided scripts and summaries work."}
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-sm text-slate-400">
-                    Job record missing for this call, so guided tools are unavailable.
-                  </p>
-                )}
-              </div>
-              {job && !callScriptQuoteId && (
-                <p className="text-sm text-amber-200">
-                  Guided scripts require a quote; add one to this job to unlock the full experience.
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Recent activity</p>
-              {messages.length === 0 ? (
-                <p className="mt-2 text-sm text-slate-400">
-                  No recent phone notes or follow-ups for this job yet.
-                </p>
-              ) : (
-                <ul className="mt-2 space-y-2">
-                  {messages.map((message) => {
-                    const createdAtMsg = message.created_at ? new Date(message.created_at) : null;
-                    const channelLabel = (message.channel ?? "other") as string;
-                    const viaLabel = (message.via ?? "email") as string;
-
-                    return (
-                      <li
-                        key={message.id}
-                        className="space-y-1 rounded-lg border border-slate-850/60 bg-slate-950/80 px-3 py-2 text-xs text-slate-100"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                          <span className="font-semibold text-slate-200">
-                            {message.subject || "Untitled message"}
-                          </span>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span>{channelLabel}</span>
-                            <span>{viaLabel}</span>
-                            {createdAtMsg && (
-                              <span>
-                                {createdAtMsg.toLocaleDateString()} {" "}
-                                {createdAtMsg.toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        {message.body && (
-                          <p className="text-sm text-slate-300">{message.body}</p>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          </div>
         </div>
       </div>
     </div>

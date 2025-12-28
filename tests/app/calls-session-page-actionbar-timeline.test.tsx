@@ -110,6 +110,7 @@ describe("CallSessionPage action bar and timeline", () => {
     expect(markup).toContain("Generate follow-up");
     expect(markup).toContain("Manual call");
     expect(markup).toContain("Manual follow-up SMS");
+    expect(markup).not.toContain("Agent tools");
     expect(markup).not.toContain('data-testid="call-session-action-bar"');
     expect(markup).not.toContain('data-testid="call-session-timeline"');
 
