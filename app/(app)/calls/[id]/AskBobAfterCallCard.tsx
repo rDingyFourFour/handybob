@@ -44,6 +44,7 @@ type AskBobAfterCallCardProps = {
   reachedCustomer?: boolean | null;
   outcomeCode?: string | null;
   callSessionDraftBody?: string | null;
+  primaryVariant?: "primary" | "secondary" | "ghost";
 };
 
 const GENERAL_READINESS_MESSAGES: Partial<Record<CallSessionFollowupReadinessReason, string>> = {
@@ -76,6 +77,7 @@ export default function AskBobAfterCallCard({
   reachedCustomer = null,
   outcomeCode = null,
   callSessionDraftBody = null,
+  primaryVariant = "primary",
 }: AskBobAfterCallCardProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -397,7 +399,7 @@ export default function AskBobAfterCallCard({
           </div>
         )}
         <HbButton
-          variant="primary"
+          variant={primaryVariant}
           size="md"
           className="w-full"
           onClick={handleGenerate}

@@ -24,6 +24,7 @@ type PostCallEnrichmentCardProps = {
   hasRecordingMetadata: boolean;
   hasOutcome: boolean;
   initialResult?: CallPostEnrichmentResult | null;
+  primaryVariant?: "primary" | "secondary" | "ghost";
 };
 
 function formatReachedLabel(value: boolean | null) {
@@ -58,6 +59,7 @@ export default function PostCallEnrichmentCard({
   hasRecordingMetadata,
   hasOutcome,
   initialResult = null,
+  primaryVariant = "primary",
 }: PostCallEnrichmentCardProps) {
   const router = useRouter();
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "failure">(
@@ -200,7 +202,7 @@ export default function PostCallEnrichmentCard({
 
       <div className="space-y-2">
         <HbButton
-          variant="primary"
+          variant={primaryVariant}
           size="md"
           className="w-full"
           onClick={handleGenerate}

@@ -51,7 +51,7 @@ describe("CallSessionPage action bar and timeline", () => {
     logSpy.mockRestore();
   });
 
-  it("renders timeline and refresh action when Twilio metadata is missing", async () => {
+  it("renders call control card when Twilio metadata is missing", async () => {
     supabaseState.responses.calls = {
       data: [
         {
@@ -104,12 +104,14 @@ describe("CallSessionPage action bar and timeline", () => {
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-1" }) });
     const markup = renderToStaticMarkup(element);
 
-    expect(markup).toContain('data-testid="call-session-timeline"');
-    expect(markup).toContain('data-testid="call-session-action-bar"');
-    expect(markup).toContain('data-testid="call-session-action-bar-manual"');
-    expect(markup).toContain("Refresh status");
+    expect(markup).toContain('data-testid="call-control-card"');
+    expect(markup).toContain('data-testid="call-control-card-timeline"');
+    expect(markup).toContain('data-testid="call-session-primary-cta"');
+    expect(markup).toContain("Generate follow-up");
     expect(markup).toContain("Manual call");
     expect(markup).toContain("Manual follow-up SMS");
+    expect(markup).not.toContain('data-testid="call-session-action-bar"');
+    expect(markup).not.toContain('data-testid="call-session-timeline"');
 
     const timelineEvent = logSpy.mock.calls.find(
       (args) => args[0] === "[calls-session-timeline-visible]",
@@ -201,21 +203,12 @@ describe("CallSessionPage action bar and timeline", () => {
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-terminal" }) });
     const markup = renderToStaticMarkup(element);
 
-    expect(markup).toContain('href="#call-outcome-capture"');
-    expect(markup).toContain('data-testid="call-session-timeline"');
-    expect(markup).toContain('data-testid="call-session-action-bar"');
-    expect(markup).toContain('data-testid="call-session-action-bar-manual"');
-    expect(markup).toContain("Generate follow-up");
-    expect(markup).toContain("disabled");
+    expect(markup).toContain('data-testid="call-control-card"');
+    expect(markup).toContain('data-testid="call-control-card-timeline"');
+    expect(markup).toContain('data-cta-kind="capture-outcome"');
+    expect(markup).toContain("Capture outcome");
+    expect(markup).not.toContain('data-testid="call-session-action-bar"');
 
-    const blockingEvent = logSpy.mock.calls.find(
-      (args) => args[0] === "[calls-after-call-outcome-blocking-visible]",
-    );
-    expect(blockingEvent).toBeTruthy();
-    const blockingPayload = blockingEvent?.[1] as Record<string, unknown>;
-    expect(Object.keys(blockingPayload)).toEqual(
-      expect.arrayContaining(["missingReason", "isTerminal", "hasOutcome", "workspaceId", "callId"]),
-    );
   });
 
   it("shows generate follow-up entry points and composer when ready with draft", async () => {
@@ -287,10 +280,9 @@ describe("CallSessionPage action bar and timeline", () => {
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-ready" }) });
     const markup = renderToStaticMarkup(element);
 
-    expect(markup).toContain('href="#askbob-after-call"');
-    expect(markup).toContain("Open composer with this draft");
+    expect(markup).toContain("Open composer");
+    expect(markup).toContain('data-cta-kind="open-composer"');
     expect(markup).toContain("Regenerate follow-up");
     expect(markup).toContain("Manual call");
-    expect(markup).toContain('data-testid="call-session-action-bar-manual"');
   });
 });

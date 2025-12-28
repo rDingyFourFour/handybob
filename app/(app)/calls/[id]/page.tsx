@@ -9,6 +9,7 @@ import CallSummaryStatus from "@/components/call-summary-status";
 import CallStatusRefreshButton from "@/components/calls/CallStatusRefreshButton";
 import AutomatedCallNotesCard from "./AutomatedCallNotesCard";
 import CallRecordingLink from "@/components/calls/CallRecordingLink";
+import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import JobCallScriptPanel, {
   type PhoneMessageSummary,
@@ -36,8 +37,6 @@ import { getJobAskBobSnapshotsForJob } from "@/lib/domain/askbob/service";
 import {
   buildCallAutomatedDialSnapshot,
   buildCallSessionFollowupReadiness,
-  type CallAutomatedDialSnapshot,
-  type CallSessionFollowupReadiness,
   getCallSessionAutomatedSpeechPlan,
   getCallSessionJobAndCustomer,
   sanitizeAutomatedCallNotes,
@@ -45,7 +44,9 @@ import {
 import LinkCallContextCard from "./LinkCallContextCard";
 import AskBobLiveGuidanceCard from "./AskBobLiveGuidanceCard";
 import PostCallEnrichmentCard from "./PostCallEnrichmentCard";
-import CallSessionActionBar from "./CallSessionActionBar";
+import CallControlCard from "./CallControlCard";
+import GuidedCallWorkspaceCard from "./GuidedCallWorkspaceCard";
+import CallManualNumberCard from "./CallManualNumberCard";
 
 type CallRecord = {
   id: string;
@@ -220,13 +221,6 @@ type StepStatus = "complete" | "current" | "upcoming";
 
 const TIMELINE_NOT_YET_LABEL = "Not yet";
 
-type TimelineRow = {
-  key: string;
-  label: string;
-  status: string;
-  timestamp: string;
-};
-
 function MessageCard({ title, body }: { title: string; body: string }) {
   return (
     <div className="hb-shell pt-20 pb-8">
@@ -244,143 +238,21 @@ function MessageCard({ title, body }: { title: string; body: string }) {
   );
 }
 
-function CallTimelineSection({
-  workspaceId,
-  callId,
-  direction,
-  call,
-  dialSnapshot,
-  callReadiness,
-  hasAfterCallDraft,
-  callHasOutcome,
-  callHasReachedFlag,
+function buildMessagesHref({
+  customerId,
+  jobId,
 }: {
-  workspaceId: string;
-  callId: string;
-  direction: string | null;
-  call: CallRecord;
-  dialSnapshot: CallAutomatedDialSnapshot;
-  callReadiness: CallSessionFollowupReadiness;
-  hasAfterCallDraft: boolean;
-  callHasOutcome: boolean;
-  callHasReachedFlag: boolean;
+  customerId: string | null;
+  jobId: string | null;
 }) {
-  const hasTwilioSid = Boolean(call.twilio_call_sid);
-  const hasTwilioStatus = Boolean(call.twilio_status);
-  const hasDialRequestedMarker = Boolean(call.twilio_call_sid || call.twilio_status);
-  const createdTimestamp = formatUtcTimestamp(call.created_at);
-  const dialRequestedTimestamp = formatUtcTimestamp(call.twilio_status_updated_at);
-  const twilioStatusLabel = formatTwilioStatusLabel(call.twilio_status ?? null);
-  const twilioStatusTimestamp = formatUtcTimestamp(call.twilio_status_updated_at);
-  const recordingTimestamp = formatUtcTimestamp(call.twilio_recording_received_at ?? null);
-  const terminalTimestamp = dialSnapshot.isTerminal
-    ? formatUtcTimestamp(call.twilio_status_updated_at)
-    : null;
-  const outcomeTimestamp = formatUtcTimestamp(call.outcome_recorded_at);
-  const hasRecordingDuration = call.twilio_recording_duration_seconds != null;
-  const recordingStatus = hasRecordingDuration
-    ? "Ready"
-    : dialSnapshot.hasRecordingMetadata
-    ? "Processing"
-    : TIMELINE_NOT_YET_LABEL;
-  const outcomeStatus = callHasOutcome && callHasReachedFlag
-    ? "Saved"
-    : callHasOutcome
-    ? "Needs reach flag"
-    : callHasReachedFlag
-    ? "Needs outcome"
-    : TIMELINE_NOT_YET_LABEL;
-  const afterCallStatus = hasAfterCallDraft
-    ? "Draft ready"
-    : callReadiness.isReady
-    ? "Ready to generate"
-    : TIMELINE_NOT_YET_LABEL;
-
-  console.log("[calls-session-timeline-visible]", {
-    workspaceId,
-    callId,
-    direction,
-    hasTwilioSid,
-    hasTwilioStatus,
-    isTerminal: dialSnapshot.isTerminal,
-    hasOutcome: callHasOutcome,
-    hasRecordingMetadata: dialSnapshot.hasRecordingMetadata,
-    hasRecordingDuration,
-    hasAfterCallDraft,
-  });
-
-  const rows: TimelineRow[] = [
-    {
-      key: "created",
-      label: "Created",
-      status: createdTimestamp ? "Created" : TIMELINE_NOT_YET_LABEL,
-      timestamp: createdTimestamp ?? TIMELINE_NOT_YET_LABEL,
-    },
-    {
-      key: "dial-requested",
-      label: "Dial requested",
-      status: hasDialRequestedMarker ? "Requested" : TIMELINE_NOT_YET_LABEL,
-      timestamp: dialRequestedTimestamp ?? TIMELINE_NOT_YET_LABEL,
-    },
-    {
-      key: "twilio-status",
-      label: "Twilio status",
-      status: twilioStatusLabel ?? (hasTwilioSid ? "Queued" : TIMELINE_NOT_YET_LABEL),
-      timestamp: twilioStatusTimestamp ?? TIMELINE_NOT_YET_LABEL,
-    },
-    {
-      key: "recording",
-      label: "Recording",
-      status: recordingStatus,
-      timestamp: recordingTimestamp ?? TIMELINE_NOT_YET_LABEL,
-    },
-    {
-      key: "terminal",
-      label: "Terminal reached",
-      status: dialSnapshot.isTerminal ? "Terminal" : TIMELINE_NOT_YET_LABEL,
-      timestamp: terminalTimestamp ?? TIMELINE_NOT_YET_LABEL,
-    },
-    {
-      key: "outcome",
-      label: "Outcome saved",
-      status: outcomeStatus,
-      timestamp: outcomeTimestamp ?? TIMELINE_NOT_YET_LABEL,
-    },
-    {
-      key: "after-call-draft",
-      label: "After-call draft present",
-      status: afterCallStatus,
-      timestamp: TIMELINE_NOT_YET_LABEL,
-    },
-  ];
-
-  return (
-    <HbCard data-testid="call-session-timeline" className="space-y-3">
-      <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call timeline</p>
-        <h2 className="hb-heading-3 text-xl font-semibold text-white">Call timeline</h2>
-        <p className="text-sm text-slate-400">
-          Track each milestone as the call completes and follow-ups become available.
-        </p>
-      </div>
-      <div className="space-y-2">
-        {rows.map((row) => (
-          <div
-            key={row.key}
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-sm"
-          >
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                {row.label}
-              </p>
-              <p className="text-sm text-slate-100">{row.status}</p>
-            </div>
-            <p className="text-xs text-slate-400">{row.timestamp}</p>
-          </div>
-        ))}
-      </div>
-    </HbCard>
-  );
+  const params = new URLSearchParams({ compose: "1", origin: "calls-followup" });
+  if (customerId) {
+    params.set("customerId", customerId);
+  }
+  if (jobId) {
+    params.set("jobId", jobId);
+  }
+  return `/messages?${params.toString()}`;
 }
 
 export default async function CallSessionPage({
@@ -890,6 +762,489 @@ export default async function CallSessionPage({
     hasScriptSummary: hasScriptSummaryForManual,
   });
 
+  const hasDialRequestedMarker = Boolean(call.twilio_call_sid || call.twilio_status);
+  const hasTwilioSid = Boolean(call.twilio_call_sid);
+  const hasTwilioStatus = Boolean(call.twilio_status);
+  const createdTimestamp = formatUtcTimestamp(call.created_at);
+  const dialRequestedTimestamp = formatUtcTimestamp(call.twilio_status_updated_at);
+  const timelineTwilioStatusLabel = formatTwilioStatusLabel(call.twilio_status ?? null);
+  const twilioStatusTimestamp = formatUtcTimestamp(call.twilio_status_updated_at);
+  const recordingTimestamp = formatUtcTimestamp(call.twilio_recording_received_at ?? null);
+  const terminalTimestamp = automatedDialSnapshot.isTerminal
+    ? formatUtcTimestamp(call.twilio_status_updated_at)
+    : null;
+  const outcomeTimestamp = formatUtcTimestamp(call.outcome_recorded_at);
+  const hasRecordingDuration = call.twilio_recording_duration_seconds != null;
+  const recordingStatus = hasRecordingDuration
+    ? "Ready"
+    : automatedDialSnapshot.hasRecordingMetadata
+    ? "Processing"
+    : TIMELINE_NOT_YET_LABEL;
+  const outcomeStatus = callHasOutcome && callHasReachedFlag
+    ? "Saved"
+    : callHasOutcome
+    ? "Needs reach flag"
+    : callHasReachedFlag
+    ? "Needs outcome"
+    : TIMELINE_NOT_YET_LABEL;
+  const afterCallStatus = hasAfterCallDraft
+    ? "Draft ready"
+    : callReadiness.isReady
+    ? "Ready to generate"
+    : TIMELINE_NOT_YET_LABEL;
+
+  console.log("[calls-session-timeline-visible]", {
+    workspaceId: workspace.id,
+    callId: call.id,
+    direction: call.direction ?? null,
+    hasTwilioSid,
+    hasTwilioStatus,
+    isTerminal: automatedDialSnapshot.isTerminal,
+    hasOutcome: callHasOutcome,
+    hasRecordingMetadata: automatedDialSnapshot.hasRecordingMetadata,
+    hasRecordingDuration,
+    hasAfterCallDraft,
+  });
+
+  const callControlTimelineRows = [
+    {
+      key: "created",
+      label: "Created",
+      status: createdTimestamp ? "Created" : TIMELINE_NOT_YET_LABEL,
+      timestamp: createdTimestamp ?? TIMELINE_NOT_YET_LABEL,
+    },
+    {
+      key: "dial-requested",
+      label: "Dial requested",
+      status: hasDialRequestedMarker ? "Requested" : TIMELINE_NOT_YET_LABEL,
+      timestamp: dialRequestedTimestamp ?? TIMELINE_NOT_YET_LABEL,
+    },
+    {
+      key: "twilio-status",
+      label: "Twilio status",
+      status: timelineTwilioStatusLabel ?? (hasTwilioSid ? "Queued" : TIMELINE_NOT_YET_LABEL),
+      timestamp: twilioStatusTimestamp ?? TIMELINE_NOT_YET_LABEL,
+    },
+    {
+      key: "recording",
+      label: "Recording",
+      status: recordingStatus,
+      timestamp: recordingTimestamp ?? TIMELINE_NOT_YET_LABEL,
+    },
+    {
+      key: "terminal",
+      label: "Terminal reached",
+      status: automatedDialSnapshot.isTerminal ? "Terminal" : TIMELINE_NOT_YET_LABEL,
+      timestamp: terminalTimestamp ?? TIMELINE_NOT_YET_LABEL,
+    },
+    {
+      key: "outcome",
+      label: "Outcome saved",
+      status: outcomeStatus,
+      timestamp: outcomeTimestamp ?? TIMELINE_NOT_YET_LABEL,
+    },
+    {
+      key: "after-call-draft",
+      label: "After-call draft present",
+      status: afterCallStatus,
+      timestamp: TIMELINE_NOT_YET_LABEL,
+    },
+  ];
+
+  const afterCallDraftBody = askBobAfterCallSnapshot?.draftMessageBody?.trim() ?? null;
+  const afterCallHasContext = Boolean(
+    askBobScriptBody?.trim() || latestPhoneMessageBody?.trim() || call.outcome_notes?.trim(),
+  );
+  const hasAfterCallCard = Boolean(jobId && customerId);
+  const canGenerateAfterCall =
+    callReadiness.isReady && hasAfterCallCard && afterCallHasContext;
+  const hasOutcomeGap = callReadiness.reasons.some(
+    (reason) => reason === "missing_outcome" || reason === "missing_reached_flag",
+  );
+  const shouldStartAutomatedCall = isAskBobAutomatedCall && !hasDialRequestedMarker;
+  const shouldRefreshStatus = hasDialRequestedMarker && !automatedDialSnapshot.isTerminal;
+
+  const primaryCta = (() => {
+    if (shouldStartAutomatedCall) {
+      const jobLink = jobId ? `/jobs/${jobId}?step=9` : null;
+      return {
+        kind: "start-automated-call",
+        label: "Open automated call panel",
+        href: jobLink ?? undefined,
+        disabled: !jobLink,
+      };
+    }
+    if (shouldRefreshStatus) {
+      return { kind: "refresh-status", label: "Refresh status", disabled: false };
+    }
+    if (automatedDialSnapshot.isTerminal && hasOutcomeGap) {
+      return {
+        kind: "capture-outcome",
+        label: "Capture outcome",
+        workspaceNavigate: { tab: "after", hash: "#call-outcome-capture" },
+      };
+    }
+    if (callReadiness.isReady && !hasAfterCallDraft && canGenerateAfterCall) {
+      return {
+        kind: "generate-followup",
+        label: "Generate follow-up",
+        workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
+      };
+    }
+    if (hasAfterCallDraft) {
+      return {
+        kind: "open-composer",
+        label: "Open composer",
+        disabled: !afterCallDraftBody || !jobId,
+      };
+    }
+    return {
+      kind: "generate-followup",
+      label: "Generate follow-up",
+      disabled: true,
+      workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
+    };
+  })();
+
+  const callControlModel = {
+    workspaceId: workspace.id,
+    callId: call.id,
+    identity: {
+      directionLabel: isInboundCall ? "Inbound call" : "Outbound call",
+      isInbound: isInboundCall,
+      from: callFromLabel,
+      to: callToLabel,
+      createdLabel: createdAtLabel,
+    },
+    timelineRows: callControlTimelineRows,
+    primaryCta,
+    secondaryActions: {
+      jobHref: jobId ? `/jobs/${jobId}` : null,
+      callsHref: "/calls",
+    },
+    manualEscape: {
+      jobId,
+      customerId,
+      customerPhone,
+      scriptSummary: scriptSummaryForManual,
+      messagesHref: buildMessagesHref({ customerId, jobId }),
+    },
+    afterCallDraft: {
+      body: afterCallDraftBody,
+    },
+  };
+
+  const showNoScriptPanel = !callScriptQuoteId;
+  const prepareTab = (
+    <div className="space-y-4">
+      {isAskBobCallContext && (
+        <AskBobCallContextStrip
+          callId={call.id}
+          jobId={job?.id ?? jobId}
+          scriptBody={askBobScriptBody}
+          scriptSummary={askBobScriptSource}
+        />
+      )}
+      {showNoScriptPanel && !isAskBobCallContext && (
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call script</p>
+          <h3 className="text-lg font-semibold text-white">No script yet</h3>
+          <p className="text-sm text-slate-400">
+            Attach a quote to generate a guided script and talking points.
+          </p>
+        </div>
+      )}
+      {job ? (
+        <>
+          {console.log("[calls/[id]] Guided workspace context", {
+            callId: call.id,
+            jobId: job.id,
+            quoteId: callScriptQuoteId,
+            context: "call-session",
+          })}
+          <JobCallScriptPanel
+            quoteId={callScriptQuoteId}
+            jobId={job.id}
+            workspaceId={workspace.id}
+            latestPhoneMessage={latestPhoneMessage}
+            customerName={customerName}
+            customerFirstName={customerFirstName}
+            customerPhone={customerPhone}
+            mode="callSession"
+            context="call-session"
+            callId={call.id}
+            isInboundCall={isInboundCall}
+          />
+        </>
+      ) : (
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-400">
+          Job record missing for this call. Please recreate the call from the job page or check your data.
+        </div>
+      )}
+      {call && job && callScriptQuoteCandidate && (
+        <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">How this works</p>
+          <ol className="space-y-1 text-sm text-slate-400">
+            <li className="flex gap-2">
+              <span className="font-semibold text-slate-400">1.</span>
+              <span>Review the script and key points in this tab.</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="font-semibold text-slate-400">2.</span>
+              <span>Call the customer and walk through the guided checklist.</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="font-semibold text-slate-400">3.</span>
+              <span>Log what happened and trigger follow-up help in the After tab.</span>
+            </li>
+          </ol>
+        </div>
+      )}
+    </div>
+  );
+
+  const duringTab = (
+    <div className="space-y-4">
+      {isAskBobAutomatedCall ? (
+        <AutomatedCallNotesCard
+          workspaceId={workspace.id}
+          callId={call.id}
+          initialNotes={sanitizedAutomatedNotes}
+        />
+      ) : (
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-400">
+          Notes appear here when an automated session is active.
+        </div>
+      )}
+      <CallManualNumberCard
+        workspaceId={workspace.id}
+        callId={call.id}
+        jobId={jobId}
+        customerId={customerId}
+        customerPhone={customerPhone}
+        scriptSummary={scriptSummaryForManual}
+      />
+      {isInboundCall && (
+        <LinkCallContextCard
+          workspaceId={workspace.id}
+          callId={call.id}
+          direction={callDirectionNormalized}
+          fromNumber={call.from_number ?? null}
+          toNumber={call.to_number ?? null}
+          customerId={linkedCustomerId}
+          jobId={call.job_id ?? null}
+          customerOptions={customerOptions}
+          jobOptions={jobOptions}
+        />
+      )}
+      {isInboundCall && linkedCustomerId && (
+        <AskBobLiveGuidanceCard
+          workspaceId={workspace.id}
+          callId={call.id}
+          direction={callDirectionNormalized}
+          fromNumber={call.from_number ?? null}
+          toNumber={call.to_number ?? null}
+          customerId={linkedCustomerId}
+          jobId={call.job_id ?? null}
+          customerName={customerName}
+          jobTitle={job?.title ?? null}
+        />
+      )}
+    </div>
+  );
+
+  const afterTab = (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call workspace</p>
+        <h2 className="hb-heading-3 text-xl font-semibold text-white">Call summary</h2>
+        <p className="text-sm text-slate-400">
+          Review what happened on the call before capturing the final outcome.
+        </p>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-400">
+          {customerName && (
+            <span className="text-slate-100">Customer: {customerName}</span>
+          )}
+          <span className="text-slate-100">From: {callFromLabel}</span>
+          <span className="text-slate-100">To: {callToLabel}</span>
+          <span className="text-slate-100">Created {createdAtLabel}</span>
+        </div>
+      </div>
+
+      <div className="space-y-2 border-t border-slate-800/40 pt-4">
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Summary</p>
+        {job && job.id && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Job:</span>
+            <Link
+              href={`/jobs/${job.id}`}
+              className="font-semibold text-slate-100 hover:text-slate-200"
+            >
+              {job?.title ?? job.id.slice(0, 8)}
+            </Link>
+            <span className="rounded-full border border-slate-800/60 bg-slate-900/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] text-slate-400">
+              {jobStatus}
+            </span>
+          </div>
+        )}
+        {callScriptQuoteCandidate ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Quote:</span>
+            {quoteLink ? (
+              <Link
+                href={quoteLink}
+                className="font-semibold text-slate-100 hover:text-slate-200"
+              >
+                {displayQuoteLabel}
+              </Link>
+            ) : (
+              <span className="font-semibold text-slate-100">{displayQuoteLabel}</span>
+            )}
+            <span className="rounded-full border border-slate-800/60 bg-slate-900/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] text-slate-400">
+              {callScriptQuoteCandidate.status ?? "Status unknown"}
+            </span>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400">
+            No quote linked to this job; guided scripts will be limited until you attach one.
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <CallSummaryStatus
+            callId={call.id}
+            initialStatus={summaryMissing ? "needed" : "recorded"}
+          />
+          {summaryMissing && (
+            <p className="text-xs text-slate-400">
+              Complete the guided call summary in the Prepare tab to unlock follow-ups.
+            </p>
+          )}
+        </div>
+        <p className="text-sm text-slate-200">{callSummary}</p>
+        {followupRecommendation?.shouldSkipFollowup && (
+          <p className="text-xs text-slate-400">
+            No further follow-up recommended based on this outcome.
+          </p>
+        )}
+      </div>
+
+      {showAutomatedOutcomeRequiredBanner && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
+          Call ended. Record outcome to generate a follow-up.
+        </div>
+      )}
+
+      <CallOutcomeCaptureCard
+        callId={call.id}
+        workspaceId={workspace.id}
+        initialOutcomeCode={call.outcome_code as CallOutcomeCode | null}
+        initialReachedCustomer={call.reached_customer}
+        initialNotes={call.outcome_notes}
+        initialRecordedAt={call.outcome_recorded_at}
+        initialLegacyOutcome={normalizeCallOutcome(call.outcome)}
+        hasAskBobScriptHint={hasAskBobScriptHint}
+        jobId={jobId}
+        automatedDialSnapshot={automatedDialSnapshot}
+        isAutomatedCallContext={isAskBobAutomatedCall}
+        primaryVariant="secondary"
+      />
+
+      {showAutomatedFollowupLink && followupLinkHref && (
+        <div className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-200">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">After-call follow-up</p>
+          <p className="text-sm text-slate-200">
+            The automated call completed. Use Step 8 to turn the outcome into a follow-up message.
+          </p>
+          <HbButton
+            as={Link}
+            href={`${followupLinkHref}#askbob-after-call`}
+            variant="secondary"
+            size="sm"
+            className="text-[11px] uppercase tracking-[0.3em]"
+          >
+            Open AskBob follow-up
+          </HbButton>
+        </div>
+      )}
+
+      {jobId && customerId && (
+        <AskBobAfterCallCard
+          callId={call.id}
+          workspaceId={workspace.id}
+          jobId={jobId}
+          customerId={customerId}
+          hasAskBobScriptBody={Boolean(askBobScriptBody)}
+          callNotes={latestPhoneMessageBody ?? null}
+          hasHumanNotes={Boolean(latestPhoneMessageBody)}
+          hasOutcomeSaved={
+            Boolean(call.outcome_recorded_at) ||
+            Boolean(call.outcome_code) ||
+            Boolean(call.outcome_notes?.trim())
+          }
+          hasOutcomeNotes={Boolean(call.outcome_notes?.trim())}
+          callReadiness={callReadiness}
+          generationSource="call_session"
+          automatedDialSnapshot={automatedDialSnapshot}
+          callSessionEnrichment={callSessionEnrichment}
+          isAskBobAutomatedCall={isAskBobAutomatedCall}
+          callDirection={call.direction ?? null}
+          reachedCustomer={call.reached_customer}
+          outcomeCode={call.outcome_code}
+          callSessionDraftBody={askBobAfterCallSnapshot?.draftMessageBody ?? null}
+          primaryVariant="secondary"
+        />
+      )}
+
+      <PostCallEnrichmentCard
+        workspaceId={workspace.id}
+        callId={call.id}
+        jobId={jobId}
+        customerId={customerId}
+        direction={call.direction ?? null}
+        isTerminal={callSessionEnrichment.isTerminal}
+        hasRecordingMetadata={callSessionEnrichment.hasRecordingMetadata}
+        hasOutcome={callSessionEnrichment.hasOutcome}
+        initialResult={postCallEnrichmentResult}
+        primaryVariant="secondary"
+      />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job</p>
+          <p className="text-lg font-semibold text-white">{displayJobTitle}</p>
+          <p className="text-xs text-slate-400">{jobStatus}</p>
+          {jobLink && (
+            <Link
+              href={jobLink}
+              className="text-sm font-semibold text-sky-300 hover:text-sky-200"
+            >
+              View job
+            </Link>
+          )}
+        </div>
+
+        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Quote</p>
+          <p className="text-lg font-semibold text-white">{displayQuoteLabel}</p>
+          <p className="text-xs text-slate-400">
+            Status: {callScriptQuoteCandidate?.status ?? "Unknown"}
+          </p>
+          <p className="text-xs text-slate-400">
+            Total: {formatCurrency(callScriptQuoteCandidate?.total ?? null)}
+          </p>
+          {quoteLink && (
+            <Link
+              href={quoteLink}
+              className="text-sm font-semibold text-sky-300 hover:text-sky-200"
+            >
+              View quote
+            </Link>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="hb-shell pt-20 pb-8">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -927,438 +1282,160 @@ export default async function CallSessionPage({
           </Link>
         </div>
 
-        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-              {isInboundCall ? "Inbound call" : "Call details"}
-            </p>
-            {isInboundCall && (
-              <span className="inline-flex items-center rounded-full border border-slate-800/60 bg-slate-950/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-sky-300">
-                Inbound
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-4 text-sm text-slate-100">
-            <span>From: {callFromLabel}</span>
-            <span className="text-slate-400">To: {callToLabel}</span>
-            <span className="text-slate-400">Created {createdAtLabel}</span>
-          </div>
-        </div>
-
-        <CallTimelineSection
-          workspaceId={workspace.id}
-          callId={call.id}
-          direction={call.direction ?? null}
-          call={call}
-          dialSnapshot={automatedDialSnapshot}
-          callReadiness={callReadiness}
-          hasAfterCallDraft={hasAfterCallDraft}
-          callHasOutcome={callHasOutcome}
-          callHasReachedFlag={callHasReachedFlag}
-        />
-
-        <CallSessionActionBar
-          workspaceId={workspace.id}
-          callId={call.id}
-          jobId={jobId}
-          customerId={customerId}
-          callReadiness={callReadiness}
-          hasAfterCallCard={Boolean(jobId && customerId)}
-          draftBody={askBobAfterCallSnapshot?.draftMessageBody ?? null}
-          customerPhone={customerPhone}
-          scriptSummary={scriptSummaryForManual}
-        />
+        <CallControlCard model={callControlModel} />
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <HbCard className="space-y-6">
-            <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-300">
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Created</p>
-                <p className="mt-1 text-base text-white">{createdAtLabel}</p>
-              </div>
-            </div>
-            {showTwilioStatus && (
-              <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
-                <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
-                  <span>Twilio status</span>
-              <CallStatusRefreshButton callId={call.id} />
-            </div>
-            <div className="flex flex-wrap items-baseline gap-2">
-              <span className="font-semibold text-white">
-                {twilioStatusLabel ?? "Queued"}
-              </span>
-              {twilioStatusUpdatedLabel && (
-                <span className="text-xs text-slate-500">Updated {twilioStatusUpdatedLabel}</span>
-              )}
-            </div>
-          </div>
-        )}
-            {isAskBobAutomatedCall && (
-              <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
-                <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
-                  <span>Automated call</span>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Voice</p>
-                    <p className="text-sm text-white">{automaticVoiceLabel ?? "Not available"}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Voicemail</p>
-                    <p className="text-sm text-white">
-                      {voicemailEnabled === null
-                        ? "Not available"
-                        : voicemailEnabled
-                        ? "Enabled"
-                        : "Disabled"}
-                    </p>
-                  </div>
-                  <div className="sm:col-span-3">
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                      Speech plan summary
-                    </p>
-                    <p className="text-sm text-white">
-                      {automaticSummaryPreview ?? "Not available"}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {jobId ? (
-                    <>
-                      <Link
-                        href={jobId ? `/jobs/${jobId}` : "#"}
-                        className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-                        onClick={() =>
-                          console.log("[calls-session-askbob-automated-open-job-click]", {
-                            workspaceId: workspace.id,
-                            callId: call.id,
-                            jobId,
-                          })
-                        }
-                      >
-                        Open job
-                      </Link>
-                      <Link
-                        href={`/jobs/${jobId}?step=9`}
-                        className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-                        onClick={() =>
-                          console.log("[calls-session-askbob-automated-open-job-askbob-click]", {
-                            workspaceId: workspace.id,
-                            callId: call.id,
-                            jobId,
-                          })
-                        }
-                      >
-                        Open AskBob on job
-                      </Link>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        disabled
-                        className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500"
-                      >
-                        Open job
-                      </button>
-                      <button
-                        type="button"
-                        disabled
-                        className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500"
-                      >
-                        Open AskBob on job
-                      </button>
-                    </>
-                  )}
+          <div className="space-y-6">
+            <HbCard className="space-y-6">
+              <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-300">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Created</p>
+                  <p className="mt-1 text-base text-white">{createdAtLabel}</p>
                 </div>
               </div>
-            )}
-            {recordingCardVisible && (
-              <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
-                <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
-                  <span>Recording</span>
-                  <span className="rounded-full border border-slate-800/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
-                    {recordingAvailable ? "Recording available" : "Recording pending"}
-                  </span>
-                </div>
-                {recordingAvailable ? (
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    {recordingDurationLabel && (
-                      <p className="text-xs text-slate-400">Duration {recordingDurationLabel}</p>
+              {showTwilioStatus && (
+                <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
+                  <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
+                    <span>Twilio status</span>
+                    <CallStatusRefreshButton callId={call.id} />
+                  </div>
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="font-semibold text-white">
+                      {twilioStatusLabel ?? "Queued"}
+                    </span>
+                    {twilioStatusUpdatedLabel && (
+                      <span className="text-xs text-slate-500">
+                        Updated {twilioStatusUpdatedLabel}
+                      </span>
                     )}
-                    <div className="flex items-center gap-2">
-                      <CallRecordingLink
-                        callId={call.id}
-                        workspaceId={workspace.id}
-                      />
-                      {recordingProcessingHintVisible && (
-                        <p className="text-[10px] text-slate-400">
-                          If this fails, refresh in a minute
-                        </p>
-                      )}
+                  </div>
+                </div>
+              )}
+              {isAskBobAutomatedCall && (
+                <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
+                  <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
+                    <span>Automated call</span>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Voice</p>
+                      <p className="text-sm text-white">
+                        {automaticVoiceLabel ?? "Not available"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Voicemail</p>
+                      <p className="text-sm text-white">
+                        {voicemailEnabled === null
+                          ? "Not available"
+                          : voicemailEnabled
+                          ? "Enabled"
+                          : "Disabled"}
+                      </p>
+                    </div>
+                    <div className="sm:col-span-3">
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                        Speech plan summary
+                      </p>
+                      <p className="text-sm text-white">
+                        {automaticSummaryPreview ?? "Not available"}
+                      </p>
                     </div>
                   </div>
-                ) : (
-                  <p className="text-xs text-slate-400">
-                    A recording will appear here after the call completes.
-                  </p>
-                )}
-              </div>
-            )}
-            {call.twilio_error_message && (
-              <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-100">
-                <p className="text-xs uppercase tracking-[0.3em] text-rose-200">Call failed</p>
-                <p className="text-sm text-rose-100">{call.twilio_error_message}</p>
-              </div>
-            )}
-
-            {isAskBobAutomatedCall && (
-              <AutomatedCallNotesCard
-                workspaceId={workspace.id}
-                callId={call.id}
-                initialNotes={sanitizedAutomatedNotes}
-              />
-            )}
-
-            <PostCallEnrichmentCard
-              workspaceId={workspace.id}
-              callId={call.id}
-              jobId={jobId}
-              customerId={customerId}
-              direction={call.direction ?? null}
-              isTerminal={callSessionEnrichment.isTerminal}
-              hasRecordingMetadata={callSessionEnrichment.hasRecordingMetadata}
-              hasOutcome={callSessionEnrichment.hasOutcome}
-              initialResult={postCallEnrichmentResult}
-            />
-
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call workspace</p>
-              <h2 className="hb-heading-3 text-xl font-semibold text-white">
-                Phone call details
-              </h2>
-              <p className="text-sm text-slate-400">
-                This column captures what happened on the call—summary, outcome, and notes.
-              </p>
-              <div className="flex flex-wrap items-center gap-3 text-sm text-slate-400">
-                {customerName && (
-                  <span className="text-slate-100">Customer: {customerName}</span>
-                )}
-                <span className="text-slate-100">From: {callFromLabel}</span>
-                <span className="text-slate-100">To: {callToLabel}</span>
-                <span className="text-slate-100">Created {createdAtLabel}</span>
-              </div>
-            </div>
-
-            <div className="space-y-2 border-t border-slate-800/40 pt-4">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Summary</p>
-              {job && job.id && (
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                  <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Job:</span>
-                  <Link
-                    href={`/jobs/${job.id}`}
-                    className="font-semibold text-slate-100 hover:text-slate-200"
-                  >
-                    {job?.title ?? job.id.slice(0, 8)}
-                  </Link>
-                  <span className="rounded-full border border-slate-800/60 bg-slate-900/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] text-slate-400">
-                    {jobStatus}
-                  </span>
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {jobId ? (
+                      <>
+                        <Link
+                          href={jobId ? `/jobs/${jobId}` : "#"}
+                          className="text-sm font-semibold text-sky-300 hover:text-sky-200"
+                          onClick={() =>
+                            console.log("[calls-session-askbob-automated-open-job-click]", {
+                              workspaceId: workspace.id,
+                              callId: call.id,
+                              jobId,
+                            })
+                          }
+                        >
+                          Open job
+                        </Link>
+                        <Link
+                          href={`/jobs/${jobId}?step=9`}
+                          className="text-sm font-semibold text-sky-300 hover:text-sky-200"
+                          onClick={() =>
+                            console.log("[calls-session-askbob-automated-open-job-askbob-click]", {
+                              workspaceId: workspace.id,
+                              callId: call.id,
+                              jobId,
+                            })
+                          }
+                        >
+                          Open AskBob on job
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          disabled
+                          className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500"
+                        >
+                          Open job
+                        </button>
+                        <button
+                          type="button"
+                          disabled
+                          className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500"
+                        >
+                          Open AskBob on job
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
-              {callScriptQuoteCandidate ? (
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                  <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Quote:</span>
-                  {quoteLink ? (
-                    <Link
-                      href={quoteLink}
-                      className="font-semibold text-slate-100 hover:text-slate-200"
-                    >
-                      {displayQuoteLabel}
-                    </Link>
+              {recordingCardVisible && (
+                <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
+                  <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
+                    <span>Recording</span>
+                    <span className="rounded-full border border-slate-800/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
+                      {recordingAvailable ? "Recording available" : "Recording pending"}
+                    </span>
+                  </div>
+                  {recordingAvailable ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      {recordingDurationLabel && (
+                        <p className="text-xs text-slate-400">Duration {recordingDurationLabel}</p>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <CallRecordingLink callId={call.id} workspaceId={workspace.id} />
+                        {recordingProcessingHintVisible && (
+                          <p className="text-[10px] text-slate-400">
+                            If this fails, refresh in a minute
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   ) : (
-                    <span className="font-semibold text-slate-100">{displayQuoteLabel}</span>
+                    <p className="text-xs text-slate-400">
+                      A recording will appear here after the call completes.
+                    </p>
                   )}
-                  <span className="rounded-full border border-slate-800/60 bg-slate-900/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] text-slate-400">
-                    {callScriptQuoteCandidate.status ?? "Status unknown"}
-                  </span>
                 </div>
-              ) : (
-                <p className="text-xs text-slate-400">
-                  No quote linked to this job; guided scripts will be limited until you attach one.
-                </p>
               )}
-              <div className="flex flex-wrap items-center gap-2">
-                <CallSummaryStatus
-                  callId={call.id}
-                  initialStatus={summaryMissing ? "needed" : "recorded"}
-                />
-                {summaryMissing && (
-                  <p className="text-xs text-slate-400">
-                    Complete the guided call summary in the panel to the right.
-                  </p>
-                )}
-              </div>
-              <p className="text-sm text-slate-200">{callSummary}</p>
-              {followupRecommendation?.shouldSkipFollowup && (
-                <p className="text-xs text-slate-400">
-                  No further follow-up recommended based on this outcome.
-                </p>
+              {call.twilio_error_message && (
+                <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-100">
+                  <p className="text-xs uppercase tracking-[0.3em] text-rose-200">Call failed</p>
+                  <p className="text-sm text-rose-100">{call.twilio_error_message}</p>
+                </div>
               )}
-            </div>
+            </HbCard>
 
-            {isAskBobCallContext && (
-              <AskBobCallContextStrip
-                callId={call.id}
-                jobId={job?.id ?? jobId}
-                scriptBody={askBobScriptBody}
-                scriptSummary={askBobScriptSource}
-              />
-            )}
-            {showAutomatedFollowupLink && followupLinkHref && (
-              <div className="space-y-1 rounded-2xl border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-200">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">After-call follow-up</p>
-                <p className="text-sm text-slate-200">
-                  The automated call completed. Use Step 8 to turn the outcome into a follow-up message.
-                </p>
-                <Link
-                  href={`${followupLinkHref}#askbob-after-call`}
-                  className="inline-flex items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-emerald-200 shadow-sm transition hover:bg-emerald-500/20"
-                >
-                  Generate follow-up with AskBob
-                </Link>
-              </div>
-            )}
-
-            {jobId && customerId && (
-              <AskBobAfterCallCard
-                callId={call.id}
-                workspaceId={workspace.id}
-                jobId={jobId}
-                customerId={customerId}
-                hasAskBobScriptBody={Boolean(askBobScriptBody)}
-                callNotes={latestPhoneMessageBody ?? null}
-                hasHumanNotes={Boolean(latestPhoneMessageBody)}
-                hasOutcomeSaved={
-                  Boolean(call.outcome_recorded_at) ||
-                  Boolean(call.outcome_code) ||
-                  Boolean(call.outcome_notes?.trim())
-                }
-                hasOutcomeNotes={Boolean(call.outcome_notes?.trim())}
-                callReadiness={callReadiness}
-                generationSource="call_session"
-                automatedDialSnapshot={automatedDialSnapshot}
-                callSessionEnrichment={callSessionEnrichment}
-                isAskBobAutomatedCall={isAskBobAutomatedCall}
-                callDirection={call.direction ?? null}
-                reachedCustomer={call.reached_customer}
-                outcomeCode={call.outcome_code}
-                callSessionDraftBody={askBobAfterCallSnapshot?.draftMessageBody ?? null}
-              />
-            )}
-
-            {isInboundCall && (
-              <LinkCallContextCard
-                workspaceId={workspace.id}
-                callId={call.id}
-                direction={callDirectionNormalized}
-                fromNumber={call.from_number ?? null}
-                toNumber={call.to_number ?? null}
-                customerId={linkedCustomerId}
-                jobId={call.job_id ?? null}
-                customerOptions={customerOptions}
-                jobOptions={jobOptions}
-              />
-            )}
-            {isInboundCall && linkedCustomerId && (
-              <AskBobLiveGuidanceCard
-                workspaceId={workspace.id}
-                callId={call.id}
-                direction={callDirectionNormalized}
-                fromNumber={call.from_number ?? null}
-                toNumber={call.to_number ?? null}
-                customerId={linkedCustomerId}
-                jobId={call.job_id ?? null}
-                customerName={customerName}
-              jobTitle={job?.title ?? null}
+            <GuidedCallWorkspaceCard
+              prepare={prepareTab}
+              during={duringTab}
+              after={afterTab}
             />
-          )}
-
-            {showAutomatedOutcomeRequiredBanner && (
-              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
-                Call ended. Record outcome to generate a follow-up.
-              </div>
-            )}
-
-            <CallOutcomeCaptureCard
-              callId={call.id}
-              workspaceId={workspace.id}
-              initialOutcomeCode={call.outcome_code as CallOutcomeCode | null}
-              initialReachedCustomer={call.reached_customer}
-              initialNotes={call.outcome_notes}
-              initialRecordedAt={call.outcome_recorded_at}
-              initialLegacyOutcome={normalizeCallOutcome(call.outcome)}
-              hasAskBobScriptHint={hasAskBobScriptHint}
-              jobId={jobId}
-              automatedDialSnapshot={automatedDialSnapshot}
-              isAutomatedCallContext={isAskBobAutomatedCall}
-            />
-
-            {call && job && callScriptQuoteCandidate && (
-              <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">How this works</p>
-                <ol className="space-y-1 text-sm text-slate-400">
-                  <li className="flex gap-2">
-                    <span className="font-semibold text-slate-400">1.</span>
-                    <span>Review the script and key points on the right.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="font-semibold text-slate-400">2.</span>
-                    <span>Call the customer and walk through the guided checklist.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="font-semibold text-slate-400">3.</span>
-                    <span>Log what happened in the summary and send an optional follow-up.</span>
-                  </li>
-                </ol>
-              </div>
-            )}
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job</p>
-                <p className="text-lg font-semibold text-white">{displayJobTitle}</p>
-                <p className="text-xs text-slate-400">{jobStatus}</p>
-                {jobLink && (
-                  <Link
-                    href={jobLink}
-                    className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-                  >
-                    View job
-                  </Link>
-                )}
-              </div>
-
-              <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Quote</p>
-                <p className="text-lg font-semibold text-white">{displayQuoteLabel}</p>
-                <p className="text-xs text-slate-400">
-                  Status: {callScriptQuoteCandidate?.status ?? "Unknown"}
-                </p>
-                <p className="text-xs text-slate-400">
-                  Total: {formatCurrency(callScriptQuoteCandidate?.total ?? null)}
-                </p>
-                {quoteLink && (
-                  <Link
-                    href={quoteLink}
-                    className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-                  >
-                    View quote
-                  </Link>
-                )}
-              </div>
-            </div>
-          </HbCard>
+          </div>
 
           <div className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
             <div className="flex items-center justify-between">
@@ -1506,21 +1583,15 @@ export default async function CallSessionPage({
                   ))}
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Use the Start guided call button, work through the script, then capture a summary
-                  to unlock the follow-up suggestion.
+                  Use the Prepare, During, and After tabs to walk the call and finalize follow-up.
                 </p>
                 {job ? (
                   <>
                     <p className="text-sm text-slate-400">
                       {callScriptQuoteId
-                        ? "Use the guided script and checklist below to conduct this call and capture the outcome."
+                        ? "Review the guided script in Prepare, capture notes in During, then save the outcome in After."
                         : "No quote detected for this job; attach one so guided scripts and summaries work."}
                     </p>
-                    {callScriptQuoteId && (
-                      <p className="text-xs text-slate-400">
-                        Use the Start guided call button below when you’re actively on the phone.
-                      </p>
-                    )}
                   </>
                 ) : (
                   <p className="text-sm text-slate-400">
@@ -1528,36 +1599,9 @@ export default async function CallSessionPage({
                   </p>
                 )}
               </div>
-              {job ? (
-                <>
-                  {!callScriptQuoteId && (
-                    <p className="text-sm text-amber-200">
-                      Guided scripts require a quote; add one to this job to unlock the full experience.
-                    </p>
-                  )}
-                  {console.log("[calls/[id]] Guided workspace context", {
-                    callId: call.id,
-                    jobId: job.id,
-                    quoteId: callScriptQuoteId,
-                    context: "call-session",
-                  })}
-                  <JobCallScriptPanel
-                    quoteId={callScriptQuoteId}
-                    jobId={job.id}
-                    workspaceId={workspace.id}
-                    latestPhoneMessage={latestPhoneMessage}
-                    customerName={customerName}
-                    customerFirstName={customerFirstName}
-                    customerPhone={customerPhone}
-                    mode="callSession"
-                    context="call-session"
-                    callId={call.id}
-                    isInboundCall={isInboundCall}
-                  />
-                </>
-              ) : (
-                <p className="text-sm text-slate-400">
-                  Job record missing for this call. Please recreate the call from the job page or check your data.
+              {job && !callScriptQuoteId && (
+                <p className="text-sm text-amber-200">
+                  Guided scripts require a quote; add one to this job to unlock the full experience.
                 </p>
               )}
             </div>

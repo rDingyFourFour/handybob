@@ -82,6 +82,7 @@ type CallOutcomeCaptureCardProps = {
   jobId?: string | null;
   automatedDialSnapshot?: CallAutomatedDialSnapshot | null;
   isAutomatedCallContext?: boolean;
+  primaryVariant?: "primary" | "secondary" | "ghost";
 };
 
 export async function callOutcomeCaptureFormAction(
@@ -131,6 +132,7 @@ export default function CallOutcomeCaptureCard({
   actionStateOverride,
   automatedDialSnapshot,
   isAutomatedCallContext,
+  primaryVariant = "primary",
 }: CallOutcomeCaptureCardProps) {
   const hasExistingOutcome =
     Boolean(initialRecordedAt) ||
@@ -155,7 +157,13 @@ export default function CallOutcomeCaptureCard({
     blockingReason === "missing_outcome" || blockingReason === "missing_reached_flag";
   const blockingLoggedRef = useRef(false);
 
-  if (typeof window !== "undefined" && shouldLogBlockingReason && !blockingLoggedRef.current) {
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!shouldLogBlockingReason || blockingLoggedRef.current) {
+      return;
+    }
     console.log("[calls-after-call-outcome-blocking-visible]", {
       missingReason: blockingReason,
       isTerminal: Boolean(automatedDialSnapshot?.isTerminal),
@@ -164,7 +172,15 @@ export default function CallOutcomeCaptureCard({
       callId,
     });
     blockingLoggedRef.current = true;
-  }
+  }, [
+    automatedDialSnapshot?.hasOutcome,
+    automatedDialSnapshot?.isTerminal,
+    blockingReason,
+    callId,
+    hasExistingOutcome,
+    shouldLogBlockingReason,
+    workspaceId,
+  ]);
   const initialNotesValue = initialNotes ?? "";
   const [initialPrefillPayload] = useState<CallOutcomePrefillPayload | null>(() => {
     if (typeof window === "undefined" || hasExistingOutcome) {
@@ -513,7 +529,7 @@ export default function CallOutcomeCaptureCard({
             <div className="text-right">
               <HbButton
                 type="button"
-                variant="primary"
+                variant={primaryVariant}
                 size="sm"
                 onClick={beginEditing}
               >
@@ -630,7 +646,7 @@ export default function CallOutcomeCaptureCard({
               >
                 Cancel
               </button>
-              <HbButton type="submit" variant="primary" size="sm" disabled={pending}>
+            <HbButton type="submit" variant={primaryVariant} size="sm" disabled={pending}>
                 {pending ? "Saving…" : "Save outcome"}
               </HbButton>
             </div>

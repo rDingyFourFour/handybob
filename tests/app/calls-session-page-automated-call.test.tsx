@@ -119,6 +119,7 @@ describe("CallSessionPage automated call view", () => {
     expect(markup).toContain("Open job");
     expect(markup).toContain("Open AskBob on job");
     expect(markup).toContain("Automated call notes");
+    expect(markup).toContain('data-testid="guided-call-workspace-during"');
 
     const detailEvents = consoleLogSpy.mock.calls.filter(
       (args) => args[0] === "[calls-session-askbob-automated-details-visible]",
@@ -189,6 +190,7 @@ describe("CallSessionPage automated call view", () => {
     expect(markup).toContain("Twilio status");
     expect(markup).toContain("Recording available");
     expect(markup).toContain("Call ended. Record outcome to generate a follow-up.");
+    expect(markup).toContain('data-testid="guided-call-workspace-after"');
   });
 
   it("hides the automated call strip and notes card when metadata is absent", async () => {
@@ -235,8 +237,8 @@ describe("CallSessionPage automated call view", () => {
     expect(markup).not.toContain("Automated call");
     expect(markup).not.toContain("Call ended. Record outcome to generate a follow-up.");
     expect(markup).not.toContain("Automated call notes");
-    expect(markup).toContain('data-testid="call-session-timeline"');
-    expect(markup).toContain('data-testid="call-session-action-bar"');
+    expect(markup).toContain('data-testid="call-control-card"');
+    expect(markup).toContain('data-testid="guided-call-workspace"');
     const detailEvents = consoleLogSpy.mock.calls.filter(
       (args) => args[0] === "[calls-session-askbob-automated-details-visible]",
     );
