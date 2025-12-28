@@ -15,7 +15,7 @@ import JobAskBobFollowupPanel from "@/components/askbob/JobAskBobFollowupPanel";
 import JobAskBobPanel, { type JobDiagnosisContext } from "@/components/askbob/JobAskBobPanel";
 import JobAskBobAfterCallPanel from "@/components/askbob/JobAskBobAfterCallPanel";
 import JobAskBobContainer from "@/components/askbob/JobAskBobContainer";
-import AskBobAutomatedCallPanel from "@/components/askbob/AskBobAutomatedCallPanel";
+import { openOrCreateCallSessionForJobAction } from "@/app/(app)/jobs/actions/openOrCreateCallSessionForJobAction";
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import AskBobStepReadinessBadge, {
@@ -242,7 +242,6 @@ export default function JobAskBobFlow({
     initialFollowupSnapshot?.callTone ?? null,
   );
   const [callScriptSummary, setCallScriptSummary] = useState<string | null>(null);
-  const [callScriptBody, setCallScriptBody] = useState<string | null>(null);
   const [callScriptPersona, setCallScriptPersona] = useState<AskBobCallPersonaStyle | null>(null);
   const [
     callScriptFollowupCallIntents,
@@ -273,14 +272,7 @@ export default function JobAskBobFlow({
   const [schedulerResetToken, setSchedulerResetToken] = useState(0);
   const [afterCallCollapsed, setAfterCallCollapsed] = useState(false);
   const [afterCallResetToken, setAfterCallResetToken] = useState(0);
-  const [automatedCallSummary, setAutomatedCallSummary] = useState<string | null>(null);
-  const automatedCallDone = Boolean(automatedCallSummary);
-  const [automatedCallCollapsed, setAutomatedCallCollapsed] = useState(false);
-  const [automatedCallResetToken, setAutomatedCallResetToken] = useState(0);
-  const [automatedCallNotesForFollowup, setAutomatedCallNotesForFollowup] = useState<string | null>(null);
-  const [automatedCallSessionId, setAutomatedCallSessionId] = useState<string | null>(
-    automatedDialSnapshot?.callId ?? null,
-  );
+  const automatedCallNotesForFollowup = null;
   const [hydratedAfterCallSnapshot, setHydratedAfterCallSnapshot] =
     useState<AskBobAfterCallSnapshotPayload | null>(null);
   const [afterCallHydrationHint, setAfterCallHydrationHint] = useState<string | null>(null);
@@ -518,10 +510,8 @@ export default function JobAskBobFlow({
   const callScriptOrigin = "askbob-call-assist";
   const hasJobBasics = Boolean(normalizedJobTitle || normalizedJobDescription);
   const hasCustomerPhone = Boolean(customerPhoneNumber?.trim());
-  const hasCallScript = Boolean(callScriptSummary?.trim() || callScriptBody?.trim());
   const callSessionId =
     forcedAfterCallCallId ??
-    automatedCallSessionId ??
     automatedDialSnapshot?.callId ??
     afterCallCacheCallId ??
     resolvedLatestCallOutcome?.callId ??
@@ -531,8 +521,11 @@ export default function JobAskBobFlow({
       automatedDialSnapshot?.isTerminal ||
       forcedAfterCallCallId,
   );
-  const callSessionInProgress = Boolean(automatedDialSnapshot?.isInProgress);
   const isForcedCallSession = Boolean(forcedAfterCallCallId);
+  const [openCallSessionState, setOpenCallSessionState] = useState<{
+    status: "idle" | "loading" | "error";
+    message: string | null;
+  }>({ status: "idle", message: null });
   const stepReadiness: Record<string, AskBobStepReadiness> = {
     intake: {
       isReady: hasJobBasics,
@@ -571,14 +564,6 @@ export default function JobAskBobFlow({
       isReady: true,
       blockingReason: null,
     },
-    automatedCall: {
-      isReady: Boolean(hasCallScript && hasCustomerPhone && !callSessionInProgress),
-      blockingReason: callSessionInProgress
-        ? "Call already started. Open the call session to continue."
-        : hasCallScript && hasCustomerPhone
-          ? null
-          : "Generate a script and confirm customer phone first.",
-    },
   };
   const stepStatusItems = [
     { label: "Step 1 Intake", done: true },
@@ -594,7 +579,6 @@ export default function JobAskBobFlow({
         : "Step 8 · Manual after-call (job-only)",
       done: afterCallDone,
     },
-    { label: "Step 9 · AskBob automated call", done: automatedCallDone },
   ];
   const jobPipelineNextAction = (() => {
     if (!stepReadiness.intake.isReady) {
@@ -612,8 +596,8 @@ export default function JobAskBobFlow({
     return "Job pipeline complete. Move to the calling pipeline when ready.";
   })();
   const callingPipelineNextAction = callSessionActiveOrTerminal && callSessionId
-    ? "Open the call session to continue automated-call ownership."
-    : "Generate a call script (Step 7), then place the automated call (Step 9) to create a session.";
+    ? "Open the call session to choose how to place the call."
+    : "Open a call session to choose automated or manual guided calling.";
   const handleManualEscapeClick = (escapeType: "sms" | "calls_workspace") => {
     console.log("[askbob-calling-manual-escape-click]", {
       workspaceId,
@@ -621,15 +605,28 @@ export default function JobAskBobFlow({
       escapeType,
     });
   };
-  const handleOpenCallSessionClick = () => {
-    if (!callSessionId) {
-      return;
-    }
-    console.log("[askbob-open-call-session-click]", {
+  const handleOpenCallSessionClick = async () => {
+    console.log("[jobs-open-call-session-click]", {
       workspaceId,
       jobId,
-      callId: callSessionId,
     });
+    setOpenCallSessionState({ status: "loading", message: null });
+    const result = await openOrCreateCallSessionForJobAction({ jobId });
+    if (!result.ok) {
+      console.log("[jobs-open-call-session-result]", {
+        workspaceId,
+        jobId,
+        code: result.code,
+      });
+      setOpenCallSessionState({ status: "error", message: result.message });
+      return;
+    }
+    console.log("[jobs-open-call-session-result]", {
+      workspaceId,
+      jobId,
+    });
+    setOpenCallSessionState({ status: "idle", message: null });
+    router.push(`/calls/${result.callId}`);
   };
   const handleToggleStep = (
     stepKey: keyof typeof stepReadiness,
@@ -880,10 +877,6 @@ export default function JobAskBobFlow({
     setCallScriptCollapsed(false);
     setCallScriptPersona(null);
     setCallScriptResetToken((value) => value + 1);
-    setCallScriptBody(null);
-    setAutomatedCallSummary(null);
-    setAutomatedCallCollapsed(false);
-    setAutomatedCallResetToken((value) => value + 1);
   };
 
   const handleSchedulerReset = () => {
@@ -926,13 +919,6 @@ export default function JobAskBobFlow({
   const handleAfterCallReset = () => {
     setAfterCallResetToken((value) => value + 1);
     setAfterCallCollapsed(false);
-  };
-
-  const handleAutomatedCallReset = () => {
-    setAutomatedCallSummary(null);
-    setAutomatedCallCollapsed(false);
-    setAutomatedCallResetToken((value) => value + 1);
-    setAutomatedCallNotesForFollowup(null);
   };
 
   const handleJumpToCallAssist = () => {
@@ -1073,23 +1059,26 @@ export default function JobAskBobFlow({
                   Use these steps when you want to script, run, or summarize a call from this job.
                 </p>
               </div>
-              {callSessionId && (
-                <HbButton
-                  as={Link}
-                  href={`/calls/${callSessionId}`}
-                  size="sm"
-                  variant="secondary"
-                  className="px-3"
-                  onClick={handleOpenCallSessionClick}
-                >
-                  Open call session
-                </HbButton>
-              )}
+              <HbButton
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="px-3"
+                onClick={handleOpenCallSessionClick}
+                disabled={openCallSessionState.status === "loading"}
+              >
+                {openCallSessionState.status === "loading"
+                  ? "Opening call session..."
+                  : "Open call session"}
+              </HbButton>
             </div>
             <div className="space-y-1 text-xs text-slate-300">
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Next best action</p>
               <p className="text-sm text-slate-200">{callingPipelineNextAction}</p>
             </div>
+            {openCallSessionState.status === "error" && openCallSessionState.message && (
+              <p className="text-xs text-rose-300">{openCallSessionState.message}</p>
+            )}
           </div>
           <div className="rounded-2xl border border-slate-800 bg-slate-950/40 px-4 py-3">
             <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Manual options</p>
@@ -1207,7 +1196,6 @@ export default function JobAskBobFlow({
               onCallScriptPersonaChange={setCallScriptPersona}
               callScriptSummary={callScriptSummary}
               onCallScriptSummaryChange={setCallScriptSummary}
-              onCallScriptBodyChange={setCallScriptBody}
               onStartCallWithScript={handleStartCallWithScript}
               latestCallOutcome={resolvedLatestCallOutcome}
               latestCallOutcomeLabel={latestCallOutcomeReference}
@@ -1240,33 +1228,6 @@ export default function JobAskBobFlow({
               forcedAfterCallCallId={forcedAfterCallCallId ?? undefined}
               forcedAfterCallHasTranscript={Boolean(forcedAfterCallHasTranscript)}
               stepReadiness={stepReadiness.afterCall}
-            />
-          </AskBobSection>
-          <AskBobSection id="askbob-automated-call">
-            <AskBobAutomatedCallPanel
-              workspaceId={workspaceId}
-              jobId={jobId}
-              customerId={customerId ?? null}
-              customerDisplayName={customerDisplayName ?? null}
-              customerPhoneNumber={customerPhoneNumber ?? null}
-              jobTitle={normalizedJobTitle || null}
-              jobDescription={jobDescription ?? null}
-              callScriptBody={callScriptBody}
-              callScriptSummary={callScriptSummary}
-              latestCallOutcomeLabel={latestCallOutcomeReference}
-              stepCompleted={automatedCallDone}
-              stepCollapsed={automatedCallCollapsed}
-              onToggleCollapse={() =>
-                handleToggleStep("automatedCall", automatedCallCollapsed, setAutomatedCallCollapsed)
-              }
-              resetToken={automatedCallResetToken}
-              onReset={handleAutomatedCallReset}
-              onStartCallWithScript={handleStartCallWithScript}
-              onAutomatedCallSuccess={setAutomatedCallSummary}
-              onAutomatedCallNotesChange={setAutomatedCallNotesForFollowup}
-              onAutomatedCallSessionIdChange={setAutomatedCallSessionId}
-              automatedDialSnapshot={automatedDialSnapshot}
-              stepReadiness={stepReadiness.automatedCall}
             />
           </AskBobSection>
         </div>

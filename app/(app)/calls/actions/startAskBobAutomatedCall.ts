@@ -30,6 +30,7 @@ import {
 const StartAskBobAutomatedCallSchema = z.object({
   workspaceId: z.string().min(1),
   jobId: z.string().min(1),
+  callId: z.string().optional().nullable(),
   customerId: z.string().optional().nullable(),
   customerPhone: z.string().min(1),
   callIntents: z.array(z.string()).optional().nullable(),
@@ -369,54 +370,72 @@ export async function startAskBobAutomatedCall(
   let call: CallSessionRow | null = null;
   let callId: string | null = null;
 
-  const existingCallResponse = await supabase
-    .from("calls")
-    .select("id, twilio_call_sid, twilio_status")
-    .eq("workspace_id", workspace.id)
-    .eq("job_id", params.jobId)
-    .eq("direction", "outbound")
-    .order("created_at", { ascending: false })
-    .limit(1);
+  const preferredCallId = normalizeCandidate(params.callId ?? null);
+  if (preferredCallId) {
+    const { data: preferredCall, error: preferredError } = await supabase
+      .from("calls")
+      .select("id, workspace_id, job_id, twilio_call_sid, twilio_status")
+      .eq("id", preferredCallId)
+      .maybeSingle();
 
-  if (existingCallResponse.error) {
-    return buildFailureResponse({
-      reason: "call_creation_failed",
-      message: "We couldn’t start the automated call right now. Please try again.",
-      diagnostics: serializeDiagnostics(existingCallResponse.error),
-    });
-  }
+    if (preferredError) {
+      return buildFailureResponse({
+        reason: "call_creation_failed",
+        message: "We couldn’t start the automated call right now. Please try again.",
+        diagnostics: serializeDiagnostics(preferredError),
+      });
+    }
 
-  const existingCallData = existingCallResponse.data;
-  const existingCall = Array.isArray(existingCallData)
-    ? (existingCallData[0] as CallSessionRow) ?? null
-    : (existingCallData as CallSessionRow | null);
+    if (!preferredCall) {
+      return buildFailureResponse({
+        reason: "call_not_found",
+        message: "We couldn’t find that call session.",
+        diagnostics: { message: "Preferred call session missing." },
+      });
+    }
 
-  if (existingCall) {
-    const normalizedExistingStatus = existingCall.twilio_status?.toLowerCase() ?? null;
-    const isTerminalFailure =
-      normalizedExistingStatus !== null && TWILIO_DIAL_FAILURE_STATUSES.has(normalizedExistingStatus);
-    const isCompleted = normalizedExistingStatus === "completed";
-    const isDialingInProgress =
-      normalizedExistingStatus !== null && TWILIO_DIAL_IN_PROGRESS_STATUSES.has(normalizedExistingStatus);
+    if (preferredCall.workspace_id !== workspace.id) {
+      return buildFailureResponse({
+        reason: "call_not_owned",
+        message: "We couldn’t start the automated call from this workspace.",
+        diagnostics: { message: "Call session workspace mismatch." },
+      });
+    }
 
-    if (isDialingInProgress) {
+    if (preferredCall.job_id !== params.jobId) {
+      return buildFailureResponse({
+        reason: "call_job_mismatch",
+        message: "We couldn’t start the automated call for this job.",
+        diagnostics: { message: "Call session job mismatch." },
+      });
+    }
+
+    const normalizedPreferredStatus = preferredCall.twilio_status?.toLowerCase() ?? null;
+    const preferredIsTerminalFailure =
+      normalizedPreferredStatus !== null && TWILIO_DIAL_FAILURE_STATUSES.has(normalizedPreferredStatus);
+    const preferredIsCompleted = normalizedPreferredStatus === "completed";
+    const preferredIsDialingInProgress =
+      normalizedPreferredStatus !== null &&
+      TWILIO_DIAL_IN_PROGRESS_STATUSES.has(normalizedPreferredStatus);
+
+    if (preferredIsDialingInProgress) {
       logGuardOutcome("reused_existing_session", {
-        callId: existingCall.id,
-        twilioStatus: normalizedExistingStatus,
+        callId: preferredCall.id,
+        twilioStatus: normalizedPreferredStatus,
       });
       return {
         status: "already_in_progress",
         code: "already_in_progress",
         message: "Call is already in progress. Open call session.",
-        callId: existingCall.id,
-        twilioStatus: existingCall.twilio_status ?? null,
-        twilioCallSid: existingCall.twilio_call_sid ?? null,
+        callId: preferredCall.id,
+        twilioStatus: preferredCall.twilio_status ?? null,
+        twilioCallSid: preferredCall.twilio_call_sid ?? null,
       };
     }
 
-    if (isCompleted) {
+    if (preferredIsCompleted) {
       logGuardOutcome("rejected_due_to_completed_call", {
-        callId: existingCall.id,
+        callId: preferredCall.id,
         twilioStatus: "completed",
       });
       return {
@@ -424,17 +443,93 @@ export async function startAskBobAutomatedCall(
         code: "rejected_due_to_completed_call",
         message:
           "The automated call for this job already completed. Reach out if you need to place another one.",
-        callId: existingCall.id,
-        twilioStatus: existingCall.twilio_status ?? null,
-        twilioCallSid: existingCall.twilio_call_sid ?? null,
+        callId: preferredCall.id,
+        twilioStatus: preferredCall.twilio_status ?? null,
+        twilioCallSid: preferredCall.twilio_call_sid ?? null,
       };
     }
 
-    if (isTerminalFailure) {
+    if (!preferredIsTerminalFailure) {
+      call = preferredCall as CallSessionRow;
+      callId = preferredCall.id;
+    } else {
       logGuardOutcome("created_new_session_after_failure", {
-        previousCallId: existingCall.id,
-        previousTwilioStatus: normalizedExistingStatus,
+        previousCallId: preferredCall.id,
+        previousTwilioStatus: normalizedPreferredStatus,
       });
+    }
+  }
+
+  if (!call) {
+    const existingCallResponse = await supabase
+      .from("calls")
+      .select("id, twilio_call_sid, twilio_status")
+      .eq("workspace_id", workspace.id)
+      .eq("job_id", params.jobId)
+      .eq("direction", "outbound")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (existingCallResponse.error) {
+      return buildFailureResponse({
+        reason: "call_creation_failed",
+        message: "We couldn’t start the automated call right now. Please try again.",
+        diagnostics: serializeDiagnostics(existingCallResponse.error),
+      });
+    }
+
+    const existingCallData = existingCallResponse.data;
+    const existingCall = Array.isArray(existingCallData)
+      ? (existingCallData[0] as CallSessionRow) ?? null
+      : (existingCallData as CallSessionRow | null);
+
+    if (existingCall) {
+      const normalizedExistingStatus = existingCall.twilio_status?.toLowerCase() ?? null;
+      const isTerminalFailure =
+        normalizedExistingStatus !== null &&
+        TWILIO_DIAL_FAILURE_STATUSES.has(normalizedExistingStatus);
+      const isCompleted = normalizedExistingStatus === "completed";
+      const isDialingInProgress =
+        normalizedExistingStatus !== null &&
+        TWILIO_DIAL_IN_PROGRESS_STATUSES.has(normalizedExistingStatus);
+
+      if (isDialingInProgress) {
+        logGuardOutcome("reused_existing_session", {
+          callId: existingCall.id,
+          twilioStatus: normalizedExistingStatus,
+        });
+        return {
+          status: "already_in_progress",
+          code: "already_in_progress",
+          message: "Call is already in progress. Open call session.",
+          callId: existingCall.id,
+          twilioStatus: existingCall.twilio_status ?? null,
+          twilioCallSid: existingCall.twilio_call_sid ?? null,
+        };
+      }
+
+      if (isCompleted) {
+        logGuardOutcome("rejected_due_to_completed_call", {
+          callId: existingCall.id,
+          twilioStatus: "completed",
+        });
+        return {
+          status: "failure",
+          code: "rejected_due_to_completed_call",
+          message:
+            "The automated call for this job already completed. Reach out if you need to place another one.",
+          callId: existingCall.id,
+          twilioStatus: existingCall.twilio_status ?? null,
+          twilioCallSid: existingCall.twilio_call_sid ?? null,
+        };
+      }
+
+      if (isTerminalFailure) {
+        logGuardOutcome("created_new_session_after_failure", {
+          previousCallId: existingCall.id,
+          previousTwilioStatus: normalizedExistingStatus,
+        });
+      }
     }
   }
 
@@ -520,35 +615,39 @@ export async function startAskBobAutomatedCall(
     });
   };
 
-  const callResult = await createCallSessionForJobQuote({
-    supabase,
-    workspaceId: workspace.id,
-    userId: user.id,
-    jobId: params.jobId,
-    customerId: resolvedCustomerId,
-    fromNumber,
-    toNumber: normalizedCustomerPhone,
-    quoteId: null,
-    scriptBody: scriptBodyPayload,
-    summaryOverride,
-  });
-
-  if (!callResult.success) {
-    return buildFailureResponse({
-      reason: "call_creation_failed",
-      message: "We couldn’t start the automated call right now. Please try again.",
-      diagnostics: serializeDiagnostics(callResult.error),
+  if (!call) {
+    const callResult = await createCallSessionForJobQuote({
+      supabase,
+      workspaceId: workspace.id,
+      userId: user.id,
+      jobId: params.jobId,
+      customerId: resolvedCustomerId,
+      fromNumber,
+      toNumber: normalizedCustomerPhone,
+      quoteId: null,
+      scriptBody: scriptBodyPayload,
+      summaryOverride,
     });
+
+    if (!callResult.success) {
+      return buildFailureResponse({
+        reason: "call_creation_failed",
+        message: "We couldn’t start the automated call right now. Please try again.",
+        diagnostics: serializeDiagnostics(callResult.error),
+      });
+    }
+
+    call = callResult.call;
+    callId = call.id;
+
+    console.log("[calls-automated-call-session-created]", {
+      callId,
+      workspaceId: call.workspace_id,
+      jobId: call.job_id,
+    });
+  } else if (!callId) {
+    callId = call.id;
   }
-
-  call = callResult.call;
-  callId = call.id;
-
-  console.log("[calls-automated-call-session-created]", {
-    callId,
-    workspaceId: call.workspace_id,
-    jobId: call.job_id,
-  });
 
   let initGateResult: Awaited<ReturnType<typeof markCallSessionDialRequested>>;
   try {

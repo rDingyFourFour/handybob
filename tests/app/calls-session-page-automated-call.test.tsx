@@ -117,7 +117,7 @@ describe("CallSessionPage automated call view", () => {
     expect(markup).toContain("Not available");
     expect(markup).toContain("Enabled");
     expect(markup).toContain("Open job");
-    expect(markup).toContain("Open AskBob on job");
+    expect(markup).not.toContain("Open AskBob on job");
     expect(markup).toContain("Automated call notes");
     expect(markup).toContain('data-testid="guided-call-workspace-during"');
 

@@ -48,11 +48,6 @@ vi.mock("@/components/askbob/JobAskBobAfterCallPanel", () => ({
   default: () => <div data-testid="askbob-step-8">Step 8</div>,
 }));
 
-vi.mock("@/components/askbob/AskBobAutomatedCallPanel", () => ({
-  __esModule: true,
-  default: () => <div data-testid="askbob-step-9">Step 9</div>,
-}));
-
 describe("job detail AskBob step order", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
@@ -117,7 +112,6 @@ describe("job detail AskBob step order", () => {
       "askbob-step-6",
       "askbob-step-7",
       "askbob-step-8",
-      "askbob-step-9",
     ]);
   });
 });

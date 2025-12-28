@@ -128,10 +128,13 @@ export type CallSessionFollowupReadinessReason =
 
 export type CallSessionPrimaryCtaReasonCode =
   | "start_automated_call"
+  | "start_guided_call"
+  | "select_call_mode"
   | "ready"
   | "not_terminal"
   | "missing_outcome"
   | "missing_reached_flag"
+  | "missing_call_context"
   | "missing_followup_context"
   | "missing_job_link"
   | "draft_ready"
@@ -199,7 +202,11 @@ export function mapCtaReasonCodeToExplanation(
 ): string {
   switch (reasonCode) {
     case "start_automated_call":
-      return "Ready to open the automated call panel.";
+      return "Ready to start the automated call.";
+    case "start_guided_call":
+      return "Ready to start the guided call.";
+    case "select_call_mode":
+      return "Choose a call mode to continue.";
     case "ready":
       if (ctaKind === "open-composer") {
         return "Draft ready. Open the composer to review and send.";
@@ -211,6 +218,8 @@ export function mapCtaReasonCodeToExplanation(
       return "Outcome required. Save the outcome to unlock follow-up.";
     case "missing_reached_flag":
       return "Reach status required. Confirm whether the customer was reached.";
+    case "missing_call_context":
+      return "Add a call script and customer phone to start the call.";
     case "missing_followup_context":
       return "Add a call summary or outcome notes to generate follow-up.";
     case "missing_job_link":
@@ -218,7 +227,10 @@ export function mapCtaReasonCodeToExplanation(
         return "Link a job to open the composer.";
       }
       if (ctaKind === "start-automated-call") {
-        return "Link a job to open the automated call panel.";
+        return "Link a job to start the automated call.";
+      }
+      if (ctaKind === "start-guided-call") {
+        return "Link a job to start the guided call.";
       }
       return "Link a job to continue.";
     case "draft_ready":
@@ -543,6 +555,47 @@ export async function updateCallSessionAutomatedNotes(
   }
 
   return sanitized;
+}
+
+export type PreferredCallSession = {
+  id: string;
+  twilio_status?: string | null;
+  created_at?: string | null;
+};
+
+export async function findPreferredCallSessionForJob({
+  supabase,
+  workspaceId,
+  jobId,
+}: {
+  supabase: SupabaseClient;
+  workspaceId: string;
+  jobId: string;
+}): Promise<PreferredCallSession | null> {
+  const { data, error } = await supabase
+    .from("calls")
+    .select("id, twilio_status, created_at")
+    .eq("workspace_id", workspaceId)
+    .eq("job_id", jobId)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  const preferred =
+    data.find((row) => !isTerminalTwilioDialStatus(row.twilio_status ?? null)) ?? data[0];
+
+  return {
+    id: preferred.id,
+    twilio_status: preferred.twilio_status ?? null,
+    created_at: preferred.created_at ?? null,
+  };
 }
 
 export type EnsureInboundCallSessionParams = {

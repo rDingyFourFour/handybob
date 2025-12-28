@@ -14,7 +14,17 @@ describe("mapCtaReasonCodeToExplanation", () => {
     {
       code: "start_automated_call",
       ctaKind: "start-automated-call",
-      expected: "Ready to open the automated call panel.",
+      expected: "Ready to start the automated call.",
+    },
+    {
+      code: "start_guided_call",
+      ctaKind: "start-guided-call",
+      expected: "Ready to start the guided call.",
+    },
+    {
+      code: "select_call_mode",
+      ctaKind: "disabled",
+      expected: "Choose a call mode to continue.",
     },
     {
       code: "ready",
@@ -35,6 +45,11 @@ describe("mapCtaReasonCodeToExplanation", () => {
       code: "missing_reached_flag",
       ctaKind: "capture-outcome",
       expected: "Reach status required. Confirm whether the customer was reached.",
+    },
+    {
+      code: "missing_call_context",
+      ctaKind: "start-automated-call",
+      expected: "Add a call script and customer phone to start the call.",
     },
     {
       code: "missing_followup_context",
@@ -77,10 +92,13 @@ describe("mapCtaReasonCodeToExplanation", () => {
     const exhaustiveCheck = (value: CallSessionPrimaryCtaReasonCode): CallSessionPrimaryCtaReasonCode => {
       switch (value) {
         case "start_automated_call":
+        case "start_guided_call":
+        case "select_call_mode":
         case "ready":
         case "not_terminal":
         case "missing_outcome":
         case "missing_reached_flag":
+        case "missing_call_context":
         case "missing_followup_context":
         case "missing_job_link":
         case "draft_ready":

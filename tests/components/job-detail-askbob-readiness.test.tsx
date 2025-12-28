@@ -47,13 +47,6 @@ vi.mock("@/components/askbob/AskBobCallAssistPanel", () => ({
   ),
 }));
 
-vi.mock("@/components/askbob/AskBobAutomatedCallPanel", () => ({
-  __esModule: true,
-  default: (props: { stepReadiness?: { isReady?: boolean; blockingReason?: string | null } }) => (
-    <div data-testid="readiness-automated-call">{renderReadiness(props.stepReadiness)}</div>
-  ),
-}));
-
 describe("job detail AskBob readiness gating", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
@@ -91,13 +84,10 @@ describe("job detail AskBob readiness gating", () => {
     expect(container.querySelector('[data-testid="readiness-call-assist"]')?.textContent).toContain(
       "Not ready: Add a customer phone number first.",
     );
-    expect(container.querySelector('[data-testid="readiness-automated-call"]')?.textContent).toContain(
-      "Not ready: Generate a script and confirm customer phone first.",
-    );
     expect(container.textContent).toContain("Step 8 · Manual after-call (job-only)");
   });
 
-  it("blocks Step 9 and shows the call session CTA when an automated call is in progress", async () => {
+  it("shows the call session CTA when an automated call is in progress", async () => {
     const { default: JobAskBobFlow } = await import("@/components/askbob/JobAskBobFlow");
 
     await act(async () => {
@@ -130,8 +120,5 @@ describe("job detail AskBob readiness gating", () => {
     });
 
     expect(container.textContent).toContain("Open call session");
-    expect(container.querySelector('[data-testid="readiness-automated-call"]')?.textContent).toContain(
-      "Not ready: Call already started. Open the call session to continue.",
-    );
   });
 });

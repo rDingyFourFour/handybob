@@ -13,7 +13,6 @@ vi.mock("next/navigation", () => ({
 let capturedPanelProps: Record<string, unknown> | null = null;
 let capturedFollowupProps: Record<string, unknown> | null = null;
 let capturedContainerProps: Record<string, unknown> | null = null;
-let capturedAutomatedCallProps: Record<string, unknown> | null = null;
 
 vi.mock("@/components/askbob/AskBobCallAssistPanel", () => ({
   __esModule: true,
@@ -39,14 +38,6 @@ vi.mock("@/components/askbob/JobAskBobContainer", () => ({
   },
 }));
 
-vi.mock("@/components/askbob/AskBobAutomatedCallPanel", () => ({
-  __esModule: true,
-  default: (props: Record<string, unknown>) => {
-    capturedAutomatedCallProps = props;
-    return <div data-testid="mock-automated-call" />;
-  },
-}));
-
 describe("JobAskBobFlow wiring", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
@@ -58,7 +49,6 @@ describe("JobAskBobFlow wiring", () => {
     capturedPanelProps = null;
     capturedFollowupProps = null;
     capturedContainerProps = null;
-    capturedAutomatedCallProps = null;
     pushMock.mockClear();
   });
 
@@ -245,7 +235,7 @@ describe("JobAskBobFlow wiring", () => {
       label: string;
       done: boolean;
     }>;
-    expect(statusItems.length).toBe(9);
+    expect(statusItems.length).toBe(8);
     expect(statusItems.map((item) => item.label)).toEqual([
       "Step 1 Intake",
       "Step 2 Diagnose",
@@ -255,11 +245,9 @@ describe("JobAskBobFlow wiring", () => {
       "Step 6 Schedule visit",
       "Step 7 Prepare a phone call with AskBob",
       "Step 8 · Manual after-call (job-only)",
-      "Step 9 · AskBob automated call",
     ]);
     expect(statusItems.map((item) => item.done)).toEqual([
       true,
-      false,
       false,
       false,
       false,
@@ -272,61 +260,5 @@ describe("JobAskBobFlow wiring", () => {
     expect(capturedPanelProps?.stepCompleted).toBe(false);
     expect(capturedFollowupProps?.stepCollapsed).toBe(false);
     expect(capturedPanelProps?.stepCollapsed).toBe(false);
-  });
-
-  it("passes context into the AskBobAutomatedCallPanel", async () => {
-    const { default: JobAskBobFlow } = await import("@/components/askbob/JobAskBobFlow");
-    await act(async () => {
-      root?.render(
-        <JobAskBobFlow
-          workspaceId="workspace-1"
-          userId="user-1"
-          jobId="job-1"
-          customerId="customer-1"
-          customerDisplayName="Customer"
-          customerPhoneNumber="+15551234567"
-          jobDescription="desc"
-          jobTitle="title"
-          askBobLastTaskLabel={null}
-          askBobLastUsedAtDisplay={null}
-          askBobLastUsedAtIso={null}
-          askBobRunsSummary={null}
-          initialLastQuoteId={null}
-          lastQuoteCreatedAt={null}
-          lastQuoteCreatedAtFriendly={null}
-          initialDiagnoseSnapshot={null}
-          initialMaterialsSnapshot={null}
-          initialQuoteSnapshot={null}
-          initialFollowupSnapshot={{
-            recommendedAction: "Call to check in",
-            rationale: "Need an update",
-            steps: [],
-            shouldSendMessage: false,
-            shouldScheduleVisit: false,
-            shouldCall: true,
-            shouldWait: false,
-            modelLatencyMs: 0,
-            callRecommended: true,
-            callPurpose: "Explain quote",
-            callTone: "friendly and confident",
-          }}
-          lastQuoteSummary={null}
-          latestCallOutcome={{
-            callId: "call-1",
-            occurredAt: "2025-01-01T10:00:00Z",
-            reachedCustomer: true,
-            outcomeCode: "reached_needs_followup",
-            outcomeNotes: null,
-            isAskBobAssisted: false,
-          }}
-        />,
-      );
-      await Promise.resolve();
-    });
-
-    expect(capturedAutomatedCallProps).toBeTruthy();
-    expect(capturedAutomatedCallProps?.callScriptSummary).toBeNull();
-    expect(capturedAutomatedCallProps?.callScriptBody).toBeNull();
-    expect(capturedAutomatedCallProps?.latestCallOutcomeLabel).toContain("Needs follow-up");
   });
 });

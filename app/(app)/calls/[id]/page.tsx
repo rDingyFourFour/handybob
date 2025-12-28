@@ -42,9 +42,8 @@ import {
 import LinkCallContextCard from "./LinkCallContextCard";
 import AskBobLiveGuidanceCard from "./AskBobLiveGuidanceCard";
 import PostCallEnrichmentCard from "./PostCallEnrichmentCard";
-import CallControlCard from "./CallControlCard";
-import GuidedCallWorkspaceCard from "./GuidedCallWorkspaceCard";
 import CallManualNumberCard from "./CallManualNumberCard";
+import CallSessionHub from "./CallSessionHub";
 
 type CallRecord = {
   id: string;
@@ -361,8 +360,9 @@ export default async function CallSessionPage({
     Boolean(call.outcome_notes?.trim());
   const callHasReachedFlag =
     call.reached_customer === true || call.reached_customer === false;
+  const callSummaryValue = call.summary?.trim() ?? "";
   const callHasNotes = Boolean(
-    call.summary?.trim() ||
+    (callSummaryValue && !isAskBobScriptSummary(callSummaryValue)) ||
       call.ai_summary?.trim() ||
       call.outcome_notes?.trim() ||
       call.transcript?.trim(),
@@ -642,6 +642,9 @@ export default async function CallSessionPage({
   const hasCustomerPhone = Boolean(customerPhone?.trim());
   const scriptSummaryForManual = askBobScriptBody?.trim() || automaticSummaryPreview?.trim() || null;
   const hasScriptSummaryForManual = Boolean(scriptSummaryForManual);
+  const automatedScriptBody = scriptSummaryForManual;
+  const automatedScriptSummary = scriptSummaryForManual;
+  const hasAutomatedScript = Boolean(automatedScriptBody?.trim());
   const hasAfterCallDraft =
     Boolean(askBobAfterCallSnapshot?.draftMessageBody?.trim()) ||
     Boolean(callSessionEnrichment.hasAskBobDraft);
@@ -697,9 +700,10 @@ export default async function CallSessionPage({
     hasRecordingMetadata: automatedDialSnapshot.hasRecordingMetadata,
     hasRecordingDuration,
     hasAfterCallDraft,
+    component: "call-status-strip",
   });
 
-  const callControlTimelineRows = [
+  const callStatusStripItems = [
     {
       key: "created",
       label: "Created",
@@ -754,20 +758,33 @@ export default async function CallSessionPage({
   const hasOutcomeGap = callReadiness.reasons.some(
     (reason) => reason === "missing_outcome" || reason === "missing_reached_flag",
   );
-  const shouldStartAutomatedCall = isAskBobAutomatedCall && !hasDialRequestedMarker;
   const shouldRefreshStatus = hasDialRequestedMarker && !automatedDialSnapshot.isTerminal;
+  const automatedOutcomeReason = callReadiness.reasons.includes("missing_outcome")
+    ? "missing_outcome"
+    : "missing_reached_flag";
+  const canStartAutomatedCall = Boolean(jobId && customerPhone && hasAutomatedScript);
+  const canStartGuidedCall = Boolean(hasCustomerPhone);
 
-  const { primaryCta, ctaReasonCode } = (() => {
-    if (shouldStartAutomatedCall) {
-      const jobLink = jobId ? `/jobs/${jobId}?step=9` : null;
+  const automatedCtaState = (() => {
+    if (!hasDialRequestedMarker) {
       return {
         primaryCta: {
           kind: "start-automated-call",
-          label: "Open automated call panel",
-          href: jobLink ?? undefined,
-          disabled: !jobLink,
+          label: "Start automated call",
+          disabled: !canStartAutomatedCall,
+          automatedCallPayload: canStartAutomatedCall
+            ? {
+                workspaceId: workspace.id,
+                jobId: jobId ?? "",
+                customerId,
+                customerPhone: customerPhone ?? "",
+                scriptBody: automatedScriptBody ?? "",
+                scriptSummary: automatedScriptSummary,
+                callId: call.id,
+              }
+            : null,
         },
-        ctaReasonCode: jobLink ? "start_automated_call" : "missing_job_link",
+        ctaReasonCode: canStartAutomatedCall ? "start_automated_call" : "missing_call_context",
       };
     }
     if (shouldRefreshStatus) {
@@ -777,16 +794,13 @@ export default async function CallSessionPage({
       };
     }
     if (automatedDialSnapshot.isTerminal && hasOutcomeGap) {
-      const outcomeReason = callReadiness.reasons.includes("missing_outcome")
-        ? "missing_outcome"
-        : "missing_reached_flag";
       return {
         primaryCta: {
           kind: "capture-outcome",
-          label: "Capture outcome",
+          label: "Record outcome",
           workspaceNavigate: { tab: "after", hash: "#call-outcome-capture" },
         },
-        ctaReasonCode: outcomeReason,
+        ctaReasonCode: automatedOutcomeReason,
       };
     }
     if (callReadiness.isReady && !hasAfterCallDraft && canGenerateAfterCall) {
@@ -830,9 +844,87 @@ export default async function CallSessionPage({
       ctaReasonCode: fallbackReasonCode,
     };
   })();
-  const primaryCtaExplanation = mapCtaReasonCodeToExplanation(ctaReasonCode, primaryCta.kind);
 
-  const callControlModel = {
+  const manualCtaState = (() => {
+    if (shouldRefreshStatus) {
+      return {
+        primaryCta: { kind: "refresh-status", label: "Refresh status", disabled: false },
+        ctaReasonCode: callReadiness.ctaReasonCode,
+      };
+    }
+    if (automatedDialSnapshot.isTerminal && hasOutcomeGap) {
+      return {
+        primaryCta: {
+          kind: "capture-outcome",
+          label: "Record outcome",
+          workspaceNavigate: { tab: "after", hash: "#call-outcome-capture" },
+        },
+        ctaReasonCode: automatedOutcomeReason,
+      };
+    }
+    if (!callHasOutcome && !automatedDialSnapshot.isTerminal) {
+      return {
+        primaryCta: {
+          kind: "start-guided-call",
+          label: "Start guided call",
+          disabled: !canStartGuidedCall,
+          workspaceNavigate: { tab: "during", hash: "#guided-call-workspace-during" },
+        },
+        ctaReasonCode: canStartGuidedCall ? "start_guided_call" : "missing_call_context",
+      };
+    }
+    if (callReadiness.isReady && !hasAfterCallDraft && canGenerateAfterCall) {
+      return {
+        primaryCta: {
+          kind: "generate-followup",
+          label: "Generate follow-up",
+          workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
+        },
+        ctaReasonCode: "ready",
+      };
+    }
+    if (hasAfterCallDraft) {
+      const isComposerEnabled = Boolean(afterCallDraftBody && jobId);
+      const draftReasonCode = isComposerEnabled
+        ? "draft_ready"
+        : afterCallDraftBody
+        ? "draft_missing_job"
+        : "draft_missing_body";
+      return {
+        primaryCta: {
+          kind: "open-composer",
+          label: "Open composer",
+          disabled: !isComposerEnabled,
+        },
+        ctaReasonCode: draftReasonCode,
+      };
+    }
+    const fallbackReasonCode = callReadiness.isReady
+      ? hasAfterCallCard
+        ? "missing_followup_context"
+        : "missing_job_link"
+      : callReadiness.ctaReasonCode;
+    return {
+      primaryCta: {
+        kind: "generate-followup",
+        label: "Generate follow-up",
+        disabled: true,
+        workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
+      },
+      ctaReasonCode: fallbackReasonCode,
+    };
+  })();
+
+  const unselectedCtaState = {
+    primaryCta: {
+      kind: "disabled",
+      label: "Select a call mode",
+      disabled: true,
+    },
+    ctaReasonCode: "select_call_mode",
+  };
+
+  const callControlModelBase = {
     workspaceId: workspace.id,
     callId: call.id,
     identity: {
@@ -842,9 +934,7 @@ export default async function CallSessionPage({
       to: callToLabel,
       createdLabel: createdAtLabel,
     },
-    timelineRows: callControlTimelineRows,
-    primaryCta,
-    primaryCtaExplanation,
+    statusStripItems: callStatusStripItems,
     secondaryActions: {
       jobHref: jobId ? `/jobs/${jobId}` : null,
       callsHref: "/calls",
@@ -860,11 +950,44 @@ export default async function CallSessionPage({
       body: afterCallDraftBody,
     },
   };
+
+  const automatedCtaExplanation = mapCtaReasonCodeToExplanation(
+    automatedCtaState.ctaReasonCode,
+    automatedCtaState.primaryCta.kind,
+  );
+  const manualCtaExplanation = mapCtaReasonCodeToExplanation(
+    manualCtaState.ctaReasonCode,
+    manualCtaState.primaryCta.kind,
+  );
+  const unselectedCtaExplanation = mapCtaReasonCodeToExplanation(
+    unselectedCtaState.ctaReasonCode,
+    unselectedCtaState.primaryCta.kind,
+  );
+
+  const automatedCallControlModel = {
+    ...callControlModelBase,
+    primaryCta: automatedCtaState.primaryCta,
+    primaryCtaExplanation: automatedCtaExplanation,
+    ctaReasonCode: automatedCtaState.ctaReasonCode,
+  };
+  const manualCallControlModel = {
+    ...callControlModelBase,
+    primaryCta: manualCtaState.primaryCta,
+    primaryCtaExplanation: manualCtaExplanation,
+    ctaReasonCode: manualCtaState.ctaReasonCode,
+  };
+  const unselectedCallControlModel = {
+    ...callControlModelBase,
+    primaryCta: unselectedCtaState.primaryCta,
+    primaryCtaExplanation: unselectedCtaExplanation,
+    ctaReasonCode: unselectedCtaState.ctaReasonCode,
+  };
+
   console.log("[calls-session-primary-cta-visible]", {
     workspaceId: workspace.id,
     callId: call.id,
-    ctaKind: primaryCta.kind,
-    ctaReasonCode,
+    ctaKind: unselectedCtaState.primaryCta.kind,
+    ctaReasonCode: unselectedCtaState.ctaReasonCode,
   });
 
   const showNoScriptPanel = !callScriptQuoteId;
@@ -1178,6 +1301,132 @@ export default async function CallSessionPage({
     </div>
   );
 
+  const callStatusDetails = (
+    <div className="space-y-6">
+      <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-300">
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Created</p>
+          <p className="mt-1 text-base text-white">{createdAtLabel}</p>
+        </div>
+      </div>
+      {showTwilioStatus && (
+        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
+          <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
+            <span>Twilio status</span>
+            <CallStatusRefreshButton callId={call.id} />
+          </div>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span className="font-semibold text-white">{twilioStatusLabel ?? "Queued"}</span>
+            {twilioStatusUpdatedLabel && (
+              <span className="text-xs text-slate-500">
+                Updated {twilioStatusUpdatedLabel}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+      {isAskBobAutomatedCall && (
+        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
+          <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
+            <span>Automated call</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Voice</p>
+              <p className="text-sm text-white">{automaticVoiceLabel ?? "Not available"}</p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                Voicemail
+              </p>
+              <p className="text-sm text-white">
+                {voicemailEnabled === null
+                  ? "Not available"
+                  : voicemailEnabled
+                  ? "Enabled"
+                  : "Disabled"}
+              </p>
+            </div>
+            <div className="sm:col-span-3">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                Speech plan summary
+              </p>
+              <p className="text-sm text-white">
+                {automaticSummaryPreview ?? "Not available"}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 pt-2">
+            {jobId ? (
+              <>
+                <Link
+                  href={jobId ? `/jobs/${jobId}` : "#"}
+                  className="text-sm font-semibold text-sky-300 hover:text-sky-200"
+                  onClick={() =>
+                    console.log("[calls-session-askbob-automated-open-job-click]", {
+                      workspaceId: workspace.id,
+                      callId: call.id,
+                      jobId,
+                    })
+                  }
+                >
+                  Open job
+                </Link>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled
+                  className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500"
+                >
+                  Open job
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      {recordingCardVisible && (
+        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
+          <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
+            <span>Recording</span>
+            <span className="rounded-full border border-slate-800/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
+              {recordingAvailable ? "Recording available" : "Recording pending"}
+            </span>
+          </div>
+          {recordingAvailable ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {recordingDurationLabel && (
+                <p className="text-xs text-slate-400">
+                  Duration {recordingDurationLabel}
+                </p>
+              )}
+              <div className="flex items-center gap-2">
+                <CallRecordingLink callId={call.id} workspaceId={workspace.id} />
+                {recordingProcessingHintVisible && (
+                  <p className="text-[10px] text-slate-400">
+                    If this fails, refresh in a minute
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400">
+              A recording will appear here after the call completes.
+            </p>
+          )}
+        </div>
+      )}
+      {call.twilio_error_message && (
+        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-100">
+          <p className="text-xs uppercase tracking-[0.3em] text-rose-200">Call failed</p>
+          <p className="text-sm text-rose-100">{call.twilio_error_message}</p>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="hb-shell pt-20 pb-8">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -1207,167 +1456,27 @@ export default async function CallSessionPage({
               </div>
             )}
           </div>
-          <Link
-            href="/calls"
-            className="rounded-full border border-slate-800/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-100 hover:border-slate-600"
-          >
-            Back to calls
-          </Link>
-        </div>
+        <Link
+          href="/calls"
+          className="rounded-full border border-slate-800/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-100 hover:border-slate-600"
+        >
+          Back to calls
+        </Link>
+      </div>
 
-        <CallControlCard model={callControlModel} />
-
-        <div className="space-y-6">
-          <HbCard className="space-y-6">
-              <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-300">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Created</p>
-                  <p className="mt-1 text-base text-white">{createdAtLabel}</p>
-                </div>
-              </div>
-              {showTwilioStatus && (
-                <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
-                  <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
-                    <span>Twilio status</span>
-                    <CallStatusRefreshButton callId={call.id} />
-                  </div>
-                  <div className="flex flex-wrap items-baseline gap-2">
-                    <span className="font-semibold text-white">
-                      {twilioStatusLabel ?? "Queued"}
-                    </span>
-                    {twilioStatusUpdatedLabel && (
-                      <span className="text-xs text-slate-500">
-                        Updated {twilioStatusUpdatedLabel}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-              {isAskBobAutomatedCall && (
-                <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
-                  <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
-                    <span>Automated call</span>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Voice</p>
-                      <p className="text-sm text-white">
-                        {automaticVoiceLabel ?? "Not available"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Voicemail</p>
-                      <p className="text-sm text-white">
-                        {voicemailEnabled === null
-                          ? "Not available"
-                          : voicemailEnabled
-                          ? "Enabled"
-                          : "Disabled"}
-                      </p>
-                    </div>
-                    <div className="sm:col-span-3">
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                        Speech plan summary
-                      </p>
-                      <p className="text-sm text-white">
-                        {automaticSummaryPreview ?? "Not available"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    {jobId ? (
-                      <>
-                        <Link
-                          href={jobId ? `/jobs/${jobId}` : "#"}
-                          className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-                          onClick={() =>
-                            console.log("[calls-session-askbob-automated-open-job-click]", {
-                              workspaceId: workspace.id,
-                              callId: call.id,
-                              jobId,
-                            })
-                          }
-                        >
-                          Open job
-                        </Link>
-                        <Link
-                          href={`/jobs/${jobId}?step=9`}
-                          className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-                          onClick={() =>
-                            console.log("[calls-session-askbob-automated-open-job-askbob-click]", {
-                              workspaceId: workspace.id,
-                              callId: call.id,
-                              jobId,
-                            })
-                          }
-                        >
-                          Open AskBob on job
-                        </Link>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          disabled
-                          className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500"
-                        >
-                          Open job
-                        </button>
-                        <button
-                          type="button"
-                          disabled
-                          className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500"
-                        >
-                          Open AskBob on job
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-              {recordingCardVisible && (
-                <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
-                  <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
-                    <span>Recording</span>
-                    <span className="rounded-full border border-slate-800/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
-                      {recordingAvailable ? "Recording available" : "Recording pending"}
-                    </span>
-                  </div>
-                  {recordingAvailable ? (
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      {recordingDurationLabel && (
-                        <p className="text-xs text-slate-400">Duration {recordingDurationLabel}</p>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <CallRecordingLink callId={call.id} workspaceId={workspace.id} />
-                        {recordingProcessingHintVisible && (
-                          <p className="text-[10px] text-slate-400">
-                            If this fails, refresh in a minute
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-400">
-                      A recording will appear here after the call completes.
-                    </p>
-                  )}
-                </div>
-              )}
-              {call.twilio_error_message && (
-                <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-100">
-                  <p className="text-xs uppercase tracking-[0.3em] text-rose-200">Call failed</p>
-                  <p className="text-sm text-rose-100">{call.twilio_error_message}</p>
-                </div>
-              )}
-            </HbCard>
-
-            <GuidedCallWorkspaceCard
-              prepare={prepareTab}
-              during={duringTab}
-              after={afterTab}
-            />
-        </div>
+        <CallSessionHub
+          key={call.id}
+          callId={call.id}
+          workspaceId={workspace.id}
+          jobId={jobId}
+          automatedModel={automatedCallControlModel}
+          manualModel={manualCallControlModel}
+          unselectedModel={unselectedCallControlModel}
+          details={callStatusDetails}
+          prepare={prepareTab}
+          during={duringTab}
+          after={afterTab}
+        />
       </div>
     </div>
   );

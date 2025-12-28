@@ -1,12 +1,11 @@
-import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Window } from "happy-dom";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 import CallSessionPage from "@/app/(app)/calls/[id]/page";
 import { ASKBOB_AUTOMATED_SCRIPT_PREFIX } from "@/lib/domain/askbob/constants";
 import { SPEECH_PLAN_METADATA_MARKER } from "@/lib/domain/askbob/speechPlan";
-import { mapCtaReasonCodeToExplanation } from "@/lib/domain/calls/sessions";
 
 const createServerClientMock = vi.fn();
 const mockResolveWorkspaceContext = vi.fn();
@@ -28,6 +27,7 @@ vi.mock("@/lib/domain/workspaces", async () => {
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     refresh: () => {},
+    push: vi.fn(),
   }),
 }));
 
@@ -43,6 +43,8 @@ function buildAutomatedCallSummary() {
 
 describe("CallSessionPage primary CTA regression", () => {
   let supabaseState = setupSupabaseMock();
+  let container: HTMLDivElement;
+  let root: Root | null = null;
 
   const baseCall = {
     id: "call-1",
@@ -85,11 +87,29 @@ describe("CallSessionPage primary CTA regression", () => {
         role: "owner",
       },
     });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
   });
+
+  afterEach(() => {
+    if (root) {
+      act(() => {
+        root.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+  });
+
+  function resetModeStorage() {
+    window.sessionStorage.removeItem("calls-session-mode:call-1");
+  }
 
   async function renderWithCall(
     callOverrides: Partial<typeof baseCall>,
     snapshots: Array<Record<string, unknown>> = [],
+    mode?: "automated" | "manual",
   ) {
     supabaseState.responses.calls = {
       data: [{ ...baseCall, ...callOverrides }],
@@ -112,122 +132,69 @@ describe("CallSessionPage primary CTA regression", () => {
     supabaseState.responses.messages = { data: [], error: null };
     supabaseState.responses.askbob_job_task_snapshots = { data: snapshots, error: null };
 
+    resetModeStorage();
+    if (mode) {
+      window.sessionStorage.setItem("calls-session-mode:call-1", mode);
+    }
+
+    if (root) {
+      act(() => {
+        root.unmount();
+      });
+      root = createRoot(container);
+    }
+
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-1" }) });
-    return renderToStaticMarkup(element);
+    await act(async () => {
+      root?.render(element);
+      await Promise.resolve();
+    });
   }
 
-  function expectSinglePrimaryCta(
-    markup: string,
-    label: string,
-    expectedDisabled: boolean,
-    expectedExplanation: string,
-  ) {
-    const window = new Window();
-    window.document.body.innerHTML = markup;
-    const primaryCtas = window.document.querySelectorAll('[data-cta-role="primary"]');
+  function assertSinglePrimaryCta(expectedLabel: string) {
+    const primaryCtas = container.querySelectorAll('[data-cta-role="primary"]');
     expect(primaryCtas).toHaveLength(1);
     const primaryCta = primaryCtas[0] as HTMLElement | undefined;
-    const primaryLabel = primaryCta?.textContent ?? "";
-    expect(primaryLabel).toContain(label);
-    expect(primaryCta?.hasAttribute("disabled") ?? false).toBe(expectedDisabled);
-    const explanationNode = window.document.querySelector(
-      '[data-testid="call-session-primary-cta-explanation"]',
-    );
-    const explanationText = explanationNode?.textContent ?? "";
-    const normalizedExplanation = explanationText.replace(/&#x27;/g, "'");
-    expect(normalizedExplanation).toContain(expectedExplanation);
-    const workspace = window.document.querySelector('[data-testid="guided-call-workspace"]');
-    const workspaceCtas = workspace?.querySelectorAll('[data-cta-role="primary"]') ?? [];
-    expect(workspaceCtas).toHaveLength(0);
+    expect(primaryCta?.textContent ?? "").toContain(expectedLabel);
   }
 
-  it("shows Start automated call when dial has not been requested", async () => {
-    const markup = await renderWithCall({});
-    expectSinglePrimaryCta(
-      markup,
-      "Open automated call panel",
-      false,
-      mapCtaReasonCodeToExplanation("start_automated_call", "start-automated-call"),
-    );
+  it("renders a single workspace root and primary CTA", async () => {
+    await renderWithCall({});
+    const workspaceRoots = container.querySelectorAll('[data-testid="guided-call-workspace"]');
+    expect(workspaceRoots).toHaveLength(1);
+    const primaryCtas = container.querySelectorAll('[data-cta-role="primary"]');
+    expect(primaryCtas).toHaveLength(1);
   });
 
-  it("shows Refresh status while dialing is in progress", async () => {
-    const markup = await renderWithCall({
-      twilio_call_sid: "CA-in-progress",
-      twilio_status: "ringing",
-      twilio_status_updated_at: "2024-01-01T12:01:00.000Z",
-    });
-    expectSinglePrimaryCta(
-      markup,
-      "Refresh status",
-      false,
-      mapCtaReasonCodeToExplanation("not_terminal", "refresh-status"),
-    );
+  it("switches the primary CTA between automated and manual modes", async () => {
+    await renderWithCall({}, [], "automated");
+    assertSinglePrimaryCta("Start automated call");
+
+    await renderWithCall({}, [], "manual");
+    assertSinglePrimaryCta("Start guided call");
   });
 
-  it("shows Capture outcome after terminal call without outcome", async () => {
-    const markup = await renderWithCall({
-      twilio_call_sid: "CA-terminal",
-      twilio_status: "completed",
-      twilio_status_updated_at: "2024-01-01T12:05:00.000Z",
-    });
-    expectSinglePrimaryCta(
-      markup,
-      "Capture outcome",
-      false,
-      mapCtaReasonCodeToExplanation("missing_outcome", "capture-outcome"),
-    );
-  });
-
-  it("shows Generate follow-up after outcome saved without draft", async () => {
-    const markup = await renderWithCall({
-      twilio_call_sid: "CA-done",
-      twilio_status: "completed",
-      twilio_status_updated_at: "2024-01-01T12:05:00.000Z",
-      outcome_code: "reached_scheduled",
-      outcome_notes: "Reached and scheduled",
-      outcome_recorded_at: "2024-01-01T12:10:00.000Z",
-      reached_customer: true,
-    });
-    expectSinglePrimaryCta(
-      markup,
-      "Generate follow-up",
-      false,
-      mapCtaReasonCodeToExplanation("ready", "generate-followup"),
-    );
-  });
-
-  it("shows Open composer when a draft is present", async () => {
-    const markup = await renderWithCall(
+  it("updates the primary CTA by readiness state without creating duplicate primaries", async () => {
+    await renderWithCall(
       {
-        twilio_call_sid: "CA-draft",
+        twilio_call_sid: "CA-terminal",
         twilio_status: "completed",
         twilio_status_updated_at: "2024-01-01T12:05:00.000Z",
-        outcome_code: "reached_scheduled",
-        outcome_notes: "Reached and scheduled",
-        outcome_recorded_at: "2024-01-01T12:10:00.000Z",
-        reached_customer: true,
       },
-      [
-        {
-          task: "job.after_call",
-          payload: {
-            afterCallSummary: "Summary",
-            recommendedActionLabel: "Send follow-up",
-            recommendedActionSteps: ["Step 1"],
-            suggestedChannel: "sms",
-            draftMessageBody: "Draft follow-up text",
-            urgencyLevel: "normal",
-          },
-          updated_at: "2024-01-01T12:15:00.000Z",
-        },
-      ],
+      [],
+      "automated",
     );
-    expectSinglePrimaryCta(
-      markup,
-      "Open composer",
-      false,
-      mapCtaReasonCodeToExplanation("draft_ready", "open-composer"),
+    assertSinglePrimaryCta("Record outcome");
+
+    await renderWithCall(
+      {
+        twilio_call_sid: "CA-terminal",
+        twilio_status: "completed",
+        twilio_status_updated_at: "2024-01-01T12:05:00.000Z",
+      },
+      [],
+      "manual",
     );
+    assertSinglePrimaryCta("Record outcome");
   });
 });

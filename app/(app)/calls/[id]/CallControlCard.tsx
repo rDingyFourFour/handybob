@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import { cacheAskBobMessageDraft } from "@/utils/askbob/messageDraftCache";
+import CallStatusStrip from "@/components/calls/CallStatusStrip";
+import { startAskBobAutomatedCall } from "@/app/(app)/calls/actions/startAskBobAutomatedCall";
 
-type TimelineRow = {
+type StatusStripItem = {
   key: string;
   label: string;
   status: string;
@@ -18,6 +20,7 @@ type TimelineRow = {
 type PrimaryCta = {
   kind:
     | "start-automated-call"
+    | "start-guided-call"
     | "refresh-status"
     | "capture-outcome"
     | "generate-followup"
@@ -30,6 +33,15 @@ type PrimaryCta = {
     tab: "prepare" | "during" | "after";
     hash: string;
   };
+  automatedCallPayload?: {
+    workspaceId: string;
+    jobId: string;
+    customerId: string | null;
+    customerPhone: string;
+    scriptBody: string;
+    scriptSummary: string | null;
+    callId?: string;
+  } | null;
 };
 
 type CallControlCardModel = {
@@ -42,9 +54,10 @@ type CallControlCardModel = {
     to: string;
     createdLabel: string;
   };
-  timelineRows: TimelineRow[];
+  statusStripItems: StatusStripItem[];
   primaryCta: PrimaryCta;
   primaryCtaExplanation: string;
+  ctaReasonCode: string;
   secondaryActions: {
     jobHref: string | null;
     callsHref: string;
@@ -63,6 +76,8 @@ type CallControlCardModel = {
 
 type CallControlCardProps = {
   model: CallControlCardModel;
+  modeChooser?: ReactNode;
+  details?: ReactNode;
 };
 
 type CopyState = "idle" | "copied";
@@ -70,7 +85,7 @@ type CopyState = "idle" | "copied";
 const COPY_RESET_MS = 2000;
 const WORKSPACE_NAV_EVENT = "calls-session-workspace-navigate";
 
-export default function CallControlCard({ model }: CallControlCardProps) {
+export default function CallControlCard({ model, modeChooser, details }: CallControlCardProps) {
   const router = useRouter();
   const [numberCopyState, setNumberCopyState] = useState<CopyState>("idle");
   const [scriptCopyState, setScriptCopyState] = useState<CopyState>("idle");
@@ -238,6 +253,40 @@ export default function CallControlCard({ model }: CallControlCardProps) {
     });
   }, [hasDraft, model.callId, model.manualEscape.jobId, model.workspaceId]);
 
+  const [automatedCallState, setAutomatedCallState] = useState<{
+    status: "idle" | "loading" | "error";
+    message: string | null;
+  }>({ status: "idle", message: null });
+
+  const handleStartAutomatedCall = useCallback(async () => {
+    const payload = model.primaryCta.automatedCallPayload;
+    if (!payload || automatedCallState.status === "loading") {
+      return;
+    }
+    setAutomatedCallState({ status: "loading", message: null });
+    try {
+      const result = await startAskBobAutomatedCall(payload);
+      if (result.status === "failure") {
+        setAutomatedCallState({
+          status: "error",
+          message: result.message ?? "We couldn’t start the automated call.",
+        });
+        return;
+      }
+      const nextCallId = result.callId;
+      if (nextCallId && nextCallId !== model.callId) {
+        router.push(`/calls/${nextCallId}`);
+        return;
+      }
+      router.refresh();
+      setAutomatedCallState({ status: "idle", message: null });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "We couldn’t start the automated call.";
+      setAutomatedCallState({ status: "error", message });
+    }
+  }, [automatedCallState.status, model.callId, model.primaryCta.automatedCallPayload, router]);
+
   const handleOpenMessagesClick = useCallback(() => {
     console.log("[calls-session-manual-escape-open-messages-click]", {
       workspaceId: model.workspaceId,
@@ -284,6 +333,14 @@ export default function CallControlCard({ model }: CallControlCardProps) {
         </HbButton>
       );
     }
+    if (primaryCta.kind === "start-automated-call") {
+      const isDisabled = primaryCta.disabled || automatedCallState.status === "loading";
+      return (
+        <HbButton {...sharedProps} onClick={handleStartAutomatedCall} disabled={isDisabled}>
+          {automatedCallState.status === "loading" ? "Starting automated call..." : primaryCta.label}
+        </HbButton>
+      );
+    }
     if (primaryCta.workspaceNavigate) {
       return (
         <HbButton
@@ -315,8 +372,10 @@ export default function CallControlCard({ model }: CallControlCardProps) {
       </HbButton>
     );
   }, [
+    automatedCallState.status,
     handleOpenComposer,
     handleRefreshStatus,
+    handleStartAutomatedCall,
     handleWorkspaceNavigate,
     hasDraft,
     primaryCta,
@@ -342,25 +401,14 @@ export default function CallControlCard({ model }: CallControlCardProps) {
         </div>
       </div>
 
-      <div data-testid="call-control-card-timeline" className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call timeline</p>
-        <div className="space-y-2">
-          {model.timelineRows.map((row) => (
-            <div
-              key={row.key}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-sm"
-            >
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                  {row.label}
-                </p>
-                <p className="text-sm text-slate-100">{row.status}</p>
-              </div>
-              <p className="text-xs text-slate-400">{row.timestamp}</p>
-            </div>
-          ))}
-        </div>
+      <div data-testid="call-control-card-status-strip">
+        <CallStatusStrip items={model.statusStripItems} />
       </div>
+      {modeChooser ? (
+        <div data-testid="call-control-card-mode-chooser" className="space-y-2">
+          {modeChooser}
+        </div>
+      ) : null}
 
       <div className="space-y-2 rounded-xl border border-slate-800/60 bg-slate-950/60 p-3">
         <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Primary</p>
@@ -368,6 +416,9 @@ export default function CallControlCard({ model }: CallControlCardProps) {
         <div data-testid="call-session-primary-cta-explanation">
           <p className="text-xs text-slate-400">{model.primaryCtaExplanation}</p>
         </div>
+        {automatedCallState.status === "error" && automatedCallState.message && (
+          <p className="text-xs text-rose-300">{automatedCallState.message}</p>
+        )}
       </div>
 
       <div className="space-y-2 rounded-xl border border-slate-800/60 bg-slate-950/60 p-3">
@@ -462,6 +513,7 @@ export default function CallControlCard({ model }: CallControlCardProps) {
           </p>
         )}
       </div>
+      {details ? <div data-testid="call-control-card-details">{details}</div> : null}
     </HbCard>
   );
 }

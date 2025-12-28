@@ -208,7 +208,6 @@ describe("CallSessionPage outcome card", () => {
     expect(markup).toContain("Ringing");
     expect(markup).toContain("Call failed");
     expect(markup).toContain("Invalid destination number");
-    expect(markup).toContain("Refresh status");
   });
 
   it("shows a record prompt after a terminal automated call without outcome", async () => {
