@@ -53,6 +53,7 @@ import {
   parsePublicBookingHandoffSignal,
   PUBLIC_BOOKING_HANDOFF_SESSION_KEY,
 } from "@/lib/domain/publicBookingHandoff";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 const MAX_SCRIPT_QUERY_LENGTH = 4000;
 const PUBLIC_BOOKING_HANDOFF_MAX_AGE_MS = 15 * 60 * 1000;
@@ -591,8 +592,8 @@ export default function JobAskBobFlow({
     return "Job pipeline complete. Move to the calling pipeline when ready.";
   })();
   const callingPipelineNextAction = callSessionActiveOrTerminal && callSessionId
-    ? "Open the call session to choose how to place the call."
-    : "Open a call session to choose automated or manual guided calling.";
+    ? callSessionCopy.jobDetail.nextActionActive
+    : callSessionCopy.jobDetail.nextActionNew;
   const handleOpenCallSessionClick = async () => {
     console.log("[jobs-open-call-session-click]", {
       workspaceId,
@@ -1013,7 +1014,7 @@ export default function JobAskBobFlow({
               <div className="space-y-1">
                 <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Calling pipeline</p>
                 <p className="text-sm text-slate-300">
-                  Use these steps when you want to script, run, or summarize a call from this job.
+                  {callSessionCopy.jobDetail.helper}
                 </p>
               </div>
               <HbButton
@@ -1025,8 +1026,8 @@ export default function JobAskBobFlow({
                 disabled={openCallSessionState.status === "loading"}
               >
                 {openCallSessionState.status === "loading"
-                  ? "Opening call session..."
-                  : "Open call session"}
+                  ? callSessionCopy.jobDetail.opening
+                  : callSessionCopy.jobDetail.openCallSessionCta}
               </HbButton>
             </div>
             <div className="space-y-1 text-xs text-slate-300">

@@ -26,13 +26,14 @@ import {
   getCallSessionOutcomeMissingReason,
   type CallAutomatedDialSnapshot,
 } from "@/lib/domain/calls/sessions";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 const NOTES_MAX_LENGTH = 1000;
 
 const REACH_OPTIONS: Array<{ value: boolean | null; label: string }> = [
-  { value: true, label: "Reached" },
-  { value: false, label: "No answer" },
-  { value: null, label: "Not sure" },
+  { value: true, label: callSessionCopy.wrapUp.outcome.reachOptions.reached },
+  { value: false, label: callSessionCopy.wrapUp.outcome.reachOptions.noAnswer },
+  { value: null, label: callSessionCopy.wrapUp.outcome.reachOptions.notSure },
 ];
 
 const PREFILL_CACHE_LOGGED = new Set<string>();
@@ -263,7 +264,7 @@ export default function CallOutcomeCaptureCard({
         notesLength,
       });
       startTransition(() => {
-        setConfirmationMessage("Saved just now");
+        setConfirmationMessage(callSessionCopy.wrapUp.outcome.savedJustNow);
         setSavedOutcome({
           reachedCustomer: actionState.reachedCustomer,
           outcomeCode: actionState.outcomeCode,
@@ -435,7 +436,7 @@ export default function CallOutcomeCaptureCard({
       return formatRecordedAtLabel(savedOutcome.recordedAt);
     }
     if (savedOutcome.legacyOutcome) {
-      return "Recorded with legacy outcome data.";
+      return callSessionCopy.wrapUp.outcome.legacyRecorded;
     }
     return null;
   }, [savedOutcome.recordedAt, savedOutcome.legacyOutcome]);
@@ -486,22 +487,28 @@ export default function CallOutcomeCaptureCard({
       className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4"
     >
       <div className="space-y-1">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call outcome</p>
-        <h3 className="text-lg font-semibold text-white">Call outcome</h3>
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+          {callSessionCopy.wrapUp.outcome.badge}
+        </p>
+        <h3 className="text-lg font-semibold text-white">
+          {callSessionCopy.wrapUp.outcome.title}
+        </h3>
         <p className="text-sm text-slate-400">
-          Log what happened on this call so follow-ups and reports stay accurate.
+          {callSessionCopy.wrapUp.outcome.helper}
         </p>
         {hasAskBobScriptHint && (
-          <p className="text-xs italic text-slate-400">This was an AskBob-assisted call.</p>
+          <p className="text-xs italic text-slate-400">
+            {callSessionCopy.wrapUp.outcome.askBobHint}
+          </p>
         )}
         {showTerminalCallBanner && (
           <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
-            Call ended. Please record the outcome.
+            {callSessionCopy.wrapUp.outcome.terminalBanner}
           </div>
         )}
         {showInProgressCallBanner && (
           <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-xs text-slate-400">
-            Call is in progress. Outcome can be recorded after it ends.
+            {callSessionCopy.wrapUp.outcome.inProgressBanner}
           </div>
         )}
       </div>
@@ -510,7 +517,9 @@ export default function CallOutcomeCaptureCard({
         <div className="space-y-2">
           {hasRecordedOutcome ? (
               <div className="space-y-2 text-sm text-slate-200">
-                <p className="font-semibold text-slate-100">Outcome recorded</p>
+                <p className="font-semibold text-slate-100">
+                  {callSessionCopy.wrapUp.outcome.recordedTitle}
+                </p>
                 <div className="flex flex-wrap gap-3 text-xs uppercase tracking-[0.3em] text-slate-500">
                   <span>Reached: {reachedLabel}</span>
                   <span>Outcome: {outcomeLabel}</span>
@@ -524,7 +533,9 @@ export default function CallOutcomeCaptureCard({
                 {recordedLabel && <p className="text-xs text-slate-400">{recordedLabel}</p>}
               </div>
           ) : (
-            <p className="text-sm text-slate-400">Outcome not recorded yet.</p>
+            <p className="text-sm text-slate-400">
+              {callSessionCopy.wrapUp.outcome.notRecorded}
+            </p>
           )}
             <div className="text-right">
               <HbButton
@@ -533,7 +544,9 @@ export default function CallOutcomeCaptureCard({
                 size="sm"
                 onClick={beginEditing}
               >
-                {hasRecordedOutcome ? "Edit outcome" : "Record outcome"}
+                {hasRecordedOutcome
+                  ? callSessionCopy.wrapUp.outcome.edit
+                  : callSessionCopy.wrapUp.outcome.record}
               </HbButton>
             </div>
         </div>
@@ -557,7 +570,9 @@ export default function CallOutcomeCaptureCard({
           />
           <fieldset className="space-y-4" disabled={pending}>
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Reached customer</p>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                {callSessionCopy.wrapUp.outcome.reachedLabel}
+              </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {REACH_OPTIONS.map((option) => {
                   const active = editingState.reachedCustomer === option.value;
@@ -581,7 +596,9 @@ export default function CallOutcomeCaptureCard({
             </div>
 
             <label className="text-sm text-slate-200">
-              <span className="text-xs uppercase tracking-[0.3em] text-slate-500">Outcome code</span>
+              <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                {callSessionCopy.wrapUp.outcome.outcomeCodeLabel}
+              </span>
               <select
                 name="outcomeCode"
                 ref={outcomeSelectRef}
@@ -596,7 +613,7 @@ export default function CallOutcomeCaptureCard({
                 data-editing-outcome-code={editingState.outcomeCode ?? ""}
                 className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 focus:border-slate-600 focus:outline-none"
               >
-                <option value="">Select outcome…</option>
+                <option value="">{callSessionCopy.wrapUp.outcome.outcomeCodePlaceholder}</option>
                 {CALL_OUTCOME_CODE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -606,7 +623,9 @@ export default function CallOutcomeCaptureCard({
             </label>
 
             <label className="text-sm text-slate-200">
-              <span className="text-xs uppercase tracking-[0.3em] text-slate-500">Notes (optional)</span>
+              <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                {callSessionCopy.wrapUp.outcome.notesLabel}
+              </span>
               <textarea
                 name="notes"
                 ref={notesRef}
@@ -622,13 +641,18 @@ export default function CallOutcomeCaptureCard({
               />
             </label>
             <p className="text-xs text-slate-500">
-              Keep it concise (up to {NOTES_MAX_LENGTH} characters) and focused on what happened.
+              {callSessionCopy.wrapUp.outcome.notesHelper.replace(
+                "{maxLength}",
+                String(NOTES_MAX_LENGTH),
+              )}
             </p>
           </fieldset>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm text-slate-400">
-              {pending ? "Saving…" : "We’ll store the reach, outcome, and notes when you save."}
+              {pending
+                ? callSessionCopy.wrapUp.outcome.saving
+                : callSessionCopy.wrapUp.outcome.savingHelper}
               {actionState?.ok === false && actionErrorMessage && (
                 <p className="text-xs text-amber-400">{actionErrorMessage}</p>
               )}
@@ -644,10 +668,10 @@ export default function CallOutcomeCaptureCard({
                 }}
                 disabled={pending}
               >
-                Cancel
+                {callSessionCopy.wrapUp.outcome.cancel}
               </button>
             <HbButton type="submit" variant={primaryVariant} size="sm" disabled={pending}>
-                {pending ? "Saving…" : "Save outcome"}
+                {pending ? callSessionCopy.wrapUp.outcome.saving : callSessionCopy.wrapUp.outcome.save}
               </HbButton>
             </div>
           </div>

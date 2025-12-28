@@ -9,6 +9,7 @@ import {
   SPEECH_PLAN_METADATA_MARKER,
 } from "@/lib/domain/askbob/speechPlan";
 import { ASKBOB_AUTOMATED_CALL_SCRIPT_PREVIEW_LIMIT } from "@/lib/domain/askbob/automatedCallConfig";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 type TwilioStatusEntry = {
   status: string;
   rank: number;
@@ -198,55 +199,9 @@ export function buildCallSessionFollowupReadiness({
 
 export function mapCtaReasonCodeToExplanation(
   reasonCode: CallSessionPrimaryCtaReasonCode,
-  ctaKind?: string,
 ): string {
-  switch (reasonCode) {
-    case "start_automated_call":
-      return "Ready to start the automated call.";
-    case "start_guided_call":
-      return "Ready to start the guided call.";
-    case "select_call_mode":
-      return "Choose a call mode to continue.";
-    case "ready":
-      if (ctaKind === "open-composer") {
-        return "Draft ready. Open the composer to review and send.";
-      }
-      return "Ready to generate follow-up.";
-    case "not_terminal":
-      return "Call in progress. We'll unlock next steps when it finishes.";
-    case "missing_outcome":
-      return "Outcome required. Save the outcome to unlock follow-up.";
-    case "missing_reached_flag":
-      return "Reach status required. Confirm whether the customer was reached.";
-    case "missing_call_context":
-      return "Add a call script and customer phone to start the call.";
-    case "missing_followup_context":
-      return "Add a call summary or outcome notes to generate follow-up.";
-    case "missing_job_link":
-      if (ctaKind === "open-composer") {
-        return "Link a job to open the composer.";
-      }
-      if (ctaKind === "start-automated-call") {
-        return "Link a job to start the automated call.";
-      }
-      if (ctaKind === "start-guided-call") {
-        return "Link a job to start the guided call.";
-      }
-      return "Link a job to continue.";
-    case "draft_ready":
-      return "Draft ready. Open the composer to review and send.";
-    case "draft_missing_body":
-      return "Draft still processing. Check back in a moment.";
-    case "draft_missing_job":
-      return "Link a job to open the composer.";
-    case "no_call_session":
-      return "Call details are unavailable. Refresh to continue.";
-    default: {
-      const _exhaustiveCheck: never = reasonCode;
-      void _exhaustiveCheck;
-      return "Review the call details to continue.";
-    }
-  }
+  const explanation = callSessionCopy.primaryCta.explanation[reasonCode];
+  return explanation ?? callSessionCopy.primaryCta.explanation.fallback;
 }
 
 type CallSessionForSnapshot = {

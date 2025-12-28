@@ -3,6 +3,7 @@ import { Window } from "happy-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 const createServerClientMock = vi.fn();
 const mockResolveWorkspaceContext = vi.fn();
@@ -109,7 +110,7 @@ describe("CallSessionPage action bar and status strip", () => {
     expect(markup).toContain('data-testid="call-control-card-status-strip"');
     expect(markup).toContain('data-testid="call-status-strip"');
     expect(markup).toContain('data-testid="call-session-primary-cta"');
-    expect(markup).toContain("Select a call mode");
+    expect(markup).toContain(callSessionCopy.primaryCta.label.disabled);
     expect(markup).toContain('data-testid="call-workspace-card"');
     expect(markup).toContain('data-testid="call-workspace-panel-unselected"');
     expect(markup).toContain('data-testid="call-wrap-up-card"');
@@ -124,7 +125,7 @@ describe("CallSessionPage action bar and status strip", () => {
       '[data-testid="call-session-primary-cta"]',
     );
     expect(primaryCtas).toHaveLength(1);
-    expect(primaryCtas[0]?.textContent).toContain("Select a call mode");
+    expect(primaryCtas[0]?.textContent).toContain(callSessionCopy.primaryCta.label.disabled);
     expect(primaryCtas[0]?.getAttribute("disabled")).not.toBeNull();
 
     const timelineEvent = logSpy.mock.calls.find(
@@ -221,7 +222,7 @@ describe("CallSessionPage action bar and status strip", () => {
     expect(markup).toContain('data-testid="call-control-card"');
     expect(markup).toContain('data-testid="call-control-card-status-strip"');
     expect(markup).toContain('data-cta-kind="disabled"');
-    expect(markup).toContain("Select a call mode");
+    expect(markup).toContain(callSessionCopy.primaryCta.label.disabled);
     expect(markup).not.toContain('data-testid="call-session-action-bar"');
 
   });
@@ -295,7 +296,7 @@ describe("CallSessionPage action bar and status strip", () => {
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-ready" }) });
     const markup = renderToStaticMarkup(element);
 
-    expect(markup).toContain("Select a call mode");
+    expect(markup).toContain(callSessionCopy.primaryCta.label.disabled);
     expect(markup).toContain('data-cta-kind="disabled"');
     expect(markup).toContain("Regenerate follow-up");
   });

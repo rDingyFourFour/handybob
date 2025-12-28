@@ -6,6 +6,7 @@ import CallWorkspaceCard from "@/app/(app)/calls/[id]/CallWorkspaceCard";
 import CallManualNumberCard from "@/app/(app)/calls/[id]/CallManualNumberCard";
 import CallSessionPage from "@/app/(app)/calls/[id]/page";
 import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 const createServerClientMock = vi.fn();
 const mockResolveWorkspaceContext = vi.fn();
@@ -129,7 +130,7 @@ describe("Call session workspace modes", () => {
         manualPanel={manualPanel}
       />,
     );
-    expect(manualMarkup).toContain("Copy number");
+    expect(manualMarkup).toContain(callSessionCopy.manualTools.copyPhone);
     expect(manualMarkup).not.toContain("Automated-only tools");
 
     const automatedMarkup = renderToStaticMarkup(
@@ -145,7 +146,7 @@ describe("Call session workspace modes", () => {
         manualPanel={manualPanel}
       />,
     );
-    expect(automatedMarkup).not.toContain("Copy number");
+    expect(automatedMarkup).not.toContain(callSessionCopy.manualTools.copyPhone);
     expect(automatedMarkup).toContain("Automated-only tools");
   });
 

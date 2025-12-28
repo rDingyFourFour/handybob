@@ -5,6 +5,7 @@ import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 import CallSessionPage from "@/app/(app)/calls/[id]/page";
 import { ASKBOB_AUTOMATED_SCRIPT_PREFIX } from "@/lib/domain/askbob/constants";
 import { SPEECH_PLAN_METADATA_MARKER } from "@/lib/domain/askbob/speechPlan";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 const createServerClientMock = vi.fn();
 const mockResolveWorkspaceContext = vi.fn();
@@ -116,7 +117,7 @@ describe("CallSessionPage automated call view", () => {
     expect(markup).toContain("Automated call");
     expect(markup).toContain("Not available");
     expect(markup).toContain("Enabled");
-    expect(markup).toContain("Open job");
+    expect(markup).toContain(callSessionCopy.secondaryActions.openJob);
     expect(markup).not.toContain("Open AskBob on job");
     expect(markup).toContain('data-testid="call-workspace-panel-unselected"');
 
@@ -188,7 +189,7 @@ describe("CallSessionPage automated call view", () => {
     expect(markup).toContain("Automated call");
     expect(markup).toContain("Twilio status");
     expect(markup).toContain("Recording available");
-    expect(markup).toContain("Call ended. Record outcome to generate a follow-up.");
+    expect(markup).toContain(callSessionCopy.wrapUp.outcomeRequiredBanner);
     expect(markup).toContain('data-testid="call-wrap-up-card"');
   });
 
@@ -234,7 +235,7 @@ describe("CallSessionPage automated call view", () => {
     const markup = renderToStaticMarkup(element);
 
     expect(markup).not.toContain("Speech plan summary");
-    expect(markup).not.toContain("Call ended. Record outcome to generate a follow-up.");
+    expect(markup).not.toContain(callSessionCopy.wrapUp.outcomeRequiredBanner);
     expect(markup).not.toContain("Automated call notes");
     expect(markup).toContain('data-testid="call-control-card"');
     expect(markup).toContain('data-testid="call-workspace-card"');

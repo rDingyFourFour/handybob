@@ -44,6 +44,7 @@ import PostCallEnrichmentCard from "./PostCallEnrichmentCard";
 import CallManualNumberCard from "./CallManualNumberCard";
 import CallSessionHub from "./CallSessionHub";
 import WrapUpCard from "./WrapUpCard";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 type CallRecord = {
   id: string;
@@ -186,7 +187,7 @@ function calculateDaysSince(value?: string | null): number | null {
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
-const TIMELINE_NOT_YET_LABEL = "Not yet";
+const TIMELINE_NOT_YET_LABEL = callSessionCopy.statusStrip.statuses.notYet;
 
 function MessageCard({ title, body }: { title: string; body: string }) {
   return (
@@ -198,7 +199,7 @@ function MessageCard({ title, body }: { title: string; body: string }) {
           href="/calls"
           className="text-sm font-semibold text-sky-300 hover:text-sky-200"
         >
-          Back to calls
+          {callSessionCopy.header.backToCalls}
         </Link>
       </HbCard>
     </div>
@@ -661,16 +662,16 @@ export default async function CallSessionPage({
   const outcomeTimestamp = formatUtcTimestamp(call.outcome_recorded_at);
   const hasRecordingDuration = call.twilio_recording_duration_seconds != null;
   const outcomeStatus = callHasOutcome && callHasReachedFlag
-    ? "Saved"
+    ? callSessionCopy.statusStrip.statuses.outcomeSaved
     : callHasOutcome
-    ? "Needs reach flag"
+    ? callSessionCopy.statusStrip.statuses.outcomeNeedsReach
     : callHasReachedFlag
-    ? "Needs outcome"
+    ? callSessionCopy.statusStrip.statuses.outcomeNeedsOutcome
     : TIMELINE_NOT_YET_LABEL;
   const afterCallStatus = hasAfterCallDraft
-    ? "Draft ready"
+    ? callSessionCopy.statusStrip.statuses.followupDraftReady
     : callReadiness.isReady
-    ? "Ready to generate"
+    ? callSessionCopy.statusStrip.statuses.followupReady
     : TIMELINE_NOT_YET_LABEL;
 
   console.log("[calls-session-timeline-visible]", {
@@ -690,31 +691,37 @@ export default async function CallSessionPage({
   const callStatusStripItems = [
     {
       key: "created",
-      label: "Created",
-      status: createdTimestamp ? "Created" : TIMELINE_NOT_YET_LABEL,
+      label: callSessionCopy.statusStrip.labels.created,
+      status: createdTimestamp
+        ? callSessionCopy.statusStrip.statuses.created
+        : TIMELINE_NOT_YET_LABEL,
       timestamp: createdTimestamp ?? TIMELINE_NOT_YET_LABEL,
     },
     {
       key: "status",
-      label: "Call status",
-      status: timelineTwilioStatusLabel ?? (hasTwilioSid ? "Queued" : TIMELINE_NOT_YET_LABEL),
+      label: callSessionCopy.statusStrip.labels.status,
+      status:
+        timelineTwilioStatusLabel ??
+        (hasTwilioSid ? callSessionCopy.statusStrip.statuses.queued : TIMELINE_NOT_YET_LABEL),
       timestamp: twilioStatusTimestamp ?? TIMELINE_NOT_YET_LABEL,
     },
     {
       key: "terminal",
-      label: "Terminal",
-      status: automatedDialSnapshot.isTerminal ? "Terminal" : TIMELINE_NOT_YET_LABEL,
+      label: callSessionCopy.statusStrip.labels.terminal,
+      status: automatedDialSnapshot.isTerminal
+        ? callSessionCopy.statusStrip.statuses.terminal
+        : TIMELINE_NOT_YET_LABEL,
       timestamp: terminalTimestamp ?? TIMELINE_NOT_YET_LABEL,
     },
     {
       key: "outcome",
-      label: "Outcome",
+      label: callSessionCopy.statusStrip.labels.outcome,
       status: outcomeStatus,
       timestamp: outcomeTimestamp ?? TIMELINE_NOT_YET_LABEL,
     },
     {
       key: "after-call",
-      label: "Follow-up",
+      label: callSessionCopy.statusStrip.labels.afterCall,
       status: afterCallStatus,
       timestamp: TIMELINE_NOT_YET_LABEL,
     },
@@ -736,13 +743,19 @@ export default async function CallSessionPage({
     : "missing_reached_flag";
   const canStartAutomatedCall = Boolean(jobId && customerPhone && hasAutomatedScript);
   const canStartGuidedCall = Boolean(hasCustomerPhone);
+  const automatedDisabledReason = !hasCustomerPhone
+    ? "missing_phone"
+    : !hasAutomatedScript
+    ? "missing_script"
+    : null;
+  const manualDisabledReason = !hasCustomerPhone ? "missing_phone" : null;
 
   const automatedCtaState = (() => {
     if (!hasDialRequestedMarker) {
       return {
         primaryCta: {
           kind: "start-automated-call",
-          label: "Start automated call",
+          label: callSessionCopy.primaryCta.label.startAutomated,
           disabled: !canStartAutomatedCall,
           automatedCallPayload: canStartAutomatedCall
             ? {
@@ -761,7 +774,11 @@ export default async function CallSessionPage({
     }
     if (shouldRefreshStatus) {
       return {
-        primaryCta: { kind: "refresh-status", label: "Refresh status", disabled: false },
+        primaryCta: {
+          kind: "refresh-status",
+          label: callSessionCopy.primaryCta.label.refreshStatus,
+          disabled: false,
+        },
         ctaReasonCode: callReadiness.ctaReasonCode,
       };
     }
@@ -769,7 +786,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "capture-outcome",
-          label: "Record outcome",
+          label: callSessionCopy.primaryCta.label.captureOutcome,
           workspaceNavigate: { tab: "after", hash: "#call-outcome-capture" },
         },
         ctaReasonCode: automatedOutcomeReason,
@@ -779,7 +796,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "generate-followup",
-          label: "Review follow-up",
+          label: callSessionCopy.primaryCta.label.generateFollowup,
           workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
         },
         ctaReasonCode: "ready",
@@ -795,7 +812,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "open-composer",
-          label: "Review follow-up draft",
+          label: callSessionCopy.primaryCta.label.openComposer,
           disabled: !isComposerEnabled,
           workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
         },
@@ -810,7 +827,7 @@ export default async function CallSessionPage({
     return {
       primaryCta: {
         kind: "generate-followup",
-        label: "Review follow-up",
+        label: callSessionCopy.primaryCta.label.generateFollowup,
         disabled: true,
         workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
       },
@@ -821,7 +838,11 @@ export default async function CallSessionPage({
   const manualCtaState = (() => {
     if (shouldRefreshStatus) {
       return {
-        primaryCta: { kind: "refresh-status", label: "Refresh status", disabled: false },
+        primaryCta: {
+          kind: "refresh-status",
+          label: callSessionCopy.primaryCta.label.refreshStatus,
+          disabled: false,
+        },
         ctaReasonCode: callReadiness.ctaReasonCode,
       };
     }
@@ -829,7 +850,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "capture-outcome",
-          label: "Record outcome",
+          label: callSessionCopy.primaryCta.label.captureOutcome,
           workspaceNavigate: { tab: "after", hash: "#call-outcome-capture" },
         },
         ctaReasonCode: automatedOutcomeReason,
@@ -839,7 +860,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "start-guided-call",
-          label: "Start guided call",
+          label: callSessionCopy.primaryCta.label.startGuided,
           disabled: !canStartGuidedCall,
           workspaceNavigate: { tab: "during", hash: "#manual-call-tools" },
         },
@@ -850,7 +871,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "generate-followup",
-          label: "Review follow-up",
+          label: callSessionCopy.primaryCta.label.generateFollowup,
           workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
         },
         ctaReasonCode: "ready",
@@ -866,7 +887,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "open-composer",
-          label: "Review follow-up draft",
+          label: callSessionCopy.primaryCta.label.openComposer,
           disabled: !isComposerEnabled,
           workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
         },
@@ -881,7 +902,7 @@ export default async function CallSessionPage({
     return {
       primaryCta: {
         kind: "generate-followup",
-        label: "Review follow-up",
+        label: callSessionCopy.primaryCta.label.generateFollowup,
         disabled: true,
         workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
       },
@@ -892,7 +913,7 @@ export default async function CallSessionPage({
   const unselectedCtaState = {
     primaryCta: {
       kind: "disabled",
-      label: "Select a call mode",
+      label: callSessionCopy.primaryCta.label.disabled,
       disabled: true,
     },
     ctaReasonCode: "select_call_mode",
@@ -902,11 +923,17 @@ export default async function CallSessionPage({
     workspaceId: workspace.id,
     callId: call.id,
     identity: {
-      directionLabel: isInboundCall ? "Inbound call" : "Outbound call",
+      directionLabel: isInboundCall
+        ? callSessionCopy.callControl.directionInbound
+        : callSessionCopy.callControl.directionOutbound,
       isInbound: isInboundCall,
       from: callFromLabel,
       to: callToLabel,
       createdLabel: createdAtLabel,
+    },
+    headerContext: {
+      customerName: customerName ?? null,
+      jobTitle: job?.title ?? null,
     },
     statusStripItems: callStatusStripItems,
     secondaryActions: {
@@ -1021,14 +1048,22 @@ export default async function CallSessionPage({
           </ol>
         </div>
       )}
-      <CallManualNumberCard
-        workspaceId={workspace.id}
-        callId={call.id}
-        jobId={jobId}
-        customerId={customerId}
-        customerPhone={customerPhone}
-        scriptSummary={scriptSummaryForManual}
-      />
+      <div className="space-y-2">
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+            {callSessionCopy.manualTools.title}
+          </p>
+          <p className="text-sm text-slate-400">{callSessionCopy.manualTools.helper}</p>
+        </div>
+        <CallManualNumberCard
+          workspaceId={workspace.id}
+          callId={call.id}
+          jobId={jobId}
+          customerId={customerId}
+          customerPhone={customerPhone}
+          scriptSummary={scriptSummaryForManual}
+        />
+      </div>
       {isInboundCall && (
         <LinkCallContextCard
           workspaceId={workspace.id}
@@ -1351,27 +1386,14 @@ export default async function CallSessionPage({
   return (
     <div className="hb-shell pt-20 pb-8">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-        <div className="flex flex-col gap-3 border-b border-slate-900 pb-5 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-2">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call session</p>
-              <h1 className="hb-heading-1 text-3xl font-semibold">Call session</h1>
-            </div>
-            {job && job.id && (
-              <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.3em] text-slate-400">
-                <span className="font-semibold text-slate-100">
-                  For job: {job?.title ?? jobId?.slice(0, 8)}
-                </span>
-              </div>
-            )}
-          </div>
-        <Link
-          href="/calls"
-          className="rounded-full border border-slate-800/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-100 hover:border-slate-600"
-        >
-          Back to calls
-        </Link>
-      </div>
+        <div className="flex items-center justify-end border-b border-slate-900 pb-5">
+          <Link
+            href="/calls"
+            className="rounded-full border border-slate-800/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-100 hover:border-slate-600"
+          >
+            {callSessionCopy.header.backToCalls}
+          </Link>
+        </div>
 
         <CallSessionHub
           key={call.id}
@@ -1387,13 +1409,15 @@ export default async function CallSessionPage({
           manualWorkspace={manualWorkspacePanel}
           automatedEligible={canStartAutomatedCall}
           manualEligible={canStartGuidedCall}
+          automatedDisabledReason={automatedDisabledReason}
+          manualDisabledReason={manualDisabledReason}
         />
         <WrapUpCard
           summarySection={wrapUpSummarySection}
           outcomeBanner={
             showAutomatedOutcomeRequiredBanner ? (
               <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
-                Call ended. Record outcome to generate a follow-up.
+                {callSessionCopy.wrapUp.outcomeRequiredBanner}
               </div>
             ) : null
           }

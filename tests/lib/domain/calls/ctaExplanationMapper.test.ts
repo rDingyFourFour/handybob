@@ -4,6 +4,7 @@ import {
   mapCtaReasonCodeToExplanation,
   type CallSessionPrimaryCtaReasonCode,
 } from "@/lib/domain/calls/sessions";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 describe("mapCtaReasonCodeToExplanation", () => {
   const cases: Array<{
@@ -14,72 +15,72 @@ describe("mapCtaReasonCodeToExplanation", () => {
     {
       code: "start_automated_call",
       ctaKind: "start-automated-call",
-      expected: "Ready to start the automated call.",
+      expected: callSessionCopy.primaryCta.explanation.start_automated_call,
     },
     {
       code: "start_guided_call",
       ctaKind: "start-guided-call",
-      expected: "Ready to start the guided call.",
+      expected: callSessionCopy.primaryCta.explanation.start_guided_call,
     },
     {
       code: "select_call_mode",
       ctaKind: "disabled",
-      expected: "Choose a call mode to continue.",
+      expected: callSessionCopy.primaryCta.explanation.select_call_mode,
     },
     {
       code: "ready",
       ctaKind: "generate-followup",
-      expected: "Ready to generate follow-up.",
+      expected: callSessionCopy.primaryCta.explanation.ready,
     },
     {
       code: "not_terminal",
       ctaKind: "refresh-status",
-      expected: "Call in progress. We'll unlock next steps when it finishes.",
+      expected: callSessionCopy.primaryCta.explanation.not_terminal,
     },
     {
       code: "missing_outcome",
       ctaKind: "capture-outcome",
-      expected: "Outcome required. Save the outcome to unlock follow-up.",
+      expected: callSessionCopy.primaryCta.explanation.missing_outcome,
     },
     {
       code: "missing_reached_flag",
       ctaKind: "capture-outcome",
-      expected: "Reach status required. Confirm whether the customer was reached.",
+      expected: callSessionCopy.primaryCta.explanation.missing_reached_flag,
     },
     {
       code: "missing_call_context",
       ctaKind: "start-automated-call",
-      expected: "Add a call script and customer phone to start the call.",
+      expected: callSessionCopy.primaryCta.explanation.missing_call_context,
     },
     {
       code: "missing_followup_context",
       ctaKind: "generate-followup",
-      expected: "Add a call summary or outcome notes to generate follow-up.",
+      expected: callSessionCopy.primaryCta.explanation.missing_followup_context,
     },
     {
       code: "missing_job_link",
       ctaKind: "generate-followup",
-      expected: "Link a job to continue.",
+      expected: callSessionCopy.primaryCta.explanation.missing_job_link,
     },
     {
       code: "draft_ready",
       ctaKind: "open-composer",
-      expected: "Draft ready. Open the composer to review and send.",
+      expected: callSessionCopy.primaryCta.explanation.draft_ready,
     },
     {
       code: "draft_missing_body",
       ctaKind: "open-composer",
-      expected: "Draft still processing. Check back in a moment.",
+      expected: callSessionCopy.primaryCta.explanation.draft_missing_body,
     },
     {
       code: "draft_missing_job",
       ctaKind: "open-composer",
-      expected: "Link a job to open the composer.",
+      expected: callSessionCopy.primaryCta.explanation.draft_missing_job,
     },
     {
       code: "no_call_session",
       ctaKind: "generate-followup",
-      expected: "Call details are unavailable. Refresh to continue.",
+      expected: callSessionCopy.primaryCta.explanation.no_call_session,
     },
   ];
 

@@ -1,5 +1,7 @@
 import React from "react";
 
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
+
 type CallStatusStripItem = {
   key: string;
   label: string;
@@ -17,7 +19,9 @@ export default function CallStatusStrip({ items }: CallStatusStripProps) {
       data-testid="call-status-strip"
       className="rounded-2xl border border-slate-800/60 bg-slate-950/60 p-3"
     >
-      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Call status</p>
+      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+        {callSessionCopy.statusStrip.title}
+      </p>
       <div className="mt-3 space-y-2">
         {items.map((item) => (
           <div

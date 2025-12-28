@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import CallSessionPage from "@/app/(app)/calls/[id]/page";
 import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 const createServerClientMock = vi.fn();
 const mockResolveWorkspaceContext = vi.fn();
@@ -144,7 +145,7 @@ describe("CallSessionPage no-duplicate surfaces", () => {
   function countOpenJobLinks() {
     const elements = Array.from(container.querySelectorAll("a, button"));
     return elements.filter((element) =>
-      (element.textContent ?? "").trim() === "Open job",
+      (element.textContent ?? "").trim() === callSessionCopy.secondaryActions.openJob,
     ).length;
   }
 

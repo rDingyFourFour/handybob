@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -119,6 +120,7 @@ describe("job detail AskBob readiness gating", () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain("Open call session");
+    expect(container.textContent).toContain(callSessionCopy.jobDetail.openCallSessionCta);
+    expect(container.textContent).toContain(callSessionCopy.jobDetail.helper);
   });
 });

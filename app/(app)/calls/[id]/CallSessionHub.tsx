@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import CallModeChooserCard, { type CallSessionMode } from "@/components/calls/CallModeChooserCard";
 import CallControlCard from "./CallControlCard";
 import CallWorkspaceCard from "./CallWorkspaceCard";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 type CallSessionHubProps = {
   callId: string;
@@ -19,6 +20,8 @@ type CallSessionHubProps = {
   manualWorkspace: ReactNode;
   automatedEligible: boolean;
   manualEligible: boolean;
+  automatedDisabledReason?: "missing_phone" | "missing_script" | null;
+  manualDisabledReason?: "missing_phone" | null;
 };
 
 const SESSION_STORAGE_PREFIX = "calls-session-mode";
@@ -48,6 +51,8 @@ export default function CallSessionHub({
   manualWorkspace,
   automatedEligible,
   manualEligible,
+  automatedDisabledReason,
+  manualDisabledReason,
 }: CallSessionHubProps) {
   const [mode, setMode] = useState<CallSessionMode | null>(() => {
     if (typeof window === "undefined") {
@@ -68,14 +73,22 @@ export default function CallSessionHub({
 
   const emitModeTelemetry = useCallback(
     (nextMode: CallSessionMode) => {
+      const modeCopy =
+        nextMode === "automated" ? callSessionCopy.mode.automated : callSessionCopy.mode.manual;
+      const nextModel = nextMode === "automated" ? automatedModel : manualModel;
       console.log("[calls-session-call-mode-select]", {
         callId,
         workspaceId,
         jobId,
         selectedMode: nextMode,
+        modeLabel: modeCopy.label,
+        modeDescription: modeCopy.description,
+        primaryCtaLabel: nextModel.primaryCta.label,
+        ctaReasonCode: nextModel.ctaReasonCode,
+        primaryCtaExplanation: nextModel.primaryCtaExplanation,
       });
     },
-    [callId, jobId, workspaceId],
+    [automatedModel, callId, jobId, manualModel, workspaceId],
   );
 
   const persistMode = useCallback(
@@ -140,11 +153,28 @@ export default function CallSessionHub({
       callMode: mode,
       ctaKind: activeModel.primaryCta.kind,
       ctaReasonCode: activeModel.ctaReasonCode,
+      primaryCtaLabel: activeModel.primaryCta.label,
+      primaryCtaExplanation: activeModel.primaryCtaExplanation,
     });
-  }, [activeModel.ctaReasonCode, activeModel.primaryCta.kind, callId, mode, workspaceId]);
+  }, [
+    activeModel.ctaReasonCode,
+    activeModel.primaryCta.kind,
+    activeModel.primaryCta.label,
+    activeModel.primaryCtaExplanation,
+    callId,
+    mode,
+    workspaceId,
+  ]);
 
   const modeChooser = (
-    <CallModeChooserCard mode={mode} onSelect={handleModeSelect} />
+    <CallModeChooserCard
+      mode={mode}
+      onSelect={handleModeSelect}
+      automatedEligible={automatedEligible}
+      manualEligible={manualEligible}
+      automatedDisabledReason={automatedDisabledReason}
+      manualDisabledReason={manualDisabledReason}
+    />
   );
 
   return (

@@ -28,6 +28,7 @@ vi.mock("@/lib/domain/workspaces", async () => {
 import CallSessionPage from "@/app/(app)/calls/[id]/page";
 import { ASKBOB_AUTOMATED_SCRIPT_PREFIX } from "@/lib/domain/askbob/constants";
 import { SPEECH_PLAN_METADATA_MARKER } from "@/lib/domain/askbob/speechPlan";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 function buildAutomatedCallSummary() {
   const metadata = JSON.stringify({
@@ -88,8 +89,8 @@ describe("CallSessionPage outcome card", () => {
     const markup = renderToStaticMarkup(element);
     expect(markup).toContain('data-testid="call-wrap-up-card"');
     expect(markup).toContain('id="call-outcome-capture"');
-    expect(markup).toContain("Reached customer");
-    expect(markup).toContain("Save outcome");
+    expect(markup).toContain(callSessionCopy.wrapUp.outcome.reachedLabel);
+    expect(markup).toContain(callSessionCopy.wrapUp.outcome.save);
   });
 
   it("renders the edited summary when an outcome exists", async () => {
@@ -117,10 +118,10 @@ describe("CallSessionPage outcome card", () => {
     const markup = renderToStaticMarkup(element);
     expect(markup).toContain('data-testid="call-wrap-up-card"');
     expect(markup).toContain('id="call-outcome-capture"');
-    expect(markup).toContain("Outcome recorded");
+    expect(markup).toContain(callSessionCopy.wrapUp.outcome.recordedTitle);
     expect(markup).toContain("Reached: Yes");
     expect(markup).toContain("Outcome: Reached · Scheduled");
-    expect(markup).toContain("Edit outcome");
+    expect(markup).toContain(callSessionCopy.wrapUp.outcome.edit);
   });
 
   it("shows the AskBob call strip when appropriate", async () => {

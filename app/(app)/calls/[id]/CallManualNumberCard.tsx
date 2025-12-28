@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import HbButton from "@/components/ui/hb-button";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 type CopyState = "idle" | "copied";
 
@@ -82,9 +83,11 @@ export default function CallManualNumberCard({
       className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-950/60 p-4 text-sm text-slate-200"
     >
       <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Manual call</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+          {callSessionCopy.manualTools.callCardTitle}
+        </p>
         <p className="text-sm text-slate-400">
-          Use this number if you need to call manually.
+          {callSessionCopy.manualTools.callCardHelper}
         </p>
       </div>
       {hasCustomerPhone ? (
@@ -93,12 +96,14 @@ export default function CallManualNumberCard({
             {trimmedCustomerPhone}
           </p>
           <HbButton variant="secondary" size="sm" onClick={handleCopyNumber}>
-            {copyState === "copied" ? "Copied" : "Copy number"}
+            {copyState === "copied"
+              ? callSessionCopy.manualTools.copyPhoneSuccess
+              : callSessionCopy.manualTools.copyPhone}
           </HbButton>
         </>
       ) : (
         <p className="text-xs text-slate-500">
-          Add a customer phone number to unlock manual call tools.
+          {callSessionCopy.manualTools.missingPhone}
         </p>
       )}
     </div>

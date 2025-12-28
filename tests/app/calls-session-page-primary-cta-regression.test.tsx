@@ -6,6 +6,7 @@ import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 import CallSessionPage from "@/app/(app)/calls/[id]/page";
 import { ASKBOB_AUTOMATED_SCRIPT_PREFIX } from "@/lib/domain/askbob/constants";
 import { SPEECH_PLAN_METADATA_MARKER } from "@/lib/domain/askbob/speechPlan";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 const createServerClientMock = vi.fn();
 const mockResolveWorkspaceContext = vi.fn();
@@ -170,10 +171,10 @@ describe("CallSessionPage primary CTA regression", () => {
 
   it("switches the primary CTA between automated and manual modes", async () => {
     await renderWithCall({}, [], "automated");
-    assertSinglePrimaryCta("Start automated call");
+    assertSinglePrimaryCta(callSessionCopy.primaryCta.label.startAutomated);
 
     await renderWithCall({}, [], "manual");
-    assertSinglePrimaryCta("Start guided call");
+    assertSinglePrimaryCta(callSessionCopy.primaryCta.label.startGuided);
   });
 
   it("updates the primary CTA by readiness state without creating duplicate primaries", async () => {
@@ -186,7 +187,7 @@ describe("CallSessionPage primary CTA regression", () => {
       [],
       "automated",
     );
-    assertSinglePrimaryCta("Record outcome");
+    assertSinglePrimaryCta(callSessionCopy.primaryCta.label.captureOutcome);
 
     await renderWithCall(
       {
@@ -197,6 +198,6 @@ describe("CallSessionPage primary CTA regression", () => {
       [],
       "manual",
     );
-    assertSinglePrimaryCta("Record outcome");
+    assertSinglePrimaryCta(callSessionCopy.primaryCta.label.captureOutcome);
   });
 });

@@ -8,6 +8,7 @@ import {
 } from "@/utils/calls/callOutcomeMessages";
 import type { SaveCallOutcomeResponse } from "@/app/(app)/calls/actions/saveCallOutcome";
 import CallOutcomeCaptureCard from "@/app/(app)/calls/[id]/CallOutcomeCaptureCard";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 // Manual smoke checklist:
 // 1. On a real call session page, expand the outcome capture card and choose a reached/no-answer option.
@@ -110,7 +111,7 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
     await flushReactUpdates();
 
     const markup = container.innerHTML;
-    expect(markup).toContain("Outcome recorded");
+    expect(markup).toContain(callSessionCopy.wrapUp.outcome.recordedTitle);
     expect(
       window.sessionStorage.getItem("askbob-call-outcome-prefill-call-prefill-existing"),
     ).not.toBe(null);
@@ -262,7 +263,7 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
     renderCard("call-save", { actionStateOverride: [null, async () => {}, false] });
     await flushReactUpdates();
 
-    expect(container.textContent).not.toContain("Outcome recorded");
+    expect(container.textContent).not.toContain(callSessionCopy.wrapUp.outcome.recordedTitle);
 
     act(() => {
       root?.render(
@@ -281,7 +282,7 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
 
     await flushReactUpdates();
 
-    expect(container.textContent).toContain("Outcome recorded");
+    expect(container.textContent).toContain(callSessionCopy.wrapUp.outcome.recordedTitle);
     expect(container.textContent).toContain("Saved just now");
     expect(container.textContent).toContain("Outcome: Reached · Scheduled");
   });
@@ -363,7 +364,7 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
     });
     await flushReactUpdates();
 
-    expect(container.textContent).toContain("Outcome recorded");
+    expect(container.textContent).toContain(callSessionCopy.wrapUp.outcome.recordedTitle);
     expect(container.textContent).toContain("Saved just now");
     expect(container.textContent).toContain("Outcome: Reached · Needs follow-up");
 
@@ -403,7 +404,7 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
     expect(container.textContent).toContain(
       CALL_OUTCOME_SCHEMA_OUT_OF_DATE_MESSAGE,
     );
-    expect(container.textContent).not.toContain("Outcome recorded");
+    expect(container.textContent).not.toContain(callSessionCopy.wrapUp.outcome.recordedTitle);
     const formElement = container.querySelector<HTMLFormElement>("form");
     expect(formElement).toBeTruthy();
     const outcomeSelect = formElement?.querySelector<HTMLSelectElement>("select[name='outcomeCode']");
@@ -438,7 +439,7 @@ describe("CallOutcomeCaptureCard prefill behavior", () => {
     await flushReactUpdates();
 
     expect(container.textContent).toContain(CALL_OUTCOME_DB_CONSTRAINT_MISMATCH_MESSAGE);
-    expect(container.textContent).not.toContain("Outcome recorded");
+    expect(container.textContent).not.toContain(callSessionCopy.wrapUp.outcome.recordedTitle);
     const formElement = container.querySelector<HTMLFormElement>("form");
     expect(formElement).toBeTruthy();
     const outcomeSelect = formElement?.querySelector<HTMLSelectElement>("select[name='outcomeCode']");

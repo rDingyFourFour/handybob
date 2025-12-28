@@ -4,36 +4,62 @@ import React from "react";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 export type CallSessionMode = "automated" | "manual";
 
 type CallModeChooserCardProps = {
   mode: CallSessionMode | null;
   onSelect: (mode: CallSessionMode) => void;
+  automatedEligible: boolean;
+  manualEligible: boolean;
+  automatedDisabledReason?: "missing_phone" | "missing_script" | null;
+  manualDisabledReason?: "missing_phone" | null;
 };
 
-const OPTION_COPY: Record<CallSessionMode, { title: string; description: string }> = {
+const OPTION_COPY: Record<CallSessionMode, { title: string; description: string; helper: string }> = {
   automated: {
-    title: "AskBob automated call",
-    description: "Let AskBob place the call, capture the recording, and summarize the outcome.",
+    title: callSessionCopy.mode.automated.label,
+    description: callSessionCopy.mode.automated.description,
+    helper: callSessionCopy.mode.automated.helper,
   },
   manual: {
-    title: "Manual guided call",
-    description: "Call the customer yourself with scripts, prompts, and follow-up help.",
+    title: callSessionCopy.mode.manual.label,
+    description: callSessionCopy.mode.manual.description,
+    helper: callSessionCopy.mode.manual.helper,
   },
 };
 
 function resolveButtonLabel(mode: CallSessionMode, selectedMode: CallSessionMode | null) {
   if (!selectedMode) {
-    return mode === "automated" ? "Select automated" : "Select manual";
+    return mode === "automated"
+      ? callSessionCopy.mode.automated.selectLabel
+      : callSessionCopy.mode.manual.selectLabel;
   }
   if (selectedMode === mode) {
-    return "Selected";
+    return callSessionCopy.mode.selectedLabel;
   }
-  return "Change";
+  return callSessionCopy.mode.changeLabel;
 }
 
-export default function CallModeChooserCard({ mode, onSelect }: CallModeChooserCardProps) {
+function resolveDisabledReason(reason?: "missing_phone" | "missing_script" | null) {
+  if (reason === "missing_phone") {
+    return callSessionCopy.disabled.missingPhone;
+  }
+  if (reason === "missing_script") {
+    return callSessionCopy.disabled.missingScript;
+  }
+  return null;
+}
+
+export default function CallModeChooserCard({
+  mode,
+  onSelect,
+  automatedEligible,
+  manualEligible,
+  automatedDisabledReason,
+  manualDisabledReason,
+}: CallModeChooserCardProps) {
   const visibleOptions: CallSessionMode[] = mode ? [mode] : ["automated", "manual"];
   const alternateMode: CallSessionMode | null =
     mode === "automated" ? "manual" : mode === "manual" ? "automated" : null;
@@ -41,18 +67,24 @@ export default function CallModeChooserCard({ mode, onSelect }: CallModeChooserC
   return (
     <HbCard data-testid="call-session-mode-chooser" className="space-y-4">
       <div className="space-y-1">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call choice</p>
-        <h2 className="hb-heading-3 text-xl font-semibold text-white">
-          Choose how to make this call
-        </h2>
-        <p className="text-sm text-slate-400">
-          Automated uses AskBob to place the call for you. Manual keeps you on the phone with guided steps.
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+          {callSessionCopy.mode.kicker}
         </p>
+        <h2 className="hb-heading-3 text-xl font-semibold text-white">
+          {callSessionCopy.mode.title}
+        </h2>
+        <p className="text-sm text-slate-400">{callSessionCopy.mode.helper}</p>
       </div>
 
       <div className={`grid gap-3 ${mode ? "" : "md:grid-cols-2"}`}>
         {visibleOptions.map((option) => {
           const selected = mode === option;
+          const isEligible = option === "automated" ? automatedEligible : manualEligible;
+          const disabledReason =
+            option === "automated"
+              ? resolveDisabledReason(automatedDisabledReason)
+              : resolveDisabledReason(manualDisabledReason);
+          const showDisabledReason = Boolean(!isEligible && disabledReason);
           return (
             <div
               key={option}
@@ -66,10 +98,14 @@ export default function CallModeChooserCard({ mode, onSelect }: CallModeChooserC
             >
               <div className="space-y-1">
                 <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                  {selected ? "Selected" : "Option"}
+                  {selected ? callSessionCopy.mode.optionTagSelected : callSessionCopy.mode.optionTagDefault}
                 </p>
                 <h3 className="text-lg font-semibold">{OPTION_COPY[option].title}</h3>
                 <p className="text-sm text-slate-400">{OPTION_COPY[option].description}</p>
+                <p className="text-xs text-slate-500">{OPTION_COPY[option].helper}</p>
+                {showDisabledReason && (
+                  <p className="text-xs text-amber-300">{disabledReason}</p>
+                )}
               </div>
               <HbButton
                 type="button"
@@ -77,7 +113,7 @@ export default function CallModeChooserCard({ mode, onSelect }: CallModeChooserC
                 size="sm"
                 className="w-full"
                 onClick={() => onSelect(option)}
-                disabled={selected}
+                disabled={selected || !isEligible}
                 data-testid={`call-mode-select-${option}`}
               >
                 {resolveButtonLabel(option, mode)}
@@ -86,9 +122,12 @@ export default function CallModeChooserCard({ mode, onSelect }: CallModeChooserC
           );
         })}
       </div>
+      {!mode && (
+        <p className="text-xs text-slate-400">{callSessionCopy.mode.unselectedHelper}</p>
+      )}
       {alternateMode && (
         <div className="flex items-center justify-between text-xs text-slate-400">
-          <span>Need a different call mode?</span>
+          <span>{callSessionCopy.mode.switchPrompt}</span>
           <HbButton
             type="button"
             variant="ghost"
@@ -96,7 +135,9 @@ export default function CallModeChooserCard({ mode, onSelect }: CallModeChooserC
             onClick={() => onSelect(alternateMode)}
             data-testid={`call-mode-switch-${alternateMode}`}
           >
-            Switch to {alternateMode === "automated" ? "automated" : "manual"}
+            {alternateMode === "automated"
+              ? callSessionCopy.mode.switchToAutomated
+              : callSessionCopy.mode.switchToManual}
           </HbButton>
         </div>
       )}

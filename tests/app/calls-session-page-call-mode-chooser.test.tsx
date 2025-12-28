@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import CallSessionHub from "@/app/(app)/calls/[id]/CallSessionHub";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -21,12 +22,16 @@ const baseModel = {
     to: "+15550002222",
     createdLabel: "Jan 1",
   },
+  headerContext: {
+    customerName: "Test Customer",
+    jobTitle: "Test job",
+  },
   statusStripItems: [
     { key: "created", label: "Created", status: "Created", timestamp: "Now" },
     { key: "dial-requested", label: "Dial requested", status: "Not yet", timestamp: "—" },
   ],
-  primaryCta: { kind: "disabled", label: "Select a call mode", disabled: true },
-  primaryCtaExplanation: "Choose a call mode to continue.",
+  primaryCta: { kind: "disabled", label: callSessionCopy.primaryCta.label.disabled, disabled: true },
+  primaryCtaExplanation: callSessionCopy.primaryCta.explanation.select_call_mode,
   ctaReasonCode: "select_call_mode",
   secondaryActions: { jobHref: "/jobs/job-1", callsHref: "/calls", messagesHref: null },
   callContext: {
@@ -40,11 +45,11 @@ const automatedModel = {
   ...baseModel,
   primaryCta: {
     kind: "start-automated-call",
-    label: "Start automated call",
+    label: callSessionCopy.primaryCta.label.startAutomated,
     disabled: false,
     automatedCallPayload: null,
   },
-  primaryCtaExplanation: "Ready to start the automated call.",
+  primaryCtaExplanation: callSessionCopy.primaryCta.explanation.start_automated_call,
   ctaReasonCode: "start_automated_call",
 };
 
@@ -52,11 +57,11 @@ const manualModel = {
   ...baseModel,
   primaryCta: {
     kind: "start-guided-call",
-    label: "Start guided call",
+    label: callSessionCopy.primaryCta.label.startGuided,
     disabled: false,
     workspaceNavigate: { tab: "during", hash: "#manual-call-tools" },
   },
-  primaryCtaExplanation: "Ready to start the guided call.",
+  primaryCtaExplanation: callSessionCopy.primaryCta.explanation.start_guided_call,
   ctaReasonCode: "start_guided_call",
 };
 
@@ -136,7 +141,9 @@ describe("CallSessionPage call mode chooser", () => {
     expect(window.sessionStorage.getItem("calls-session-mode:call-1")).toBe("automated");
     const primaryCtas = container.querySelectorAll('[data-cta-role="primary"]');
     expect(primaryCtas).toHaveLength(1);
-    expect(primaryCtas[0]?.textContent ?? "").toContain("Start automated call");
+    expect(primaryCtas[0]?.textContent ?? "").toContain(
+      callSessionCopy.primaryCta.label.startAutomated,
+    );
     const modeEvent = logSpy.mock.calls.find(
       (args) => args[0] === "[calls-session-call-mode-select]",
     );
@@ -152,7 +159,9 @@ describe("CallSessionPage call mode chooser", () => {
     expect(window.sessionStorage.getItem("calls-session-mode:call-1")).toBe("manual");
     const primaryCtas = container.querySelectorAll('[data-cta-role="primary"]');
     expect(primaryCtas).toHaveLength(1);
-    expect(primaryCtas[0]?.textContent ?? "").toContain("Start guided call");
+    expect(primaryCtas[0]?.textContent ?? "").toContain(
+      callSessionCopy.primaryCta.label.startGuided,
+    );
     const modeEvent = logSpy.mock.calls.find(
       (args) => args[0] === "[calls-session-call-mode-select]",
     );
@@ -178,6 +187,6 @@ describe("CallSessionPage call mode chooser", () => {
     expect(window.sessionStorage.getItem("calls-session-mode:call-2")).toBe(null);
     const primaryCtas = container.querySelectorAll('[data-cta-role="primary"]');
     expect(primaryCtas).toHaveLength(1);
-    expect(primaryCtas[0]?.textContent ?? "").toContain("Select a call mode");
+    expect(primaryCtas[0]?.textContent ?? "").toContain(callSessionCopy.primaryCta.label.disabled);
   });
 });

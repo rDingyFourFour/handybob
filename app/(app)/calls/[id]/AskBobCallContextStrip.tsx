@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import HbButton from "@/components/ui/hb-button";
 import { ASKBOB_CALL_INTENT_LABELS, type AskBobCallIntent } from "@/lib/domain/askbob/types";
 import { readAndClearAskBobCallContext } from "@/utils/askbob/callContextCache";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 type AskBobCallContextStripProps = {
   callId: string;
@@ -56,7 +57,7 @@ export default function AskBobCallContextStrip({
     }
     try {
       await navigator.clipboard.writeText(scriptBody);
-      setCopyFeedback("Copied script");
+      setCopyFeedback(callSessionCopy.manualToolsScript.copyScriptSuccess);
       window.setTimeout(() => setCopyFeedback(null), 2000);
     } catch (error) {
       console.error("[calls-session-askbob-strip] clipboard.copy failed", error);
@@ -92,7 +93,7 @@ export default function AskBobCallContextStrip({
               className="text-[11px] uppercase tracking-[0.3em]"
               onClick={handleCopyScript}
             >
-              Copy script
+              {callSessionCopy.manualToolsScript.copyScript}
             </HbButton>
             {copyFeedback && (
               <p className="text-[11px] text-emerald-400">{copyFeedback}</p>

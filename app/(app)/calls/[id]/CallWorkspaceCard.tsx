@@ -4,6 +4,7 @@ import { useCallback, useEffect, type ReactNode } from "react";
 
 import HbCard from "@/components/ui/hb-card";
 import { type CallSessionMode } from "@/components/calls/CallModeChooserCard";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 type CallWorkspaceCardProps = {
   callId: string;
@@ -96,28 +97,36 @@ export default function CallWorkspaceCard({
   return (
     <HbCard id="call-workspace" data-testid="call-workspace-card" className="space-y-4">
       <div className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call workspace</p>
-        <h2 className="hb-heading-3 text-xl font-semibold text-white">Call workspace</h2>
-        <p className="text-sm text-slate-400">
-          Pick a call mode, then use the focused tools for that path.
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+          {callSessionCopy.workspace.title}
         </p>
+        <h2 className="hb-heading-3 text-xl font-semibold text-white">
+          {callSessionCopy.workspace.title}
+        </h2>
+        <p className="text-sm text-slate-400">{callSessionCopy.workspace.helper}</p>
       </div>
 
       {panelKey === "unselected" && (
         <div data-testid="call-workspace-panel-unselected" className="space-y-4">
           <div className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-950/60 p-4 text-sm text-slate-200">
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Availability</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+              {callSessionCopy.workspace.availabilityTitle}
+            </p>
             <div className="space-y-2 text-xs text-slate-400">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-slate-200">Automated call</span>
+                <span className="text-slate-200">{callSessionCopy.workspace.automatedLabel}</span>
                 <span className={automatedEligible ? "text-emerald-300" : "text-slate-500"}>
-                  {automatedEligible ? "Ready" : "Missing script or phone"}
+                  {automatedEligible
+                    ? callSessionCopy.workspace.ready
+                    : callSessionCopy.workspace.missingAutomated}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-slate-200">Manual call</span>
+                <span className="text-slate-200">{callSessionCopy.workspace.manualLabel}</span>
                 <span className={manualEligible ? "text-emerald-300" : "text-slate-500"}>
-                  {manualEligible ? "Ready" : "Missing customer phone"}
+                  {manualEligible
+                    ? callSessionCopy.workspace.ready
+                    : callSessionCopy.workspace.missingManual}
                 </span>
               </div>
             </div>
@@ -128,10 +137,14 @@ export default function CallWorkspaceCard({
       {panelKey === "automated" && (
         <div data-testid="call-workspace-panel-automated" className="space-y-4">
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Automated mode</p>
-            <h3 className="text-lg font-semibold text-white">AskBob automated call</h3>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+              {callSessionCopy.workspace.automatedModeLabel}
+            </p>
+            <h3 className="text-lg font-semibold text-white">
+              {callSessionCopy.workspace.automatedTitle}
+            </h3>
             <p className="text-sm text-slate-400">
-              Monitor automated call progress, recordings, and notes here.
+              {callSessionCopy.workspace.automatedHelper}
             </p>
           </div>
           {automatedPanel}
@@ -141,11 +154,13 @@ export default function CallWorkspaceCard({
       {panelKey === "manual" && (
         <div data-testid="call-workspace-panel-manual" className="space-y-4">
           <div className="space-y-1" id="manual-call-tools">
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Manual mode</p>
-            <h3 className="text-lg font-semibold text-white">Manual guided call</h3>
-            <p className="text-sm text-slate-400">
-              Use the script, call tools, and guidance while you run the call.
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+              {callSessionCopy.workspace.manualModeLabel}
             </p>
+            <h3 className="text-lg font-semibold text-white">
+              {callSessionCopy.workspace.manualTitle}
+            </h3>
+            <p className="text-sm text-slate-400">{callSessionCopy.workspace.manualHelper}</p>
           </div>
           {manualPanel}
         </div>

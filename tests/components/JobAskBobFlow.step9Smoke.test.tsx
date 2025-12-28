@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import JobAskBobFlow from "@/components/askbob/JobAskBobFlow";
 import { openOrCreateCallSessionForJobAction } from "@/app/(app)/jobs/actions/openOrCreateCallSessionForJobAction";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 vi.mock("@/app/(app)/jobs/actions/openOrCreateCallSessionForJobAction", () => ({
   openOrCreateCallSessionForJobAction: vi.fn(),
@@ -42,7 +43,7 @@ const mockOpenCallSessionAction = openOrCreateCallSessionForJobAction as unknown
 
 function findOpenCallSessionButton(container: HTMLElement) {
   return Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
-    button.textContent?.includes("Open call session"),
+    button.textContent?.includes(callSessionCopy.jobDetail.openCallSessionCta),
   );
 }
 
@@ -197,7 +198,7 @@ describe("JobAskBobFlow call session open", () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain("Open call session");
+    expect(container.textContent).toContain(callSessionCopy.jobDetail.openCallSessionCta);
     expect(container.textContent).not.toContain("Place automated call");
     expect(container.textContent).not.toContain("Step 9 · AskBob automated call");
   });

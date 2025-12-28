@@ -9,6 +9,7 @@ import { cacheAskBobAfterCallResult } from "@/utils/askbob/afterCallCache";
 import { cacheAskBobMessageDraft } from "@/utils/askbob/messageDraftCache";
 import type { AskBobJobAfterCallResult } from "@/lib/domain/askbob/types";
 import { runAskBobJobAfterCallAction } from "@/app/(app)/askbob/after-call-actions";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 import {
   CallAutomatedDialSnapshot,
   CallSessionFollowupReadiness,
@@ -47,13 +48,13 @@ type AskBobAfterCallCardProps = {
 };
 
 const GENERAL_READINESS_MESSAGES: Partial<Record<CallSessionFollowupReadinessReason, string>> = {
-  not_terminal: "Call is still in progress. Wait until it finishes before generating a follow-up.",
-  no_call_session: "Call session data is unavailable. Refresh the page to try again.",
+  not_terminal: callSessionCopy.wrapUp.afterCall.readiness.notTerminal,
+  no_call_session: callSessionCopy.wrapUp.afterCall.readiness.noCallSession,
 };
 
 const MISSING_REASON_MESSAGES: Record<CallSessionOutcomeMissingReason, string | null> = {
-  missing_outcome: "Record how the call went before generating a follow-up.",
-  missing_reached_flag: "Mark whether the customer was reached before generating a follow-up.",
+  missing_outcome: callSessionCopy.wrapUp.afterCall.readiness.missingOutcome,
+  missing_reached_flag: callSessionCopy.wrapUp.afterCall.readiness.missingReached,
   ready: null,
 };
 
@@ -111,10 +112,10 @@ export default function AskBobAfterCallCard({
     Boolean(callSessionDraftBody?.trim()) ||
     Boolean(callSessionEnrichment?.hasAskBobDraft);
   const buttonLabel = isLoading
-    ? "Generating…"
+    ? callSessionCopy.wrapUp.afterCall.generating
     : callReadiness.isReady && hasDraft
-    ? "Regenerate follow-up"
-    : "Generate follow-up";
+    ? callSessionCopy.wrapUp.afterCall.regenerate
+    : callSessionCopy.wrapUp.afterCall.generate;
   const draftBody = result?.draftMessageBody?.trim() || callSessionDraftBody?.trim() || null;
   const readinessState = callReadiness.isReady
     ? "ready"
@@ -139,28 +140,40 @@ export default function AskBobAfterCallCard({
   const postCallStatusItems = callSessionEnrichment
     ? [
         {
-          label: "Call state",
-          value: callSessionEnrichment.isTerminal ? "Terminal" : "In progress",
+          label: callSessionCopy.wrapUp.afterCall.statusLabels.callState,
+          value: callSessionEnrichment.isTerminal
+            ? callSessionCopy.wrapUp.afterCall.statusValues.terminal
+            : callSessionCopy.wrapUp.afterCall.statusValues.inProgress,
         },
         {
-          label: "Outcome",
-          value: callSessionEnrichment.hasOutcome ? "Recorded" : "Missing",
+          label: callSessionCopy.wrapUp.afterCall.statusLabels.outcome,
+          value: callSessionEnrichment.hasOutcome
+            ? callSessionCopy.wrapUp.afterCall.statusValues.recorded
+            : callSessionCopy.wrapUp.afterCall.statusValues.missing,
         },
         {
-          label: "Reached flag",
-          value: callSessionEnrichment.hasReachedFlag ? "Present" : "Missing",
+          label: callSessionCopy.wrapUp.afterCall.statusLabels.reached,
+          value: callSessionEnrichment.hasReachedFlag
+            ? callSessionCopy.wrapUp.afterCall.statusValues.present
+            : callSessionCopy.wrapUp.afterCall.statusValues.missing,
         },
         {
-          label: "Notes",
-          value: callSessionEnrichment.hasNotes ? "Present" : "Empty",
+          label: callSessionCopy.wrapUp.afterCall.statusLabels.notes,
+          value: callSessionEnrichment.hasNotes
+            ? callSessionCopy.wrapUp.afterCall.statusValues.present
+            : callSessionCopy.wrapUp.afterCall.statusValues.empty,
         },
         {
-          label: "Recording",
-          value: callSessionEnrichment.hasRecordingMetadata ? "Recorded" : "Unavailable",
+          label: callSessionCopy.wrapUp.afterCall.statusLabels.recording,
+          value: callSessionEnrichment.hasRecordingMetadata
+            ? callSessionCopy.wrapUp.afterCall.statusValues.recorded
+            : callSessionCopy.wrapUp.afterCall.statusValues.unavailable,
         },
         {
-          label: "AskBob draft",
-          value: callSessionEnrichment.hasAskBobDraft ? "Present" : "Empty",
+          label: callSessionCopy.wrapUp.afterCall.statusLabels.draft,
+          value: callSessionEnrichment.hasAskBobDraft
+            ? callSessionCopy.wrapUp.afterCall.statusValues.present
+            : callSessionCopy.wrapUp.afterCall.statusValues.empty,
         },
       ]
     : [];
@@ -262,7 +275,7 @@ export default function AskBobAfterCallCard({
         failureCode: response.ok ? null : response.code ?? null,
       });
       if (!response.ok) {
-        const message = response.message ?? "AskBob could not summarize the call right now.";
+        const message = response.message ?? callSessionCopy.wrapUp.afterCall.errorFallback;
         if (response.code?.startsWith("not_ready")) {
           setServerNotReadyMessage(message);
         } else {
@@ -294,7 +307,7 @@ export default function AskBobAfterCallCard({
       });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "AskBob could not summarize the call right now.";
+        error instanceof Error ? error.message : callSessionCopy.wrapUp.afterCall.errorFallback;
       setErrorMessage(message);
       console.log("[askbob-after-call-ui-generate-failure]", {
         callId,
@@ -359,18 +372,20 @@ export default function AskBobAfterCallCard({
   return (
     <HbCard id="askbob-after-call" className="space-y-3">
       <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
-        <h3 className="hb-heading-3 text-xl font-semibold">After-call help</h3>
-        <p className="text-sm text-slate-400">
-          Let AskBob summarize the call and draft a customer message. You can edit before sending.
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+          {callSessionCopy.wrapUp.afterCall.badge}
         </p>
+        <h3 className="hb-heading-3 text-xl font-semibold">
+          {callSessionCopy.wrapUp.afterCall.title}
+        </h3>
+        <p className="text-sm text-slate-400">{callSessionCopy.wrapUp.afterCall.helper}</p>
       </div>
 
       <div className="space-y-2">
         {postCallStatusVisible && (
           <div className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-950/50 p-3 text-xs text-slate-300">
             <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.3em] text-slate-500">
-              <span>Post call status</span>
+              <span>{callSessionCopy.wrapUp.afterCall.postCallStatus}</span>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               {postCallStatusItems.map((item) => (
@@ -403,18 +418,19 @@ export default function AskBobAfterCallCard({
         ) : (
           !hasContext && (
             <p className="text-xs text-slate-500">
-              AskBob needs at least a script, outcome notes, or call summary to craft the summary.
+              {callSessionCopy.wrapUp.afterCall.readiness.missingContext}
             </p>
           )
         )}
         {outcomeSavedHintVisible && (
           <p className="text-xs text-sky-300">
-            Outcome saved. You can now generate a follow-up.
+            {callSessionCopy.wrapUp.afterCall.readiness.outcomeSavedHint}
           </p>
         )}
         {callReadiness.isReady && suggestedChannel && (
           <p className="text-xs text-slate-400">
-            Suggested channel: <span className="font-semibold text-slate-100">{suggestedChannel}</span>
+            {callSessionCopy.wrapUp.afterCall.readiness.suggestedChannel}{" "}
+            <span className="font-semibold text-slate-100">{suggestedChannel}</span>
           </p>
         )}
         {errorMessage && <p className="text-sm text-rose-400">{errorMessage}</p>}
@@ -424,17 +440,19 @@ export default function AskBobAfterCallCard({
         <div className="space-y-3 rounded-2xl border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-200">
           {result && (
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call summary</p>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                {callSessionCopy.wrapUp.afterCall.summaryLabel}
+              </p>
               <p className="text-sm text-slate-200">{result.afterCallSummary}</p>
             </div>
           )}
 
           <div>
             <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-500">
-              <span>Draft message</span>
+              <span>{callSessionCopy.wrapUp.afterCall.draftLabel}</span>
               {draftBody && (
                 <span className="text-[11px] text-slate-400">
-                  {draftBody.length} characters
+                  {draftBody.length} {callSessionCopy.wrapUp.afterCall.draftCharacters}
                 </span>
               )}
             </div>
@@ -446,7 +464,7 @@ export default function AskBobAfterCallCard({
                 {draftBody}
               </pre>
             ) : (
-              <p className="text-xs text-slate-500">AskBob did not propose a message draft.</p>
+              <p className="text-xs text-slate-500">{callSessionCopy.wrapUp.afterCall.draftEmpty}</p>
             )}
           </div>
 
@@ -458,7 +476,7 @@ export default function AskBobAfterCallCard({
                 className="flex-1"
                 onClick={handleOpenMessagesComposer}
               >
-                Open composer with this draft
+                {callSessionCopy.wrapUp.afterCall.openComposer}
               </HbButton>
             )}
           </div>
