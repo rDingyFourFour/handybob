@@ -36,6 +36,8 @@ import { getJobAskBobSnapshotsForJob } from "@/lib/domain/askbob/service";
 import {
   buildCallAutomatedDialSnapshot,
   buildCallSessionFollowupReadiness,
+  type CallAutomatedDialSnapshot,
+  type CallSessionFollowupReadiness,
   getCallSessionAutomatedSpeechPlan,
   getCallSessionJobAndCustomer,
   sanitizeAutomatedCallNotes,
@@ -43,6 +45,7 @@ import {
 import LinkCallContextCard from "./LinkCallContextCard";
 import AskBobLiveGuidanceCard from "./AskBobLiveGuidanceCard";
 import PostCallEnrichmentCard from "./PostCallEnrichmentCard";
+import CallSessionActionBar from "./CallSessionActionBar";
 
 type CallRecord = {
   id: string;
@@ -141,6 +144,15 @@ function formatTwilioStatusTimestamp(value: string | null) {
   return parsed.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
 }
 
+function formatUtcTimestamp(value: string | null) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
+}
+
 function formatCurrency(value: number | null | undefined) {
   if (value == null) {
     return "—";
@@ -206,6 +218,15 @@ function previewMessageText(message: MessageRecord | null): string | null {
 
 type StepStatus = "complete" | "current" | "upcoming";
 
+const TIMELINE_NOT_YET_LABEL = "Not yet";
+
+type TimelineRow = {
+  key: string;
+  label: string;
+  status: string;
+  timestamp: string;
+};
+
 function MessageCard({ title, body }: { title: string; body: string }) {
   return (
     <div className="hb-shell pt-20 pb-8">
@@ -220,6 +241,145 @@ function MessageCard({ title, body }: { title: string; body: string }) {
         </Link>
       </HbCard>
     </div>
+  );
+}
+
+function CallTimelineSection({
+  workspaceId,
+  callId,
+  direction,
+  call,
+  dialSnapshot,
+  callReadiness,
+  hasAfterCallDraft,
+  callHasOutcome,
+  callHasReachedFlag,
+}: {
+  workspaceId: string;
+  callId: string;
+  direction: string | null;
+  call: CallRecord;
+  dialSnapshot: CallAutomatedDialSnapshot;
+  callReadiness: CallSessionFollowupReadiness;
+  hasAfterCallDraft: boolean;
+  callHasOutcome: boolean;
+  callHasReachedFlag: boolean;
+}) {
+  const hasTwilioSid = Boolean(call.twilio_call_sid);
+  const hasTwilioStatus = Boolean(call.twilio_status);
+  const hasDialRequestedMarker = Boolean(call.twilio_call_sid || call.twilio_status);
+  const createdTimestamp = formatUtcTimestamp(call.created_at);
+  const dialRequestedTimestamp = formatUtcTimestamp(call.twilio_status_updated_at);
+  const twilioStatusLabel = formatTwilioStatusLabel(call.twilio_status ?? null);
+  const twilioStatusTimestamp = formatUtcTimestamp(call.twilio_status_updated_at);
+  const recordingTimestamp = formatUtcTimestamp(call.twilio_recording_received_at ?? null);
+  const terminalTimestamp = dialSnapshot.isTerminal
+    ? formatUtcTimestamp(call.twilio_status_updated_at)
+    : null;
+  const outcomeTimestamp = formatUtcTimestamp(call.outcome_recorded_at);
+  const hasRecordingDuration = call.twilio_recording_duration_seconds != null;
+  const recordingStatus = hasRecordingDuration
+    ? "Ready"
+    : dialSnapshot.hasRecordingMetadata
+    ? "Processing"
+    : TIMELINE_NOT_YET_LABEL;
+  const outcomeStatus = callHasOutcome && callHasReachedFlag
+    ? "Saved"
+    : callHasOutcome
+    ? "Needs reach flag"
+    : callHasReachedFlag
+    ? "Needs outcome"
+    : TIMELINE_NOT_YET_LABEL;
+  const afterCallStatus = hasAfterCallDraft
+    ? "Draft ready"
+    : callReadiness.isReady
+    ? "Ready to generate"
+    : TIMELINE_NOT_YET_LABEL;
+
+  console.log("[calls-session-timeline-visible]", {
+    workspaceId,
+    callId,
+    direction,
+    hasTwilioSid,
+    hasTwilioStatus,
+    isTerminal: dialSnapshot.isTerminal,
+    hasOutcome: callHasOutcome,
+    hasRecordingMetadata: dialSnapshot.hasRecordingMetadata,
+    hasRecordingDuration,
+    hasAfterCallDraft,
+  });
+
+  const rows: TimelineRow[] = [
+    {
+      key: "created",
+      label: "Created",
+      status: createdTimestamp ? "Created" : TIMELINE_NOT_YET_LABEL,
+      timestamp: createdTimestamp ?? TIMELINE_NOT_YET_LABEL,
+    },
+    {
+      key: "dial-requested",
+      label: "Dial requested",
+      status: hasDialRequestedMarker ? "Requested" : TIMELINE_NOT_YET_LABEL,
+      timestamp: dialRequestedTimestamp ?? TIMELINE_NOT_YET_LABEL,
+    },
+    {
+      key: "twilio-status",
+      label: "Twilio status",
+      status: twilioStatusLabel ?? (hasTwilioSid ? "Queued" : TIMELINE_NOT_YET_LABEL),
+      timestamp: twilioStatusTimestamp ?? TIMELINE_NOT_YET_LABEL,
+    },
+    {
+      key: "recording",
+      label: "Recording",
+      status: recordingStatus,
+      timestamp: recordingTimestamp ?? TIMELINE_NOT_YET_LABEL,
+    },
+    {
+      key: "terminal",
+      label: "Terminal reached",
+      status: dialSnapshot.isTerminal ? "Terminal" : TIMELINE_NOT_YET_LABEL,
+      timestamp: terminalTimestamp ?? TIMELINE_NOT_YET_LABEL,
+    },
+    {
+      key: "outcome",
+      label: "Outcome saved",
+      status: outcomeStatus,
+      timestamp: outcomeTimestamp ?? TIMELINE_NOT_YET_LABEL,
+    },
+    {
+      key: "after-call-draft",
+      label: "After-call draft present",
+      status: afterCallStatus,
+      timestamp: TIMELINE_NOT_YET_LABEL,
+    },
+  ];
+
+  return (
+    <HbCard data-testid="call-session-timeline" className="space-y-3">
+      <div>
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call timeline</p>
+        <h2 className="hb-heading-3 text-xl font-semibold text-white">Call timeline</h2>
+        <p className="text-sm text-slate-400">
+          Track each milestone as the call completes and follow-ups become available.
+        </p>
+      </div>
+      <div className="space-y-2">
+        {rows.map((row) => (
+          <div
+            key={row.key}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800/60 bg-slate-950/60 px-3 py-2 text-sm"
+          >
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                {row.label}
+              </p>
+              <p className="text-sm text-slate-100">{row.status}</p>
+            </div>
+            <p className="text-xs text-slate-400">{row.timestamp}</p>
+          </div>
+        ))}
+      </div>
+    </HbCard>
   );
 }
 
@@ -714,6 +874,21 @@ export default async function CallSessionPage({
   const customerId = customer?.id ?? null;
   const customerFirstName = customerName ? customerName.split(" ")[0] : null;
   const linkedCustomerId = call.customer_id ?? null;
+  const hasCustomerPhone = Boolean(customerPhone?.trim());
+  const scriptSummaryForManual = askBobScriptBody?.trim() || automaticSummaryPreview?.trim() || null;
+  const hasScriptSummaryForManual = Boolean(scriptSummaryForManual);
+  const hasAfterCallDraft =
+    Boolean(askBobAfterCallSnapshot?.draftMessageBody?.trim()) ||
+    Boolean(callSessionEnrichment.hasAskBobDraft);
+
+  console.log("[calls-session-manual-escape-visible]", {
+    workspaceId: workspace.id,
+    callId: call.id,
+    jobId,
+    customerId,
+    hasCustomerPhone,
+    hasScriptSummary: hasScriptSummaryForManual,
+  });
 
   return (
     <div className="hb-shell pt-20 pb-8">
@@ -769,6 +944,30 @@ export default async function CallSessionPage({
             <span className="text-slate-400">Created {createdAtLabel}</span>
           </div>
         </div>
+
+        <CallTimelineSection
+          workspaceId={workspace.id}
+          callId={call.id}
+          direction={call.direction ?? null}
+          call={call}
+          dialSnapshot={automatedDialSnapshot}
+          callReadiness={callReadiness}
+          hasAfterCallDraft={hasAfterCallDraft}
+          callHasOutcome={callHasOutcome}
+          callHasReachedFlag={callHasReachedFlag}
+        />
+
+        <CallSessionActionBar
+          workspaceId={workspace.id}
+          callId={call.id}
+          jobId={jobId}
+          customerId={customerId}
+          callReadiness={callReadiness}
+          hasAfterCallCard={Boolean(jobId && customerId)}
+          draftBody={askBobAfterCallSnapshot?.draftMessageBody ?? null}
+          customerPhone={customerPhone}
+          scriptSummary={scriptSummaryForManual}
+        />
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <HbCard className="space-y-6">

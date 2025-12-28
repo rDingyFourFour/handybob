@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import AskBobForm from "./AskBobForm";
+import AskBobStepReadinessBadge, {
+  type AskBobStepReadiness,
+} from "@/components/askbob/AskBobStepReadinessBadge";
 import type {
   AskBobDiagnoseSnapshotPayload,
   AskBobResponseDTO,
@@ -29,6 +32,7 @@ type JobAskBobPanelProps = {
   stepCollapsed?: boolean;
   onToggleStepCollapsed?: () => void;
   initialDiagnoseSnapshot?: AskBobDiagnoseSnapshotPayload | null;
+  stepReadiness?: AskBobStepReadiness | null;
 };
 
 export default function JobAskBobPanel({
@@ -44,6 +48,7 @@ export default function JobAskBobPanel({
   stepCollapsed = false,
   onToggleStepCollapsed,
   initialDiagnoseSnapshot,
+  stepReadiness,
 }: JobAskBobPanelProps) {
   useEffect(() => {
     console.log("[askbob-ui-entry]", {
@@ -103,13 +108,16 @@ export default function JobAskBobPanel({
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
         <div className="flex flex-wrap items-center gap-2 justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="hb-heading-3 text-xl font-semibold">Step 2 · Diagnose the job</h2>
-            {stepCompleted && (
-              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
-                Done
-              </span>
-            )}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <h2 className="hb-heading-3 text-xl font-semibold">Step 2 · Diagnose the job</h2>
+              {stepCompleted && (
+                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
+                  Done
+                </span>
+              )}
+            </div>
+            <AskBobStepReadinessBadge readiness={stepReadiness} />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <HbButton

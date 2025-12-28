@@ -364,7 +364,7 @@ export default function AskBobAfterCallCard({
     : undefined;
 
   return (
-    <HbCard className="space-y-3">
+    <HbCard id="askbob-after-call" className="space-y-3">
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
         <h3 className="hb-heading-3 text-xl font-semibold">After-call help</h3>

@@ -6,6 +6,9 @@ import Link from "next/link";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
+import AskBobStepReadinessBadge, {
+  type AskBobStepReadiness,
+} from "@/components/askbob/AskBobStepReadinessBadge";
 import { runAskBobJobScheduleAction } from "@/app/(app)/askbob/job-schedule-actions";
 import { runAskBobScheduleAppointmentAction } from "@/app/(app)/askbob/job-schedule-actions";
 import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
@@ -29,6 +32,7 @@ type AskBobSchedulerPanelProps = {
   onToggleStepCollapsed?: () => void;
   resetToken?: number;
   onReset?: () => void;
+  stepReadiness?: AskBobStepReadiness | null;
   onAppointmentScheduled?: (info: {
     startAt: string;
     friendlyLabel: string | null;
@@ -52,6 +56,7 @@ export default function AskBobSchedulerPanel({
   onToggleStepCollapsed,
   resetToken,
   onReset,
+  stepReadiness,
   onAppointmentScheduled,
   onScrollIntoView,
 }: AskBobSchedulerPanelProps) {
@@ -249,13 +254,16 @@ export default function AskBobSchedulerPanel({
       <div className="space-y-1">
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
         <div className="flex flex-wrap items-center gap-2 justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="hb-heading-3 text-xl font-semibold">Step 6 · Schedule an appointment with AskBob</h2>
-            {stepCompleted && (
-              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
-                Done
-              </span>
-            )}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <h2 className="hb-heading-3 text-xl font-semibold">Step 6 · Schedule an appointment with AskBob</h2>
+              {stepCompleted && (
+                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
+                  Done
+                </span>
+              )}
+            </div>
+            <AskBobStepReadinessBadge readiness={stepReadiness} />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <HbButton

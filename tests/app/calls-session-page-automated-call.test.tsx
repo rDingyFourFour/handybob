@@ -233,10 +233,10 @@ describe("CallSessionPage automated call view", () => {
     const markup = renderToStaticMarkup(element);
 
     expect(markup).not.toContain("Automated call");
-    expect(markup).not.toContain("Twilio status");
-    expect(markup).not.toContain("Recording");
     expect(markup).not.toContain("Call ended. Record outcome to generate a follow-up.");
     expect(markup).not.toContain("Automated call notes");
+    expect(markup).toContain('data-testid="call-session-timeline"');
+    expect(markup).toContain('data-testid="call-session-action-bar"');
     const detailEvents = consoleLogSpy.mock.calls.filter(
       (args) => args[0] === "[calls-session-askbob-automated-details-visible]",
     );

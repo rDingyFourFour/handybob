@@ -357,8 +357,9 @@ describe("CallSessionPage outcome card", () => {
 
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-8" }) });
     const markup = renderToStaticMarkup(element);
-    expect(markup).not.toContain("Twilio status");
-    expect(markup).not.toContain("Refresh status");
+    expect(markup).toContain('data-testid="call-session-timeline"');
+    expect(markup).toContain('data-testid="call-session-action-bar"');
+    expect(markup).toContain("Refresh status");
   });
 
   it("renders a recording pending card when the Twilio call has no recording yet", async () => {

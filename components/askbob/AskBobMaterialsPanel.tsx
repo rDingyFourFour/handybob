@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
+import AskBobStepReadinessBadge, {
+  type AskBobStepReadiness,
+} from "@/components/askbob/AskBobStepReadinessBadge";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import type {
   AskBobMaterialsGenerateResult,
@@ -35,6 +38,7 @@ type AskBobMaterialsPanelProps = {
   stepCollapsed?: boolean;
   onToggleStepCollapsed?: () => void;
   initialMaterialsSnapshot?: AskBobMaterialsSnapshotPayload | null;
+  stepReadiness?: AskBobStepReadiness | null;
 };
 
 type MaterialsExtraDetailsInput = {
@@ -98,6 +102,7 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
     stepCollapsed = false,
     onToggleStepCollapsed,
     initialMaterialsSnapshot,
+    stepReadiness,
   } = props;
   const initialMaterialsSuggestion = initialMaterialsSnapshot
     ? adaptAskBobMaterialsToSmartQuote({
@@ -227,13 +232,16 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob materials</p>
         <div className="flex flex-wrap items-center gap-2 justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="hb-heading-3 text-xl font-semibold">Step 3 · Build a materials checklist</h2>
-            {stepCompleted && (
-              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
-                Done
-              </span>
-            )}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <h2 className="hb-heading-3 text-xl font-semibold">Step 3 · Build a materials checklist</h2>
+              {stepCompleted && (
+                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
+                  Done
+                </span>
+              )}
+            </div>
+            <AskBobStepReadinessBadge readiness={stepReadiness} />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <HbButton

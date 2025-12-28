@@ -22,7 +22,10 @@ import {
   readAndClearCallOutcomePrefill,
   type CallOutcomePrefillPayload,
 } from "@/utils/askbob/callOutcomePrefillCache";
-import type { CallAutomatedDialSnapshot } from "@/lib/domain/calls/sessions";
+import {
+  getCallSessionOutcomeMissingReason,
+  type CallAutomatedDialSnapshot,
+} from "@/lib/domain/calls/sessions";
 
 const NOTES_MAX_LENGTH = 1000;
 
@@ -145,6 +148,23 @@ export default function CallOutcomeCaptureCard({
     Boolean(isAutomatedCallContext && automatedDialSnapshot?.isTerminal && !hasExistingOutcome);
   const showInProgressCallBanner =
     Boolean(isAutomatedCallContext && automatedDialSnapshot?.isInProgress && !hasExistingOutcome);
+  const blockingReason = automatedDialSnapshot
+    ? getCallSessionOutcomeMissingReason(automatedDialSnapshot)
+    : "ready";
+  const shouldLogBlockingReason =
+    blockingReason === "missing_outcome" || blockingReason === "missing_reached_flag";
+  const blockingLoggedRef = useRef(false);
+
+  if (typeof window !== "undefined" && shouldLogBlockingReason && !blockingLoggedRef.current) {
+    console.log("[calls-after-call-outcome-blocking-visible]", {
+      missingReason: blockingReason,
+      isTerminal: Boolean(automatedDialSnapshot?.isTerminal),
+      hasOutcome: Boolean(automatedDialSnapshot?.hasOutcome ?? hasExistingOutcome),
+      workspaceId,
+      callId,
+    });
+    blockingLoggedRef.current = true;
+  }
   const initialNotesValue = initialNotes ?? "";
   const [initialPrefillPayload] = useState<CallOutcomePrefillPayload | null>(() => {
     if (typeof window === "undefined" || hasExistingOutcome) {
@@ -445,7 +465,10 @@ export default function CallOutcomeCaptureCard({
   };
 
   return (
-    <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+    <div
+      id="call-outcome-capture"
+      className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4"
+    >
       <div className="space-y-1">
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call outcome</p>
         <h3 className="text-lg font-semibold text-white">Call outcome</h3>

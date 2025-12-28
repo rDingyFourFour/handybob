@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
+import AskBobStepReadinessBadge, {
+  type AskBobStepReadiness,
+} from "@/components/askbob/AskBobStepReadinessBadge";
 import {
   AskBobCallPurpose,
   ASKBOB_CALL_INTENT_LABELS,
@@ -57,6 +60,7 @@ type AskBobCallAssistPanelProps = {
   latestCallOutcomeLabel?: string | null;
   latestCallOutcome?: LatestCallOutcomeForJob | null;
   onCallScriptBodyChange?: (body: string | null) => void;
+  stepReadiness?: AskBobStepReadiness | null;
 };
 
 type ScriptResult = {
@@ -162,6 +166,7 @@ export default function AskBobCallAssistPanel({
   latestCallOutcome,
   latestCallOutcomeLabel,
   onCallScriptBodyChange,
+  stepReadiness,
 }: AskBobCallAssistPanelProps) {
   const normalizedFollowupCallPurpose = followupCallPurpose?.trim() ?? null;
   const normalizedFollowupCallTone = followupCallTone?.trim() ?? null;
@@ -548,6 +553,7 @@ export default function AskBobCallAssistPanel({
                 </span>
               )}
             </div>
+            <AskBobStepReadinessBadge readiness={stepReadiness} />
             {readyToCallLabel && (
               <p className="text-xs text-slate-400">{readyToCallLabel}</p>
             )}

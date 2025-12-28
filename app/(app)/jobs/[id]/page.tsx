@@ -32,6 +32,10 @@ import {
 } from "@/lib/domain/askbob/callHistory";
 import { getLatestCallOutcomeForJob } from "@/lib/domain/calls/latestCallOutcome";
 import {
+  buildCallAutomatedDialSnapshot,
+  type CallAutomatedDialSnapshot,
+} from "@/lib/domain/calls/sessions";
+import {
   getInvoiceForJob,
   type InvoiceSnapshotRow as JobInvoiceSnapshotRow,
 } from "@/lib/domain/invoices/getInvoiceForJob";
@@ -269,6 +273,7 @@ export default async function JobDetailPage({
   }
 
   let workspace;
+  let userId: string | null = null;
   try {
     const workspaceResult = await resolveWorkspaceContext({
       supabase,
@@ -283,6 +288,7 @@ export default async function JobDetailPage({
       return fallbackCard("Access denied", routeOutcome.message);
     }
     workspace = workspaceResult.ok ? workspaceResult.membership.workspace : null;
+    userId = workspaceResult.ok ? workspaceResult.userId : null;
   } catch (error) {
     console.error("[job-detail] Failed to resolve workspace", error);
     return fallbackCard("Job unavailable", "Unable to resolve workspace. Please try again.");
@@ -596,6 +602,27 @@ export default async function JobDetailPage({
     ? followupStatusClasses[followupDueInfo.dueStatus]
     : "";
   const latestCallLabelText = buildCallLabel(latestCall);
+  let automatedDialSnapshot: CallAutomatedDialSnapshot | null = null;
+  if (latestCall?.id) {
+    try {
+      const { data, error } = await supabase
+        .from("calls")
+        .select(
+          "id, workspace_id, twilio_call_sid, twilio_status, twilio_status_updated_at, twilio_recording_url, twilio_recording_sid, twilio_recording_duration_seconds, transcript, outcome_recorded_at, outcome_code, outcome_notes, reached_customer"
+        )
+        .eq("workspace_id", workspace.id)
+        .eq("id", latestCall.id)
+        .maybeSingle();
+
+      if (error) {
+        console.warn("[job-detail] Failed to load call session snapshot", error);
+      } else if (data) {
+        automatedDialSnapshot = buildCallAutomatedDialSnapshot(data);
+      }
+    } catch (error) {
+      console.warn("[job-detail] Call session snapshot lookup error", error);
+    }
+  }
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -623,6 +650,7 @@ export default async function JobDetailPage({
           <JobAskBobFlow
             workspaceId={workspace.id}
             jobId={job.id}
+            userId={userId ?? workspace.id}
             customerId={customerId ?? null}
             customerDisplayName={customerName ?? null}
             customerPhoneNumber={customerPhoneNumber ?? null}
@@ -650,6 +678,7 @@ export default async function JobDetailPage({
             afterCallCacheCallId={afterCallCallId ?? undefined}
             forcedAfterCallCallId={forcedAfterCallCallId ?? undefined}
             forcedAfterCallHasTranscript={forcedAfterCallHasTranscript}
+            automatedDialSnapshot={automatedDialSnapshot}
           />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">

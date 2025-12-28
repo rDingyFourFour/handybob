@@ -16,6 +16,9 @@ import {
 } from "@/app/(app)/calls/actions/startAskBobAutomatedCall";
 import { saveAutomatedCallNotesAction } from "@/app/(app)/calls/actions/saveAutomatedCallNotesAction";
 import { formatTwilioStatusLabel } from "@/utils/calls/twilioStatusLabel";
+import AskBobStepReadinessBadge, {
+  type AskBobStepReadiness,
+} from "@/components/askbob/AskBobStepReadinessBadge";
 import {
   ASKBOB_AUTOMATED_GREETING_STYLE_DEFAULT,
   ASKBOB_AUTOMATED_VOICE_DEFAULT,
@@ -116,8 +119,10 @@ type Props = {
   onReset?: () => void;
   onStartCallWithScript?: (payload: StartCallWithScriptPayload) => void;
   onAutomatedCallSuccess?: (summary: string) => void;
+  onAutomatedCallSessionIdChange?: (callId: string | null) => void;
   onAutomatedCallNotesChange?: (notes: string | null) => void;
   automatedDialSnapshot?: CallAutomatedDialSnapshot | null;
+  stepReadiness?: AskBobStepReadiness | null;
 };
 
 export default function AskBobAutomatedCallPanel({
@@ -138,8 +143,10 @@ export default function AskBobAutomatedCallPanel({
   onReset,
   onStartCallWithScript,
   onAutomatedCallSuccess,
+  onAutomatedCallSessionIdChange,
   onAutomatedCallNotesChange,
   automatedDialSnapshot,
+  stepReadiness,
 }: Props) {
   const [status, setStatus] = useState<StatusState>("idle");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -338,6 +345,7 @@ const previewText = scriptPreview
 
   useEffect(() => {
     if (!callSessionId) {
+      onAutomatedCallSessionIdChange?.(null);
       setNotesInput("");
       notesRef.current = "";
       notesDirtyRef.current = false;
@@ -360,7 +368,7 @@ const previewText = scriptPreview
       clearTimeout(autosaveTimerRef.current);
       autosaveTimerRef.current = null;
     }
-  }, [callSessionId, notifyParentOfNotes]);
+  }, [callSessionId, notifyParentOfNotes, onAutomatedCallSessionIdChange]);
 
   useEffect(() => {
     if (status === "success" || status === "already_in_progress") {
@@ -674,6 +682,7 @@ const previewText = scriptPreview
       });
 
       setCallSessionId(actionResult.callId ?? null);
+      onAutomatedCallSessionIdChange?.(actionResult.callId ?? null);
       setTwilioStatus(actionResult.twilioStatus ?? null);
       setResultTwilioCallSid(actionResult.twilioCallSid ?? null);
 
@@ -745,6 +754,7 @@ const previewText = scriptPreview
     voice,
     workspaceId,
     hasCustomerPhone,
+    onAutomatedCallSessionIdChange,
   ]);
 
   const handleOpenCallWorkspace = () => {
@@ -778,6 +788,9 @@ const previewText = scriptPreview
     return "Generate a script in Step 7 and then place an automated call when you’re ready.";
   }, [status, statusMessage]);
   const showSuccessBanner = (status === "success" || status === "already_in_progress") && Boolean(callSessionId);
+  const showPersistentCallSessionLink = Boolean(
+    callSessionId && (status === "success" || status === "already_in_progress"),
+  );
   const sessionRecordingDurationLabel = sessionStatus?.recordingDurationSeconds
     ? formatRecordingDuration(sessionStatus.recordingDurationSeconds)
     : null;
@@ -802,12 +815,23 @@ const previewText = scriptPreview
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
         <div className="flex flex-wrap items-center gap-2 justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="hb-heading-3 text-xl font-semibold">Step 9 · AskBob automated call</h2>
-            {stepCompleted && (
-              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
-                Done
-              </span>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <h2 className="hb-heading-3 text-xl font-semibold">Step 9 · AskBob automated call</h2>
+              {stepCompleted && (
+                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
+                  Done
+                </span>
+              )}
+            </div>
+            <AskBobStepReadinessBadge readiness={stepReadiness} />
+            {showPersistentCallSessionLink && callSessionId && (
+              <Link
+                href={`/calls/${callSessionId}`}
+                className="text-xs uppercase tracking-[0.3em] text-emerald-200"
+              >
+                Open call session
+              </Link>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">

@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
+import AskBobStepReadinessBadge, {
+  type AskBobStepReadiness,
+} from "@/components/askbob/AskBobStepReadinessBadge";
 import { formatCurrency } from "@/utils/timeline/formatters";
 import { runAskBobQuoteGenerateAction } from "@/app/(app)/askbob/quote-actions";
 import { createQuoteFromAskBobAction } from "@/app/(app)/quotes/askbob-actions";
@@ -30,9 +33,12 @@ type AskBobQuotePanelProps = {
   onQuoteApplied?: (quoteId: string, createdAt?: string | null) => void;
   onScrollToFollowup?: () => void;
   stepCompleted?: boolean;
+  stepCollapsed?: boolean;
+  onToggleStepCollapsed?: () => void;
   resetToken?: number;
   onQuoteReset?: () => void;
   initialQuoteSnapshot?: AskBobQuoteSnapshotPayload | null;
+  stepReadiness?: AskBobStepReadiness | null;
 };
 
 const DEFAULT_PROMPT = "Generate a standard quote for this job.";
@@ -132,6 +138,7 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     stepCollapsed = false,
     onToggleStepCollapsed,
     initialQuoteSnapshot,
+    stepReadiness,
   } = props;
   const router = useRouter();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
@@ -313,13 +320,16 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob quote</p>
         <div className="flex flex-wrap items-center gap-2 justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="hb-heading-3 text-xl font-semibold">Step 4 · Draft a quote</h2>
-            {stepCompleted && (
-              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
-                Done
-              </span>
-            )}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <h2 className="hb-heading-3 text-xl font-semibold">Step 4 · Draft a quote</h2>
+              {stepCompleted && (
+                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
+                  Done
+                </span>
+              )}
+            </div>
+            <AskBobStepReadinessBadge readiness={stepReadiness} />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <HbButton

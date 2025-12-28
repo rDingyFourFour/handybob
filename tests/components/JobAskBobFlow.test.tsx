@@ -254,7 +254,7 @@ describe("JobAskBobFlow wiring", () => {
       "Step 5 Follow-up guidance",
       "Step 6 Schedule visit",
       "Step 7 Prepare a phone call with AskBob",
-      "Step 8 · After the call summary",
+      "Step 8 · Manual after-call (job-only)",
       "Step 9 · AskBob automated call",
     ]);
     expect(statusItems.map((item) => item.done)).toEqual([
