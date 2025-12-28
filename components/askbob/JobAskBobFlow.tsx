@@ -46,8 +46,13 @@ import {
   buildFollowupSummaryFromSnapshot,
   buildQuoteSummaryFromSnapshot,
 } from "@/lib/domain/askbob/summary";
+import {
+  parsePublicBookingHandoffSignal,
+  PUBLIC_BOOKING_HANDOFF_SESSION_KEY,
+} from "@/lib/domain/publicBookingHandoff";
 
 const MAX_SCRIPT_QUERY_LENGTH = 4000;
+const PUBLIC_BOOKING_HANDOFF_MAX_AGE_MS = 15 * 60 * 1000;
 
 const AFTER_CALL_HYDRATION_HINT =
   "AskBob couldn’t restore the last after-call draft. Generate a new summary to continue.";
@@ -280,6 +285,7 @@ export default function JobAskBobFlow({
   const callSessionDraftLoggedRef = useRef(false);
   const previousJobContextRef = useRef({ jobId, workspaceId });
   const previousForcedAfterCallCallIdRef = useRef(forcedAfterCallCallId ?? null);
+  const handoffCheckedJobIdRef = useRef<string | null>(null);
   useEffect(() => {
     const previousContext = previousJobContextRef.current;
     if (previousContext.jobId !== jobId || previousContext.workspaceId !== workspaceId) {
@@ -562,7 +568,7 @@ export default function JobAskBobFlow({
     [callScriptOrigin, customerId, jobId, router, userId, workspaceId],
   );
 
-  const scrollToSection = (sectionId: string) => {
+  const scrollToSection = useCallback((sectionId: string) => {
     if (typeof document === "undefined") {
       return;
     }
@@ -571,7 +577,89 @@ export default function JobAskBobFlow({
       return;
     }
     target.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (handoffCheckedJobIdRef.current === jobId) {
+      return;
+    }
+    handoffCheckedJobIdRef.current = jobId;
+    let raw: string | null = null;
+    try {
+      raw = window.sessionStorage.getItem(PUBLIC_BOOKING_HANDOFF_SESSION_KEY);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown";
+      console.warn("[public-booking-owner-handoff-askbob-autostart-ignored]", {
+        jobId,
+        reason: "storage_unavailable",
+        diagnostics: reason,
+      });
+      return;
+    }
+    if (!raw) {
+      return;
+    }
+    const parsed = parsePublicBookingHandoffSignal(raw);
+    if (!parsed) {
+      console.log("[public-booking-owner-handoff-askbob-autostart-ignored]", {
+        jobId,
+        reason: "parse_failed",
+      });
+      return;
+    }
+    const ageMs = Date.now() - parsed.createdAt;
+    if (parsed.jobId !== jobId) {
+      console.log("[public-booking-owner-handoff-askbob-autostart-ignored]", {
+        jobId,
+        desiredStep: parsed.desiredStep,
+        ageMs,
+        reason: "wrong_job",
+      });
+      return;
+    }
+    if (parsed.desiredStep !== 1) {
+      console.log("[public-booking-owner-handoff-askbob-autostart-ignored]", {
+        jobId,
+        desiredStep: parsed.desiredStep,
+        ageMs,
+        reason: "wrong_step",
+      });
+      return;
+    }
+    if (ageMs < 0 || ageMs > PUBLIC_BOOKING_HANDOFF_MAX_AGE_MS) {
+      console.log("[public-booking-owner-handoff-askbob-autostart-ignored]", {
+        jobId,
+        desiredStep: parsed.desiredStep,
+        ageMs,
+        reason: "stale",
+      });
+      return;
+    }
+    console.log("[public-booking-owner-handoff-askbob-autostart-detected]", {
+      jobId,
+      desiredStep: parsed.desiredStep,
+      ageMs,
+    });
+    Promise.resolve().then(() => {
+      setDiagnoseCollapsed(false);
+      scrollToSection("askbob-diagnose");
+      try {
+        window.sessionStorage.removeItem(PUBLIC_BOOKING_HANDOFF_SESSION_KEY);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "unknown";
+        console.warn("[public-booking-owner-handoff-askbob-autostart-clear-failure]", {
+          jobId,
+          reason,
+        });
+      }
+      console.log("[public-booking-owner-handoff-askbob-autostart-applied]", {
+        jobId,
+      });
+    });
+  }, [jobId, scrollToSection]);
 
   const handleDiagnoseComplete = (context: JobDiagnosisContext) => {
     const summary = context.diagnosisSummary?.trim() ?? null;

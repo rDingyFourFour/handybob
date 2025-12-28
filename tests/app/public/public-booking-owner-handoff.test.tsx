@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BookingForm } from "@/app/public/bookings/[slug]/BookingForm";
 import { PublicBookingConfirmation } from "@/app/public/bookings/[slug]/PublicBookingConfirmation";
+import { PUBLIC_BOOKING_HANDOFF_SESSION_KEY } from "@/lib/domain/publicBookingHandoff";
 
 const mockReplace = vi.fn();
 const mockSubmitPublicBooking = vi.fn();
@@ -33,6 +34,7 @@ describe("public booking owner handoff", () => {
     root = createRoot(container);
     mockReplace.mockReset();
     mockSubmitPublicBooking.mockReset();
+    window.sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -132,6 +134,16 @@ describe("public booking owner handoff", () => {
       handoffButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
+    const stored = window.sessionStorage.getItem(PUBLIC_BOOKING_HANDOFF_SESSION_KEY);
+    expect(stored).toBeTruthy();
+    if (stored) {
+      const parsed = JSON.parse(stored) as Record<string, unknown>;
+      expect(parsed.jobId).toBe("job-9");
+      expect(parsed.source).toBe("public_booking_owner_handoff");
+      expect(parsed.desiredStep).toBe(1);
+      expect(typeof parsed.createdAt).toBe("number");
+    }
+
     expect(mockReplace).toHaveBeenCalledWith("/jobs/job-9");
     expect(
       logSpy.mock.calls.some(
@@ -141,6 +153,16 @@ describe("public booking owner handoff", () => {
           payload.jobId === "job-9" &&
           payload.customerId === "cust-9" &&
           payload.redirectPath === "/jobs/job-9",
+      ),
+    ).toBe(true);
+    expect(
+      logSpy.mock.calls.some(
+        ([label, payload]) =>
+          label === "[public-booking-owner-handoff-askbob-click]" &&
+          payload.workspaceId === "workspace-1" &&
+          payload.jobId === "job-9" &&
+          payload.desiredStep === 1 &&
+          payload.hasHandoffSignal === true,
       ),
     ).toBe(true);
     expect(

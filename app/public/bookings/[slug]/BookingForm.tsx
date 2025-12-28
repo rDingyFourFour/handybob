@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 
 import { submitPublicBooking, type ActionState } from "./actions";
 import { PublicBookingConfirmation } from "./PublicBookingConfirmation";
+import {
+  PUBLIC_BOOKING_HANDOFF_SESSION_KEY,
+  type PublicBookingHandoffSignal,
+} from "@/lib/domain/publicBookingHandoff";
 
 type Props = {
   workspaceSlug: string;
@@ -108,6 +112,36 @@ function BookingFormContent({ workspaceSlug, onReset }: BookingFormContentProps)
       return;
     }
     const redirectPath = state.ownerHandoff.redirectPath;
+    const desiredStep = 1;
+    let hasHandoffSignal = false;
+    if (typeof window !== "undefined" && window.sessionStorage) {
+      const signal: PublicBookingHandoffSignal = {
+        jobId: state.jobId,
+        createdAt: Date.now(),
+        source: "public_booking_owner_handoff",
+        desiredStep,
+      };
+      try {
+        window.sessionStorage.setItem(
+          PUBLIC_BOOKING_HANDOFF_SESSION_KEY,
+          JSON.stringify(signal),
+        );
+        hasHandoffSignal = true;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "unknown";
+        console.warn("[public-booking-owner-handoff-signal-failure]", {
+          workspaceId: state.workspaceId,
+          jobId: state.jobId,
+          reason,
+        });
+      }
+    }
+    console.log("[public-booking-owner-handoff-askbob-click]", {
+      workspaceId: state.workspaceId,
+      jobId: state.jobId,
+      desiredStep,
+      hasHandoffSignal,
+    });
     console.log("[public-booking-owner-handoff-click]", {
       workspaceId: state.workspaceId,
       jobId: state.jobId,
