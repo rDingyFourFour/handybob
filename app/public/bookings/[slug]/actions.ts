@@ -18,10 +18,12 @@ import { validatePublicLeadSubmission } from "@/schemas/publicLead";
 import {
   buildPublicLeadDescription,
   buildPublicLeadTitle,
+  buildPublicBookingIdempotencyKey,
+  buildPublicBookingNormalizedContactKey,
+  createPublicBookingLeadJob,
   isPublicLeadJobInsertGuardError,
   normalizePublicLeadUrgency,
   upsertPublicLeadCustomer,
-  upsertPublicLeadJob,
 } from "@/lib/domain/publicLeads";
 import { createServerClient } from "@/utils/supabase/server";
 
@@ -32,6 +34,7 @@ export type ActionSuccess = {
   customerId: string;
   isOwnerHandoffEligible: boolean;
   redirectTo: string | null;
+  reusedExistingBookingJob: boolean;
 };
 
 export type ActionError = {
@@ -212,13 +215,26 @@ export async function submitPublicBooking(
   const normalizedUrgency = normalizePublicLeadUrgency(
     selectedUrgency === "specific_date" && contactSpecificDate ? "flexible" : selectedUrgency,
   );
+  const normalizedContactKey = buildPublicBookingNormalizedContactKey({ email, phone });
+  const dayBucket = new Date().toISOString().slice(0, 10);
+  const idempotencyKey = buildPublicBookingIdempotencyKey({
+    workspaceId: workspace.id,
+    normalizedContactKey,
+    title: jobTitle,
+    description: mergedDescription,
+    dayBucket,
+  });
+  const idempotencyKeyPrefix = idempotencyKey.slice(0, 8);
 
   let jobId: string | null = null;
+  let jobCustomerId: string | null = customer.id;
+  let reusedExistingBookingJob = false;
   try {
-    const jobResult = await upsertPublicLeadJob({
+    const jobResult = await createPublicBookingLeadJob({
       supabase,
       workspace,
       customerId: customer.id,
+      idempotencyKey,
       job: {
         description: mergedDescription,
         title: jobTitle,
@@ -228,6 +244,8 @@ export async function submitPublicBooking(
       },
     });
     jobId = jobResult.jobId;
+    jobCustomerId = jobResult.customerId ?? customer.id;
+    reusedExistingBookingJob = jobResult.reusedExistingBookingJob;
   } catch (error) {
     const diagnostics = buildJobCreateDiagnostics(error);
     const message = error instanceof Error ? error.message : "unknown";
@@ -275,7 +293,7 @@ export async function submitPublicBooking(
 
   await logSubmission(supabase, {
     workspaceId: workspace.id,
-    customerId: customer.id,
+    customerId: jobCustomerId,
     jobId,
     ipHash,
     userAgent,
@@ -287,29 +305,35 @@ export async function submitPublicBooking(
       status: "success",
       workspaceId: workspace.id,
       jobId,
-      customerId: customer.id,
+      customerId: jobCustomerId,
       spamSuspected: true,
       hasAttentionScore: false,
+      hasIdempotencyKey: Boolean(idempotencyKey),
+      reusedExistingBookingJob,
+      shortKeyPrefix: idempotencyKeyPrefix,
     });
     const spamSuccess: ActionSuccess = {
       status: "success",
       workspaceId: workspace.id,
       jobId,
-      customerId: customer.id,
+      customerId: jobCustomerId ?? customer.id,
       isOwnerHandoffEligible: false,
       redirectTo: null,
+      reusedExistingBookingJob,
     };
     console.log("[public-booking-submit-success]", {
       workspaceId: workspace.id,
       jobId,
-      customerId: customer.id,
+      customerId: jobCustomerId ?? customer.id,
       isOwnerHandoffEligible: spamSuccess.isOwnerHandoffEligible,
     });
     return spamSuccess;
   }
 
+  const shouldTriggerPostInsert = !reusedExistingBookingJob;
+
   // AI classification (best-effort, non-blocking)
-  if (jobId) {
+  if (jobId && shouldTriggerPostInsert) {
     try {
       const classification = await classifyJobWithAi({
         jobId,
@@ -335,7 +359,7 @@ export async function submitPublicBooking(
     }
   }
 
-  if (!spamSuspected && workspace.auto_confirmation_email_enabled && email) {
+  if (!spamSuspected && shouldTriggerPostInsert && workspace.auto_confirmation_email_enabled && email) {
     const workspaceName = workspace.brand_name || workspace.name || "Your contractor";
     const firstName = name.split(" ")[0] || name;
     const body = [
@@ -376,22 +400,26 @@ export async function submitPublicBooking(
     status: "success",
     workspaceId: workspace.id,
     jobId,
-    customerId: customer.id,
+    customerId: jobCustomerId,
     hasAttentionScore: true,
+    hasIdempotencyKey: Boolean(idempotencyKey),
+    reusedExistingBookingJob,
+    shortKeyPrefix: idempotencyKeyPrefix,
   });
 
   const successState: ActionSuccess = {
     status: "success",
     workspaceId: workspace.id,
     jobId,
-    customerId: customer.id,
+    customerId: jobCustomerId ?? customer.id,
     isOwnerHandoffEligible,
     redirectTo: isOwnerHandoffEligible ? redirectTo : null,
+    reusedExistingBookingJob,
   };
   console.log("[public-booking-submit-success]", {
     workspaceId: workspace.id,
     jobId,
-    customerId: customer.id,
+    customerId: jobCustomerId ?? customer.id,
     isOwnerHandoffEligible: successState.isOwnerHandoffEligible,
   });
   return successState;

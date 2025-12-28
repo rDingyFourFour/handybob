@@ -4,7 +4,7 @@ import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 
 const createAdminClientMock = vi.fn();
 const mockUpsertPublicLeadCustomer = vi.fn();
-const mockUpsertPublicLeadJob = vi.fn();
+const mockCreatePublicBookingLeadJob = vi.fn();
 
 vi.mock("@/utils/supabase/admin", () => ({
   createAdminClient: () => createAdminClientMock(),
@@ -33,7 +33,7 @@ vi.mock("@/lib/domain/publicLeads", async () => {
   return {
     ...actual,
     upsertPublicLeadCustomer: (...args: unknown[]) => mockUpsertPublicLeadCustomer(...args),
-    upsertPublicLeadJob: (...args: unknown[]) => mockUpsertPublicLeadJob(...args),
+    createPublicBookingLeadJob: (...args: unknown[]) => mockCreatePublicBookingLeadJob(...args),
   };
 });
 
@@ -55,7 +55,7 @@ describe("submitPublicBooking diagnostics", () => {
   beforeEach(() => {
     createAdminClientMock.mockReset();
     mockUpsertPublicLeadCustomer.mockReset();
-    mockUpsertPublicLeadJob.mockReset();
+    mockCreatePublicBookingLeadJob.mockReset();
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
@@ -93,7 +93,11 @@ describe("submitPublicBooking diagnostics", () => {
       email: "jane@example.com",
       phone: null,
     });
-    mockUpsertPublicLeadJob.mockResolvedValue({ jobId: "job-1", wasUpdated: false });
+    mockCreatePublicBookingLeadJob.mockResolvedValue({
+      jobId: "job-1",
+      customerId: "cust-1",
+      reusedExistingBookingJob: false,
+    });
 
     const result = await submitPublicBooking("demo", { status: "idle" }, buildFormData());
 
@@ -101,13 +105,15 @@ describe("submitPublicBooking diagnostics", () => {
     expect(result.jobId).toBe("job-1");
     expect(result.isOwnerHandoffEligible).toBe(false);
     expect(result.redirectTo).toBeNull();
+    expect(result.reusedExistingBookingJob).toBe(false);
     const logCalls = vi.mocked(console.log).mock.calls;
     expect(
       logCalls.some(
         ([label, payload]) =>
           label === "[public-booking-submit]" &&
           payload.workspaceId === "workspace-1" &&
-          payload.hasAttentionScore === true,
+          payload.hasAttentionScore === true &&
+          payload.reusedExistingBookingJob === false,
       ),
     ).toBe(true);
     expect(
@@ -146,7 +152,7 @@ describe("submitPublicBooking diagnostics", () => {
       email: "jane@example.com",
       phone: null,
     });
-    mockUpsertPublicLeadJob.mockRejectedValue(
+    mockCreatePublicBookingLeadJob.mockRejectedValue(
       new Error(
         "null value in column \"attention_score\" of relation \"jobs\" violates not-null constraint",
       ),

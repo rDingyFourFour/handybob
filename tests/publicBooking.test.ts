@@ -30,6 +30,8 @@ type JobRow = {
   customer_id?: string | null;
   title?: string;
   description_raw?: string;
+  source?: string | null;
+  description_ai_summary?: string | null;
 };
 
 type LeadFormSubmissionRow = {
@@ -134,15 +136,43 @@ function makeSupabaseMock(initial?: Partial<SupabaseMockState>) {
           };
         case "jobs":
           return {
-            select: () => ({
-              eq: () => ({
-                eq: () => ({
-                  order: () => ({
-                    limit: async () => ({ data: state.jobs }),
-                  }),
+            select: () => {
+              const filters: Record<string, string> = {};
+              const query = {
+                eq: (col: string, value: string) => {
+                  filters[col] = value;
+                  return query;
+                },
+                order: () => query,
+                limit: (size?: number) => {
+                  const filtered = state.jobs.filter((job) =>
+                    Object.entries(filters).every(([key, value]) => {
+                      const jobValue = job[key as keyof JobRow];
+                      return jobValue === value;
+                    }),
+                  );
+                  const limited = typeof size === "number" ? filtered.slice(0, size) : filtered;
+                  const limitQuery = {
+                    maybeSingle: async () => ({
+                      data: limited[0] ?? null,
+                    }),
+                    then: (onFulfilled: (value: { data: JobRow[] }) => void, onRejected: () => void) =>
+                      Promise.resolve({ data: limited }).then(onFulfilled, onRejected),
+                  };
+                  return limitQuery;
+                },
+                maybeSingle: async () => ({
+                  data:
+                    state.jobs.find((job) =>
+                      Object.entries(filters).every(([key, value]) => {
+                        const jobValue = job[key as keyof JobRow];
+                        return jobValue === value;
+                      }),
+                    ) ?? null,
                 }),
-              }),
-            }),
+              };
+              return query;
+            },
             insert: (payload: JobRow) => ({
               select: () => ({
                 single: async () => {

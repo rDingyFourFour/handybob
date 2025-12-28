@@ -150,6 +150,7 @@ describe("BookingForm", () => {
       customerId: "cust-1",
       isOwnerHandoffEligible: false,
       redirectTo: null,
+      reusedExistingBookingJob: false,
     });
 
     await renderForm();
@@ -190,6 +191,7 @@ describe("BookingForm", () => {
       customerId: "cust-2",
       isOwnerHandoffEligible: true,
       redirectTo: "/jobs/job-2",
+      reusedExistingBookingJob: false,
     });
 
     await renderForm();
@@ -216,5 +218,52 @@ describe("BookingForm", () => {
           payload.jobId === "job-2",
       ),
     ).toBe(true);
+  });
+
+  it("ignores rapid double submits and keeps confirmation stable", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const deferred = createDeferred<ActionState>();
+    mockSubmitPublicBooking.mockImplementationOnce(() => deferred.promise);
+
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    nowSpy.mockReturnValueOnce(1_000);
+    await renderForm();
+    fillRequiredFields();
+
+    await submitForm();
+    nowSpy.mockReturnValueOnce(1_100);
+    await submitForm();
+
+    expect(mockSubmitPublicBooking).toHaveBeenCalledTimes(1);
+    expect(
+      logSpy.mock.calls.some(([label]) => label === "[public-booking-submit-rapid-click-ignored]"),
+    ).toBe(true);
+
+    deferred.resolve({
+      status: "success",
+      workspaceId: "workspace-1",
+      jobId: "job-rapid",
+      customerId: "cust-rapid",
+      isOwnerHandoffEligible: false,
+      redirectTo: null,
+      reusedExistingBookingJob: false,
+    });
+
+    await flushReactUpdates();
+
+    const confirmation = container.querySelector<HTMLElement>(
+      "[data-testid=\"public-booking-confirmation\"]",
+    );
+    expect(confirmation).toBeTruthy();
+    expect(confirmation?.getAttribute("data-job-id")).toBe("job-rapid");
+    expect(confirmation?.textContent).toContain("Request received");
+
+    const confirmationText = confirmation?.textContent;
+    await flushReactUpdates();
+    const confirmationAfter = container.querySelector<HTMLElement>(
+      "[data-testid=\"public-booking-confirmation\"]",
+    );
+    expect(confirmationAfter).toBe(confirmation);
+    expect(confirmationAfter?.textContent).toBe(confirmationText);
   });
 });

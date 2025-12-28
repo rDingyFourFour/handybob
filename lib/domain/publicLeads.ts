@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { normalizePhone } from "@/utils/phones/normalizePhone";
@@ -36,6 +37,7 @@ type PublicLeadJobInput = {
 
 const CLOSED_JOB_STATUSES = ["completed", "cancelled", "closed", "lost", "done"];
 const DEFAULT_ATTENTION_SCORE = 0;
+const PUBLIC_BOOKING_IDEMPOTENCY_PREFIX = "public_booking_idem:";
 const PUBLIC_LEAD_REQUIRED_JOB_FIELDS = [
   "attention_score",
   "workspace_id",
@@ -60,6 +62,7 @@ export type PublicLeadJobInsertPayload = {
   category: string | null;
   attention_reason: string | null;
   spam_suspected: boolean | null;
+  description_ai_summary?: string | null;
   priority?: string;
 };
 
@@ -114,6 +117,40 @@ export function buildPublicLeadDescription(
   return lines.join("\n\n");
 }
 
+export function buildPublicBookingNormalizedContactKey(params: {
+  email?: string | null;
+  phone?: string | null;
+}) {
+  const email = params.email?.trim().toLowerCase();
+  if (email) return email;
+  const phone = normalizePhone(params.phone);
+  if (phone) return phone;
+  return "unknown_contact";
+}
+
+export function buildPublicBookingIdempotencyKey(params: {
+  workspaceId: string;
+  normalizedContactKey: string;
+  title: string;
+  description: string;
+  dayBucket: string;
+}) {
+  const normalizedTitle = params.title.trim();
+  const normalizedDescription = params.description.trim();
+  const data = [
+    params.workspaceId,
+    params.normalizedContactKey,
+    normalizedTitle,
+    normalizedDescription,
+    params.dayBucket,
+  ].join("|");
+  return crypto.createHash("sha256").update(data).digest("hex").slice(0, 16);
+}
+
+export function buildPublicBookingIdempotencyMarker(idempotencyKey: string) {
+  return `${PUBLIC_BOOKING_IDEMPOTENCY_PREFIX}${idempotencyKey}`;
+}
+
 export function normalizePublicLeadUrgency(raw?: string | null) {
   const value = (raw || "").toLowerCase();
   if (value === "today") return "today";
@@ -130,8 +167,9 @@ export function buildPublicLeadJobInsertPayload(params: {
   job: PublicLeadJobInput;
   title?: string;
   attentionScore?: number;
+  idempotencyMarker?: string | null;
 }): PublicLeadJobInsertPayload {
-  const { workspace, customerId, job, title, attentionScore } = params;
+  const { workspace, customerId, job, title, attentionScore, idempotencyMarker } = params;
   const resolvedTitle = title ?? (job.title?.trim() || buildPublicLeadTitle(job.description));
   const resolvedAttentionScore = attentionScore ?? job.attentionScore ?? DEFAULT_ATTENTION_SCORE;
 
@@ -151,6 +189,7 @@ export function buildPublicLeadJobInsertPayload(params: {
     category: job.category ?? null,
     attention_reason: job.attentionReason ?? null,
     spam_suspected: job.spamSuspected ?? null,
+    description_ai_summary: idempotencyMarker ?? null,
   };
 
   if (job.priority != null) {
@@ -298,6 +337,88 @@ export async function upsertPublicLeadJob(params: {
   }
 
   return { jobId: inserted.id as string, wasUpdated: false };
+}
+
+export async function findExistingPublicBookingJobByIdempotencyKey(params: {
+  supabase: SupabaseClient;
+  workspaceId: string;
+  idempotencyKey: string;
+}): Promise<{ jobId: string; customerId: string | null } | null> {
+  const marker = buildPublicBookingIdempotencyMarker(params.idempotencyKey);
+  const { data } = await params.supabase
+    .from("jobs")
+    .select("id, customer_id")
+    .eq("workspace_id", params.workspaceId)
+    .eq("status", "lead")
+    .eq("source", "web_form")
+    .eq("description_ai_summary", marker)
+    .limit(1)
+    .maybeSingle();
+
+  if (!data) return null;
+  const row = data as { id?: string | null; customer_id?: string | null };
+  if (!row.id) return null;
+  return { jobId: row.id, customerId: row.customer_id ?? null };
+}
+
+export async function createPublicBookingLeadJob(params: {
+  supabase: SupabaseClient;
+  workspace: PublicLeadWorkspace;
+  customerId?: string | null;
+  job: PublicLeadJobInput;
+  idempotencyKey: string;
+}): Promise<{
+  jobId: string;
+  customerId: string | null;
+  reusedExistingBookingJob: boolean;
+}> {
+  const { supabase, workspace, customerId, job, idempotencyKey } = params;
+  const existing = await findExistingPublicBookingJobByIdempotencyKey({
+    supabase,
+    workspaceId: workspace.id,
+    idempotencyKey,
+  });
+
+  if (existing) {
+    return {
+      jobId: existing.jobId,
+      customerId: existing.customerId ?? customerId ?? null,
+      reusedExistingBookingJob: true,
+    };
+  }
+
+  const title = job.title?.trim() || buildPublicLeadTitle(job.description);
+  const resolvedAttentionScore = job.attentionScore ?? DEFAULT_ATTENTION_SCORE;
+  const marker = buildPublicBookingIdempotencyMarker(idempotencyKey);
+  const insertPayload = buildPublicLeadJobInsertPayload({
+    workspace,
+    customerId,
+    job,
+    title,
+    attentionScore: resolvedAttentionScore,
+    idempotencyMarker: marker,
+  });
+  assertPublicLeadInsertPayload(insertPayload);
+
+  if (insertPayload.description_ai_summary == null) {
+    insertPayload.description_ai_summary = marker;
+  }
+
+  const { data: inserted, error } = await supabase
+    .from("jobs")
+    .insert(insertPayload)
+    .select("id, customer_id")
+    .single();
+
+  if (error || !inserted?.id) {
+    throw new Error(error?.message || "Failed to create lead");
+  }
+
+  return {
+    jobId: inserted.id as string,
+    customerId: (inserted as { customer_id?: string | null }).customer_id ?? customerId ?? null,
+    reusedExistingBookingJob: false,
+  };
 }
 
 async function findOpenLeadForCustomer(

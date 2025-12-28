@@ -1,4 +1,6 @@
 type PublicBookingConfirmationProps = {
+  jobId: string;
+  customerId: string;
   isOwnerHandoffEligible: boolean;
   onOwnerHandoff?: () => void;
   onReset?: () => void;
@@ -11,6 +13,8 @@ export const PUBLIC_BOOKING_WHAT_TO_EXPECT_LINES = [
 ];
 
 export function PublicBookingConfirmation({
+  jobId,
+  customerId,
   isOwnerHandoffEligible,
   onOwnerHandoff,
   onReset,
@@ -18,7 +22,12 @@ export function PublicBookingConfirmation({
   const handleReset = onReset ?? (() => {});
 
   return (
-    <div className="space-y-6">
+    <div
+      className="space-y-6"
+      data-testid="public-booking-confirmation"
+      data-job-id={jobId}
+      data-customer-id={customerId}
+    >
       <div className="space-y-3">
         <h2 className="text-2xl font-semibold text-slate-50">Request received</h2>
         <p className="hb-muted">We&apos;ll review your request and reach out to confirm details.</p>

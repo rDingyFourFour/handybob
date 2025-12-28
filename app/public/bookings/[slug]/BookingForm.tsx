@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState, type FormEvent } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 
@@ -54,6 +54,16 @@ function BookingFormContent({ workspaceSlug, onReset }: BookingFormContentProps)
   );
   const router = useRouter();
   const confirmationLoggedRef = useRef<string | null>(null);
+  const lastSubmitAtRef = useRef<number | null>(null);
+  const pendingRef = useRef(false);
+
+  function PendingTracker() {
+    const { pending } = useFormStatus();
+    useEffect(() => {
+      pendingRef.current = pending;
+    }, [pending]);
+    return null;
+  }
 
   useEffect(() => {
     if (state.status !== "success") {
@@ -92,9 +102,26 @@ function BookingFormContent({ workspaceSlug, onReset }: BookingFormContentProps)
     }
   }
 
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    const now = Date.now();
+    const lastSubmitAt = lastSubmitAtRef.current;
+    const withinWindow = lastSubmitAt != null && now - lastSubmitAt < 1500;
+    if (pendingRef.current || withinWindow) {
+      event.preventDefault();
+      event.stopPropagation();
+      console.log("[public-booking-submit-rapid-click-ignored]", {
+        workspaceSlug,
+      });
+      return;
+    }
+    lastSubmitAtRef.current = now;
+  }
+
   if (state.status === "success") {
     return (
       <PublicBookingConfirmation
+        jobId={state.jobId}
+        customerId={state.customerId}
         isOwnerHandoffEligible={state.isOwnerHandoffEligible && Boolean(state.redirectTo)}
         onOwnerHandoff={handleOwnerHandoff}
         onReset={onReset}
@@ -103,7 +130,8 @@ function BookingFormContent({ workspaceSlug, onReset }: BookingFormContentProps)
   }
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} className="space-y-4" onSubmit={handleSubmit}>
+      <PendingTracker />
       <div className="grid gap-4 md:grid-cols-2">
         <div>
           <label className="hb-label" htmlFor="name">Full name *</label>
