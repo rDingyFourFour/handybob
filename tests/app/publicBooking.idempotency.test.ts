@@ -127,7 +127,7 @@ describe("submitPublicBooking idempotency", () => {
       expect(second.jobId).toBe(first.jobId);
       expect(second.customerId).toBe(first.customerId);
       expect(second.reusedExistingBookingJob).toBe(true);
-      expect(second.redirectTo).toBeNull();
+      expect(second.ownerHandoff.redirectPath).toBeUndefined();
     }
 
     expect(insertSpy).toHaveBeenCalledTimes(1);

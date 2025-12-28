@@ -103,8 +103,8 @@ describe("submitPublicBooking diagnostics", () => {
 
     expect(result.status).toBe("success");
     expect(result.jobId).toBe("job-1");
-    expect(result.isOwnerHandoffEligible).toBe(false);
-    expect(result.redirectTo).toBeNull();
+    expect(result.ownerHandoff.eligible).toBe(false);
+    expect(result.ownerHandoff.redirectPath).toBeUndefined();
     expect(result.reusedExistingBookingJob).toBe(false);
     const logCalls = vi.mocked(console.log).mock.calls;
     expect(
@@ -123,7 +123,8 @@ describe("submitPublicBooking diagnostics", () => {
           payload.workspaceId === "workspace-1" &&
           payload.jobId === "job-1" &&
           payload.customerId === "cust-1" &&
-          payload.isOwnerHandoffEligible === false,
+          payload.ownerHandoffEligible === false &&
+          payload.redirectPath === null,
       ),
     ).toBe(true);
   });

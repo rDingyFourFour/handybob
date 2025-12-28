@@ -29,16 +29,20 @@ import { createServerClient } from "@/utils/supabase/server";
 
 export type ActionSuccess = {
   status: "success";
+  success: true;
   workspaceId: string;
   jobId: string;
   customerId: string;
-  isOwnerHandoffEligible: boolean;
-  redirectTo: string | null;
+  ownerHandoff: {
+    eligible: boolean;
+    redirectPath?: string;
+  };
   reusedExistingBookingJob: boolean;
 };
 
 export type ActionError = {
   status: "error";
+  success: false;
   errors?: Partial<Record<"name" | "email" | "description", string>>;
   message: string | null;
   errorCode: string;
@@ -102,6 +106,7 @@ export async function submitPublicBooking(
     });
     return {
       status: "error",
+      success: false,
       message: validation.error,
       errorCode: "invalid_input",
     };
@@ -145,6 +150,7 @@ export async function submitPublicBooking(
     });
     return {
       status: "error",
+      success: false,
       message: "This booking link is not active.",
       errorCode: "inactive_form",
     };
@@ -168,6 +174,7 @@ export async function submitPublicBooking(
     });
     return {
       status: "error",
+      success: false,
       message: "Bookings are currently disabled for this business.",
       errorCode: "bookings_disabled",
     };
@@ -192,6 +199,7 @@ export async function submitPublicBooking(
     });
     return {
       status: "error",
+      success: false,
       message: "Something went wrong, please try again later.",
       errorCode: "rate_limited",
     };
@@ -221,6 +229,7 @@ export async function submitPublicBooking(
     });
     return {
       status: "error",
+      success: false,
       message: "We could not save your request. Please try again.",
       errorCode: "customer_create_failed",
     };
@@ -288,6 +297,7 @@ export async function submitPublicBooking(
     });
     return {
       status: "error",
+      success: false,
       message: "We could not save your request. Please try again.",
       errorCode: "job_create_failed",
     };
@@ -309,6 +319,7 @@ export async function submitPublicBooking(
     });
     return {
       status: "error",
+      success: false,
       message: "We could not save your request. Please try again.",
       errorCode: "job_create_failed",
     };
@@ -337,18 +348,21 @@ export async function submitPublicBooking(
     });
     const spamSuccess: ActionSuccess = {
       status: "success",
+      success: true,
       workspaceId: workspace.id,
       jobId,
       customerId: jobCustomerId ?? customer.id,
-      isOwnerHandoffEligible: false,
-      redirectTo: null,
+      ownerHandoff: {
+        eligible: false,
+      },
       reusedExistingBookingJob,
     };
     console.log("[public-booking-submit-success]", {
       workspaceId: workspace.id,
       jobId,
       customerId: jobCustomerId ?? customer.id,
-      isOwnerHandoffEligible: spamSuccess.isOwnerHandoffEligible,
+      ownerHandoffEligible: spamSuccess.ownerHandoff.eligible,
+      redirectPath: spamSuccess.ownerHandoff.redirectPath ?? null,
     });
     return spamSuccess;
   }
@@ -403,16 +417,16 @@ export async function submitPublicBooking(
     });
   }
 
-  let redirectTo: string | null = null;
-  let isOwnerHandoffEligible = false;
+  let redirectPath: string | null = null;
+  let ownerHandoffEligible = false;
   try {
     const authSupabase = await createServerClient();
     const { data } = await authSupabase.auth.getUser();
     if (data?.user?.id && data.user.id === workspace.owner_id && jobId) {
       const candidate = `/jobs/${jobId}`;
       if (isValidHandoffTarget(candidate)) {
-        redirectTo = candidate;
-        isOwnerHandoffEligible = true;
+        redirectPath = candidate;
+        ownerHandoffEligible = true;
       }
     }
   } catch (error) {
@@ -432,18 +446,19 @@ export async function submitPublicBooking(
 
   const successState: ActionSuccess = {
     status: "success",
+    success: true,
     workspaceId: workspace.id,
     jobId,
     customerId: jobCustomerId ?? customer.id,
-    isOwnerHandoffEligible,
-    redirectTo: isOwnerHandoffEligible ? redirectTo : null,
+    ownerHandoff: ownerHandoffEligible && redirectPath ? { eligible: true, redirectPath } : { eligible: false },
     reusedExistingBookingJob,
   };
   console.log("[public-booking-submit-success]", {
     workspaceId: workspace.id,
     jobId,
     customerId: jobCustomerId ?? customer.id,
-    isOwnerHandoffEligible: successState.isOwnerHandoffEligible,
+    ownerHandoffEligible: successState.ownerHandoff.eligible,
+    redirectPath: successState.ownerHandoff.redirectPath ?? null,
   });
   return successState;
 }

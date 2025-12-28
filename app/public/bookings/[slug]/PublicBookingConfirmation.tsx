@@ -1,25 +1,23 @@
 type PublicBookingConfirmationProps = {
   jobId: string;
   customerId: string;
-  isOwnerHandoffEligible: boolean;
+  ownerHandoff: {
+    eligible: boolean;
+    redirectPath?: string;
+  };
   onOwnerHandoff?: () => void;
   onReset?: () => void;
 };
 
-export const PUBLIC_BOOKING_WHAT_TO_EXPECT_LINES = [
-  "We'll confirm the details and timing.",
-  "We'll follow up if anything is unclear.",
-  "You'll get a scheduling update soon.",
-];
-
 export function PublicBookingConfirmation({
   jobId,
   customerId,
-  isOwnerHandoffEligible,
+  ownerHandoff,
   onOwnerHandoff,
   onReset,
 }: PublicBookingConfirmationProps) {
   const handleReset = onReset ?? (() => {});
+  const showOwnerHandoff = ownerHandoff.eligible && Boolean(ownerHandoff.redirectPath);
 
   return (
     <div
@@ -30,22 +28,24 @@ export function PublicBookingConfirmation({
     >
       <div className="space-y-3">
         <h2 className="text-2xl font-semibold text-slate-50">Request received</h2>
-        <p className="hb-muted">We&apos;ll review your request and reach out to confirm details.</p>
-        <p className="hb-muted">If you included a phone number, you may receive a call or text.</p>
-        <p className="hb-muted">If you included an email, look for a confirmation message.</p>
+        <p className="hb-muted">We&apos;ll review your request and reach out shortly.</p>
+        <p className="hb-muted">Look out for a call, text, or email if you shared contact details.</p>
       </div>
 
       <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
-        <h3 className="text-sm font-semibold text-slate-100">What to expect next</h3>
-        <ul className="mt-2 space-y-1 text-sm text-slate-300">
-          {PUBLIC_BOOKING_WHAT_TO_EXPECT_LINES.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
+        <h3 className="text-sm font-semibold text-slate-100">What happens next</h3>
+        <p className="mt-2 text-sm text-slate-300">
+          We&apos;ll confirm the details, timing, and next steps after reviewing your request.
+        </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        {isOwnerHandoffEligible && onOwnerHandoff && (
+      <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+        <div className="text-xs uppercase tracking-wide text-slate-400">Job reference</div>
+        <div className="mt-1 text-sm font-semibold text-slate-100">{jobId}</div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3" data-testid="public-booking-confirmation-actions">
+        {showOwnerHandoff && onOwnerHandoff && (
           <button type="button" className="hb-button min-w-[180px]" onClick={onOwnerHandoff}>
             Open in AskBob
           </button>

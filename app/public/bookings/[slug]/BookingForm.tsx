@@ -54,6 +54,7 @@ function BookingFormContent({ workspaceSlug, onReset }: BookingFormContentProps)
   );
   const router = useRouter();
   const confirmationLoggedRef = useRef<string | null>(null);
+  const ownerHandoffLoggedRef = useRef<string | null>(null);
   const lastSubmitAtRef = useRef<number | null>(null);
   const pendingRef = useRef(false);
 
@@ -78,20 +79,49 @@ function BookingFormContent({ workspaceSlug, onReset }: BookingFormContentProps)
       workspaceId: state.workspaceId,
       jobId: state.jobId,
       customerId: state.customerId,
-      isOwnerHandoffEligible: state.isOwnerHandoffEligible,
+      ownerHandoffEligible: state.ownerHandoff.eligible,
+    });
+  }, [state]);
+
+  useEffect(() => {
+    if (state.status !== "success") {
+      return;
+    }
+    if (!state.ownerHandoff.eligible || !state.ownerHandoff.redirectPath) {
+      return;
+    }
+    const logKey = `${state.jobId}:${state.customerId}:handoff`;
+    if (ownerHandoffLoggedRef.current === logKey) {
+      return;
+    }
+    ownerHandoffLoggedRef.current = logKey;
+    console.log("[public-booking-owner-handoff-visible]", {
+      workspaceId: state.workspaceId,
+      jobId: state.jobId,
+      customerId: state.customerId,
+      redirectPath: state.ownerHandoff.redirectPath,
     });
   }, [state]);
 
   function handleOwnerHandoff() {
-    if (state.status !== "success" || !state.redirectTo) {
+    if (state.status !== "success" || !state.ownerHandoff.redirectPath) {
       return;
     }
+    const redirectPath = state.ownerHandoff.redirectPath;
     console.log("[public-booking-owner-handoff-click]", {
       workspaceId: state.workspaceId,
       jobId: state.jobId,
+      customerId: state.customerId,
+      redirectPath,
     });
     try {
-      router.replace(state.redirectTo);
+      router.replace(redirectPath);
+      console.log("[public-booking-owner-handoff-navigate]", {
+        workspaceId: state.workspaceId,
+        jobId: state.jobId,
+        customerId: state.customerId,
+        redirectPath,
+      });
     } catch (error) {
       const reason = error instanceof Error ? error.message : "unknown";
       console.warn("[public-booking-owner-handoff-failure]", {
@@ -122,7 +152,7 @@ function BookingFormContent({ workspaceSlug, onReset }: BookingFormContentProps)
       <PublicBookingConfirmation
         jobId={state.jobId}
         customerId={state.customerId}
-        isOwnerHandoffEligible={state.isOwnerHandoffEligible && Boolean(state.redirectTo)}
+        ownerHandoff={state.ownerHandoff}
         onOwnerHandoff={handleOwnerHandoff}
         onReset={onReset}
       />

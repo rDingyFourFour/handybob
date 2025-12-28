@@ -123,6 +123,7 @@ describe("BookingForm", () => {
 
     deferred.resolve({
       status: "error",
+      success: false,
       errors: { name: "Name is required." },
       message: "We could not save your request. Please try again.",
       errorCode: "invalid_input",
@@ -144,6 +145,7 @@ describe("BookingForm", () => {
   it("shows a friendly message when bookings are disabled", async () => {
     mockSubmitPublicBooking.mockResolvedValueOnce({
       status: "error",
+      success: false,
       errors: {},
       message: null,
       errorCode: "bookings_disabled",
@@ -162,11 +164,11 @@ describe("BookingForm", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     mockSubmitPublicBooking.mockResolvedValueOnce({
       status: "success",
+      success: true,
       workspaceId: "workspace-1",
       jobId: "job-1",
       customerId: "cust-1",
-      isOwnerHandoffEligible: false,
-      redirectTo: null,
+      ownerHandoff: { eligible: false },
       reusedExistingBookingJob: false,
     });
 
@@ -177,10 +179,9 @@ describe("BookingForm", () => {
     await flushReactUpdates();
 
     expect(container.textContent).toContain("Request received");
-    expect(container.textContent).toContain("What to expect next");
-    expect(container.textContent).toContain("We'll confirm the details and timing.");
-    expect(container.textContent).toContain("We'll follow up if anything is unclear.");
-    expect(container.textContent).toContain("You'll get a scheduling update soon.");
+    expect(container.textContent).toContain("What happens next");
+    expect(container.textContent).toContain("We'll confirm the details, timing, and next steps after reviewing your request.");
+    expect(container.textContent).toContain("Job reference");
 
     const confirmationLogs = logSpy.mock.calls.filter(
       ([label]) => label === "[public-booking-confirmation-visible]",
@@ -203,11 +204,11 @@ describe("BookingForm", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     mockSubmitPublicBooking.mockResolvedValueOnce({
       status: "success",
+      success: true,
       workspaceId: "workspace-1",
       jobId: "job-2",
       customerId: "cust-2",
-      isOwnerHandoffEligible: true,
-      redirectTo: "/jobs/job-2",
+      ownerHandoff: { eligible: true, redirectPath: "/jobs/job-2" },
       reusedExistingBookingJob: false,
     });
 
@@ -232,7 +233,9 @@ describe("BookingForm", () => {
         ([label, payload]) =>
           label === "[public-booking-owner-handoff-click]" &&
           payload.workspaceId === "workspace-1" &&
-          payload.jobId === "job-2",
+          payload.jobId === "job-2" &&
+          payload.customerId === "cust-2" &&
+          payload.redirectPath === "/jobs/job-2",
       ),
     ).toBe(true);
   });
@@ -258,11 +261,11 @@ describe("BookingForm", () => {
 
     deferred.resolve({
       status: "success",
+      success: true,
       workspaceId: "workspace-1",
       jobId: "job-rapid",
       customerId: "cust-rapid",
-      isOwnerHandoffEligible: false,
-      redirectTo: null,
+      ownerHandoff: { eligible: false },
       reusedExistingBookingJob: false,
     });
 
