@@ -141,11 +141,11 @@ describe("SettingsHomePage sign-out", () => {
     await renderSettings({ slug: "test-workspace" });
     await flushReactUpdates();
 
-    const link = container.querySelector('a[href="/public/bookings/test-workspace"]');
-    expect(link).not.toBeNull();
+    const link = container.querySelector('[data-testid="booking-link-url"]');
+    expect(link?.textContent).toBe("/public/bookings/test-workspace");
     expect(findButton("Copy link")).toBeDefined();
-    expect(findButton("Open")).toBeDefined();
-    expect(container.textContent).toContain("Active");
+    expect(findButton("Open link")).toBeDefined();
+    expect(container.textContent).toContain("Enabled");
   });
 
   it("renders a placeholder when the workspace slug is missing", async () => {
@@ -166,7 +166,7 @@ describe("SettingsHomePage sign-out", () => {
     await flushReactUpdates();
 
     const copyButton = findButton("Copy link");
-    const openButton = findButton("Open");
+    const openButton = findButton("Open link");
     expect(copyButton).toBeDefined();
     expect(openButton).toBeDefined();
 
@@ -191,7 +191,7 @@ describe("SettingsHomePage sign-out", () => {
     expect(
       logCalls.some(
         ([label, payload]) =>
-          label === "[bookings-public-link-visible]" &&
+          label === "[settings-booking-link-visible]" &&
           payload.workspaceId === "workspace-1" &&
           payload.workspaceSlug === "test-workspace",
       ),
@@ -199,7 +199,7 @@ describe("SettingsHomePage sign-out", () => {
     expect(
       logCalls.some(
         ([label, payload]) =>
-          label === "[bookings-public-link-copy-click]" &&
+          label === "[settings-booking-link-copy-click]" &&
           payload.workspaceId === "workspace-1" &&
           payload.workspaceSlug === "test-workspace",
       ),
@@ -207,7 +207,7 @@ describe("SettingsHomePage sign-out", () => {
     expect(
       logCalls.some(
         ([label, payload]) =>
-          label === "[bookings-public-link-open-click]" &&
+          label === "[settings-booking-link-open-click]" &&
           payload.workspaceId === "workspace-1" &&
           payload.workspaceSlug === "test-workspace",
       ),
@@ -225,7 +225,7 @@ describe("SettingsHomePage sign-out", () => {
     await renderSettings({ slug: "test-workspace", publicLeadEnabled: false });
     await flushReactUpdates();
 
-    expect(container.textContent).toContain("Inactive");
+    expect(container.textContent).toContain("Disabled");
 
     const toggleButton = findButton("Enable bookings");
     expect(toggleButton).toBeDefined();
@@ -243,7 +243,7 @@ describe("SettingsHomePage sign-out", () => {
     });
     await flushReactUpdates();
 
-    expect(container.textContent).toContain("Active");
+    expect(container.textContent).toContain("Enabled");
     expect(container.textContent).toContain("Bookings");
   });
 

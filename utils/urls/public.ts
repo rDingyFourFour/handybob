@@ -19,6 +19,4 @@ export function publicInvoiceUrl(token: string) {
   return buildPublicPath(`/public/invoices/${token}`);
 }
 
-export function publicBookingUrl(slug: string) {
-  return buildPublicPath(`/public/bookings/${slug}`);
-}
+export { getPublicBookingUrlForSlug as publicBookingUrl } from "@/lib/domain/workspaces/publicBookingUrl";

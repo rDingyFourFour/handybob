@@ -1,26 +1,19 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import { getPublicBookingUrlForSlug } from "@/lib/domain/workspaces/publicBookingUrl";
+import BookingLinkCard from "@/app/(app)/settings/BookingLinkCard";
 import { updatePublicBookingStatus, type PublicBookingToggleState } from "./publicBookingActions";
-
-type CopyStatus = "idle" | "success" | "failure";
 
 type PublicBookingLinkCardProps = {
   slug: string | null | undefined;
   workspaceId: string | null | undefined;
   enabled: boolean;
   canManage: boolean;
-};
-
-const copyStatusLabels: Record<CopyStatus, string> = {
-  idle: "Copy link",
-  success: "Copied",
-  failure: "Copy failed",
 };
 
 export default function PublicBookingLinkCard({
@@ -30,7 +23,6 @@ export default function PublicBookingLinkCard({
   canManage,
 }: PublicBookingLinkCardProps) {
   const router = useRouter();
-  const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
   const initialToggleState: PublicBookingToggleState = {
     status: "idle",
     enabled,
@@ -49,17 +41,10 @@ export default function PublicBookingLinkCard({
     return getPublicBookingUrlForSlug(slug);
   }, [slug]);
 
-  const statusLabel = toggleState.enabled ? "Active" : "Inactive";
+  const statusLabel = toggleState.enabled ? "Enabled" : "Disabled";
   const statusStyles = toggleState.enabled
     ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
     : "border-rose-400/40 bg-rose-500/10 text-rose-200";
-
-  useEffect(() => {
-    console.log("[bookings-public-link-visible]", {
-      workspaceId,
-      workspaceSlug: slug ?? null,
-    });
-  }, [slug, workspaceId]);
 
   useEffect(() => {
     if (toggleState.status === "success") {
@@ -78,35 +63,6 @@ export default function PublicBookingLinkCard({
       });
     }
   }, [router, slug, toggleState, workspaceId]);
-
-  const handleCopy = async () => {
-    if (!bookingUrl) {
-      return;
-    }
-    console.log("[bookings-public-link-copy-click]", {
-      workspaceId,
-      workspaceSlug: slug ?? null,
-    });
-    try {
-      await navigator.clipboard.writeText(bookingUrl);
-      setCopyStatus("success");
-      window.setTimeout(() => setCopyStatus("idle"), 2000);
-    } catch {
-      setCopyStatus("failure");
-      window.setTimeout(() => setCopyStatus("idle"), 2000);
-    }
-  };
-
-  const handleOpen = () => {
-    if (!bookingUrl) {
-      return;
-    }
-    console.log("[bookings-public-link-open-click]", {
-      workspaceId,
-      workspaceSlug: slug ?? null,
-    });
-    window.open(bookingUrl, "_blank", "noopener,noreferrer");
-  };
 
   const handleToggleClick = () => {
     console.log("[bookings-enable-toggle-click]", {
@@ -133,39 +89,17 @@ export default function PublicBookingLinkCard({
         Share this link to capture service requests. Each submission creates a lead job and customer
         record in your workspace.
       </p>
-      <div className="space-y-3 text-sm text-slate-300">
-        <div>
-          <span className="text-xs uppercase tracking-[0.3em] text-slate-500">
-            Public booking link
-          </span>
-          {bookingUrl ? (
-            <div className="mt-2">
-              <a className="text-amber-200 underline" href={bookingUrl}>
-                {bookingUrl}
-              </a>
-            </div>
-          ) : (
-            <p className="mt-2 text-sm text-slate-400">
-              Set a workspace slug to enable a shareable booking link.
-            </p>
-          )}
-        </div>
-        {bookingUrl && (
-          <div className="flex flex-wrap gap-2">
-            <HbButton type="button" size="sm" variant="secondary" onClick={handleCopy}>
-              {copyStatusLabels[copyStatus]}
-            </HbButton>
-            <HbButton
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={handleOpen}
-            >
-              Open
-            </HbButton>
-          </div>
-        )}
-      </div>
+      <p className="text-xs text-slate-400">
+        {toggleState.enabled
+          ? "Anyone with this link can request a booking."
+          : "This booking link is not active."}
+      </p>
+      <BookingLinkCard
+        bookingUrl={bookingUrl}
+        isEnabled={toggleState.enabled}
+        workspaceId={workspaceId ?? null}
+        workspaceSlug={slug ?? null}
+      />
       <form action={formAction} className="flex items-center justify-between gap-3">
         <input type="hidden" name="enabled" value={String(!toggleState.enabled)} />
         <div className="text-xs text-slate-500">
