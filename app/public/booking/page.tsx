@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
-import { getPublicBookingUrlForSlug } from "@/lib/domain/workspaces/publicBookingUrl";
+import { publicBookingPath } from "@/lib/domain/workspaces/publicBookingUrl";
 
 const EXAMPLE_SLUG = "your-workspace-slug";
 
@@ -11,7 +11,7 @@ export default function PublicBookingEntryPage() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const exampleUrl = getPublicBookingUrlForSlug(EXAMPLE_SLUG);
+  const exampleUrl = publicBookingPath(EXAMPLE_SLUG);
 
   useEffect(() => {
     console.log("[public-booking-entry-visible]");
@@ -28,7 +28,7 @@ export default function PublicBookingEntryPage() {
     if (isEmpty) {
       return;
     }
-    const destination = getPublicBookingUrlForSlug(trimmedSlug);
+    const destination = publicBookingPath(trimmedSlug);
     router.push(destination);
   };
 

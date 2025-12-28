@@ -11,29 +11,40 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe("getPublicBookingUrlForSlug", () => {
+describe("publicBookingPath", () => {
   it("returns the canonical booking path", async () => {
-    const { getPublicBookingUrlForSlug } = await import(
+    const { publicBookingPath } = await import(
       "@/lib/domain/workspaces/publicBookingUrl"
     );
-    expect(getPublicBookingUrlForSlug("workspace-slug")).toBe("/public/bookings/workspace-slug");
+    expect(publicBookingPath("workspace-slug")).toBe("/public/bookings/workspace-slug");
   });
 
   it("trims and lowercases the slug", async () => {
-    const { getPublicBookingUrlForSlug } = await import(
+    const { publicBookingPath } = await import(
       "@/lib/domain/workspaces/publicBookingUrl"
     );
-    expect(getPublicBookingUrlForSlug("  My-Slug  ")).toBe("/public/bookings/my-slug");
+    expect(publicBookingPath("  My-Slug  ")).toBe("/public/bookings/my-slug");
   });
+});
 
+describe("publicBookingUrl", () => {
   it("uses the configured app url when available", async () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://example.test/";
     vi.resetModules();
-    const { getPublicBookingUrlForSlug } = await import(
+    const { publicBookingUrl } = await import(
       "@/lib/domain/workspaces/publicBookingUrl"
     );
-    expect(getPublicBookingUrlForSlug("workspace-slug")).toBe(
+    expect(publicBookingUrl("workspace-slug")).toBe(
       "https://example.test/public/bookings/workspace-slug",
     );
+  });
+
+  it("returns null when the app url is not configured", async () => {
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    vi.resetModules();
+    const { publicBookingUrl } = await import(
+      "@/lib/domain/workspaces/publicBookingUrl"
+    );
+    expect(publicBookingUrl("workspace-slug")).toBeNull();
   });
 });

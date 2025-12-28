@@ -7,7 +7,8 @@ import HbButton from "@/components/ui/hb-button";
 type CopyStatus = "idle" | "success" | "failure";
 
 type BookingLinkCardProps = {
-  bookingUrl: string | null;
+  displayUrlText: string | null;
+  absoluteUrlForActions: string | null;
   isEnabled: boolean;
   workspaceId: string | null;
   workspaceSlug: string | null;
@@ -20,7 +21,8 @@ const copyStatusLabels: Record<CopyStatus, string> = {
 };
 
 export default function BookingLinkCard({
-  bookingUrl,
+  displayUrlText,
+  absoluteUrlForActions,
   isEnabled,
   workspaceId,
   workspaceSlug,
@@ -34,15 +36,21 @@ export default function BookingLinkCard({
     console.log("[settings-booking-link-visible]", {
       workspaceId,
       workspaceSlug,
+      displayUrlText: displayUrlText ?? null,
+      hasAbsoluteUrlForActions: Boolean(absoluteUrlForActions),
     });
-  }, [workspaceId, workspaceSlug]);
+  }, [absoluteUrlForActions, displayUrlText, workspaceId, workspaceSlug]);
+
+  const actionUrl = absoluteUrlForActions ?? displayUrlText;
 
   const handleCopy = async () => {
-    if (!bookingUrl) {
+    if (!actionUrl) {
       console.log("[settings-booking-link-copy-failure]", {
         workspaceId,
         workspaceSlug,
         errorCode: "missing_url",
+        displayUrlText: displayUrlText ?? null,
+        hasAbsoluteUrlForActions: Boolean(absoluteUrlForActions),
       });
       setCopyStatus("failure");
       resetCopyStatus();
@@ -51,17 +59,21 @@ export default function BookingLinkCard({
     console.log("[settings-booking-link-copy-click]", {
       workspaceId,
       workspaceSlug,
+      displayUrlText: displayUrlText ?? null,
+      hasAbsoluteUrlForActions: Boolean(absoluteUrlForActions),
     });
     try {
       if (!navigator?.clipboard?.writeText) {
         throw new Error("clipboard_unavailable");
       }
-      await navigator.clipboard.writeText(bookingUrl);
+      await navigator.clipboard.writeText(actionUrl);
       setCopyStatus("success");
       resetCopyStatus();
       console.log("[settings-booking-link-copy-success]", {
         workspaceId,
         workspaceSlug,
+        displayUrlText: displayUrlText ?? null,
+        hasAbsoluteUrlForActions: Boolean(absoluteUrlForActions),
       });
     } catch (error) {
       const errorCode =
@@ -74,28 +86,34 @@ export default function BookingLinkCard({
         workspaceId,
         workspaceSlug,
         errorCode,
+        displayUrlText: displayUrlText ?? null,
+        hasAbsoluteUrlForActions: Boolean(absoluteUrlForActions),
       });
     }
   };
 
   const handleOpen = () => {
-    if (!bookingUrl) {
+    if (!actionUrl) {
       console.log("[settings-booking-link-open-blocked]", {
         workspaceId,
         workspaceSlug,
         errorCode: "missing_url",
+        displayUrlText: displayUrlText ?? null,
+        hasAbsoluteUrlForActions: Boolean(absoluteUrlForActions),
       });
       return;
     }
     console.log("[settings-booking-link-open-click]", {
       workspaceId,
       workspaceSlug,
+      displayUrlText: displayUrlText ?? null,
+      hasAbsoluteUrlForActions: Boolean(absoluteUrlForActions),
     });
-    window.open(bookingUrl, "_blank", "noopener,noreferrer");
+    window.open(actionUrl, "_blank", "noopener,noreferrer");
   };
 
-  const shouldShowActions = Boolean(bookingUrl);
-  const openDisabled = !bookingUrl;
+  const shouldShowActions = Boolean(displayUrlText);
+  const openDisabled = !displayUrlText;
 
   return (
     <div className="space-y-3 text-sm text-slate-300" data-testid="booking-link-card">
@@ -108,9 +126,9 @@ export default function BookingLinkCard({
             </span>
           )}
         </div>
-        {bookingUrl ? (
+        {displayUrlText ? (
           <div className="mt-2 break-all text-amber-200" data-testid="booking-link-url">
-            {bookingUrl}
+            {displayUrlText}
           </div>
         ) : (
           <p className="mt-2 text-sm text-slate-400">

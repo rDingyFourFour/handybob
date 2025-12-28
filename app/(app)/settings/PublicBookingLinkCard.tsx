@@ -4,7 +4,10 @@ import { useMemo, useState } from "react";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
-import { getPublicBookingUrlForSlug } from "@/lib/domain/workspaces/publicBookingUrl";
+import {
+  publicBookingPath,
+  publicBookingUrl,
+} from "@/lib/domain/workspaces/publicBookingUrl";
 import BookingLinkCard from "@/app/(app)/settings/BookingLinkCard";
 import {
   updatePublicBookingEnabledAction,
@@ -29,11 +32,18 @@ export default function PublicBookingLinkCard({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
 
-  const bookingUrl = useMemo(() => {
+  const displayUrlText = useMemo(() => {
     if (!slug || !slug.trim()) {
       return null;
     }
-    return getPublicBookingUrlForSlug(slug);
+    return publicBookingPath(slug);
+  }, [slug]);
+
+  const absoluteUrlForActions = useMemo(() => {
+    if (!slug || !slug.trim()) {
+      return null;
+    }
+    return publicBookingUrl(slug);
   }, [slug]);
 
   const statusLabel = toggleEnabled ? "Enabled" : "Disabled";
@@ -116,7 +126,8 @@ export default function PublicBookingLinkCard({
           : "This booking link is not active."}
       </p>
       <BookingLinkCard
-        bookingUrl={bookingUrl}
+        displayUrlText={displayUrlText}
+        absoluteUrlForActions={absoluteUrlForActions}
         isEnabled={toggleEnabled}
         workspaceId={workspaceId ?? null}
         workspaceSlug={slug ?? null}

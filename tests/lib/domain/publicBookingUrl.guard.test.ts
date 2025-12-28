@@ -21,6 +21,6 @@ describe("public booking url helper guard", () => {
     });
     vi.resetModules();
     const bookingModule = await import("@/lib/domain/workspaces/publicBookingUrl");
-    expect(bookingModule.getPublicBookingUrlForSlug("demo")).toContain("/public/bookings/demo");
+    expect(bookingModule.publicBookingPath("demo")).toContain("/public/bookings/demo");
   });
 });

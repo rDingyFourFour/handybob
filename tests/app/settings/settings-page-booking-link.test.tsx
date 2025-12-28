@@ -65,7 +65,7 @@ describe("Settings booking link section", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://example.test";
     vi.resetModules();
     const { default: SettingsHomePage } = await import("@/app/(app)/settings/page");
-    const { getPublicBookingUrlForSlug } = await import(
+    const { publicBookingPath } = await import(
       "@/lib/domain/workspaces/publicBookingUrl"
     );
     const supabaseState = setupSupabaseMock({
@@ -112,7 +112,7 @@ describe("Settings booking link section", () => {
       root?.render(await SettingsHomePage());
     });
 
-    return getPublicBookingUrlForSlug(slug ?? "");
+    return publicBookingPath(slug ?? "");
   }
 
   async function flushReactUpdates(iterations = 3) {
@@ -124,6 +124,11 @@ describe("Settings booking link section", () => {
   }
 
   it("shows the canonical booking url and enabled state", async () => {
+    const clipboardWrite = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText: clipboardWrite } });
+    const openSpy = vi.fn();
+    Object.assign(window, { open: openSpy });
+
     const expectedUrl = await renderSettings({ slug: "test-workspace", publicLeadEnabled: true });
     await flushReactUpdates();
 
@@ -132,13 +137,40 @@ describe("Settings booking link section", () => {
     expect(container.textContent).toContain("Enabled");
     expect(container.textContent).toContain("Anyone with this link can request a booking.");
 
+    const copyButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Copy link",
+    );
+    const openButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Open link",
+    );
+    expect(copyButton).toBeDefined();
+    expect(openButton).toBeDefined();
+
+    await act(async () => {
+      copyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {
+      openButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(clipboardWrite).toHaveBeenCalledWith(
+      "https://example.test/public/bookings/test-workspace",
+    );
+    expect(openSpy).toHaveBeenCalledWith(
+      "https://example.test/public/bookings/test-workspace",
+      "_blank",
+      "noopener,noreferrer",
+    );
+
     const logCalls = vi.mocked(console.log).mock.calls;
     expect(
       logCalls.some(
         ([label, payload]) =>
           label === "[settings-booking-link-visible]" &&
           payload.workspaceId === "workspace-1" &&
-          payload.workspaceSlug === "test-workspace",
+          payload.workspaceSlug === "test-workspace" &&
+          payload.displayUrlText === expectedUrl &&
+          payload.hasAbsoluteUrlForActions === true,
       ),
     ).toBe(true);
   });
