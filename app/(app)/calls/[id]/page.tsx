@@ -9,7 +9,6 @@ import CallSummaryStatus from "@/components/call-summary-status";
 import CallStatusRefreshButton from "@/components/calls/CallStatusRefreshButton";
 import AutomatedCallNotesCard from "./AutomatedCallNotesCard";
 import CallRecordingLink from "@/components/calls/CallRecordingLink";
-import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import JobCallScriptPanel, {
   type PhoneMessageSummary,
@@ -421,18 +420,6 @@ export default async function CallSessionPage({
       hasLegacyOutcome: Boolean(call.outcome),
     });
   }
-  const callTranscriptFlag = Boolean(call.transcript?.trim());
-  const showAutomatedFollowupLink =
-    Boolean(isAskBobAutomatedCall && automatedDialSnapshot.isTerminal && hasExistingOutcome && jobId);
-  const followupLinkHref =
-    showAutomatedFollowupLink && jobId
-      ? `/jobs/${jobId}?${new URLSearchParams({
-          callId: call.id,
-          workspaceId: workspace.id,
-          afterCallForce: "1",
-          hasCallTranscript: callTranscriptFlag ? "1" : "0",
-        }).toString()}`
-      : undefined;
   const showAutomatedOutcomeRequiredBanner =
     Boolean(isAskBobAutomatedCall && automatedDialSnapshot.isTerminal && !hasExistingOutcome);
   if (showAutomatedOutcomeRequiredBanner) {
@@ -792,7 +779,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "generate-followup",
-          label: "Generate follow-up",
+          label: "Review follow-up",
           workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
         },
         ctaReasonCode: "ready",
@@ -808,8 +795,9 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "open-composer",
-          label: "Open composer",
+          label: "Review follow-up draft",
           disabled: !isComposerEnabled,
+          workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
         },
         ctaReasonCode: draftReasonCode,
       };
@@ -822,7 +810,7 @@ export default async function CallSessionPage({
     return {
       primaryCta: {
         kind: "generate-followup",
-        label: "Generate follow-up",
+        label: "Review follow-up",
         disabled: true,
         workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
       },
@@ -862,7 +850,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "generate-followup",
-          label: "Generate follow-up",
+          label: "Review follow-up",
           workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
         },
         ctaReasonCode: "ready",
@@ -878,8 +866,9 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "open-composer",
-          label: "Open composer",
+          label: "Review follow-up draft",
           disabled: !isComposerEnabled,
+          workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
         },
         ctaReasonCode: draftReasonCode,
       };
@@ -892,7 +881,7 @@ export default async function CallSessionPage({
     return {
       primaryCta: {
         kind: "generate-followup",
-        label: "Generate follow-up",
+        label: "Review follow-up",
         disabled: true,
         workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
       },
@@ -1116,12 +1105,9 @@ export default async function CallSessionPage({
         {job && job.id && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
             <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Job:</span>
-            <Link
-              href={`/jobs/${job.id}`}
-              className="font-semibold text-slate-100 hover:text-slate-200"
-            >
+            <span className="font-semibold text-slate-100">
               {job?.title ?? job.id.slice(0, 8)}
-            </Link>
+            </span>
             <span className="rounded-full border border-slate-800/60 bg-slate-900/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] text-slate-400">
               {jobStatus}
             </span>
@@ -1187,25 +1173,6 @@ export default async function CallSessionPage({
     />
   );
 
-  const wrapUpFollowupLinkSection =
-    showAutomatedFollowupLink && followupLinkHref ? (
-      <div className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-200">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">After-call follow-up</p>
-        <p className="text-sm text-slate-200">
-          The automated call completed. Use Step 8 to turn the outcome into a follow-up message.
-        </p>
-        <HbButton
-          as={Link}
-          href={`${followupLinkHref}#askbob-after-call`}
-          variant="secondary"
-          size="sm"
-          className="text-[11px] uppercase tracking-[0.3em]"
-        >
-          Open AskBob follow-up
-        </HbButton>
-      </div>
-    ) : null;
-
   const wrapUpAfterCallSection =
     jobId && customerId ? (
       <AskBobAfterCallCard
@@ -1247,6 +1214,7 @@ export default async function CallSessionPage({
       hasOutcome={callSessionEnrichment.hasOutcome}
       initialResult={postCallEnrichmentResult}
       primaryVariant="secondary"
+      hideFollowupComposer
     />
   );
 
@@ -1256,14 +1224,7 @@ export default async function CallSessionPage({
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job</p>
         <p className="text-lg font-semibold text-white">{displayJobTitle}</p>
         <p className="text-xs text-slate-400">{jobStatus}</p>
-        {jobLink && (
-          <Link
-            href={jobLink}
-            className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-          >
-            View job
-          </Link>
-        )}
+        {jobLink && <span className="text-sm font-semibold text-slate-400">Job linked</span>}
       </div>
 
       <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
@@ -1342,34 +1303,8 @@ export default async function CallSessionPage({
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 pt-2">
-            {jobId ? (
-              <>
-                <Link
-                  href={jobId ? `/jobs/${jobId}` : "#"}
-                  className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-                  onClick={() =>
-                    console.log("[calls-session-askbob-automated-open-job-click]", {
-                      workspaceId: workspace.id,
-                      callId: call.id,
-                      jobId,
-                    })
-                  }
-                >
-                  Open job
-                </Link>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  disabled
-                  className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500"
-                >
-                  Open job
-                </button>
-              </>
-            )}
+          <div className="pt-2 text-xs uppercase tracking-[0.3em] text-slate-500">
+            Job access is available from the primary actions.
           </div>
         </div>
       )}
@@ -1427,18 +1362,6 @@ export default async function CallSessionPage({
                 <span className="font-semibold text-slate-100">
                   For job: {job?.title ?? jobId?.slice(0, 8)}
                 </span>
-                <Link
-                  href={`/jobs/${job.id}`}
-                  className="rounded-full border border-slate-800/60 px-2 py-0.5 font-semibold text-slate-100 hover:border-slate-600"
-                >
-                  Open job
-                </Link>
-                <Link
-                  href={`/jobs/${job.id}?agent=phone`}
-                  className="rounded-full border border-slate-800/60 px-2 py-0.5 font-semibold text-slate-100 hover:border-slate-600"
-                >
-                  Open job phone workspace
-                </Link>
               </div>
             )}
           </div>
@@ -1464,7 +1387,6 @@ export default async function CallSessionPage({
           manualWorkspace={manualWorkspacePanel}
           automatedEligible={canStartAutomatedCall}
           manualEligible={canStartGuidedCall}
-          manualMessagesHref={manualMessagesHref}
         />
         <WrapUpCard
           summarySection={wrapUpSummarySection}
@@ -1476,7 +1398,6 @@ export default async function CallSessionPage({
             ) : null
           }
           outcomeSection={wrapUpOutcomeSection}
-          followupLinkSection={wrapUpFollowupLinkSection}
           afterCallSection={wrapUpAfterCallSection}
           enrichmentSection={wrapUpEnrichmentSection}
           metaSection={wrapUpMetaSection}

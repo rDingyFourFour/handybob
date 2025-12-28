@@ -1,11 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, type ReactNode } from "react";
-import Link from "next/link";
 
-import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
-import CallModeChooserCard, { type CallSessionMode } from "@/components/calls/CallModeChooserCard";
+import { type CallSessionMode } from "@/components/calls/CallModeChooserCard";
 
 type CallWorkspaceCardProps = {
   callId: string;
@@ -15,10 +13,8 @@ type CallWorkspaceCardProps = {
   selectedMode: CallSessionMode | null;
   automatedEligible: boolean;
   manualEligible: boolean;
-  onSelectMode: (mode: CallSessionMode) => void;
   automatedPanel: ReactNode;
   manualPanel: ReactNode;
-  manualMessagesHref: string | null;
 };
 
 const WORKSPACE_NAV_EVENT = "calls-session-workspace-navigate";
@@ -46,10 +42,8 @@ export default function CallWorkspaceCard({
   selectedMode,
   automatedEligible,
   manualEligible,
-  onSelectMode,
   automatedPanel,
   manualPanel,
-  manualMessagesHref,
 }: CallWorkspaceCardProps) {
   const handleWorkspaceNavigate = useCallback((hash: string | null) => {
     if (!hash) {
@@ -111,7 +105,6 @@ export default function CallWorkspaceCard({
 
       {panelKey === "unselected" && (
         <div data-testid="call-workspace-panel-unselected" className="space-y-4">
-          <CallModeChooserCard mode={selectedMode} onSelect={onSelectMode} />
           <div className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-950/60 p-4 text-sm text-slate-200">
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Availability</p>
             <div className="space-y-2 text-xs text-slate-400">
@@ -155,25 +148,6 @@ export default function CallWorkspaceCard({
             </p>
           </div>
           {manualPanel}
-          {manualMessagesHref && (
-            <div className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-950/60 p-4 text-sm text-slate-200">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                Manual follow-up SMS
-              </p>
-              <p className="text-xs text-slate-400">
-                Send a quick SMS with the customer preselected.
-              </p>
-              <HbButton
-                as={Link}
-                href={manualMessagesHref}
-                variant="secondary"
-                size="sm"
-                className="w-full"
-              >
-                Open messages composer
-              </HbButton>
-            </div>
-          )}
         </div>
       )}
     </HbCard>

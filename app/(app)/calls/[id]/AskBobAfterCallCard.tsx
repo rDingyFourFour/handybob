@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import HbButton from "@/components/ui/hb-button";
@@ -83,7 +82,6 @@ export default function AskBobAfterCallCard({
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [result, setResult] = useState<AskBobJobAfterCallResult | null>(null);
-  const [cacheKey, setCacheKey] = useState<string | null>(null);
   const [serverNotReadyMessage, setServerNotReadyMessage] = useState<string | null>(null);
   const [outcomeSavedHintVisible, setOutcomeSavedHintVisible] = useState(false);
   const suggestedChannelLoggedRef = useRef(false);
@@ -283,7 +281,6 @@ export default function AskBobAfterCallCard({
       }
       setResult(response.result);
       const storedKey = cacheAskBobAfterCallResult(jobId, callId, response.result);
-      setCacheKey(storedKey);
       console.log("[askbob-after-call-ui-generate-success]", {
         callId,
         jobId,
@@ -358,12 +355,6 @@ export default function AskBobAfterCallCard({
     });
     router.push(`/messages?${params.toString()}`);
   };
-
-  const backToJobHref = cacheKey
-    ? `/jobs/${jobId}?origin=calls-aftercall&callId=${encodeURIComponent(callId)}&afterCallKey=${encodeURIComponent(
-        cacheKey,
-      )}`
-    : undefined;
 
   return (
     <HbCard id="askbob-after-call" className="space-y-3">
@@ -468,17 +459,6 @@ export default function AskBobAfterCallCard({
                 onClick={handleOpenMessagesComposer}
               >
                 Open composer with this draft
-              </HbButton>
-            )}
-            {backToJobHref && (
-              <HbButton
-                as={Link}
-                href={backToJobHref}
-                size="sm"
-                variant="ghost"
-                className="flex-1 text-[11px] uppercase tracking-[0.3em]"
-              >
-                Back to job
               </HbButton>
             )}
           </div>

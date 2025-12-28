@@ -8,7 +8,7 @@ import {
 } from "@/lib/domain/calls/sessions";
 
 type OpenOrCreateCallSessionResult =
-  | { ok: true; callId: string }
+  | { ok: true; callId: string; createdNew: boolean }
   | { ok: false; code: string; message: string };
 
 const FROM_PLACEHOLDER = "workspace-default";
@@ -80,7 +80,7 @@ export async function openOrCreateCallSessionForJobAction({
   }
 
   if (existingSession?.id) {
-    return { ok: true, callId: existingSession.id };
+    return { ok: true, callId: existingSession.id, createdNew: false };
   }
 
   const { data: workspaceRow, error: workspaceError } = await supabase
@@ -123,5 +123,5 @@ export async function openOrCreateCallSessionForJobAction({
     };
   }
 
-  return { ok: true, callId: createResult.call.id };
+  return { ok: true, callId: createResult.call.id, createdNew: true };
 }

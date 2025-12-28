@@ -72,6 +72,7 @@ describe("JobAskBobFlow call session open", () => {
     mockOpenCallSessionAction.mockResolvedValueOnce({
       ok: true,
       callId: "call-123",
+      createdNew: true,
     });
 
     await act(async () => {
@@ -159,5 +160,45 @@ describe("JobAskBobFlow call session open", () => {
     });
 
     expect(container.textContent).toContain("We couldn’t find that job.");
+  });
+
+  it("keeps the call session doorway without automated call execution controls", async () => {
+    mockOpenCallSessionAction.mockResolvedValueOnce({
+      ok: true,
+      callId: "call-789",
+      createdNew: false,
+    });
+
+    await act(async () => {
+      root?.render(
+        <JobAskBobFlow
+          workspaceId="workspace-1"
+          userId="user-1"
+          jobId="job-1"
+          customerId="customer-1"
+          customerDisplayName="Customer"
+          customerPhoneNumber="+15550001234"
+          jobDescription="desc"
+          jobTitle="title"
+          askBobLastTaskLabel={null}
+          askBobLastUsedAtDisplay={null}
+          askBobLastUsedAtIso={null}
+          askBobRunsSummary={null}
+          initialLastQuoteId={null}
+          lastQuoteCreatedAt={null}
+          lastQuoteCreatedAtFriendly={null}
+          initialDiagnoseSnapshot={null}
+          initialMaterialsSnapshot={null}
+          initialQuoteSnapshot={null}
+          initialFollowupSnapshot={null}
+          lastQuoteSummary={null}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Open call session");
+    expect(container.textContent).not.toContain("Place automated call");
+    expect(container.textContent).not.toContain("Step 9 · AskBob automated call");
   });
 });

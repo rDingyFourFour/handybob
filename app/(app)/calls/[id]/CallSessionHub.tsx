@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { type CallSessionMode } from "@/components/calls/CallModeChooserCard";
+import CallModeChooserCard, { type CallSessionMode } from "@/components/calls/CallModeChooserCard";
 import CallControlCard from "./CallControlCard";
 import CallWorkspaceCard from "./CallWorkspaceCard";
 
@@ -19,7 +19,6 @@ type CallSessionHubProps = {
   manualWorkspace: ReactNode;
   automatedEligible: boolean;
   manualEligible: boolean;
-  manualMessagesHref: string | null;
 };
 
 const SESSION_STORAGE_PREFIX = "calls-session-mode";
@@ -49,7 +48,6 @@ export default function CallSessionHub({
   manualWorkspace,
   automatedEligible,
   manualEligible,
-  manualMessagesHref,
 }: CallSessionHubProps) {
   const [mode, setMode] = useState<CallSessionMode | null>(() => {
     if (typeof window === "undefined") {
@@ -70,11 +68,11 @@ export default function CallSessionHub({
 
   const emitModeTelemetry = useCallback(
     (nextMode: CallSessionMode) => {
-      console.log("[calls-session-mode-select]", {
+      console.log("[calls-session-call-mode-select]", {
         callId,
         workspaceId,
         jobId,
-        mode: nextMode,
+        selectedMode: nextMode,
       });
     },
     [callId, jobId, workspaceId],
@@ -145,9 +143,13 @@ export default function CallSessionHub({
     });
   }, [activeModel.ctaReasonCode, activeModel.primaryCta.kind, callId, mode, workspaceId]);
 
+  const modeChooser = (
+    <CallModeChooserCard mode={mode} onSelect={handleModeSelect} />
+  );
+
   return (
     <div className="space-y-6">
-      <CallControlCard model={activeModel} details={details} />
+      <CallControlCard model={activeModel} details={details} modeChooser={modeChooser} />
       <CallWorkspaceCard
         callId={callId}
         workspaceId={workspaceId}
@@ -156,10 +158,8 @@ export default function CallSessionHub({
         selectedMode={mode}
         automatedEligible={automatedEligible}
         manualEligible={manualEligible}
-        onSelectMode={handleModeSelect}
         automatedPanel={automatedWorkspace}
         manualPanel={manualWorkspace}
-        manualMessagesHref={manualMessagesHref}
       />
     </div>
   );

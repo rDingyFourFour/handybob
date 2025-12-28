@@ -2,7 +2,6 @@
 
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 import AskBobSection from "@/components/askbob/AskBobSection";
 import AskBobMaterialsPanel, { type MaterialsSummaryContext } from "@/components/askbob/AskBobMaterialsPanel";
@@ -594,13 +593,6 @@ export default function JobAskBobFlow({
   const callingPipelineNextAction = callSessionActiveOrTerminal && callSessionId
     ? "Open the call session to choose how to place the call."
     : "Open a call session to choose automated or manual guided calling.";
-  const handleManualEscapeClick = (escapeType: "sms" | "calls_workspace") => {
-    console.log("[askbob-calling-manual-escape-click]", {
-      workspaceId,
-      jobId,
-      escapeType,
-    });
-  };
   const handleOpenCallSessionClick = async () => {
     console.log("[jobs-open-call-session-click]", {
       workspaceId,
@@ -617,6 +609,12 @@ export default function JobAskBobFlow({
       setOpenCallSessionState({ status: "error", message: result.message });
       return;
     }
+    console.log("[job-detail-open-call-session-click]", {
+      workspaceId,
+      jobId,
+      callId: result.callId,
+      createdNew: result.createdNew,
+    });
     console.log("[jobs-open-call-session-result]", {
       workspaceId,
       jobId,
@@ -1035,40 +1033,10 @@ export default function JobAskBobFlow({
               <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Next best action</p>
               <p className="text-sm text-slate-200">{callingPipelineNextAction}</p>
             </div>
-            {openCallSessionState.status === "error" && openCallSessionState.message && (
-              <p className="text-xs text-rose-300">{openCallSessionState.message}</p>
-            )}
-          </div>
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/40 px-4 py-3">
-            <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Manual options</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {customerId && (
-                <HbButton
-                  as={Link}
-                  href={`/messages?${new URLSearchParams({
-                    compose: "1",
-                    customerId,
-                    jobId,
-                    origin: "askbob-calling-manual",
-                  }).toString()}`}
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => handleManualEscapeClick("sms")}
-                >
-                  Send SMS manually
-                </HbButton>
-              )}
-              <HbButton
-                as={Link}
-                href="/calls"
-                size="sm"
-                variant="ghost"
-                onClick={() => handleManualEscapeClick("calls_workspace")}
-              >
-                Open calls workspace
-              </HbButton>
-            </div>
-          </div>
+          {openCallSessionState.status === "error" && openCallSessionState.message && (
+            <p className="text-xs text-rose-300">{openCallSessionState.message}</p>
+          )}
+        </div>
           <AskBobSection id="askbob-followup">
             <JobAskBobFollowupPanel
               workspaceId={workspaceId}

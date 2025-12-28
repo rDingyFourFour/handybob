@@ -223,17 +223,6 @@ export default function CallControlCard({ model, modeChooser, details }: CallCon
       "data-cta-role": "primary",
       "data-cta-kind": primaryCta.kind,
     };
-    if (primaryCta.kind === "open-composer") {
-      return (
-        <HbButton
-          {...sharedProps}
-          onClick={handleOpenComposer}
-          disabled={primaryCta.disabled || !hasDraft}
-        >
-          {primaryCta.label}
-        </HbButton>
-      );
-    }
     if (primaryCta.kind === "refresh-status") {
       return (
         <HbButton {...sharedProps} onClick={handleRefreshStatus} disabled={primaryCta.disabled}>
@@ -257,6 +246,17 @@ export default function CallControlCard({ model, modeChooser, details }: CallCon
             handleWorkspaceNavigate(primaryCta.workspaceNavigate!.hash, primaryCta.workspaceNavigate!.tab)
           }
           disabled={primaryCta.disabled}
+        >
+          {primaryCta.label}
+        </HbButton>
+      );
+    }
+    if (primaryCta.kind === "open-composer") {
+      return (
+        <HbButton
+          {...sharedProps}
+          onClick={handleOpenComposer}
+          disabled={primaryCta.disabled || !hasDraft}
         >
           {primaryCta.label}
         </HbButton>
@@ -309,14 +309,14 @@ export default function CallControlCard({ model, modeChooser, details }: CallCon
         </div>
       </div>
 
-      <div data-testid="call-control-card-status-strip">
-        <CallStatusStrip items={model.statusStripItems} />
-      </div>
       {modeChooser ? (
         <div data-testid="call-control-card-mode-chooser" className="space-y-2">
           {modeChooser}
         </div>
       ) : null}
+      <div data-testid="call-control-card-status-strip">
+        <CallStatusStrip items={model.statusStripItems} />
+      </div>
 
       <div className="space-y-2 rounded-xl border border-slate-800/60 bg-slate-950/60 p-3">
         <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Primary</p>

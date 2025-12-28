@@ -25,6 +25,7 @@ type PostCallEnrichmentCardProps = {
   hasOutcome: boolean;
   initialResult?: CallPostEnrichmentResult | null;
   primaryVariant?: "primary" | "secondary" | "ghost";
+  hideFollowupComposer?: boolean;
 };
 
 function formatReachedLabel(value: boolean | null) {
@@ -60,6 +61,7 @@ export default function PostCallEnrichmentCard({
   hasOutcome,
   initialResult = null,
   primaryVariant = "primary",
+  hideFollowupComposer = false,
 }: PostCallEnrichmentCardProps) {
   const router = useRouter();
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "failure">(
@@ -335,15 +337,17 @@ export default function PostCallEnrichmentCard({
             <HbButton size="sm" variant="secondary" className="flex-1" onClick={handleApplyOutcome}>
               Apply suggested outcome
             </HbButton>
-            <HbButton
-              size="sm"
-              variant="secondary"
-              className="flex-1"
-              onClick={handleOpenComposer}
-              disabled={!canOpenComposer}
-            >
-              Open composer with suggested follow-up
-            </HbButton>
+            {!hideFollowupComposer && (
+              <HbButton
+                size="sm"
+                variant="secondary"
+                className="flex-1"
+                onClick={handleOpenComposer}
+                disabled={!canOpenComposer}
+              >
+                Open composer with suggested follow-up
+              </HbButton>
+            )}
           </div>
         </div>
       )}

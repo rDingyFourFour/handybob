@@ -125,10 +125,8 @@ describe("Call session workspace modes", () => {
         selectedMode="manual"
         automatedEligible
         manualEligible
-        onSelectMode={() => {}}
         automatedPanel={automatedPanel}
         manualPanel={manualPanel}
-        manualMessagesHref={null}
       />,
     );
     expect(manualMarkup).toContain("Copy number");
@@ -143,10 +141,8 @@ describe("Call session workspace modes", () => {
         selectedMode="automated"
         automatedEligible
         manualEligible
-        onSelectMode={() => {}}
         automatedPanel={automatedPanel}
         manualPanel={manualPanel}
-        manualMessagesHref={null}
       />,
     );
     expect(automatedMarkup).not.toContain("Copy number");

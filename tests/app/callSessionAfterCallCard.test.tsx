@@ -523,7 +523,6 @@ describe("AskBobAfterCallCard", () => {
         callId: "call-1",
       }),
     );
-    expect(container.textContent).toContain("Back to job");
     expect(mockRunAction).toHaveBeenCalledWith(
       expect.objectContaining({ generationSource: "call_session" }),
     );

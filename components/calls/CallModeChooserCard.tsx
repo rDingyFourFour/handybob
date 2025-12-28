@@ -34,25 +34,30 @@ function resolveButtonLabel(mode: CallSessionMode, selectedMode: CallSessionMode
 }
 
 export default function CallModeChooserCard({ mode, onSelect }: CallModeChooserCardProps) {
+  const visibleOptions: CallSessionMode[] = mode ? [mode] : ["automated", "manual"];
+  const alternateMode: CallSessionMode | null =
+    mode === "automated" ? "manual" : mode === "manual" ? "automated" : null;
+
   return (
-    <HbCard data-testid="call-mode-chooser-card" className="space-y-4">
+    <HbCard data-testid="call-session-mode-chooser" className="space-y-4">
       <div className="space-y-1">
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call choice</p>
         <h2 className="hb-heading-3 text-xl font-semibold text-white">
-          Choose how to place this call
+          Choose how to make this call
         </h2>
         <p className="text-sm text-slate-400">
-          Pick automated or manual guidance so we can focus the next steps.
+          Automated uses AskBob to place the call for you. Manual keeps you on the phone with guided steps.
         </p>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {(Object.keys(OPTION_COPY) as CallSessionMode[]).map((option) => {
+      <div className={`grid gap-3 ${mode ? "" : "md:grid-cols-2"}`}>
+        {visibleOptions.map((option) => {
           const selected = mode === option;
           return (
             <div
               key={option}
               data-testid={`call-mode-option-${option}`}
+              data-selected={selected ? "true" : "false"}
               className={`space-y-3 rounded-2xl border px-4 py-3 ${
                 selected
                   ? "border-amber-400/60 bg-amber-500/10 text-amber-100"
@@ -81,6 +86,20 @@ export default function CallModeChooserCard({ mode, onSelect }: CallModeChooserC
           );
         })}
       </div>
+      {alternateMode && (
+        <div className="flex items-center justify-between text-xs text-slate-400">
+          <span>Need a different call mode?</span>
+          <HbButton
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => onSelect(alternateMode)}
+            data-testid={`call-mode-switch-${alternateMode}`}
+          >
+            Switch to {alternateMode === "automated" ? "automated" : "manual"}
+          </HbButton>
+        </div>
+      )}
     </HbCard>
   );
 }

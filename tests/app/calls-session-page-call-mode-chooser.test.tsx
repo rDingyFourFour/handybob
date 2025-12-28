@@ -99,7 +99,6 @@ describe("CallSessionPage call mode chooser", () => {
           manualWorkspace={<div />}
           automatedEligible
           manualEligible
-          manualMessagesHref={null}
         />,
       );
       await Promise.resolve();
@@ -120,7 +119,7 @@ describe("CallSessionPage call mode chooser", () => {
 
   it("renders the chooser with stable option wrappers when no mode is selected", async () => {
     await renderHub();
-    const chooser = container.querySelector('[data-testid="call-mode-chooser-card"]');
+    const chooser = container.querySelector('[data-testid="call-session-mode-chooser"]');
     expect(chooser).toBeTruthy();
     const options = container.querySelectorAll('[data-testid^="call-mode-option-"]');
     expect(options).toHaveLength(2);
@@ -139,7 +138,7 @@ describe("CallSessionPage call mode chooser", () => {
     expect(primaryCtas).toHaveLength(1);
     expect(primaryCtas[0]?.textContent ?? "").toContain("Start automated call");
     const modeEvent = logSpy.mock.calls.find(
-      (args) => args[0] === "[calls-session-mode-select]",
+      (args) => args[0] === "[calls-session-call-mode-select]",
     );
     expect(modeEvent).toBeTruthy();
   });
@@ -155,20 +154,22 @@ describe("CallSessionPage call mode chooser", () => {
     expect(primaryCtas).toHaveLength(1);
     expect(primaryCtas[0]?.textContent ?? "").toContain("Start guided call");
     const modeEvent = logSpy.mock.calls.find(
-      (args) => args[0] === "[calls-session-mode-select]",
+      (args) => args[0] === "[calls-session-call-mode-select]",
     );
     expect(modeEvent).toBeTruthy();
   });
 
-  it("hides the mode chooser after selecting a mode", async () => {
+  it("collapses the unselected mode after selecting a mode", async () => {
     await renderHub();
     clickMode("automated");
     await act(async () => {
       await Promise.resolve();
     });
-    const primaryCtas = container.querySelectorAll('[data-cta-role="primary"]');
-    expect(primaryCtas).toHaveLength(1);
-    expect(container.querySelector('[data-testid="call-mode-chooser-card"]')).toBeFalsy();
+    const chooser = container.querySelector('[data-testid="call-session-mode-chooser"]');
+    expect(chooser).toBeTruthy();
+    const options = container.querySelectorAll('[data-testid^="call-mode-option-"]');
+    expect(options).toHaveLength(1);
+    expect(options[0]?.getAttribute("data-selected")).toBe("true");
   });
 
   it("scopes session mode by callId", async () => {

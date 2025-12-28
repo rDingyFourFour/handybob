@@ -77,7 +77,10 @@ export default function CallManualNumberCard({
   ]);
 
   return (
-    <div className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-950/60 p-4 text-sm text-slate-200">
+    <div
+      data-testid="call-manual-number-card"
+      className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-950/60 p-4 text-sm text-slate-200"
+    >
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Manual call</p>
         <p className="text-sm text-slate-400">

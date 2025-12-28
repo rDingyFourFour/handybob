@@ -205,4 +205,29 @@ describe("PostCallEnrichmentCard", () => {
       expect.objectContaining({ draftSource: "call_post_enrichment" }),
     );
   });
+
+  it("hides the composer action when configured for wrap-up embedding", async () => {
+    act(() => {
+      root?.render(
+        <PostCallEnrichmentCard
+          workspaceId="workspace-1"
+          callId="call-5"
+          jobId="job-5"
+          customerId="customer-5"
+          direction="outbound"
+          isTerminal
+          hasRecordingMetadata
+          hasOutcome
+          initialResult={baseResult}
+          hideFollowupComposer
+        />,
+      );
+    });
+    await flushReactUpdates();
+
+    const openButton = Array.from(container.querySelectorAll("button")).find((element) =>
+      element.textContent?.includes("Open composer"),
+    );
+    expect(openButton).toBeUndefined();
+  });
 });

@@ -63,7 +63,7 @@ describe("openOrCreateCallSessionForJobAction", () => {
 
     const result = await openOrCreateCallSessionForJobAction({ jobId: "job-1" });
 
-    expect(result).toEqual({ ok: true, callId: "call-1" });
+    expect(result).toEqual({ ok: true, callId: "call-1", createdNew: false });
     expect(supabaseState.queries.calls.insert).not.toHaveBeenCalled();
   });
 
@@ -111,7 +111,7 @@ describe("openOrCreateCallSessionForJobAction", () => {
 
     const result = await openOrCreateCallSessionForJobAction({ jobId: "job-1" });
 
-    expect(result).toEqual({ ok: true, callId: "call-new" });
+    expect(result).toEqual({ ok: true, callId: "call-new", createdNew: true });
     expect(supabaseState.queries.calls.insert).toHaveBeenCalled();
   });
 
