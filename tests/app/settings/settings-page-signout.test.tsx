@@ -9,7 +9,7 @@ const mockGetCurrentWorkspace = vi.fn();
 const mockRedirect = vi.fn();
 const mockReplace = vi.fn();
 const mockSignOut = vi.fn();
-const mockUpdatePublicBookingStatus = vi.fn();
+const mockUpdatePublicBookingEnabledAction = vi.fn();
 
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => mockRedirect(url),
@@ -39,8 +39,9 @@ vi.mock("@/utils/supabase/client", () => ({
   }),
 }));
 
-vi.mock("@/app/(app)/settings/publicBookingActions", () => ({
-  updatePublicBookingStatus: (...args: unknown[]) => mockUpdatePublicBookingStatus(...args),
+vi.mock("@/app/(app)/settings/actions/updatePublicBookingEnabledAction", () => ({
+  updatePublicBookingEnabledAction: (...args: unknown[]) =>
+    mockUpdatePublicBookingEnabledAction(...args),
 }));
 
 import SettingsHomePage from "@/app/(app)/settings/page";
@@ -56,7 +57,7 @@ describe("SettingsHomePage sign-out", () => {
     mockRedirect.mockReset();
     mockReplace.mockReset();
     mockSignOut.mockReset();
-    mockUpdatePublicBookingStatus.mockReset();
+    mockUpdatePublicBookingEnabledAction.mockReset();
     createServerClientMock.mockReset();
     mockGetCurrentWorkspace.mockReset();
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -215,11 +216,9 @@ describe("SettingsHomePage sign-out", () => {
   });
 
   it("updates the bookings status badge after toggling", async () => {
-    mockUpdatePublicBookingStatus.mockResolvedValue({
-      status: "success",
+    mockUpdatePublicBookingEnabledAction.mockResolvedValue({
+      success: true,
       enabled: true,
-      message: null,
-      code: null,
     });
 
     await renderSettings({ slug: "test-workspace", publicLeadEnabled: false });
@@ -231,15 +230,7 @@ describe("SettingsHomePage sign-out", () => {
     expect(toggleButton).toBeDefined();
 
     await act(async () => {
-      const form = toggleButton?.closest("form");
-      if (!form) {
-        throw new Error("missing bookings toggle form");
-      }
-      if (typeof (form as HTMLFormElement).requestSubmit === "function") {
-        (form as HTMLFormElement).requestSubmit(toggleButton as HTMLButtonElement);
-      } else {
-        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-      }
+      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushReactUpdates();
 

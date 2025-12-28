@@ -111,7 +111,7 @@ describe("BookingLinkCard", () => {
     ).toBe(true);
   });
 
-  it("opens the link when enabled and blocks when disabled", async () => {
+  it("opens the link when enabled and when disabled", async () => {
     const openSpy = vi.fn();
     Object.assign(window, { open: openSpy });
 
@@ -138,14 +138,6 @@ describe("BookingLinkCard", () => {
       disabledOpenButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(openSpy).toHaveBeenCalledTimes(1);
-    const logCalls = vi.mocked(console.log).mock.calls;
-    expect(
-      logCalls.some(
-        ([label, payload]) =>
-          label === "[settings-booking-link-open-blocked]" &&
-          payload.errorCode === "disabled",
-      ),
-    ).toBe(true);
+    expect(openSpy).toHaveBeenCalledTimes(2);
   });
 });

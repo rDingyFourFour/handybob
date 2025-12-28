@@ -141,6 +141,23 @@ describe("BookingForm", () => {
     ).toBe(false);
   });
 
+  it("shows a friendly message when bookings are disabled", async () => {
+    mockSubmitPublicBooking.mockResolvedValueOnce({
+      status: "error",
+      errors: {},
+      message: null,
+      errorCode: "bookings_disabled",
+    });
+
+    await renderForm();
+    fillRequiredFields();
+
+    await submitForm();
+    await flushReactUpdates();
+
+    expect(container.textContent).toContain("Bookings are currently disabled for this business.");
+  });
+
   it("renders confirmation content and resets the form", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     mockSubmitPublicBooking.mockResolvedValueOnce({

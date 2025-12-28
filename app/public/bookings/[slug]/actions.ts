@@ -132,14 +132,14 @@ export async function submitPublicBooking(
     .eq("slug", workspaceSlug)
     .maybeSingle<WorkspaceRow>();
 
-  if (!workspace || workspace.public_lead_form_enabled === false) {
+  if (!workspace) {
     console.warn("[public-booking-submit]", {
       status: "error",
       errorCode: "inactive_form",
       workspaceSlug,
     });
     logSubmitFailure({
-      workspaceId: workspace?.id ?? null,
+      workspaceId: null,
       customerId: null,
       errorCode: "inactive_form",
     });
@@ -147,6 +147,29 @@ export async function submitPublicBooking(
       status: "error",
       message: "This booking link is not active.",
       errorCode: "inactive_form",
+    };
+  }
+
+  if (workspace.public_lead_form_enabled === false) {
+    console.warn("[public-booking-submit-blocked]", {
+      workspaceId: workspace.id,
+      slug: workspaceSlug,
+      code: "bookings_disabled",
+    });
+    console.warn("[public-booking-submit]", {
+      status: "error",
+      errorCode: "bookings_disabled",
+      workspaceSlug,
+    });
+    logSubmitFailure({
+      workspaceId: workspace.id,
+      customerId: null,
+      errorCode: "bookings_disabled",
+    });
+    return {
+      status: "error",
+      message: "Bookings are currently disabled for this business.",
+      errorCode: "bookings_disabled",
     };
   }
 

@@ -87,14 +87,6 @@ export default function BookingLinkCard({
       });
       return;
     }
-    if (!isEnabled) {
-      console.log("[settings-booking-link-open-blocked]", {
-        workspaceId,
-        workspaceSlug,
-        errorCode: "disabled",
-      });
-      return;
-    }
     console.log("[settings-booking-link-open-click]", {
       workspaceId,
       workspaceSlug,
@@ -103,12 +95,19 @@ export default function BookingLinkCard({
   };
 
   const shouldShowActions = Boolean(bookingUrl);
-  const openDisabled = !isEnabled || !bookingUrl;
+  const openDisabled = !bookingUrl;
 
   return (
     <div className="space-y-3 text-sm text-slate-300" data-testid="booking-link-card">
       <div>
-        <span className="text-xs uppercase tracking-[0.3em] text-slate-500">Public booking link</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs uppercase tracking-[0.3em] text-slate-500">Public booking link</span>
+          {!isEnabled && (
+            <span className="rounded-full border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-200">
+              Inactive externally
+            </span>
+          )}
+        </div>
         {bookingUrl ? (
           <div className="mt-2 break-all text-amber-200" data-testid="booking-link-url">
             {bookingUrl}

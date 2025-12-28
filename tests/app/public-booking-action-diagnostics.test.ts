@@ -128,6 +128,44 @@ describe("submitPublicBooking diagnostics", () => {
     ).toBe(true);
   });
 
+  it("blocks submissions when bookings are disabled", async () => {
+    const supabaseState = setupSupabaseMock({
+      workspaces: {
+        data: [
+          {
+            id: "workspace-1",
+            owner_id: "user-1",
+            slug: "demo",
+            name: "Demo Workspace",
+            brand_name: "Demo",
+            public_lead_form_enabled: false,
+            auto_confirmation_email_enabled: false,
+          },
+        ],
+        error: null,
+      },
+    });
+    createAdminClientMock.mockReturnValue(supabaseState.supabase);
+
+    const result = await submitPublicBooking("demo", { status: "idle" }, buildFormData());
+
+    expect(result.status).toBe("error");
+    expect(result.errorCode).toBe("bookings_disabled");
+    expect(mockUpsertPublicLeadCustomer).not.toHaveBeenCalled();
+    expect(mockCreatePublicBookingLeadJob).not.toHaveBeenCalled();
+
+    const warnCalls = vi.mocked(console.warn).mock.calls;
+    expect(
+      warnCalls.some(
+        ([label, payload]) =>
+          label === "[public-booking-submit-blocked]" &&
+          payload.workspaceId === "workspace-1" &&
+          payload.slug === "demo" &&
+          payload.code === "bookings_disabled",
+      ),
+    ).toBe(true);
+  });
+
   it("returns job_create_failed with safe diagnostics on constraint errors", async () => {
     const supabaseState = setupSupabaseMock({
       workspaces: {

@@ -1,13 +1,15 @@
 "use client";
 
-import { useActionState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import { getPublicBookingUrlForSlug } from "@/lib/domain/workspaces/publicBookingUrl";
 import BookingLinkCard from "@/app/(app)/settings/BookingLinkCard";
-import { updatePublicBookingStatus, type PublicBookingToggleState } from "./publicBookingActions";
+import {
+  updatePublicBookingEnabledAction,
+  type UpdatePublicBookingEnabledResult,
+} from "@/app/(app)/settings/actions/updatePublicBookingEnabledAction";
 
 type PublicBookingLinkCardProps = {
   slug: string | null | undefined;
@@ -22,17 +24,10 @@ export default function PublicBookingLinkCard({
   enabled,
   canManage,
 }: PublicBookingLinkCardProps) {
-  const router = useRouter();
-  const initialToggleState: PublicBookingToggleState = {
-    status: "idle",
-    enabled,
-    message: null,
-    code: null,
-  };
-  const [toggleState, formAction, pending] = useActionState(
-    updatePublicBookingStatus,
-    initialToggleState
-  );
+  const [toggleEnabled, setToggleEnabled] = useState(enabled);
+  const [pending, setPending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
 
   const bookingUrl = useMemo(() => {
     if (!slug || !slug.trim()) {
@@ -41,34 +36,60 @@ export default function PublicBookingLinkCard({
     return getPublicBookingUrlForSlug(slug);
   }, [slug]);
 
-  const statusLabel = toggleState.enabled ? "Enabled" : "Disabled";
-  const statusStyles = toggleState.enabled
+  const statusLabel = toggleEnabled ? "Enabled" : "Disabled";
+  const statusStyles = toggleEnabled
     ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
     : "border-rose-400/40 bg-rose-500/10 text-rose-200";
 
-  useEffect(() => {
-    if (toggleState.status === "success") {
-      console.log("[bookings-enable-toggle-success]", {
-        workspaceId,
-        workspaceSlug: slug ?? null,
-        enabled: toggleState.enabled,
-      });
-      router.refresh();
+  const handleToggle = async () => {
+    if (!canManage || pending) {
+      return;
     }
-    if (toggleState.status === "error") {
-      console.log("[bookings-enable-toggle-failure]", {
-        workspaceId,
-        workspaceSlug: slug ?? null,
-        code: toggleState.code ?? "unknown",
-      });
-    }
-  }, [router, slug, toggleState, workspaceId]);
-
-  const handleToggleClick = () => {
-    console.log("[bookings-enable-toggle-click]", {
+    const previousEnabled = toggleEnabled;
+    const nextEnabled = !toggleEnabled;
+    setPending(true);
+    setErrorMessage(null);
+    setErrorCode(null);
+    setToggleEnabled(nextEnabled);
+    console.log("[settings-booking-toggle-ui-click]", {
       workspaceId,
       workspaceSlug: slug ?? null,
-      enabled: !toggleState.enabled,
+      intendedEnabled: nextEnabled,
+    });
+
+    let result: UpdatePublicBookingEnabledResult;
+    try {
+      result = await updatePublicBookingEnabledAction({ enabled: nextEnabled });
+    } catch {
+      result = {
+        success: false,
+        code: "unknown",
+        message: "We couldn’t update bookings right now.",
+      };
+    }
+
+    if (result.success) {
+      setToggleEnabled(result.enabled);
+      setPending(false);
+      console.log("[settings-booking-toggle-ui-result]", {
+        workspaceId,
+        workspaceSlug: slug ?? null,
+        intendedEnabled: nextEnabled,
+        success: true,
+      });
+      return;
+    }
+
+    setToggleEnabled(previousEnabled);
+    setPending(false);
+    setErrorMessage(result.message);
+    setErrorCode(result.code);
+    console.log("[settings-booking-toggle-ui-result]", {
+      workspaceId,
+      workspaceSlug: slug ?? null,
+      intendedEnabled: nextEnabled,
+      success: false,
+      code: result.code,
     });
   };
 
@@ -90,33 +111,46 @@ export default function PublicBookingLinkCard({
         record in your workspace.
       </p>
       <p className="text-xs text-slate-400">
-        {toggleState.enabled
+        {toggleEnabled
           ? "Anyone with this link can request a booking."
           : "This booking link is not active."}
       </p>
       <BookingLinkCard
         bookingUrl={bookingUrl}
-        isEnabled={toggleState.enabled}
+        isEnabled={toggleEnabled}
         workspaceId={workspaceId ?? null}
         workspaceSlug={slug ?? null}
       />
-      <form action={formAction} className="flex items-center justify-between gap-3">
-        <input type="hidden" name="enabled" value={String(!toggleState.enabled)} />
-        <div className="text-xs text-slate-500">
-          Toggle bookings on to show the form at the public URL.
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-1">
+          <label className="flex items-center gap-3 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-600 bg-slate-900"
+              checked={toggleEnabled}
+              onChange={handleToggle}
+              disabled={!canManage || pending}
+            />
+            <span>Bookings enabled</span>
+          </label>
+          <div className="text-xs text-slate-500">
+            {pending ? "Saving..." : "Toggle bookings to control public intake."}
+          </div>
         </div>
         <HbButton
-          type="submit"
+          type="button"
           size="sm"
           variant="secondary"
-          onClick={handleToggleClick}
+          onClick={handleToggle}
           disabled={!canManage || pending}
         >
-          {toggleState.enabled ? "Disable bookings" : "Enable bookings"}
+          {toggleEnabled ? "Disable bookings" : "Enable bookings"}
         </HbButton>
-      </form>
-      {toggleState.status === "error" && toggleState.message && (
-        <p className="text-xs text-rose-300">{toggleState.message}</p>
+      </div>
+      {errorMessage && (
+        <p className="text-xs text-rose-300" data-error-code={errorCode ?? undefined}>
+          {errorMessage}
+        </p>
       )}
     </HbCard>
   );

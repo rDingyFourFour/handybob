@@ -67,6 +67,8 @@ describe("public booking page states", () => {
     expect(markup).toContain("This booking link is not active");
     expect(markup).toContain('data-testid="public-booking-state"');
     expect(markup).toContain("<section");
+    expect(markup).not.toContain("BookingForm mock");
+    expect(markup).not.toContain("public-booking-form-container");
   });
 
   it("renders the enabled state with confirmation and form", async () => {

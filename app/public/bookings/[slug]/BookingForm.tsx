@@ -129,6 +129,11 @@ function BookingFormContent({ workspaceSlug, onReset }: BookingFormContentProps)
     );
   }
 
+  const displayMessage =
+    state.errorCode === "bookings_disabled"
+      ? "Bookings are currently disabled for this business."
+      : state.message;
+
   return (
     <form action={formAction} className="space-y-4" onSubmit={handleSubmit}>
       <PendingTracker />
@@ -199,9 +204,9 @@ function BookingFormContent({ workspaceSlug, onReset }: BookingFormContentProps)
         <input id="website" name="website" autoComplete="off" />
       </div>
 
-      {state.message && (
+      {displayMessage && (
         <div className="rounded-lg border border-rose-500/50 bg-rose-950/40 px-3 py-2 text-sm text-rose-100">
-          {state.message}
+          {displayMessage}
         </div>
       )}
 

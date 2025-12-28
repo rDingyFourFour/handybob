@@ -172,7 +172,7 @@ function renderPublicBookingState(state: PublicBookingState) {
         <div className="mx-auto max-w-2xl space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-6 text-center shadow-xl shadow-black/30">
           <h2 className="text-2xl font-semibold">This booking link is not active</h2>
           <p className="hb-muted">
-            Please contact the business for an updated link or check back after bookings are enabled.
+            Bookings are currently disabled for this business. Please contact them for an updated link or check back later.
           </p>
         </div>
       )}
