@@ -2,21 +2,24 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import CallModeChooserCard, { type CallSessionMode } from "@/components/calls/CallModeChooserCard";
+import { type CallSessionMode } from "@/components/calls/CallModeChooserCard";
 import CallControlCard from "./CallControlCard";
-import GuidedCallWorkspaceCard from "./GuidedCallWorkspaceCard";
+import CallWorkspaceCard from "./CallWorkspaceCard";
 
 type CallSessionHubProps = {
   callId: string;
   workspaceId: string;
   jobId: string | null;
+  customerId: string | null;
   automatedModel: Parameters<typeof CallControlCard>[0]["model"];
   manualModel: Parameters<typeof CallControlCard>[0]["model"];
   unselectedModel: Parameters<typeof CallControlCard>[0]["model"];
   details?: ReactNode;
-  prepare: ReactNode;
-  during: ReactNode;
-  after: ReactNode;
+  automatedWorkspace: ReactNode;
+  manualWorkspace: ReactNode;
+  automatedEligible: boolean;
+  manualEligible: boolean;
+  manualMessagesHref: string | null;
 };
 
 const SESSION_STORAGE_PREFIX = "calls-session-mode";
@@ -33,21 +36,20 @@ function resolveMode(value: string | null): CallSessionMode | null {
   return null;
 }
 
-function defaultTabForMode(mode: CallSessionMode) {
-  return mode === "manual" ? "during" : "prepare";
-}
-
 export default function CallSessionHub({
   callId,
   workspaceId,
   jobId,
+  customerId,
   automatedModel,
   manualModel,
   unselectedModel,
   details,
-  prepare,
-  during,
-  after,
+  automatedWorkspace,
+  manualWorkspace,
+  automatedEligible,
+  manualEligible,
+  manualMessagesHref,
 }: CallSessionHubProps) {
   const [mode, setMode] = useState<CallSessionMode | null>(() => {
     if (typeof window === "undefined") {
@@ -67,8 +69,8 @@ export default function CallSessionHub({
   });
 
   const emitModeTelemetry = useCallback(
-    (eventName: string, nextMode: CallSessionMode) => {
-      console.log(eventName, {
+    (nextMode: CallSessionMode) => {
+      console.log("[calls-session-mode-select]", {
         callId,
         workspaceId,
         jobId,
@@ -93,36 +95,32 @@ export default function CallSessionHub({
     [callId],
   );
 
-  const dispatchWorkspaceTab = useCallback((nextMode: CallSessionMode) => {
+  const dispatchWorkspaceNavigate = useCallback((hash: string) => {
     if (typeof window === "undefined") {
       return;
     }
     window.dispatchEvent(
       new CustomEvent(WORKSPACE_NAV_EVENT, {
-        detail: { tab: defaultTabForMode(nextMode) },
+        detail: { hash },
       }),
     );
   }, []);
 
   const handleModeSelect = useCallback(
     (nextMode: CallSessionMode) => {
-      const isChange = mode !== null && mode !== nextMode;
-      const eventName = isChange
-        ? "[calls-session-call-mode-change]"
-        : "[calls-session-call-mode-select]";
       setMode(nextMode);
       persistMode(nextMode);
-      emitModeTelemetry(eventName, nextMode);
+      emitModeTelemetry(nextMode);
     },
-    [emitModeTelemetry, mode, persistMode],
+    [emitModeTelemetry, persistMode],
   );
 
   useEffect(() => {
     if (!mode) {
       return;
     }
-    dispatchWorkspaceTab(mode);
-  }, [dispatchWorkspaceTab, mode]);
+    dispatchWorkspaceNavigate("#call-workspace");
+  }, [dispatchWorkspaceNavigate, mode]);
 
   const activeModel = useMemo(() => {
     if (mode === "automated") {
@@ -147,14 +145,22 @@ export default function CallSessionHub({
     });
   }, [activeModel.ctaReasonCode, activeModel.primaryCta.kind, callId, mode, workspaceId]);
 
-  const modeChooser = (
-    <CallModeChooserCard mode={mode} onSelect={handleModeSelect} />
-  );
-
   return (
     <div className="space-y-6">
-      <CallControlCard model={activeModel} modeChooser={modeChooser} details={details} />
-      <GuidedCallWorkspaceCard prepare={prepare} during={during} after={after} />
+      <CallControlCard model={activeModel} details={details} />
+      <CallWorkspaceCard
+        callId={callId}
+        workspaceId={workspaceId}
+        jobId={jobId}
+        customerId={customerId}
+        selectedMode={mode}
+        automatedEligible={automatedEligible}
+        manualEligible={manualEligible}
+        onSelectMode={handleModeSelect}
+        automatedPanel={automatedWorkspace}
+        manualPanel={manualWorkspace}
+        manualMessagesHref={manualMessagesHref}
+      />
     </div>
   );
 }

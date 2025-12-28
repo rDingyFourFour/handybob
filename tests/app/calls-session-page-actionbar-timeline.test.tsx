@@ -110,12 +110,22 @@ describe("CallSessionPage action bar and status strip", () => {
     expect(markup).toContain('data-testid="call-status-strip"');
     expect(markup).toContain('data-testid="call-session-primary-cta"');
     expect(markup).toContain("Select a call mode");
-    expect(markup).toContain("Manual call");
-    expect(markup).toContain("Manual follow-up SMS");
+    expect(markup).toContain('data-testid="call-workspace-card"');
+    expect(markup).toContain('data-testid="call-workspace-panel-unselected"');
+    expect(markup).toContain('data-testid="call-wrap-up-card"');
     expect(markup).not.toContain("Agent tools");
     expect(markup).not.toContain('data-testid="call-session-action-bar"');
     expect(markup).not.toContain('data-testid="call-session-timeline"');
     expect(markup).not.toContain('data-testid="call-control-card-timeline"');
+
+    const window = new Window();
+    window.document.body.innerHTML = markup;
+    const primaryCtas = window.document.querySelectorAll(
+      '[data-testid="call-session-primary-cta"]',
+    );
+    expect(primaryCtas).toHaveLength(1);
+    expect(primaryCtas[0]?.textContent).toContain("Select a call mode");
+    expect(primaryCtas[0]?.getAttribute("disabled")).not.toBeNull();
 
     const timelineEvent = logSpy.mock.calls.find(
       (args) => args[0] === "[calls-session-timeline-visible]",
@@ -288,7 +298,6 @@ describe("CallSessionPage action bar and status strip", () => {
     expect(markup).toContain("Select a call mode");
     expect(markup).toContain('data-cta-kind="disabled"');
     expect(markup).toContain("Regenerate follow-up");
-    expect(markup).toContain("Manual call");
   });
 
   it("renders a stable status strip wrapper for empty vs populated milestones", async () => {

@@ -44,6 +44,7 @@ import AskBobLiveGuidanceCard from "./AskBobLiveGuidanceCard";
 import PostCallEnrichmentCard from "./PostCallEnrichmentCard";
 import CallManualNumberCard from "./CallManualNumberCard";
 import CallSessionHub from "./CallSessionHub";
+import WrapUpCard from "./WrapUpCard";
 
 type CallRecord = {
   id: string;
@@ -640,6 +641,9 @@ export default async function CallSessionPage({
   const customerFirstName = customerName ? customerName.split(" ")[0] : null;
   const linkedCustomerId = call.customer_id ?? null;
   const hasCustomerPhone = Boolean(customerPhone?.trim());
+  const manualMessagesHref = hasCustomerPhone
+    ? buildMessagesHref({ customerId, jobId })
+    : null;
   const scriptSummaryForManual = askBobScriptBody?.trim() || automaticSummaryPreview?.trim() || null;
   const hasScriptSummaryForManual = Boolean(scriptSummaryForManual);
   const automatedScriptBody = scriptSummaryForManual;
@@ -662,20 +666,13 @@ export default async function CallSessionPage({
   const hasTwilioSid = Boolean(call.twilio_call_sid);
   const hasTwilioStatus = Boolean(call.twilio_status);
   const createdTimestamp = formatUtcTimestamp(call.created_at);
-  const dialRequestedTimestamp = formatUtcTimestamp(call.twilio_status_updated_at);
   const timelineTwilioStatusLabel = formatTwilioStatusLabel(call.twilio_status ?? null);
   const twilioStatusTimestamp = formatUtcTimestamp(call.twilio_status_updated_at);
-  const recordingTimestamp = formatUtcTimestamp(call.twilio_recording_received_at ?? null);
   const terminalTimestamp = automatedDialSnapshot.isTerminal
     ? formatUtcTimestamp(call.twilio_status_updated_at)
     : null;
   const outcomeTimestamp = formatUtcTimestamp(call.outcome_recorded_at);
   const hasRecordingDuration = call.twilio_recording_duration_seconds != null;
-  const recordingStatus = hasRecordingDuration
-    ? "Ready"
-    : automatedDialSnapshot.hasRecordingMetadata
-    ? "Processing"
-    : TIMELINE_NOT_YET_LABEL;
   const outcomeStatus = callHasOutcome && callHasReachedFlag
     ? "Saved"
     : callHasOutcome
@@ -711,38 +708,26 @@ export default async function CallSessionPage({
       timestamp: createdTimestamp ?? TIMELINE_NOT_YET_LABEL,
     },
     {
-      key: "dial-requested",
-      label: "Dial requested",
-      status: hasDialRequestedMarker ? "Requested" : TIMELINE_NOT_YET_LABEL,
-      timestamp: dialRequestedTimestamp ?? TIMELINE_NOT_YET_LABEL,
-    },
-    {
-      key: "twilio-status",
-      label: "Twilio status",
+      key: "status",
+      label: "Call status",
       status: timelineTwilioStatusLabel ?? (hasTwilioSid ? "Queued" : TIMELINE_NOT_YET_LABEL),
       timestamp: twilioStatusTimestamp ?? TIMELINE_NOT_YET_LABEL,
     },
     {
-      key: "recording",
-      label: "Recording",
-      status: recordingStatus,
-      timestamp: recordingTimestamp ?? TIMELINE_NOT_YET_LABEL,
-    },
-    {
       key: "terminal",
-      label: "Terminal reached",
+      label: "Terminal",
       status: automatedDialSnapshot.isTerminal ? "Terminal" : TIMELINE_NOT_YET_LABEL,
       timestamp: terminalTimestamp ?? TIMELINE_NOT_YET_LABEL,
     },
     {
       key: "outcome",
-      label: "Outcome saved",
+      label: "Outcome",
       status: outcomeStatus,
       timestamp: outcomeTimestamp ?? TIMELINE_NOT_YET_LABEL,
     },
     {
-      key: "after-call-draft",
-      label: "After-call draft present",
+      key: "after-call",
+      label: "Follow-up",
       status: afterCallStatus,
       timestamp: TIMELINE_NOT_YET_LABEL,
     },
@@ -868,7 +853,7 @@ export default async function CallSessionPage({
           kind: "start-guided-call",
           label: "Start guided call",
           disabled: !canStartGuidedCall,
-          workspaceNavigate: { tab: "during", hash: "#guided-call-workspace-during" },
+          workspaceNavigate: { tab: "during", hash: "#manual-call-tools" },
         },
         ctaReasonCode: canStartGuidedCall ? "start_guided_call" : "missing_call_context",
       };
@@ -938,13 +923,11 @@ export default async function CallSessionPage({
     secondaryActions: {
       jobHref: jobId ? `/jobs/${jobId}` : null,
       callsHref: "/calls",
+      messagesHref: manualMessagesHref,
     },
-    manualEscape: {
+    callContext: {
       jobId,
       customerId,
-      customerPhone,
-      scriptSummary: scriptSummaryForManual,
-      messagesHref: buildMessagesHref({ customerId, jobId }),
     },
     afterCallDraft: {
       body: afterCallDraftBody,
@@ -983,15 +966,8 @@ export default async function CallSessionPage({
     ctaReasonCode: unselectedCtaState.ctaReasonCode,
   };
 
-  console.log("[calls-session-primary-cta-visible]", {
-    workspaceId: workspace.id,
-    callId: call.id,
-    ctaKind: unselectedCtaState.primaryCta.kind,
-    ctaReasonCode: unselectedCtaState.ctaReasonCode,
-  });
-
   const showNoScriptPanel = !callScriptQuoteId;
-  const prepareTab = (
+  const manualWorkspacePanel = (
     <div className="space-y-4">
       {isAskBobCallContext && (
         <AskBobCallContextStrip
@@ -1043,7 +1019,7 @@ export default async function CallSessionPage({
           <ol className="space-y-1 text-sm text-slate-400">
             <li className="flex gap-2">
               <span className="font-semibold text-slate-400">1.</span>
-              <span>Review the script and key points in this tab.</span>
+              <span>Review the script and key points in this panel.</span>
             </li>
             <li className="flex gap-2">
               <span className="font-semibold text-slate-400">2.</span>
@@ -1051,25 +1027,9 @@ export default async function CallSessionPage({
             </li>
             <li className="flex gap-2">
               <span className="font-semibold text-slate-400">3.</span>
-              <span>Log what happened and trigger follow-up help in the After tab.</span>
+              <span>Log what happened and wrap up outcomes below.</span>
             </li>
           </ol>
-        </div>
-      )}
-    </div>
-  );
-
-  const duringTab = (
-    <div className="space-y-4">
-      {isAskBobAutomatedCall ? (
-        <AutomatedCallNotesCard
-          workspaceId={workspace.id}
-          callId={call.id}
-          initialNotes={sanitizedAutomatedNotes}
-        />
-      ) : (
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-400">
-          Notes appear here when an automated session is active.
         </div>
       )}
       <CallManualNumberCard
@@ -1109,11 +1069,35 @@ export default async function CallSessionPage({
     </div>
   );
 
-  const afterTab = (
+  const automatedWorkspacePanel = (
+    <div className="space-y-4">
+      {isAskBobCallContext && (
+        <AskBobCallContextStrip
+          callId={call.id}
+          jobId={job?.id ?? jobId}
+          scriptBody={askBobScriptBody}
+          scriptSummary={askBobScriptSource}
+        />
+      )}
+      {isAskBobAutomatedCall ? (
+        <AutomatedCallNotesCard
+          workspaceId={workspace.id}
+          callId={call.id}
+          initialNotes={sanitizedAutomatedNotes}
+        />
+      ) : (
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-400">
+          Automated call notes appear here when an automated session is active.
+        </div>
+      )}
+    </div>
+  );
+
+  const wrapUpSummarySection = (
     <div className="space-y-4">
       <div className="space-y-1">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call workspace</p>
-        <h2 className="hb-heading-3 text-xl font-semibold text-white">Call summary</h2>
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call summary</p>
+        <h3 className="hb-heading-3 text-xl font-semibold text-white">Call summary</h3>
         <p className="text-sm text-slate-400">
           Review what happened on the call before capturing the final outcome.
         </p>
@@ -1172,7 +1156,7 @@ export default async function CallSessionPage({
           />
           {summaryMissing && (
             <p className="text-xs text-slate-400">
-              Complete the guided call summary in the Prepare tab to unlock follow-ups.
+              Complete the guided call summary in the manual workspace to unlock follow-ups.
             </p>
           )}
         </div>
@@ -1183,120 +1167,122 @@ export default async function CallSessionPage({
           </p>
         )}
       </div>
+    </div>
+  );
 
-      {showAutomatedOutcomeRequiredBanner && (
-        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
-          Call ended. Record outcome to generate a follow-up.
-        </div>
-      )}
+  const wrapUpOutcomeSection = (
+    <CallOutcomeCaptureCard
+      callId={call.id}
+      workspaceId={workspace.id}
+      initialOutcomeCode={call.outcome_code as CallOutcomeCode | null}
+      initialReachedCustomer={call.reached_customer}
+      initialNotes={call.outcome_notes}
+      initialRecordedAt={call.outcome_recorded_at}
+      initialLegacyOutcome={normalizeCallOutcome(call.outcome)}
+      hasAskBobScriptHint={hasAskBobScriptHint}
+      jobId={jobId}
+      automatedDialSnapshot={automatedDialSnapshot}
+      isAutomatedCallContext={isAskBobAutomatedCall}
+      primaryVariant="secondary"
+    />
+  );
 
-      <CallOutcomeCaptureCard
+  const wrapUpFollowupLinkSection =
+    showAutomatedFollowupLink && followupLinkHref ? (
+      <div className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-200">
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">After-call follow-up</p>
+        <p className="text-sm text-slate-200">
+          The automated call completed. Use Step 8 to turn the outcome into a follow-up message.
+        </p>
+        <HbButton
+          as={Link}
+          href={`${followupLinkHref}#askbob-after-call`}
+          variant="secondary"
+          size="sm"
+          className="text-[11px] uppercase tracking-[0.3em]"
+        >
+          Open AskBob follow-up
+        </HbButton>
+      </div>
+    ) : null;
+
+  const wrapUpAfterCallSection =
+    jobId && customerId ? (
+      <AskBobAfterCallCard
         callId={call.id}
         workspaceId={workspace.id}
-        initialOutcomeCode={call.outcome_code as CallOutcomeCode | null}
-        initialReachedCustomer={call.reached_customer}
-        initialNotes={call.outcome_notes}
-        initialRecordedAt={call.outcome_recorded_at}
-        initialLegacyOutcome={normalizeCallOutcome(call.outcome)}
-        hasAskBobScriptHint={hasAskBobScriptHint}
-        jobId={jobId}
-        automatedDialSnapshot={automatedDialSnapshot}
-        isAutomatedCallContext={isAskBobAutomatedCall}
-        primaryVariant="secondary"
-      />
-
-      {showAutomatedFollowupLink && followupLinkHref && (
-        <div className="space-y-2 rounded-2xl border border-slate-800/60 bg-slate-950/40 p-4 text-sm text-slate-200">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">After-call follow-up</p>
-          <p className="text-sm text-slate-200">
-            The automated call completed. Use Step 8 to turn the outcome into a follow-up message.
-          </p>
-          <HbButton
-            as={Link}
-            href={`${followupLinkHref}#askbob-after-call`}
-            variant="secondary"
-            size="sm"
-            className="text-[11px] uppercase tracking-[0.3em]"
-          >
-            Open AskBob follow-up
-          </HbButton>
-        </div>
-      )}
-
-      {jobId && customerId && (
-        <AskBobAfterCallCard
-          callId={call.id}
-          workspaceId={workspace.id}
-          jobId={jobId}
-          customerId={customerId}
-          hasAskBobScriptBody={Boolean(askBobScriptBody)}
-          callNotes={latestPhoneMessageBody ?? null}
-          hasHumanNotes={Boolean(latestPhoneMessageBody)}
-          hasOutcomeSaved={
-            Boolean(call.outcome_recorded_at) ||
-            Boolean(call.outcome_code) ||
-            Boolean(call.outcome_notes?.trim())
-          }
-          hasOutcomeNotes={Boolean(call.outcome_notes?.trim())}
-          callReadiness={callReadiness}
-          generationSource="call_session"
-          automatedDialSnapshot={automatedDialSnapshot}
-          callSessionEnrichment={callSessionEnrichment}
-          isAskBobAutomatedCall={isAskBobAutomatedCall}
-          callDirection={call.direction ?? null}
-          reachedCustomer={call.reached_customer}
-          outcomeCode={call.outcome_code}
-          callSessionDraftBody={askBobAfterCallSnapshot?.draftMessageBody ?? null}
-          primaryVariant="secondary"
-        />
-      )}
-
-      <PostCallEnrichmentCard
-        workspaceId={workspace.id}
-        callId={call.id}
         jobId={jobId}
         customerId={customerId}
-        direction={call.direction ?? null}
-        isTerminal={callSessionEnrichment.isTerminal}
-        hasRecordingMetadata={callSessionEnrichment.hasRecordingMetadata}
-        hasOutcome={callSessionEnrichment.hasOutcome}
-        initialResult={postCallEnrichmentResult}
+        hasAskBobScriptBody={Boolean(askBobScriptBody)}
+        callNotes={latestPhoneMessageBody ?? null}
+        hasHumanNotes={Boolean(latestPhoneMessageBody)}
+        hasOutcomeSaved={
+          Boolean(call.outcome_recorded_at) ||
+          Boolean(call.outcome_code) ||
+          Boolean(call.outcome_notes?.trim())
+        }
+        hasOutcomeNotes={Boolean(call.outcome_notes?.trim())}
+        callReadiness={callReadiness}
+        generationSource="call_session"
+        automatedDialSnapshot={automatedDialSnapshot}
+        callSessionEnrichment={callSessionEnrichment}
+        isAskBobAutomatedCall={isAskBobAutomatedCall}
+        callDirection={call.direction ?? null}
+        reachedCustomer={call.reached_customer}
+        outcomeCode={call.outcome_code}
+        callSessionDraftBody={askBobAfterCallSnapshot?.draftMessageBody ?? null}
         primaryVariant="secondary"
       />
+    ) : null;
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job</p>
-          <p className="text-lg font-semibold text-white">{displayJobTitle}</p>
-          <p className="text-xs text-slate-400">{jobStatus}</p>
-          {jobLink && (
-            <Link
-              href={jobLink}
-              className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-            >
-              View job
-            </Link>
-          )}
-        </div>
+  const wrapUpEnrichmentSection = (
+    <PostCallEnrichmentCard
+      workspaceId={workspace.id}
+      callId={call.id}
+      jobId={jobId}
+      customerId={customerId}
+      direction={call.direction ?? null}
+      isTerminal={callSessionEnrichment.isTerminal}
+      hasRecordingMetadata={callSessionEnrichment.hasRecordingMetadata}
+      hasOutcome={callSessionEnrichment.hasOutcome}
+      initialResult={postCallEnrichmentResult}
+      primaryVariant="secondary"
+    />
+  );
 
-        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Quote</p>
-          <p className="text-lg font-semibold text-white">{displayQuoteLabel}</p>
-          <p className="text-xs text-slate-400">
-            Status: {callScriptQuoteCandidate?.status ?? "Unknown"}
-          </p>
-          <p className="text-xs text-slate-400">
-            Total: {formatCurrency(callScriptQuoteCandidate?.total ?? null)}
-          </p>
-          {quoteLink && (
-            <Link
-              href={quoteLink}
-              className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-            >
-              View quote
-            </Link>
-          )}
-        </div>
+  const wrapUpMetaSection = (
+    <div className="grid gap-4 md:grid-cols-2">
+      <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job</p>
+        <p className="text-lg font-semibold text-white">{displayJobTitle}</p>
+        <p className="text-xs text-slate-400">{jobStatus}</p>
+        {jobLink && (
+          <Link
+            href={jobLink}
+            className="text-sm font-semibold text-sky-300 hover:text-sky-200"
+          >
+            View job
+          </Link>
+        )}
+      </div>
+
+      <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Quote</p>
+        <p className="text-lg font-semibold text-white">{displayQuoteLabel}</p>
+        <p className="text-xs text-slate-400">
+          Status: {callScriptQuoteCandidate?.status ?? "Unknown"}
+        </p>
+        <p className="text-xs text-slate-400">
+          Total: {formatCurrency(callScriptQuoteCandidate?.total ?? null)}
+        </p>
+        {quoteLink && (
+          <Link
+            href={quoteLink}
+            className="text-sm font-semibold text-sky-300 hover:text-sky-200"
+          >
+            View quote
+          </Link>
+        )}
       </div>
     </div>
   );
@@ -1469,13 +1455,31 @@ export default async function CallSessionPage({
           callId={call.id}
           workspaceId={workspace.id}
           jobId={jobId}
+          customerId={customerId}
           automatedModel={automatedCallControlModel}
           manualModel={manualCallControlModel}
           unselectedModel={unselectedCallControlModel}
           details={callStatusDetails}
-          prepare={prepareTab}
-          during={duringTab}
-          after={afterTab}
+          automatedWorkspace={automatedWorkspacePanel}
+          manualWorkspace={manualWorkspacePanel}
+          automatedEligible={canStartAutomatedCall}
+          manualEligible={canStartGuidedCall}
+          manualMessagesHref={manualMessagesHref}
+        />
+        <WrapUpCard
+          summarySection={wrapUpSummarySection}
+          outcomeBanner={
+            showAutomatedOutcomeRequiredBanner ? (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
+                Call ended. Record outcome to generate a follow-up.
+              </div>
+            ) : null
+          }
+          outcomeSection={wrapUpOutcomeSection}
+          followupLinkSection={wrapUpFollowupLinkSection}
+          afterCallSection={wrapUpAfterCallSection}
+          enrichmentSection={wrapUpEnrichmentSection}
+          metaSection={wrapUpMetaSection}
         />
       </div>
     </div>

@@ -8,9 +8,7 @@ import AskBobSection from "@/components/askbob/AskBobSection";
 import AskBobMaterialsPanel, { type MaterialsSummaryContext } from "@/components/askbob/AskBobMaterialsPanel";
 import AskBobQuotePanel from "@/components/askbob/AskBobQuotePanel";
 import AskBobSchedulerPanel from "@/components/askbob/AskBobSchedulerPanel";
-import AskBobCallAssistPanel, {
-  type StartCallWithScriptPayload,
-} from "@/components/askbob/AskBobCallAssistPanel";
+import AskBobCallAssistPanel from "@/components/askbob/AskBobCallAssistPanel";
 import JobAskBobFollowupPanel from "@/components/askbob/JobAskBobFollowupPanel";
 import JobAskBobPanel, { type JobDiagnosisContext } from "@/components/askbob/JobAskBobPanel";
 import JobAskBobAfterCallPanel from "@/components/askbob/JobAskBobAfterCallPanel";
@@ -43,7 +41,6 @@ import type {
   AskBobQuoteSnapshotPayload,
 } from "@/lib/domain/askbob/types";
 import { ASKBOB_CALL_PERSONA_DEFAULT, ASKBOB_CALL_PERSONA_LABELS } from "@/lib/domain/askbob/types";
-import { cacheAskBobCallContext } from "@/utils/askbob/callContextCache";
 import {
   AfterCallCacheReadReason,
   readAndClearAskBobAfterCallResult,
@@ -507,7 +504,6 @@ export default function JobAskBobFlow({
   const leadLogRef = useRef(false);
   const normalizedJobStatus = jobStatus?.trim().toLowerCase() ?? "";
   const router = useRouter();
-  const callScriptOrigin = "askbob-call-assist";
   const hasJobBasics = Boolean(normalizedJobTitle || normalizedJobDescription);
   const hasCustomerPhone = Boolean(customerPhoneNumber?.trim());
   const callSessionId =
@@ -661,43 +657,6 @@ export default function JobAskBobFlow({
       hasJobDescription: Boolean(jobDescription?.trim()),
     });
   }, [jobDescription, jobId, normalizedJobStatus, normalizedJobTitle, workspaceId]);
-
-  const handleStartCallWithScript = useCallback(
-    (payload: StartCallWithScriptPayload) => {
-      const resolvedCustomerId = payload.customerId ?? customerId ?? null;
-      const scriptValue = payload.scriptBody?.trim() ?? "";
-      const scriptSummary = payload.scriptSummary ?? null;
-      const contextIntents = payload.callIntents ?? null;
-      const url = buildAskBobCallAssistUrl({
-        jobId,
-        customerId: resolvedCustomerId,
-        origin: callScriptOrigin,
-        scriptBody: scriptValue,
-        scriptSummary: payload.scriptSummary,
-      });
-
-      if (scriptValue) {
-        cacheAskBobCallContext(jobId, {
-          scriptBody: scriptValue,
-          scriptSummary,
-          intents: contextIntents,
-        });
-      }
-
-      console.log("[askbob-call-assist-call-route]", {
-        workspaceId,
-        userId,
-        jobId,
-        customerId: resolvedCustomerId,
-        hasScriptBody: Boolean(scriptValue),
-        scriptLength: scriptValue.length,
-        origin: callScriptOrigin,
-      });
-
-      router.push(url);
-    },
-    [callScriptOrigin, customerId, jobId, router, userId, workspaceId],
-  );
 
   const scrollToSection = useCallback((sectionId: string) => {
     if (typeof document === "undefined") {
@@ -1196,7 +1155,6 @@ export default function JobAskBobFlow({
               onCallScriptPersonaChange={setCallScriptPersona}
               callScriptSummary={callScriptSummary}
               onCallScriptSummaryChange={setCallScriptSummary}
-              onStartCallWithScript={handleStartCallWithScript}
               latestCallOutcome={resolvedLatestCallOutcome}
               latestCallOutcomeLabel={latestCallOutcomeReference}
               stepReadiness={stepReadiness.callAssist}

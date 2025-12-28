@@ -53,7 +53,7 @@ describe("CallSessionPage automated call view", () => {
     consoleLogSpy.mockRestore();
   });
 
-  it("renders the automated call details strip with placeholders and notes card", async () => {
+  it("renders the automated call details strip with placeholders", async () => {
     const metadata = {
       voice: "unknown",
       greetingStyle: "Friendly",
@@ -118,8 +118,7 @@ describe("CallSessionPage automated call view", () => {
     expect(markup).toContain("Enabled");
     expect(markup).toContain("Open job");
     expect(markup).not.toContain("Open AskBob on job");
-    expect(markup).toContain("Automated call notes");
-    expect(markup).toContain('data-testid="guided-call-workspace-during"');
+    expect(markup).toContain('data-testid="call-workspace-panel-unselected"');
 
     const detailEvents = consoleLogSpy.mock.calls.filter(
       (args) => args[0] === "[calls-session-askbob-automated-details-visible]",
@@ -190,7 +189,7 @@ describe("CallSessionPage automated call view", () => {
     expect(markup).toContain("Twilio status");
     expect(markup).toContain("Recording available");
     expect(markup).toContain("Call ended. Record outcome to generate a follow-up.");
-    expect(markup).toContain('data-testid="guided-call-workspace-after"');
+    expect(markup).toContain('data-testid="call-wrap-up-card"');
   });
 
   it("hides the automated call strip and notes card when metadata is absent", async () => {
@@ -234,11 +233,11 @@ describe("CallSessionPage automated call view", () => {
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-basic" }) });
     const markup = renderToStaticMarkup(element);
 
-    expect(markup).not.toContain("Automated call");
+    expect(markup).not.toContain("Speech plan summary");
     expect(markup).not.toContain("Call ended. Record outcome to generate a follow-up.");
     expect(markup).not.toContain("Automated call notes");
     expect(markup).toContain('data-testid="call-control-card"');
-    expect(markup).toContain('data-testid="guided-call-workspace"');
+    expect(markup).toContain('data-testid="call-workspace-card"');
     const detailEvents = consoleLogSpy.mock.calls.filter(
       (args) => args[0] === "[calls-session-askbob-automated-details-visible]",
     );

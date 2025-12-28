@@ -18,17 +18,19 @@ export default function CallStatusStrip({ items }: CallStatusStripProps) {
       className="rounded-2xl border border-slate-800/60 bg-slate-950/60 p-3"
     >
       <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">Call status</p>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-3 space-y-2">
         {items.map((item) => (
           <div
             key={item.key}
-            className="flex min-w-[140px] flex-1 flex-col gap-1 rounded-xl border border-slate-800/60 bg-slate-950/80 px-3 py-2 text-xs text-slate-200"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800/60 bg-slate-950/80 px-3 py-2 text-xs text-slate-200"
             data-testid={`call-status-strip-${item.key}`}
           >
-            <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
-              {item.label}
-            </span>
-            <span className="text-sm text-slate-100">{item.status}</span>
+            <div className="space-y-0.5">
+              <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500">
+                {item.label}
+              </span>
+              <span className="block text-sm text-slate-100">{item.status}</span>
+            </div>
             <span className="text-[10px] text-slate-500">{item.timestamp}</span>
           </div>
         ))}

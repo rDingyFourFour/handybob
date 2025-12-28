@@ -86,7 +86,8 @@ describe("CallSessionPage outcome card", () => {
 
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-1" }) });
     const markup = renderToStaticMarkup(element);
-    expect(markup).toContain('data-testid="guided-call-workspace-after"');
+    expect(markup).toContain('data-testid="call-wrap-up-card"');
+    expect(markup).toContain('id="call-outcome-capture"');
     expect(markup).toContain("Reached customer");
     expect(markup).toContain("Save outcome");
   });
@@ -114,7 +115,8 @@ describe("CallSessionPage outcome card", () => {
 
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-2" }) });
     const markup = renderToStaticMarkup(element);
-    expect(markup).toContain('data-testid="guided-call-workspace-after"');
+    expect(markup).toContain('data-testid="call-wrap-up-card"');
+    expect(markup).toContain('id="call-outcome-capture"');
     expect(markup).toContain("Outcome recorded");
     expect(markup).toContain("Reached: Yes");
     expect(markup).toContain("Outcome: Reached · Scheduled");
@@ -144,8 +146,8 @@ describe("CallSessionPage outcome card", () => {
 
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-3" }) });
     const markup = renderToStaticMarkup(element);
-    expect(markup).toContain('data-testid="guided-call-workspace-after"');
-    expect(markup).toContain("Prepared call script for this job");
+    expect(markup).toContain('data-testid="call-wrap-up-card"');
+    expect(markup).toContain("Call summary");
   });
 
   it("does not render the AskBob call strip without the script", async () => {
@@ -171,8 +173,8 @@ describe("CallSessionPage outcome card", () => {
 
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-4" }) });
     const markup = renderToStaticMarkup(element);
-    expect(markup).toContain('data-testid="guided-call-workspace-after"');
-    expect(markup).not.toContain("Prepared call script for this job");
+    expect(markup).toContain('data-testid="call-wrap-up-card"');
+    expect(markup).toContain("Call summary");
   });
 
   it("shows Twilio status and error banner when Twilio data exists", async () => {
@@ -203,7 +205,7 @@ describe("CallSessionPage outcome card", () => {
 
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-5" }) });
     const markup = renderToStaticMarkup(element);
-    expect(markup).toContain('data-testid="guided-call-workspace-after"');
+    expect(markup).toContain('data-testid="call-wrap-up-card"');
     expect(markup).toContain("Twilio status");
     expect(markup).toContain("Ringing");
     expect(markup).toContain("Call failed");
@@ -240,7 +242,7 @@ describe("CallSessionPage outcome card", () => {
 
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-terminal" }) });
     const markup = renderToStaticMarkup(element);
-    expect(markup).toContain('data-testid="guided-call-workspace-after"');
+    expect(markup).toContain('data-testid="call-wrap-up-card"');
     expect(markup).toContain("Call ended. Please record the outcome.");
   });
 

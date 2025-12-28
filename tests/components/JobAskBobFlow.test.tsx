@@ -62,7 +62,7 @@ describe("JobAskBobFlow wiring", () => {
     container.remove();
   });
 
-  it("passes job/customer context and call handler into AskBobCallAssistPanel", async () => {
+  it("passes job/customer context into AskBobCallAssistPanel", async () => {
     const { default: JobAskBobFlow } = await import("@/components/askbob/JobAskBobFlow");
     await act(async () => {
       root?.render(
@@ -117,7 +117,7 @@ describe("JobAskBobFlow wiring", () => {
       followupCallIntentsToken: 0,
       latestCallOutcomeLabel: null,
     });
-    expect(typeof capturedPanelProps?.onStartCallWithScript).toBe("function");
+    expect(capturedPanelProps?.onStartCallWithScript).toBeUndefined();
   });
 
   it("provides the latest call outcome label when an outcome is available", async () => {

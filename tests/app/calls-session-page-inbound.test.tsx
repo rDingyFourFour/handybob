@@ -86,7 +86,7 @@ describe("CallSessionPage inbound flow", () => {
     expect(markup).not.toContain("Send follow-up SMS");
   });
 
-  it("shows the linked context card when the call has a customer and job", async () => {
+  it("defers inbound context tools until a manual mode is selected", async () => {
     supabaseState.responses.calls = {
       data: [
         {
@@ -134,8 +134,9 @@ describe("CallSessionPage inbound flow", () => {
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-2" }) });
     const markup = renderToStaticMarkup(element);
 
-    expect(markup).toContain("Link call context");
-    expect(markup).toContain("Coaching for Roof repair");
+    expect(markup).toContain('data-testid="call-workspace-panel-unselected"');
+    expect(markup).not.toContain("Link call context");
+    expect(markup).not.toContain("Coaching for Roof repair");
   });
 
   it("redirects to login when unauthenticated", async () => {

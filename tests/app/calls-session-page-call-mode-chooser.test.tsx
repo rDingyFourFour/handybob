@@ -28,13 +28,10 @@ const baseModel = {
   primaryCta: { kind: "disabled", label: "Select a call mode", disabled: true },
   primaryCtaExplanation: "Choose a call mode to continue.",
   ctaReasonCode: "select_call_mode",
-  secondaryActions: { jobHref: "/jobs/job-1", callsHref: "/calls" },
-  manualEscape: {
+  secondaryActions: { jobHref: "/jobs/job-1", callsHref: "/calls", messagesHref: null },
+  callContext: {
     jobId: "job-1",
     customerId: "customer-1",
-    customerPhone: "+15550002222",
-    scriptSummary: "Summary",
-    messagesHref: "/messages",
   },
   afterCallDraft: { body: null },
 };
@@ -57,7 +54,7 @@ const manualModel = {
     kind: "start-guided-call",
     label: "Start guided call",
     disabled: false,
-    workspaceNavigate: { tab: "during", hash: "#guided-call-workspace-during" },
+    workspaceNavigate: { tab: "during", hash: "#manual-call-tools" },
   },
   primaryCtaExplanation: "Ready to start the guided call.",
   ctaReasonCode: "start_guided_call",
@@ -94,12 +91,15 @@ describe("CallSessionPage call mode chooser", () => {
           callId={callId}
           workspaceId="workspace-1"
           jobId="job-1"
+          customerId="customer-1"
           automatedModel={{ ...automatedModel, callId }}
           manualModel={{ ...manualModel, callId }}
           unselectedModel={{ ...baseModel, callId }}
-          prepare={<div />}
-          during={<div />}
-          after={<div />}
+          automatedWorkspace={<div />}
+          manualWorkspace={<div />}
+          automatedEligible
+          manualEligible
+          manualMessagesHref={null}
         />,
       );
       await Promise.resolve();
@@ -110,7 +110,12 @@ describe("CallSessionPage call mode chooser", () => {
     const button = container.querySelector<HTMLButtonElement>(
       `[data-testid="call-mode-select-${mode}"]`,
     );
-    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    if (!button) {
+      return;
+    }
+    act(() => {
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
   }
 
   it("renders the chooser with stable option wrappers when no mode is selected", async () => {
@@ -134,7 +139,7 @@ describe("CallSessionPage call mode chooser", () => {
     expect(primaryCtas).toHaveLength(1);
     expect(primaryCtas[0]?.textContent ?? "").toContain("Start automated call");
     const modeEvent = logSpy.mock.calls.find(
-      (args) => args[0] === "[calls-session-call-mode-select]",
+      (args) => args[0] === "[calls-session-mode-select]",
     );
     expect(modeEvent).toBeTruthy();
   });
@@ -150,27 +155,20 @@ describe("CallSessionPage call mode chooser", () => {
     expect(primaryCtas).toHaveLength(1);
     expect(primaryCtas[0]?.textContent ?? "").toContain("Start guided call");
     const modeEvent = logSpy.mock.calls.find(
-      (args) => args[0] === "[calls-session-call-mode-select]",
+      (args) => args[0] === "[calls-session-mode-select]",
     );
     expect(modeEvent).toBeTruthy();
   });
 
-  it("changes modes with telemetry and avoids duplicate primaries", async () => {
+  it("hides the mode chooser after selecting a mode", async () => {
     await renderHub();
     clickMode("automated");
     await act(async () => {
       await Promise.resolve();
     });
-    clickMode("manual");
-    await act(async () => {
-      await Promise.resolve();
-    });
     const primaryCtas = container.querySelectorAll('[data-cta-role="primary"]');
     expect(primaryCtas).toHaveLength(1);
-    const changeEvent = logSpy.mock.calls.find(
-      (args) => args[0] === "[calls-session-call-mode-change]",
-    );
-    expect(changeEvent).toBeTruthy();
+    expect(container.querySelector('[data-testid="call-mode-chooser-card"]')).toBeFalsy();
   });
 
   it("scopes session mode by callId", async () => {

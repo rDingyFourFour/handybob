@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -61,13 +61,11 @@ type CallControlCardModel = {
   secondaryActions: {
     jobHref: string | null;
     callsHref: string;
+    messagesHref: string | null;
   };
-  manualEscape: {
+  callContext: {
     jobId: string | null;
     customerId: string | null;
-    customerPhone: string | null;
-    scriptSummary: string | null;
-    messagesHref: string;
   };
   afterCallDraft: {
     body: string | null;
@@ -80,104 +78,23 @@ type CallControlCardProps = {
   details?: ReactNode;
 };
 
-type CopyState = "idle" | "copied";
-
-const COPY_RESET_MS = 2000;
 const WORKSPACE_NAV_EVENT = "calls-session-workspace-navigate";
 
 export default function CallControlCard({ model, modeChooser, details }: CallControlCardProps) {
   const router = useRouter();
-  const [numberCopyState, setNumberCopyState] = useState<CopyState>("idle");
-  const [scriptCopyState, setScriptCopyState] = useState<CopyState>("idle");
-  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const trimmedDraftBody = model.afterCallDraft.body?.trim() ?? "";
-  const trimmedScriptSummary = model.manualEscape.scriptSummary?.trim() ?? "";
-  const trimmedCustomerPhone = model.manualEscape.customerPhone?.trim() ?? "";
 
-  const hasDraft = Boolean(trimmedDraftBody && model.manualEscape.jobId);
-  const hasCustomerPhone = Boolean(trimmedCustomerPhone);
-  const hasScriptSummary = Boolean(trimmedScriptSummary);
-
-  const resetCopyState = useCallback((setter: (state: CopyState) => void) => {
-    if (resetTimerRef.current) {
-      window.clearTimeout(resetTimerRef.current);
-    }
-    resetTimerRef.current = window.setTimeout(() => {
-      setter("idle");
-      resetTimerRef.current = null;
-    }, COPY_RESET_MS);
-  }, []);
-
-  const handleCopyText = useCallback(
-    async (text: string, setter: (state: CopyState) => void) => {
-      if (!text) {
-        return;
-      }
-      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
-        return;
-      }
-      try {
-        await navigator.clipboard.writeText(text);
-        setter("copied");
-        resetCopyState(setter);
-      } catch (error) {
-        console.error("[calls-session-actionbar] copy failed", error);
-      }
-    },
-    [resetCopyState],
-  );
-
-  const handleCopyNumber = useCallback(async () => {
-    console.log("[calls-session-manual-escape-copy-number-click]", {
-      workspaceId: model.workspaceId,
-      callId: model.callId,
-      jobId: model.manualEscape.jobId,
-      customerId: model.manualEscape.customerId,
-      hasCustomerPhone,
-      hasScriptSummary,
-    });
-    await handleCopyText(trimmedCustomerPhone, setNumberCopyState);
-  }, [
-    handleCopyText,
-    hasCustomerPhone,
-    hasScriptSummary,
-    model.callId,
-    model.manualEscape.customerId,
-    model.manualEscape.jobId,
-    model.workspaceId,
-    trimmedCustomerPhone,
-  ]);
-
-  const handleCopyScript = useCallback(async () => {
-    console.log("[calls-session-manual-escape-copy-script-click]", {
-      workspaceId: model.workspaceId,
-      callId: model.callId,
-      jobId: model.manualEscape.jobId,
-      customerId: model.manualEscape.customerId,
-      hasCustomerPhone,
-      hasScriptSummary,
-    });
-    await handleCopyText(trimmedScriptSummary, setScriptCopyState);
-  }, [
-    handleCopyText,
-    hasCustomerPhone,
-    hasScriptSummary,
-    model.callId,
-    model.manualEscape.customerId,
-    model.manualEscape.jobId,
-    model.workspaceId,
-    trimmedScriptSummary,
-  ]);
+  const hasDraft = Boolean(trimmedDraftBody && model.callContext.jobId);
 
   const handleOpenComposer = useCallback(() => {
-    if (!hasDraft || !model.manualEscape.jobId) {
+    if (!hasDraft || !model.callContext.jobId) {
       return;
     }
     const draftKey = cacheAskBobMessageDraft({
       body: trimmedDraftBody,
-      jobId: model.manualEscape.jobId,
-      customerId: model.manualEscape.customerId,
+      jobId: model.callContext.jobId,
+      customerId: model.callContext.customerId,
       origin: "call_session_after_call",
       workspaceId: model.workspaceId,
       callId: model.callId,
@@ -185,10 +102,10 @@ export default function CallControlCard({ model, modeChooser, details }: CallCon
     const params = new URLSearchParams({
       compose: "1",
       origin: "call_session_after_call",
-      jobId: model.manualEscape.jobId,
+      jobId: model.callContext.jobId,
     });
-    if (model.manualEscape.customerId) {
-      params.set("customerId", model.manualEscape.customerId);
+    if (model.callContext.customerId) {
+      params.set("customerId", model.callContext.customerId);
     }
     if (draftKey) {
       params.set("draftKey", draftKey);
@@ -196,15 +113,15 @@ export default function CallControlCard({ model, modeChooser, details }: CallCon
     console.log("[calls-session-actionbar-open-composer-click]", {
       workspaceId: model.workspaceId,
       callId: model.callId,
-      jobId: model.manualEscape.jobId,
+      jobId: model.callContext.jobId,
       hasDraft,
     });
     router.push(`/messages?${params.toString()}`);
   }, [
     hasDraft,
     model.callId,
-    model.manualEscape.customerId,
-    model.manualEscape.jobId,
+    model.callContext.customerId,
+    model.callContext.jobId,
     model.workspaceId,
     router,
     trimmedDraftBody,
@@ -239,19 +156,19 @@ export default function CallControlCard({ model, modeChooser, details }: CallCon
     console.log("[calls-session-actionbar-open-job-click]", {
       workspaceId: model.workspaceId,
       callId: model.callId,
-      jobId: model.manualEscape.jobId,
+      jobId: model.callContext.jobId,
       hasDraft,
     });
-  }, [hasDraft, model.callId, model.manualEscape.jobId, model.workspaceId]);
+  }, [hasDraft, model.callId, model.callContext.jobId, model.workspaceId]);
 
   const handleOpenCallsClick = useCallback(() => {
     console.log("[calls-session-actionbar-open-calls-click]", {
       workspaceId: model.workspaceId,
       callId: model.callId,
-      jobId: model.manualEscape.jobId,
+      jobId: model.callContext.jobId,
       hasDraft,
     });
-  }, [hasDraft, model.callId, model.manualEscape.jobId, model.workspaceId]);
+  }, [hasDraft, model.callId, model.callContext.jobId, model.workspaceId]);
 
   const [automatedCallState, setAutomatedCallState] = useState<{
     status: "idle" | "loading" | "error";
@@ -291,19 +208,10 @@ export default function CallControlCard({ model, modeChooser, details }: CallCon
     console.log("[calls-session-manual-escape-open-messages-click]", {
       workspaceId: model.workspaceId,
       callId: model.callId,
-      jobId: model.manualEscape.jobId,
-      customerId: model.manualEscape.customerId,
-      hasCustomerPhone,
-      hasScriptSummary,
+      jobId: model.callContext.jobId,
+      customerId: model.callContext.customerId,
     });
-  }, [
-    hasCustomerPhone,
-    hasScriptSummary,
-    model.callId,
-    model.manualEscape.customerId,
-    model.manualEscape.jobId,
-    model.workspaceId,
-  ]);
+  }, [model.callId, model.callContext.customerId, model.callContext.jobId, model.workspaceId]);
 
   const primaryCta = model.primaryCta;
   const primaryButton = useMemo(() => {
@@ -444,76 +352,30 @@ export default function CallControlCard({ model, modeChooser, details }: CallCon
           >
             Open calls list
           </HbButton>
+          {model.secondaryActions.messagesHref && (
+            <HbButton
+              as={Link}
+              href={model.secondaryActions.messagesHref}
+              variant="ghost"
+              size="sm"
+              className="w-full"
+              onClick={handleOpenMessagesClick}
+            >
+              Open messages
+            </HbButton>
+          )}
         </div>
       </div>
-
-      <div className="space-y-3 rounded-xl border border-slate-800/60 bg-slate-950/60 p-3">
-        <div>
-          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-            Manual escape hatches
-          </p>
-          <p className="text-xs text-slate-400">
-            Manual actions stay available even if automation is blocked.
-          </p>
-        </div>
-
-        {hasCustomerPhone ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-2 rounded-xl border border-slate-800/60 bg-slate-950/80 p-3">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Manual call</p>
-              <p className="text-base font-semibold text-slate-100 select-text">
-                {trimmedCustomerPhone}
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <HbButton variant="secondary" size="sm" onClick={handleCopyNumber}>
-                  {numberCopyState === "copied" ? "Copied" : "Copy number"}
-                </HbButton>
-                {hasScriptSummary ? (
-                  <HbButton variant="ghost" size="sm" onClick={handleCopyScript}>
-                    {scriptCopyState === "copied" ? "Copied" : "Copy script"}
-                  </HbButton>
-                ) : (
-                  <span className="text-[11px] text-slate-500">
-                    Generate a call script from the job to copy it here.
-                  </span>
-                )}
-              </div>
-              {hasScriptSummary && (
-                <p className="text-[11px] text-slate-400">
-                  Script summary:{" "}
-                  {trimmedScriptSummary.length > 140
-                    ? `${trimmedScriptSummary.slice(0, 137)}...`
-                    : trimmedScriptSummary}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2 rounded-xl border border-slate-800/60 bg-slate-950/80 p-3">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                Manual follow-up SMS
-              </p>
-              <p className="text-xs text-slate-400">
-                Send a quick SMS with the customer preselected.
-              </p>
-              <HbButton
-                as={Link}
-                href={model.manualEscape.messagesHref}
-                variant="secondary"
-                size="sm"
-                className="w-full"
-                onClick={handleOpenMessagesClick}
-              >
-                Open messages composer
-              </HbButton>
-            </div>
+      {details ? (
+        <details className="rounded-xl border border-slate-800/60 bg-slate-950/60 p-3">
+          <summary className="cursor-pointer text-[11px] uppercase tracking-[0.3em] text-slate-500">
+            Details
+          </summary>
+          <div data-testid="call-control-card-details" className="mt-3">
+            {details}
           </div>
-        ) : (
-          <p className="text-xs text-slate-500">
-            Add a customer phone number to unlock manual call and SMS escape hatches.
-          </p>
-        )}
-      </div>
-      {details ? <div data-testid="call-control-card-details">{details}</div> : null}
+        </details>
+      ) : null}
     </HbCard>
   );
 }
