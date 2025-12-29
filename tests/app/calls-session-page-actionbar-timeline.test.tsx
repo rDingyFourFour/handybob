@@ -298,7 +298,7 @@ describe("CallSessionPage action bar and status strip", () => {
 
     expect(markup).toContain(callSessionCopy.primaryCta.label.disabled);
     expect(markup).toContain('data-cta-kind="disabled"');
-    expect(markup).toContain("Regenerate follow-up");
+    expect(markup).toContain(callSessionCopy.wrapUp.afterCall.regenerate);
   });
 
   it("renders a stable status strip wrapper for empty vs populated milestones", async () => {

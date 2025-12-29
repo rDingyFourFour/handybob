@@ -244,7 +244,7 @@ describe("CallSessionPage outcome card", () => {
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-terminal" }) });
     const markup = renderToStaticMarkup(element);
     expect(markup).toContain('data-testid="call-wrap-up-card"');
-    expect(markup).toContain("Call ended. Please record the outcome.");
+    expect(markup).toContain(callSessionCopy.wrapUp.outcome.terminalBanner);
   });
 
   it("reminds to wait while an automated call is in progress", async () => {
@@ -277,7 +277,7 @@ describe("CallSessionPage outcome card", () => {
 
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-progress" }) });
     const markup = renderToStaticMarkup(element);
-    expect(markup).toContain("Call is in progress. Outcome can be recorded after it ends.");
+    expect(markup).toContain(callSessionCopy.wrapUp.outcome.inProgressBanner);
   });
 
   it("renders the Twilio status strip when only the SID exists", async () => {

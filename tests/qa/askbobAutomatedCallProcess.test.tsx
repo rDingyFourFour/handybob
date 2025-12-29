@@ -14,6 +14,7 @@ import {
   buildRecordingReadyDialStatus,
   buildTerminalCompletedDialStatus,
 } from "@/tests/helpers/callSessionDialStatusFixtures";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 const mockStartCall = startAskBobAutomatedCall as unknown as ReturnType<typeof vi.fn>;
 const mockGetStatus = getCallSessionDialStatus as unknown as ReturnType<typeof vi.fn>;
@@ -234,7 +235,7 @@ describe("AskBob automated call process", () => {
     });
     expect(mockGetStatus).toHaveBeenCalledTimes(7);
 
-    expect(container.textContent).toContain("Call ended. Please record the outcome.");
+    expect(container.textContent).toContain(callSessionCopy.wrapUp.outcome.terminalBanner);
 
     act(() => {
       window.dispatchEvent(new CustomEvent("calls-after-call-outcome-saved", { detail: {} }));
@@ -243,10 +244,10 @@ describe("AskBob automated call process", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(container.textContent).toContain("Outcome saved. You can now generate a follow-up.");
+    expect(container.textContent).toContain(callSessionCopy.wrapUp.afterCall.readiness.outcomeSavedHint);
 
     const generateButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((node) =>
-      node.textContent?.includes("Generate follow-up"),
+      node.textContent?.includes(callSessionCopy.wrapUp.afterCall.generate),
     );
     expect(generateButton?.hasAttribute("disabled")).toBe(true);
 
@@ -266,7 +267,7 @@ describe("AskBob automated call process", () => {
     });
 
     const enabledButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((node) =>
-      node.textContent?.includes("Generate follow-up"),
+      node.textContent?.includes(callSessionCopy.wrapUp.afterCall.generate),
     );
     expect(enabledButton?.hasAttribute("disabled")).toBe(false);
   });

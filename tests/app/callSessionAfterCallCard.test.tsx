@@ -28,6 +28,7 @@ import type {
   CallAutomatedDialSnapshot,
   CallSessionFollowupReadiness,
 } from "@/lib/domain/calls/sessions";
+import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 describe("AskBobAfterCallCard", () => {
   let container: HTMLDivElement;
@@ -127,11 +128,11 @@ describe("AskBobAfterCallCard", () => {
     });
 
     const button = Array.from(container.querySelectorAll("button")).find((element) =>
-      element.textContent?.includes("Generate follow-up"),
+      element.textContent?.includes(callSessionCopy.wrapUp.afterCall.generate),
     );
-    expect(button?.textContent).toMatch(/Generate follow-up/i);
+    expect(button?.textContent).toContain(callSessionCopy.wrapUp.afterCall.generate);
     expect(button?.hasAttribute("disabled")).toBe(true);
-    expect(container.textContent).toContain("needs at least a script");
+    expect(container.textContent).toContain(callSessionCopy.wrapUp.afterCall.readiness.missingContext);
   });
 
   it("shows readiness message when the call is not terminal", () => {
@@ -154,7 +155,7 @@ describe("AskBobAfterCallCard", () => {
 
     const button = container.querySelector("button");
     expect(button?.hasAttribute("disabled")).toBe(true);
-    expect(container.textContent).toContain("Call is still in progress");
+    expect(container.textContent).toContain(callSessionCopy.wrapUp.afterCall.readiness.notTerminal);
   });
 
   it("disables the CTA when the terminal call still lacks an outcome", () => {
@@ -177,11 +178,9 @@ describe("AskBobAfterCallCard", () => {
     });
 
     const button = container.querySelector("button");
-    expect(button?.textContent).toMatch(/Generate follow-up/i);
+    expect(button?.textContent).toContain(callSessionCopy.wrapUp.afterCall.generate);
     expect(button?.hasAttribute("disabled")).toBe(true);
-    expect(container.textContent).toContain(
-      "Record how the call went before generating a follow-up",
-    );
+    expect(container.textContent).toContain(callSessionCopy.wrapUp.afterCall.readiness.missingOutcome);
   });
 
   it("enables the CTA once the call readiness is satisfied again", () => {
@@ -226,7 +225,7 @@ describe("AskBobAfterCallCard", () => {
 
     const enabledButton = container.querySelector("button");
     expect(enabledButton?.hasAttribute("disabled")).toBe(false);
-    expect(enabledButton?.textContent).toContain("Generate follow-up");
+    expect(enabledButton?.textContent).toContain(callSessionCopy.wrapUp.afterCall.generate);
   });
 
   it("shows a post-save nudge message when the outcome-saved event fires", async () => {
@@ -253,7 +252,7 @@ describe("AskBobAfterCallCard", () => {
     });
 
     await flushReactUpdates();
-    expect(container.textContent).toContain("Outcome saved. You can now generate a follow-up.");
+    expect(container.textContent).toContain(callSessionCopy.wrapUp.afterCall.readiness.outcomeSavedHint);
   });
 
   it("renders post call status labels for automated or inbound calls", () => {
@@ -303,7 +302,7 @@ describe("AskBobAfterCallCard", () => {
 
     const disabledButton = container.querySelector("button");
     expect(disabledButton?.hasAttribute("disabled")).toBe(true);
-    expect(disabledButton?.textContent).toContain("Generate follow-up");
+    expect(disabledButton?.textContent).toContain(callSessionCopy.wrapUp.afterCall.generate);
 
     act(() => {
       root?.render(
@@ -324,7 +323,7 @@ describe("AskBobAfterCallCard", () => {
 
     const generateButton = container.querySelector("button");
     expect(generateButton?.hasAttribute("disabled")).toBe(false);
-    expect(generateButton?.textContent).toContain("Generate follow-up");
+    expect(generateButton?.textContent).toContain(callSessionCopy.wrapUp.afterCall.generate);
 
     act(() => {
       root?.render(
@@ -346,7 +345,7 @@ describe("AskBobAfterCallCard", () => {
     });
 
     const regenerateButton = container.querySelector("button");
-    expect(regenerateButton?.textContent).toContain("Regenerate follow-up");
+    expect(regenerateButton?.textContent).toContain(callSessionCopy.wrapUp.afterCall.regenerate);
   });
 
   it("shows suggested channel only when readiness is ready and logs visibility", async () => {
@@ -370,7 +369,7 @@ describe("AskBobAfterCallCard", () => {
     });
 
     await flushReactUpdates();
-    expect(container.textContent).toContain("Suggested channel");
+    expect(container.textContent).toContain(callSessionCopy.wrapUp.afterCall.readiness.suggestedChannel);
     const channelLog = logSpy.mock.calls.find(
       (entry) => entry[0] === "[calls-after-call-suggested-channel-visible]",
     );
@@ -396,7 +395,7 @@ describe("AskBobAfterCallCard", () => {
     });
 
     await flushReactUpdates();
-    expect(container.textContent).not.toContain("Suggested channel");
+    expect(container.textContent).not.toContain(callSessionCopy.wrapUp.afterCall.readiness.suggestedChannel);
   });
 
   it("only enables open composer when readiness is ready and draft exists", async () => {
@@ -418,7 +417,7 @@ describe("AskBobAfterCallCard", () => {
       );
     });
 
-    expect(container.textContent).not.toContain("Open composer with this draft");
+    expect(container.textContent).not.toContain(callSessionCopy.wrapUp.afterCall.openComposer);
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     act(() => {
@@ -441,7 +440,7 @@ describe("AskBobAfterCallCard", () => {
 
     await flushReactUpdates();
     const openButton = Array.from(container.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("Open composer"),
+      button.textContent?.includes(callSessionCopy.wrapUp.afterCall.openComposer),
     );
     expect(openButton).toBeTruthy();
     if (openButton) {
@@ -504,7 +503,7 @@ describe("AskBobAfterCallCard", () => {
     expect(container.textContent).toContain("Wrapped summary");
     expect(mockCacheResult).toHaveBeenCalledWith("job-1", "call-1", expect.any(Object));
     const openButton = Array.from(container.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("Open composer"),
+      button.textContent?.includes(callSessionCopy.wrapUp.afterCall.openComposer),
     );
     expect(openButton).toBeTruthy();
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -527,7 +526,7 @@ describe("AskBobAfterCallCard", () => {
       expect.objectContaining({ generationSource: "call_session" }),
     );
     const regenerateButton = container.querySelector("button");
-    expect(regenerateButton?.textContent).toMatch(/Regenerate follow-up/i);
+    expect(regenerateButton?.textContent).toContain(callSessionCopy.wrapUp.afterCall.regenerate);
     const openComposerLogEntry = logSpy.mock.calls.find(
       (entry) => entry[0] === "[calls-after-call-open-composer-click]",
     );
@@ -585,7 +584,7 @@ describe("AskBobAfterCallCard", () => {
 
     await flushReactUpdates();
     const firstButton = container.querySelector("button");
-    expect(firstButton?.textContent).toMatch(/Regenerate follow-up/i);
+    expect(firstButton?.textContent).toContain(callSessionCopy.wrapUp.afterCall.regenerate);
 
     act(() => {
       root?.render(
@@ -607,8 +606,8 @@ describe("AskBobAfterCallCard", () => {
     await flushReactUpdates();
     const disabledButton = container.querySelector("button");
     expect(disabledButton?.hasAttribute("disabled")).toBe(true);
-    expect(disabledButton?.textContent).toMatch(/Generate follow-up/i);
-    expect(container.textContent).toContain("Call is still in progress");
+    expect(disabledButton?.textContent).toContain(callSessionCopy.wrapUp.afterCall.generate);
+    expect(container.textContent).toContain(callSessionCopy.wrapUp.afterCall.readiness.notTerminal);
   });
 
   it("shows the server not-ready message and keeps the button disabled when the backend blocks", async () => {
