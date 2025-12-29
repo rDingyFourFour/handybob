@@ -82,6 +82,11 @@ export default function AskBobSummaryCard({
           jobId,
           stepType: nextStep.stepType,
         });
+      } else {
+        console.log("[job-details-askbob-summary-collapsed]", {
+          jobId,
+          stepType: nextStep.stepType,
+        });
       }
       return next;
     });
@@ -90,41 +95,41 @@ export default function AskBobSummaryCard({
   return (
     <HbCard className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">
           {jobDetailsCopy.askBobSummary.collapsedHint}
         </p>
         <button
           type="button"
           onClick={toggleExpanded}
           aria-expanded={isExpanded}
-          className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400 transition hover:text-slate-200"
+          className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
           data-testid="job-details-askbob-summary-toggle"
         >
           {isExpanded ? "Hide details" : "View details"}
         </button>
       </div>
       {!isExpanded ? (
-        <div data-testid="job-details-askbob-summary-collapsed" className="text-sm text-slate-300">
+        <div data-testid="job-details-askbob-summary-collapsed" className="text-sm text-[var(--color-text-secondary)]">
           {collapsedCopy}
         </div>
       ) : (
         <div data-testid="job-details-askbob-summary-expanded" className="space-y-3">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+          <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">
             {jobDetailsCopy.askBobSummary.expandedHint}
           </p>
           <div className="space-y-3">
             {progressSteps.map((step) => (
               <div
                 key={step.key}
-                className="flex items-center justify-between gap-4 rounded-xl border border-slate-800/60 bg-slate-950/40 px-3 py-2 text-sm"
+                className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm"
               >
                 <div>
-                  <p className="text-sm font-semibold text-slate-200">{step.label}</p>
-                  <p className="text-sm text-slate-400">{statusHints[step.key]}</p>
+                  <p className="text-sm font-semibold text-[var(--color-text-primary)]">{step.label}</p>
+                  <p className="text-sm text-[var(--color-text-secondary)]">{statusHints[step.key]}</p>
                 </div>
                 <Link
                   href={`#${step.anchor}`}
-                  className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400 transition hover:text-slate-200"
+                  className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
                 >
                   Review
                 </Link>

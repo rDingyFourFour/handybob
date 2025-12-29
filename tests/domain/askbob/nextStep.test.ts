@@ -98,7 +98,7 @@ describe("deriveNextStepForJobDetails", () => {
       }),
     );
     expect(result.stepType).toBe("call");
-    expect(result.primaryCta?.actionTarget).toBe("call-session");
+    expect(result.primaryCta?.actionTarget).toBe("progress-call");
   });
 
   it("moves to invoice when the quote is accepted and no invoice exists", () => {

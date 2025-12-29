@@ -5,11 +5,11 @@ import { cn } from "@/lib/utils/cn";
 
 const baseClasses = cn(
   "rounded-2xl",
-  "border border-slate-800/60",
-  "bg-slate-900/60",
-  "shadow-sm",
+  "border border-[var(--color-border)]",
+  "bg-[var(--color-card)]",
+  "shadow-sm shadow-[0_10px_25px_rgba(31,20,15,0.08)]",
   "p-6",
-  "transition-colors hover:border-slate-600",
+  "transition-colors hover:border-[var(--color-border-strong)]",
 );
 
 type HbCardProps = {

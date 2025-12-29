@@ -92,7 +92,7 @@ const ACTION_TARGETS: Record<JobProgressStep | "invoice" | "call", string> = {
   materials: "progress-materials",
   quote: "progress-quote",
   followup: "progress-followup",
-  call: "call-session",
+  call: "progress-call",
   invoice: "invoice-section",
 };
 

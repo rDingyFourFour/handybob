@@ -13,18 +13,8 @@ import {
   mockResolveWorkspaceContext,
 } from "./test-helpers";
 import JobDetailPage from "@/app/(app)/jobs/[id]/page";
-import { PROGRESS_STEPS } from "@/app/(app)/jobs/[id]/progressSteps";
-import type { JobProgressStep } from "@/lib/domain/askbob/nextStep";
 
-const ROW_TEST_IDS: Record<JobProgressStep, string> = {
-  diagnose: "askbob-diagnose-section",
-  materials: "askbob-materials-section",
-  quote: "askbob-quote-section",
-  followup: "askbob-followup-section",
-  call: "askbob-call-session-section",
-};
-
-describe("JobDetails progress panels mounting", () => {
+describe("JobDetails call row", () => {
   beforeEach(() => {
     createSupabaseState({
       jobs: { data: [JOB_RECORD], error: null },
@@ -74,42 +64,31 @@ describe("JobDetails progress panels mounting", () => {
     mockGetLatestCallOutcomeForJob.mockResolvedValue(null);
   });
 
-  it("renders each AskBob panel inside the matching accordion row", async () => {
+  it("renders only the call session doorway action inside the call row", async () => {
     const element = await JobDetailPage({
       params: Promise.resolve({ id: JOB_RECORD.id }),
       searchParams: Promise.resolve({}),
     });
     const container = document.createElement("div");
     const root = createRoot(container);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     try {
       act(() => {
         root.render(element);
       });
-      expect(container.querySelector('[data-testid="askbob-job-pipeline"]')).toBeNull();
-      expect(container.querySelector('[data-testid="askbob-calling-pipeline"]')).toBeNull();
-
-      for (const step of PROGRESS_STEPS) {
-        const toggle = container.querySelector<HTMLButtonElement>(
-          `[data-testid="progress-row-${step.key}-toggle"]`,
-        );
-        const isExpanded = toggle?.getAttribute("aria-expanded") === "true";
-        if (!isExpanded) {
-          act(() => {
-            toggle?.click();
-          });
-        }
-        const panel = container.querySelector(`[data-testid="${ROW_TEST_IDS[step.key]}"]`);
-        expect(panel).toBeTruthy();
-        const rowContent = container.querySelector(
-          `[data-testid="progress-row-${step.key}-content"]`,
-        );
-        expect(rowContent?.getAttribute("aria-hidden")).toBe("false");
-        if (step.key === "call") {
-          expect(rowContent?.textContent).toContain("Open call session");
-          expect(rowContent?.textContent).not.toContain("Start automated call");
-        }
-      }
+      const callToggle = container.querySelector<HTMLButtonElement>(
+        '[data-testid="progress-row-call-toggle"]',
+      );
+      act(() => {
+        callToggle?.click();
+      });
+      const callContent = container.querySelector('[data-testid="progress-row-call-content"]');
+      expect(callContent).toBeTruthy();
+      const buttons = callContent?.querySelectorAll("button");
+      expect(buttons?.length).toBe(1);
+      expect(buttons?.[0]?.textContent).toContain("Open call session");
     } finally {
+      logSpy.mockRestore();
       act(() => {
         root.unmount();
       });

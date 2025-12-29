@@ -29,7 +29,9 @@ export default function JobProgressAccordion({
     [progressSteps],
   );
 
-  const [expandedStep, setExpandedStep] = useState<JobProgressStep | null>(() => defaultExpandedStep ?? null);
+  const [expandedStep, setExpandedStep] = useState<JobProgressStep | null>(
+    () => defaultExpandedStep ?? null,
+  );
 
   const scrollToAnchor = useCallback(
     (stepKey: JobProgressStep) => {
@@ -41,10 +43,7 @@ export default function JobProgressAccordion({
         return;
       }
       const target = document.getElementById(anchor);
-      if (!target) {
-        return;
-      }
-      if (typeof target.scrollIntoView !== "function") {
+      if (!target || typeof target.scrollIntoView !== "function") {
         return;
       }
       target.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -54,6 +53,7 @@ export default function JobProgressAccordion({
 
   const handleToggle = useCallback(
     (stepKey: JobProgressStep) => {
+      let shouldScroll = false;
       setExpandedStep((current) => {
         if (current === stepKey) {
           console.log("[job-details-progress-row-collapse]", { stepKey });
@@ -63,13 +63,14 @@ export default function JobProgressAccordion({
           console.log("[job-details-progress-row-collapse]", { stepKey: current });
         }
         console.log("[job-details-progress-row-expand]", { stepKey });
+        shouldScroll = true;
         return stepKey;
       });
-      if (expandedStep !== stepKey) {
+      if (shouldScroll) {
         scrollToAnchor(stepKey);
       }
     },
-    [expandedStep, scrollToAnchor],
+    [scrollToAnchor],
   );
 
   return (
@@ -81,14 +82,17 @@ export default function JobProgressAccordion({
             key={step.key}
             id={step.anchor}
             data-testid={`progress-row-${step.key}`}
-            className="space-y-3 rounded-xl border border-slate-800/60 bg-slate-950/40 px-4 py-3 text-sm"
+            className="space-y-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-4 shadow-sm"
           >
-            <div className="flex items-center justify-between gap-4">
+            <div
+              data-testid={`progress-row-${step.key}-header`}
+              className="flex items-center justify-between gap-3"
+            >
               <div>
-                <p className="text-sm font-semibold text-slate-100">{step.label}</p>
+                <p className="text-sm font-semibold text-[var(--color-text-primary)]">{step.label}</p>
                 <p
                   data-testid={`progress-row-${step.key}-status`}
-                  className="text-sm text-slate-400"
+                  className="text-sm text-[var(--color-text-secondary)]"
                 >
                   {statusHints[step.key]}
                 </p>
@@ -99,7 +103,7 @@ export default function JobProgressAccordion({
                 data-testid={`progress-row-${step.key}-toggle`}
                 aria-expanded={isExpanded}
                 aria-controls={`progress-row-${step.key}-content`}
-                className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400 transition hover:text-slate-200"
+                className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
                 onClick={() => handleToggle(step.key)}
               >
                 Review
@@ -111,7 +115,9 @@ export default function JobProgressAccordion({
               aria-hidden={!isExpanded}
               className={isExpanded ? "space-y-3" : "hidden"}
             >
-              {rowContent[step.key] ?? null}
+              <div className="space-y-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card-elevated)] px-3 py-3">
+                {rowContent[step.key] ?? null}
+              </div>
             </div>
           </section>
         );

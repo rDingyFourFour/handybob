@@ -90,6 +90,7 @@ type JobAskBobFlowProps = {
   jobDescription?: string | null;
   jobTitle?: string | null;
   jobStatus?: string | null;
+  showIntakePanel?: boolean;
   askBobLastTaskLabel?: string | null;
   askBobLastUsedAtDisplay?: string | null;
   askBobLastUsedAtIso?: string | null;
@@ -198,6 +199,7 @@ export default function JobAskBobFlow({
   jobDescription,
   jobTitle,
   jobStatus,
+  showIntakePanel = true,
   askBobLastTaskLabel,
   askBobLastUsedAtDisplay,
   askBobLastUsedAtIso,
@@ -255,9 +257,6 @@ export default function JobAskBobFlow({
   const [followupRecommendation, setFollowupRecommendation] = useState<FollowUpRecommendation | null>(
     () => initialFollowupRecommendation,
   );
-  const [callScriptSummary, setCallScriptSummary] = useState<string | null>(null);
-  const [callScriptCollapsed, setCallScriptCollapsed] = useState(false);
-  const [callScriptResetToken, setCallScriptResetToken] = useState(0);
   const [diagnoseCollapsed, setDiagnoseCollapsed] = useState(initialCollapsedDefaults.diagnose);
   const [materialsCollapsed, setMaterialsCollapsed] = useState(initialCollapsedDefaults.materials);
   const [quoteCollapsed, setQuoteCollapsed] = useState(initialCollapsedDefaults.quote);
@@ -275,6 +274,9 @@ export default function JobAskBobFlow({
   const [schedulerDone, setSchedulerDone] = useState(false);
   const [schedulerCollapsed, setSchedulerCollapsed] = useState(initialCollapsedDefaults.scheduler);
   const [schedulerResetToken, setSchedulerResetToken] = useState(0);
+  const [callScriptSummary, setCallScriptSummary] = useState<string | null>(null);
+  const [, setCallScriptCollapsed] = useState(false);
+  const [, setCallScriptResetToken] = useState(0);
   const handoffCheckedJobIdRef = useRef<string | null>(null);
   const resolvedLatestCallOutcome = latestCallOutcome ?? null;
   const latestCallOutcomeHint = resolvedLatestCallOutcome
@@ -342,39 +344,6 @@ export default function JobAskBobFlow({
       blockingReason: hasCustomerPhone ? null : "Add a customer phone number first.",
     },
   };
-  type StageStatus = "not_started" | "drafted" | "completed";
-  const stageStatusItems: Array<{ id: string; label: string; status: StageStatus; order: number }> = [
-    {
-      id: "diagnose",
-      label: "Diagnose",
-      status: diagnosisSummary?.trim() ? "drafted" : "not_started",
-      order: 1,
-    },
-    {
-      id: "materials",
-      label: "Materials",
-      status: materialsSummary?.trim() ? "drafted" : "not_started",
-      order: 2,
-    },
-    {
-      id: "quote",
-      label: "Quote",
-      status: quoteDone ? "completed" : hasQuoteSnapshotContext ? "drafted" : "not_started",
-      order: 3,
-    },
-    {
-      id: "followup",
-      label: "Follow-up",
-      status: followupSummary?.trim() ? "drafted" : "not_started",
-      order: 4,
-    },
-    {
-      id: "call-prep",
-      label: "Call preparation",
-      status: callScriptDone ? "completed" : callScriptSummary?.trim() ? "drafted" : "not_started",
-      order: 5,
-    },
-  ];
   const jobPipelineNextAction = (() => {
     if (!stepReadiness.intake.isReady) {
       return "Add a job title or description to start AskBob recommendations.";
@@ -650,23 +619,23 @@ export default function JobAskBobFlow({
 
   const maybeAutoCollapseSteps = () => {
     if (
-      hasAutoCollapsedAllSteps ||
-      !diagnosisDone ||
-      !materialsDone ||
-      !quoteDone ||
-      !followupDone ||
-      !schedulerDone ||
-      !callScriptDone
-    ) {
-      return;
-    }
-    setDiagnoseCollapsed(true);
-    setMaterialsCollapsed(true);
-    setQuoteCollapsed(true);
-    setFollowupCollapsed(true);
-    setSchedulerCollapsed(true);
-    setCallScriptCollapsed(true);
-    setHasAutoCollapsedAllSteps(true);
+    hasAutoCollapsedAllSteps ||
+    !diagnosisDone ||
+    !materialsDone ||
+    !quoteDone ||
+    !followupDone ||
+    !schedulerDone ||
+    !callScriptDone
+  ) {
+    return;
+  }
+  setDiagnoseCollapsed(true);
+  setMaterialsCollapsed(true);
+  setQuoteCollapsed(true);
+  setFollowupCollapsed(true);
+  setSchedulerCollapsed(true);
+  setCallScriptCollapsed(true);
+  setHasAutoCollapsedAllSteps(true);
   };
 
   const handleFollowupReset = () => {
@@ -848,19 +817,52 @@ export default function JobAskBobFlow({
     scrollToSection("askbob-followup");
   };
 
+  type StageStatus = "not_started" | "drafted" | "completed";
+  const stageStatusItems: Array<{ id: string; label: string; status: StageStatus; order: number }> = [
+    {
+      id: "diagnose",
+      label: "Diagnose",
+      status: diagnosisSummary?.trim() ? "drafted" : "not_started",
+      order: 1,
+    },
+    {
+      id: "materials",
+      label: "Materials",
+      status: materialsSummary?.trim() ? "drafted" : "not_started",
+      order: 2,
+    },
+    {
+      id: "quote",
+      label: "Quote",
+      status: quoteDone ? "completed" : hasQuoteSnapshotContext ? "drafted" : "not_started",
+      order: 3,
+    },
+    {
+      id: "followup",
+      label: "Follow-up",
+      status: followupSummary?.trim() ? "drafted" : "not_started",
+      order: 4,
+    },
+    {
+      id: "call-prep",
+      label: "Call preparation",
+      status: callScriptDone ? "completed" : callScriptSummary?.trim() ? "drafted" : "not_started",
+      order: 5,
+    },
+  ];
+
   const handleAskBobAppointmentScheduled = (info: {
     startAt: string;
     friendlyLabel: string | null;
     appointmentId?: string | null;
   }) => {
-    setSessionAskBobAppointment(info);
-    setSchedulerDone(true);
-    maybeAutoCollapseSteps();
-  };
+      setSessionAskBobAppointment(info);
+      setSchedulerDone(true);
+      maybeAutoCollapseSteps();
+    };
 
   const handleStageSelect = (stageId: string) => {
     if (stageId === "call-prep") {
-      handleShowCallPrep();
       return;
     }
     const sectionMap: Record<string, string> = {
@@ -877,22 +879,24 @@ export default function JobAskBobFlow({
 
   return (
     <div className="space-y-6">
-      <JobAskBobContainer
-        workspaceId={workspaceId}
-        jobId={jobId}
-        askBobLastTaskLabel={askBobLastTaskLabel}
-        askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
-        askBobLastUsedAtIso={askBobLastUsedAtIso}
-        askBobRunsSummary={askBobRunsSummary}
-        stageStatusItems={stageStatusItems}
-        nextActionLabel={nextActionLabel}
-        nextActionMessage={nextActionMessage}
-        nextActionRationale={nextActionRationale}
-        nextActionErrorMessage={openCallSessionState.message}
-        nextActionDisabled={openCallSessionState.status === "loading"}
-        onNextAction={handleAssistantNextAction}
-        onStageSelect={handleStageSelect}
-      />
+      {showIntakePanel ? (
+        <JobAskBobContainer
+          workspaceId={workspaceId}
+          jobId={jobId}
+          askBobLastTaskLabel={askBobLastTaskLabel}
+          askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
+          askBobLastUsedAtIso={askBobLastUsedAtIso}
+          askBobRunsSummary={askBobRunsSummary}
+          stageStatusItems={stageStatusItems}
+          nextActionLabel={nextActionLabel}
+          nextActionMessage={nextActionMessage}
+          nextActionRationale={nextActionRationale}
+          nextActionErrorMessage={openCallSessionState.message}
+          nextActionDisabled={openCallSessionState.status === "loading"}
+          onNextAction={handleAssistantNextAction}
+          onStageSelect={handleStageSelect}
+        />
+      ) : null}
       <div className="space-y-8">
         <JobProgressAccordion
           progressSteps={progressSteps}

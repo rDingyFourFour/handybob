@@ -13,18 +13,8 @@ import {
   mockResolveWorkspaceContext,
 } from "./test-helpers";
 import JobDetailPage from "@/app/(app)/jobs/[id]/page";
-import { PROGRESS_STEPS } from "@/app/(app)/jobs/[id]/progressSteps";
-import type { JobProgressStep } from "@/lib/domain/askbob/nextStep";
 
-const ROW_TEST_IDS: Record<JobProgressStep, string> = {
-  diagnose: "askbob-diagnose-section",
-  materials: "askbob-materials-section",
-  quote: "askbob-quote-section",
-  followup: "askbob-followup-section",
-  call: "askbob-call-session-section",
-};
-
-describe("JobDetails progress panels mounting", () => {
+describe("JobDetails telemetry events", () => {
   beforeEach(() => {
     createSupabaseState({
       jobs: { data: [JOB_RECORD], error: null },
@@ -74,7 +64,8 @@ describe("JobDetails progress panels mounting", () => {
     mockGetLatestCallOutcomeForJob.mockResolvedValue(null);
   });
 
-  it("renders each AskBob panel inside the matching accordion row", async () => {
+  it("logs next step and summary interactions once per action", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const element = await JobDetailPage({
       params: Promise.resolve({ id: JOB_RECORD.id }),
       searchParams: Promise.resolve({}),
@@ -85,31 +76,27 @@ describe("JobDetails progress panels mounting", () => {
       act(() => {
         root.render(element);
       });
-      expect(container.querySelector('[data-testid="askbob-job-pipeline"]')).toBeNull();
-      expect(container.querySelector('[data-testid="askbob-calling-pipeline"]')).toBeNull();
+      expect(
+        logSpy.mock.calls.filter(([name]) => name === "[job-details-next-step-rendered]"),
+      ).toHaveLength(1);
 
-      for (const step of PROGRESS_STEPS) {
-        const toggle = container.querySelector<HTMLButtonElement>(
-          `[data-testid="progress-row-${step.key}-toggle"]`,
-        );
-        const isExpanded = toggle?.getAttribute("aria-expanded") === "true";
-        if (!isExpanded) {
-          act(() => {
-            toggle?.click();
-          });
-        }
-        const panel = container.querySelector(`[data-testid="${ROW_TEST_IDS[step.key]}"]`);
-        expect(panel).toBeTruthy();
-        const rowContent = container.querySelector(
-          `[data-testid="progress-row-${step.key}-content"]`,
-        );
-        expect(rowContent?.getAttribute("aria-hidden")).toBe("false");
-        if (step.key === "call") {
-          expect(rowContent?.textContent).toContain("Open call session");
-          expect(rowContent?.textContent).not.toContain("Start automated call");
-        }
-      }
+      const ctaButton = container.querySelector('[data-testid="job-details-next-step-primary-cta"]');
+      act(() => ctaButton?.click());
+      expect(
+        logSpy.mock.calls.filter(([name]) => name === "[job-details-next-step-primary-cta-click]"),
+      ).toHaveLength(1);
+
+      const summaryToggle = container.querySelector('[data-testid="job-details-askbob-summary-toggle"]');
+      act(() => summaryToggle?.click());
+      act(() => summaryToggle?.click());
+      expect(
+        logSpy.mock.calls.filter(([name]) => name === "[job-details-askbob-summary-expanded]"),
+      ).toHaveLength(1);
+      expect(
+        logSpy.mock.calls.filter(([name]) => name === "[job-details-askbob-summary-collapsed]"),
+      ).toHaveLength(1);
     } finally {
+      logSpy.mockRestore();
       act(() => {
         root.unmount();
       });

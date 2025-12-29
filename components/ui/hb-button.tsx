@@ -9,10 +9,10 @@ const baseClasses =
 
 const variantClasses: Record<HbButtonVariant, string> = {
   primary:
-    "bg-amber-500 text-slate-950 hover:bg-amber-400 disabled:bg-slate-600 disabled:text-slate-400",
+    "bg-[var(--color-primary)] text-[var(--color-primary-text)] hover:bg-[var(--color-primary-dark)] disabled:bg-[var(--color-border)] disabled:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-background-paper)]",
   secondary:
-    "border border-slate-300/20 text-slate-100 bg-slate-900/50 hover:border-slate-200 hover:bg-slate-900",
-  ghost: "text-slate-300 hover:text-slate-100",
+    "border border-[var(--color-border)] text-[var(--color-text-primary)] bg-[var(--color-card-elevated)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-card)] disabled:border-[var(--color-border)] disabled:text-[var(--color-text-secondary)]",
+  ghost: "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]",
 };
 
 const sizeClasses: Record<HbButtonSize, string> = {

@@ -19,16 +19,19 @@ export default function NextStepCard({ jobId, nextStep }: NextStepCardProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const primaryCta = nextStep.primaryCta;
+  const nextStepStatement = jobDetailsCopy.nextStep.statement;
+  const nextStepConfirmation = jobDetailsCopy.nextStep.confirmation;
 
   const logPrimaryCtaClick = useCallback(
     (routedToCallSession: boolean) => {
       console.log("[job-details-next-step-primary-cta-click]", {
         stepType: nextStep.stepType,
         jobId,
+        target: primaryCta?.actionTarget ?? null,
         routedToCallSession,
       });
     },
-    [jobId, nextStep.stepType],
+    [jobId, nextStep.stepType, primaryCta],
   );
 
   const handleCallAction = useCallback(async () => {
@@ -56,7 +59,7 @@ export default function NextStepCard({ jobId, nextStep }: NextStepCardProps) {
     if (!primaryCta) {
       return null;
     }
-    const isCallAction = primaryCta.actionTarget === "call-session";
+    const isCallAction = primaryCta.actionTarget === "progress-call";
     if (isCallAction) {
       return (
         <HbButton
@@ -64,6 +67,7 @@ export default function NextStepCard({ jobId, nextStep }: NextStepCardProps) {
           onClick={handleCallAction}
           disabled={isLoading}
           data-testid="job-details-next-step-primary-cta"
+          className="w-full md:w-auto"
         >
           {primaryCta.label}
         </HbButton>
@@ -76,6 +80,7 @@ export default function NextStepCard({ jobId, nextStep }: NextStepCardProps) {
         href={`#${primaryCta.actionTarget}`}
         onClick={() => logPrimaryCtaClick(false)}
         data-testid="job-details-next-step-primary-cta"
+        className="w-full md:w-auto"
       >
         {primaryCta.label}
       </HbButton>
@@ -83,17 +88,27 @@ export default function NextStepCard({ jobId, nextStep }: NextStepCardProps) {
   }, [handleCallAction, isLoading, logPrimaryCtaClick, primaryCta]);
 
   return (
-    <HbCard className="space-y-3">
+    <HbCard className="space-y-4 border-[var(--color-border-strong)] bg-[var(--color-card-elevated)] p-5">
       <div className="flex items-center justify-between">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{jobDetailsCopy.nextStep.title}</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">
+          {jobDetailsCopy.nextStep.title}
+        </p>
         {!primaryCta ? (
-          <span className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+          <span className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">
             {jobDetailsCopy.nextStep.doneLabel}
           </span>
         ) : null}
       </div>
-      <p className="text-sm text-slate-200">{nextStep.rationale}</p>
-      {primaryCtaButton}
+      <div className="space-y-2">
+        <p className="text-sm text-[var(--color-text-secondary)]">{nextStepStatement}</p>
+        <p className="text-lg font-semibold text-[var(--color-text-primary)]">{nextStep.rationale}</p>
+        <p className="text-sm text-[var(--color-text-secondary)]">
+          {primaryCta ? nextStepConfirmation : jobDetailsCopy.nextStep.doneLabel}
+        </p>
+      </div>
+      {primaryCtaButton ? (
+        <div className="flex w-full">{primaryCtaButton}</div>
+      ) : null}
     </HbCard>
   );
 }

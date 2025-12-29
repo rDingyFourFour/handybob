@@ -181,4 +181,23 @@ describe("JobDetails progress accordion", () => {
       deriveSpy.mockRestore();
     },
   );
+
+  it("leaves all rows collapsed when the next step is done", async () => {
+    const nextStepResult: NextStepResult = {
+      stepType: "done",
+      rationale: "All caught up",
+      primaryCta: null,
+      statusHints: NEXT_STEP_STATUS_HINTS,
+    };
+    const deriveSpy = vi
+      .spyOn(nextStepModule, "deriveNextStepForJobDetails")
+      .mockImplementation(() => nextStepResult);
+    const markup = await renderJobDetailPage();
+    for (const step of PROGRESS_STEPS) {
+      expect(markup).toContain(
+        `data-testid="progress-row-${step.key}-content" aria-hidden="true"`,
+      );
+    }
+    deriveSpy.mockRestore();
+  });
 });

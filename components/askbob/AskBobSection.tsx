@@ -11,7 +11,9 @@ type AskBobSectionProps = {
 export default function AskBobSection({ id, children, testId }: AskBobSectionProps) {
   return (
     <section id={id} className="space-y-3" data-testid={testId}>
-      <div className="rounded-3xl border border-slate-800 bg-slate-950/40 p-5">{children}</div>
+      <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] p-5">
+        {children}
+      </div>
     </section>
   );
 }

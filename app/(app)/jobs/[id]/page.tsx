@@ -110,7 +110,10 @@ function appointmentStatusClass(status: string | null) {
   if (!status) {
     return appointmentStatusClasses.scheduled;
   }
-  return appointmentStatusClasses[status] ?? "border border-slate-700 bg-slate-900/60 text-slate-200";
+  return (
+    appointmentStatusClasses[status] ??
+    "border border-[var(--color-border)] bg-[var(--color-card-elevated)] text-[var(--color-text-secondary)]"
+  );
 }
 
 function formatAppointmentTimeRange(start: string | null, end: string | null) {
@@ -586,8 +589,8 @@ export default async function JobDetailPage({
   const followupStatusClasses: Record<FollowupDueStatus, string> = {
     overdue: "border border-amber-200 text-amber-200 bg-amber-200/10",
     "due-today": "border border-emerald-200 text-emerald-200 bg-emerald-200/10",
-    scheduled: "border border-slate-600 text-slate-200 bg-slate-900/80",
-    none: "border border-slate-700 text-slate-400 bg-slate-950/40",
+    scheduled: "border border-[var(--color-border)] text-[var(--color-text-secondary)] bg-[var(--color-card-elevated)]",
+    none: "border border-[var(--color-border)] text-[var(--color-text-secondary)] bg-[var(--color-card)]",
   };
   const followupStatusChipLabel = latestCall
     ? followupStatusLabels[followupDueInfo.dueStatus]
@@ -597,7 +600,10 @@ export default async function JobDetailPage({
     : "";
 
   return (
-    <div className="hb-shell pt-20 pb-8 space-y-6">
+    <div
+      className="hb-shell pt-20 pb-8 space-y-6 bg-[var(--color-background-paper)] text-[var(--color-text-primary)]"
+      data-testid="job-details-shell"
+    >
       <section data-testid="job-details-job-brief">
         <JobBriefCard
           title={displayJobTitle}
@@ -621,125 +627,136 @@ export default async function JobDetailPage({
           statusHints={nextStep.statusHints}
         />
       </section>
-      <section data-testid="job-details-job-progress-header" className="space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job progress</p>
+      <section data-testid="job-details-job-progress" className="space-y-4">
+        <div data-testid="job-details-job-progress-header" className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">Job progress</p>
+          </div>
         </div>
-      </section>
-      <JobDetailsCard
-        jobId={job.id}
-        title={displayJobTitle}
-        status={job.status}
-        quoteHref={quoteHref}
-        acceptedQuoteId={acceptedQuote?.id ?? null}
-        scheduleVisitHref={scheduleVisitHref}
-        unseenFollowupLabel={followupStatusChipLabel}
-        followupDueLabel={followupDueInfo.dueLabel}
-        followupStatusClass={followupStatusChipClass}
-        urgency={job.urgency}
-        source={job.source}
-        aiUrgency={job.ai_urgency}
-        priority={job.priority}
-        attentionReason={job.attention_reason}
-        attentionScore={job.attention_score}
-        createdLabel={createdLabel}
-        customerId={customerId}
-        customerName={customerName}
-        description={job.description_raw}
-      />
-      <JobAskBobFlow
-        workspaceId={workspace.id}
-        jobId={job.id}
-        userId={userId ?? workspace.id}
-        customerId={customerId ?? null}
-        customerDisplayName={customerName ?? null}
-        customerPhoneNumber={customerPhoneNumber ?? null}
-        jobDescription={job.description_raw ?? null}
-        jobTitle={askBobJobTitle}
-        jobStatus={job.status ?? null}
+        <JobAskBobFlow
+          workspaceId={workspace.id}
+          jobId={job.id}
+          userId={userId ?? workspace.id}
+          customerId={customerId ?? null}
+          customerDisplayName={customerName ?? null}
+          customerPhoneNumber={customerPhoneNumber ?? null}
+          jobDescription={job.description_raw ?? null}
+          jobTitle={askBobJobTitle}
+          jobStatus={job.status ?? null}
+          initialLastQuoteId={lastQuoteId ?? null}
+          lastQuoteCreatedAt={lastQuoteCreatedAt ?? null}
+          lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? null}
+          initialDiagnoseSnapshot={diagnoseSnapshot ?? undefined}
+          initialMaterialsSnapshot={materialsSnapshot ?? undefined}
+          initialQuoteSnapshot={quoteSnapshot ?? undefined}
+          diagnoseSnapshotHistory={diagnosePreviousVersions}
+          materialsSnapshotHistory={materialsPreviousVersions}
+          quoteSnapshotHistory={quotePreviousVersions}
+          diagnoseLatestSnapshotVersion={diagnoseLatestVersion}
+          materialsLatestSnapshotVersion={materialsLatestVersion}
+          quoteLatestSnapshotVersion={quoteLatestVersion}
+          initialFollowupSnapshot={followupSnapshot ?? undefined}
+          lastQuoteSummary={lastQuoteSummary}
+          callHistoryHint={callHistoryHint}
+          latestCallOutcome={latestCallOutcome}
+        progressSteps={PROGRESS_STEPS}
+        statusHints={nextStep.statusHints}
+        defaultProgressStep={defaultProgressRow}
+        showIntakePanel={false}
         askBobLastTaskLabel={askBobLastTaskLabel}
         askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
         askBobLastUsedAtIso={askBobLastUsedAtIso}
         askBobRunsSummary={askBobRunsSummary}
-        initialLastQuoteId={lastQuoteId ?? null}
-        lastQuoteCreatedAt={lastQuoteCreatedAt ?? null}
-        lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? null}
-        initialDiagnoseSnapshot={diagnoseSnapshot ?? undefined}
-        initialMaterialsSnapshot={materialsSnapshot ?? undefined}
-        initialQuoteSnapshot={quoteSnapshot ?? undefined}
-        diagnoseSnapshotHistory={diagnosePreviousVersions}
-        materialsSnapshotHistory={materialsPreviousVersions}
-        quoteSnapshotHistory={quotePreviousVersions}
-        diagnoseLatestSnapshotVersion={diagnoseLatestVersion}
-        materialsLatestSnapshotVersion={materialsLatestVersion}
-        quoteLatestSnapshotVersion={quoteLatestVersion}
-        initialFollowupSnapshot={followupSnapshot ?? undefined}
-        lastQuoteSummary={lastQuoteSummary}
-        callHistoryHint={callHistoryHint}
-        latestCallOutcome={latestCallOutcome}
-        progressSteps={PROGRESS_STEPS}
-        statusHints={nextStep.statusHints}
-        defaultProgressStep={defaultProgressRow}
-      />
-      <HbCard className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Upcoming visits</p>
-            <h2 className="hb-heading-3 text-xl font-semibold">Scheduled appointments for this job</h2>
+        />
+      </section>
+      <section className="space-y-6" data-testid="job-details-secondary-content">
+        <JobDetailsCard
+          jobId={job.id}
+          title={displayJobTitle}
+          status={job.status}
+          quoteHref={quoteHref}
+          acceptedQuoteId={acceptedQuote?.id ?? null}
+          scheduleVisitHref={scheduleVisitHref}
+          unseenFollowupLabel={followupStatusChipLabel}
+          followupDueLabel={followupDueInfo.dueLabel}
+          followupStatusClass={followupStatusChipClass}
+          urgency={job.urgency}
+          source={job.source}
+          aiUrgency={job.ai_urgency}
+          priority={job.priority}
+          attentionReason={job.attention_reason}
+          attentionScore={job.attention_score}
+          createdLabel={createdLabel}
+          customerId={customerId}
+          customerName={customerName}
+          description={job.description_raw}
+        />
+        <HbCard className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">Upcoming visits</p>
+              <h2 className="hb-heading-3 text-xl font-semibold text-[var(--color-text-primary)]">
+                Scheduled appointments for this job
+              </h2>
+            </div>
+            <Link
+              href="/appointments"
+              className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
+            >
+              View all appointments
+            </Link>
           </div>
-          <Link
-            href="/appointments"
-            className="text-xs uppercase tracking-[0.3em] text-slate-400 transition hover:text-slate-200"
-          >
-            View all appointments
-          </Link>
-        </div>
-        {upcomingAppointmentsError ? (
-          <p className="text-sm text-slate-400">
-            Something went wrong loading upcoming visits. Try refreshing the page.
-          </p>
-        ) : upcomingAppointments.length === 0 ? (
-          <div className="space-y-2 text-sm text-slate-400">
-            <p>No upcoming appointments for this job yet.</p>
-            <HbButton as={Link} href={`/appointments/new?jobId=${job.id}`} size="sm" variant="secondary">
-              Schedule a visit
-            </HbButton>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {upcomingAppointments.map((appointment) => (
-              <Link
-                key={appointment.id}
-                href={`/appointments/${appointment.id}`}
-                className="group flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-200 transition hover:border-slate-600 hover:bg-slate-900"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-slate-100">{formatDate(appointment.start_time)}</p>
-                  <p className="text-xs text-slate-400">
-                    {formatAppointmentTimeRange(appointment.start_time, appointment.end_time)}
-                  </p>
-                </div>
-                <span
-                  className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.3em] font-semibold ${appointmentStatusClass(
-                    appointment.status,
-                  )}`}
+          {upcomingAppointmentsError ? (
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              Something went wrong loading upcoming visits. Try refreshing the page.
+            </p>
+          ) : upcomingAppointments.length === 0 ? (
+            <div className="space-y-2 text-sm text-[var(--color-text-secondary)]">
+              <p>No upcoming appointments for this job yet.</p>
+              <HbButton as={Link} href={`/appointments/new?jobId=${job.id}`} size="sm" variant="secondary">
+                Schedule a visit
+              </HbButton>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {upcomingAppointments.map((appointment) => (
+                <Link
+                  key={appointment.id}
+                  href={`/appointments/${appointment.id}`}
+                  className="group flex items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 text-sm text-[var(--color-text-primary)] transition hover:border-[var(--color-border-strong)]"
                 >
-                  {appointmentStatusLabel(appointment.status)}
-                </span>
-              </Link>
-            ))}
-          </div>
-        )}
-      </HbCard>
-      <JobInvoiceSection
-        workspaceId={workspace.id}
-        jobId={job.id}
-        acceptedQuoteId={acceptedQuote?.id ?? null}
-        invoice={invoice}
-        invoiceCreatedLabel={invoiceCreatedLabel}
-      />
-      <JobQuotesCard quotes={quotes} quotesError={quotesError} quoteHref={quoteHref} />
-      <JobRecentActivityCard jobId={job.id} workspaceId={workspace.id} />
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                      {formatDate(appointment.start_time)}
+                    </p>
+                    <p className="text-xs text-[var(--color-text-secondary)]">
+                      {formatAppointmentTimeRange(appointment.start_time, appointment.end_time)}
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.3em] font-semibold ${appointmentStatusClass(
+                      appointment.status,
+                    )}`}
+                  >
+                    {appointmentStatusLabel(appointment.status)}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </HbCard>
+        <section id="invoice-section" data-testid="job-details-invoice-section">
+          <JobInvoiceSection
+            workspaceId={workspace.id}
+            jobId={job.id}
+            acceptedQuoteId={acceptedQuote?.id ?? null}
+            invoice={invoice}
+            invoiceCreatedLabel={invoiceCreatedLabel}
+          />
+        </section>
+        <JobQuotesCard quotes={quotes} quotesError={quotesError} quoteHref={quoteHref} />
+        <JobRecentActivityCard jobId={job.id} workspaceId={workspace.id} />
+      </section>
     </div>
   );
 }

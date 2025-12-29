@@ -1,8 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  background-color: #020617;
-  color: #f8fafc;
+  --color-background-paper: #f8f3eb;
+  --color-card: #fff8f2;
+  --color-card-elevated: #fff5ed;
+  --color-border: #ddcfc0;
+  --color-border-strong: #c9b8a4;
+  --color-text-primary: #1f1a14;
+  --color-text-secondary: #6e6054;
+  --color-primary: #1e5c40;
+  --color-primary-dark: #164833;
+  --color-primary-text: #fdf8f2;
+  --color-focus: #7ca98b;
+  background-color: var(--color-background-paper);
+  color: var(--color-text-primary);
   min-height: 100%;
 }
 
@@ -11,8 +22,8 @@ body {
   margin: 0;
   min-height: 100%;
   font-family: "Inter", system-ui, sans-serif;
-  background-color: #020617;
-  color: #f8fafc;
+  background-color: var(--color-background-paper);
+  color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -29,14 +40,14 @@ body {
 .hb-muted {
   font-size: 0.75rem;
   line-height: 1.4;
-  color: #94a3b8;
+  color: var(--color-text-secondary);
 }
 
 .hb-card {
   border-radius: 0.85rem;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  background-color: #0f172a;
-  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.45);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-card);
+  box-shadow: 0 15px 30px rgba(31, 26, 20, 0.08);
   padding: 1.25rem;
 }
 
@@ -68,19 +79,20 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
-  border-radius: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
   border: none;
-  background-color: #38bdf8;
-  color: #020617;
+  background-color: var(--color-primary);
+  color: var(--color-primary-text);
   font-weight: 600;
   font-size: 0.9375rem;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 10px 20px rgba(30, 92, 64, 0.25);
 }
 
 .hb-button:hover {
-  background-color: #22c6ff;
+  background-color: var(--color-primary-dark);
 }
 
 .hb-button-ghost {
@@ -88,11 +100,11 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
-  border-radius: 0.5rem;
-  border: 1px solid rgba(226, 232, 240, 0.4);
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border-strong);
   background-color: transparent;
-  color: #f8fafc;
+  color: var(--color-text-secondary);
   font-weight: 600;
   font-size: 0.9375rem;
   cursor: pointer;
