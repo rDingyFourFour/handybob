@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { mapWorkspaceResultToRouteOutcome, resolveWorkspaceContext } from "@/lib/domain/workspaces";
-import CallSummaryStatus from "@/components/call-summary-status";
 import CallStatusRefreshButton from "@/components/calls/CallStatusRefreshButton";
 import AutomatedCallNotesCard from "./AutomatedCallNotesCard";
 import CallRecordingLink from "@/components/calls/CallRecordingLink";
@@ -42,9 +41,8 @@ import LinkCallContextCard from "./LinkCallContextCard";
 import AskBobLiveGuidanceCard from "./AskBobLiveGuidanceCard";
 import PostCallEnrichmentCard from "./PostCallEnrichmentCard";
 import CallManualNumberCard from "./CallManualNumberCard";
-import CallSessionHub from "./CallSessionHub";
-import WrapUpCard from "./WrapUpCard";
-import { type CallWorkspacePanel } from "./CallWorkspaceCard";
+import CallSessionExperience from "./CallSessionExperience";
+import { type CallWorkspacePanel } from "./callSessionTypes";
 import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 type CallRecord = {
@@ -422,9 +420,10 @@ export default async function CallSessionPage({
       hasLegacyOutcome: Boolean(call.outcome),
     });
   }
-  const showAutomatedOutcomeRequiredBanner =
-    Boolean(isAskBobAutomatedCall && automatedDialSnapshot.isTerminal && !hasExistingOutcome);
-  if (showAutomatedOutcomeRequiredBanner) {
+  const showOutcomeRequiredBanner = Boolean(
+    automatedDialSnapshot.isTerminal && !hasExistingOutcome,
+  );
+  if (showOutcomeRequiredBanner) {
     console.log("[calls-after-call-outcome-required-visible]", {
       callId: call.id,
       workspaceId: workspace.id,
@@ -728,6 +727,33 @@ export default async function CallSessionPage({
     },
   ];
 
+  const statusLabelMap: Record<"terminal" | "outcome" | "after-call", string> = {
+    terminal: callSessionCopy.statusStrip.labels.terminal,
+    outcome: callSessionCopy.statusStrip.labels.outcome,
+    "after-call": callSessionCopy.statusStrip.labels.afterCall,
+  };
+
+  const statusChips = callStatusStripItems
+    .filter((item) => item.key in statusLabelMap)
+    .map((item) => {
+      const key = item.key as keyof typeof statusLabelMap;
+      return {
+        key: item.key,
+        label: statusLabelMap[key],
+        value: item.status,
+      };
+    });
+
+  const statusBadgeLabel = automatedDialSnapshot.isTerminal
+    ? callSessionCopy.statusStrip.statuses.terminal
+    : hasDialRequestedMarker
+    ? callSessionCopy.statusStrip.statuses.inProgress
+    : callSessionCopy.statusStrip.statuses.created;
+
+  const mainStatusValue =
+    timelineTwilioStatusLabel ??
+    (hasTwilioSid ? callSessionCopy.statusStrip.statuses.queued : TIMELINE_NOT_YET_LABEL);
+
   const afterCallDraftBody = askBobAfterCallSnapshot?.draftMessageBody?.trim() ?? null;
   const afterCallHasContext = Boolean(
     askBobScriptBody?.trim() || latestPhoneMessageBody?.trim() || call.outcome_notes?.trim(),
@@ -951,6 +977,14 @@ export default async function CallSessionPage({
     },
   };
 
+  const headerSubtitleTemplate = callSessionCopy.header.subtitleTemplate;
+  const headerSubtitle =
+    customerName && job?.title
+      ? headerSubtitleTemplate
+          .replace("{customerName}", customerName)
+          .replace("{jobTitle}", job?.title)
+      : callSessionCopy.header.subtitleFallback;
+
   const automatedCtaExplanation = mapCtaReasonCodeToExplanation(
     automatedCtaState.ctaReasonCode,
     automatedCtaState.primaryCta.kind,
@@ -1131,6 +1165,17 @@ export default async function CallSessionPage({
     });
   }
 
+  const manualFallbackNode = (
+    <CallManualNumberCard
+      workspaceId={workspace.id}
+      callId={call.id}
+      jobId={jobId}
+      customerId={customerId}
+      customerPhone={customerPhone}
+      scriptSummary={scriptSummaryForManual}
+    />
+  );
+
   const automatedWorkspacePanels: CallWorkspacePanel[] = [];
   if (isAskBobCallContext) {
     automatedWorkspacePanels.push({
@@ -1166,80 +1211,6 @@ export default async function CallSessionPage({
       ),
     });
   }
-
-  const wrapUpSummarySection = (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call summary</p>
-        <h3 className="hb-heading-3 text-xl font-semibold text-white">Call summary</h3>
-        <p className="text-sm text-slate-400">
-          Review what happened on the call before capturing the final outcome.
-        </p>
-        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-400">
-          {customerName && (
-            <span className="text-slate-100">Customer: {customerName}</span>
-          )}
-          <span className="text-slate-100">From: {callFromLabel}</span>
-          <span className="text-slate-100">To: {callToLabel}</span>
-          <span className="text-slate-100">Created {createdAtLabel}</span>
-        </div>
-      </div>
-
-      <div className="space-y-2 border-t border-slate-800/40 pt-4">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Summary</p>
-        {job && job.id && (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-            <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Job:</span>
-            <span className="font-semibold text-slate-100">
-              {job?.title ?? job.id.slice(0, 8)}
-            </span>
-            <span className="rounded-full border border-slate-800/60 bg-slate-900/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] text-slate-400">
-              {jobStatus}
-            </span>
-          </div>
-        )}
-        {callScriptQuoteCandidate ? (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-            <span className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Quote:</span>
-            {quoteLink ? (
-              <Link
-                href={quoteLink}
-                className="font-semibold text-slate-100 hover:text-slate-200"
-              >
-                {displayQuoteLabel}
-              </Link>
-            ) : (
-              <span className="font-semibold text-slate-100">{displayQuoteLabel}</span>
-            )}
-            <span className="rounded-full border border-slate-800/60 bg-slate-900/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.3em] text-slate-400">
-              {callScriptQuoteCandidate.status ?? "Status unknown"}
-            </span>
-          </div>
-        ) : (
-          <p className="text-xs text-slate-400">
-            No quote linked to this job; guided scripts will be limited until you attach one.
-          </p>
-        )}
-        <div className="flex flex-wrap items-center gap-2">
-          <CallSummaryStatus
-            callId={call.id}
-            initialStatus={summaryMissing ? "needed" : "recorded"}
-          />
-          {summaryMissing && (
-            <p className="text-xs text-slate-400">
-              Complete the guided call summary in the manual workspace to unlock follow-ups.
-            </p>
-          )}
-        </div>
-        <p className="text-sm text-slate-200">{callSummary}</p>
-        {shouldSkipFollowup && (
-          <p className="text-xs text-slate-400">
-            No further follow-up recommended based on this outcome.
-          </p>
-        )}
-      </div>
-    </div>
-  );
 
   const wrapUpOutcomeSection = (
     <CallOutcomeCaptureCard
@@ -1301,36 +1272,6 @@ export default async function CallSessionPage({
       primaryVariant="secondary"
       hideFollowupComposer
     />
-  );
-
-  const wrapUpMetaSection = (
-    <div className="grid gap-4 md:grid-cols-2">
-      <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job</p>
-        <p className="text-lg font-semibold text-white">{displayJobTitle}</p>
-        <p className="text-xs text-slate-400">{jobStatus}</p>
-        {jobLink && <span className="text-sm font-semibold text-slate-400">Job linked</span>}
-      </div>
-
-      <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Quote</p>
-        <p className="text-lg font-semibold text-white">{displayQuoteLabel}</p>
-        <p className="text-xs text-slate-400">
-          Status: {callScriptQuoteCandidate?.status ?? "Unknown"}
-        </p>
-        <p className="text-xs text-slate-400">
-          Total: {formatCurrency(callScriptQuoteCandidate?.total ?? null)}
-        </p>
-        {quoteLink && (
-          <Link
-            href={quoteLink}
-            className="text-sm font-semibold text-sky-300 hover:text-sky-200"
-          >
-            View quote
-          </Link>
-        )}
-      </div>
-    </div>
   );
 
   const callStatusDetails = (
@@ -1434,49 +1375,50 @@ export default async function CallSessionPage({
   );
 
   return (
-    <div className="hb-shell pt-20 pb-8">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-        <div className="flex items-center justify-end border-b border-slate-900 pb-5">
-          <Link
-            href="/calls"
-            className="rounded-full border border-slate-800/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-100 hover:border-slate-600"
-          >
-            {callSessionCopy.header.backToCalls}
-          </Link>
-        </div>
-
-        <CallSessionHub
-          key={call.id}
-          callId={call.id}
-          workspaceId={workspace.id}
-          jobId={jobId}
-          customerId={customerId}
-          automatedModel={automatedCallControlModel}
-          manualModel={manualCallControlModel}
-          unselectedModel={unselectedCallControlModel}
-          details={callStatusDetails}
-          automatedPanels={automatedWorkspacePanels}
-          manualPanels={manualWorkspacePanels}
-          automatedEligible={canStartAutomatedCall}
-          manualEligible={canStartGuidedCall}
-          automatedDisabledReason={automatedDisabledReason}
-          manualDisabledReason={manualDisabledReason}
-        />
-        <WrapUpCard
-          summarySection={wrapUpSummarySection}
-          outcomeBanner={
-            showAutomatedOutcomeRequiredBanner ? (
-              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
-                {callSessionCopy.wrapUp.outcomeRequiredBanner}
-              </div>
-            ) : null
-          }
-          outcomeSection={wrapUpOutcomeSection}
-          afterCallSection={wrapUpAfterCallSection}
-          enrichmentSection={wrapUpEnrichmentSection}
-          metaSection={wrapUpMetaSection}
-        />
-      </div>
-    </div>
+    <CallSessionExperience
+      callId={call.id}
+      workspaceId={workspace.id}
+      jobId={jobId ?? null}
+      customerId={customerId}
+      headerSubtitle={headerSubtitle}
+      directionLabel={callControlModelBase.identity.directionLabel}
+      isInbound={callControlModelBase.identity.isInbound}
+      fromLabel={callControlModelBase.identity.from}
+      toLabel={callControlModelBase.identity.to}
+      createdLabel={callControlModelBase.identity.createdLabel}
+      callSummary={callSummary}
+      summaryMissing={summaryMissing}
+      customerName={customerName}
+      jobTitle={displayJobTitle}
+      jobStatus={jobStatus}
+      jobLink={jobLink}
+      quoteLabel={displayQuoteLabel}
+      quoteLink={quoteLink}
+      quoteStatus={callScriptQuoteCandidate?.status ?? null}
+      openMessagesHref={manualMessagesHref}
+      mainStatusLabel={callSessionCopy.statusStrip.labels.status}
+      mainStatusValue={mainStatusValue}
+      statusBadgeLabel={statusBadgeLabel}
+      statusChips={statusChips}
+      callStatusDetails={callStatusDetails}
+      automatedModel={automatedCallControlModel}
+      manualModel={manualCallControlModel}
+      unselectedModel={unselectedCallControlModel}
+      automatedPanels={automatedWorkspacePanels}
+      manualPanels={manualWorkspacePanels}
+      automatedEligible={canStartAutomatedCall}
+      manualEligible={canStartGuidedCall}
+      automatedDisabledReason={automatedDisabledReason}
+      manualDisabledReason={manualDisabledReason}
+      manualFallbackNode={manualFallbackNode}
+      showInProgressBanner={!automatedDialSnapshot.isTerminal}
+      showOutcomeRequiredBanner={showOutcomeRequiredBanner}
+      callOutcomePanel={wrapUpOutcomeSection}
+      callFollowUpPanel={wrapUpAfterCallSection}
+      callEnrichmentPanel={wrapUpEnrichmentSection}
+      summaryHint={
+        shouldSkipFollowup ? "No further follow-up recommended based on this outcome." : null
+      }
+    />
   );
 }

@@ -119,7 +119,7 @@ describe("CallSessionPage automated call view", () => {
     expect(markup).toContain("Enabled");
     expect(markup).toContain(callSessionCopy.secondaryActions.openJob);
     expect(markup).not.toContain("Open AskBob on job");
-    expect(markup).toContain('data-testid="call-workspace-panel-unselected"');
+    expect(markup).toContain('data-testid="call-workspace-locked"');
 
     const detailEvents = consoleLogSpy.mock.calls.filter(
       (args) => args[0] === "[calls-session-askbob-automated-details-visible]",
@@ -237,8 +237,8 @@ describe("CallSessionPage automated call view", () => {
     expect(markup).not.toContain("Speech plan summary");
     expect(markup).not.toContain(callSessionCopy.wrapUp.outcomeRequiredBanner);
     expect(markup).not.toContain("Automated call notes");
-    expect(markup).toContain('data-testid="call-control-card"');
-    expect(markup).toContain('data-testid="call-workspace-card"');
+    expect(markup).toContain('data-testid="call-primary-action-bar"');
+    expect(markup).toContain('id="call-workspace"');
     const detailEvents = consoleLogSpy.mock.calls.filter(
       (args) => args[0] === "[calls-session-askbob-automated-details-visible]",
     );

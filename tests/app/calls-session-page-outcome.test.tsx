@@ -365,7 +365,7 @@ describe("CallSessionPage outcome card", () => {
 
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-8" }) });
     const markup = renderToStaticMarkup(element);
-    expect(markup).toContain('data-testid="call-control-card"');
+    expect(markup).toContain('data-testid="call-primary-action-bar"');
     expect(markup).not.toContain("Refresh status");
   });
 

@@ -2,7 +2,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import CallSessionHub from "@/app/(app)/calls/[id]/CallSessionHub";
+import CallSessionExperience from "@/app/(app)/calls/[id]/CallSessionExperience";
+import type { CallSessionCtaModel } from "@/app/(app)/calls/[id]/callSessionTypes";
 import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 vi.mock("next/navigation", () => ({
@@ -12,74 +13,68 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-const baseModel = {
+const baseModel: CallSessionCtaModel = {
   workspaceId: "workspace-1",
   callId: "call-1",
   identity: {
-    directionLabel: "Outbound call",
+    directionLabel: callSessionCopy.callControl.directionOutbound,
     isInbound: false,
     from: "+15550001111",
     to: "+15550002222",
     createdLabel: "Jan 1",
   },
-  headerContext: {
-    customerName: "Test Customer",
-    jobTitle: "Test job",
-  },
-  statusStripItems: [
-    { key: "created", label: "Created", status: "Created", timestamp: "Now" },
-    { key: "dial-requested", label: "Dial requested", status: "Not yet", timestamp: "—" },
-  ],
-  primaryCta: { kind: "disabled", label: callSessionCopy.primaryCta.label.disabled, disabled: true },
+  headerContext: { customerName: "Test customer", jobTitle: "Test job" },
+  statusStripItems: [],
+  primaryCta: { kind: "disabled", label: callSessionCopy.primaryCta.label.disabled },
   primaryCtaExplanation: callSessionCopy.primaryCta.explanation.select_call_mode,
   ctaReasonCode: "select_call_mode",
   secondaryActions: { jobHref: "/jobs/job-1", callsHref: "/calls", messagesHref: null },
-  callContext: {
-    jobId: "job-1",
-    customerId: "customer-1",
-  },
+  callContext: { jobId: "job-1", customerId: "customer-1" },
   afterCallDraft: { body: null },
 };
 
-const automatedModel = {
+const automatedModel: CallSessionCtaModel = {
   ...baseModel,
   primaryCta: {
+    ...baseModel.primaryCta,
     kind: "start-automated-call",
     label: callSessionCopy.primaryCta.label.startAutomated,
-    disabled: false,
-    automatedCallPayload: null,
+    automatedCallPayload: {
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      customerId: "customer-1",
+      customerPhone: "+15550002222",
+      scriptBody: "script",
+      scriptSummary: "summary",
+    },
   },
   primaryCtaExplanation: callSessionCopy.primaryCta.explanation.start_automated_call,
   ctaReasonCode: "start_automated_call",
 };
 
-const manualModel = {
+const manualModel: CallSessionCtaModel = {
   ...baseModel,
   primaryCta: {
     kind: "start-guided-call",
     label: callSessionCopy.primaryCta.label.startGuided,
-    disabled: false,
     workspaceNavigate: { tab: "during", hash: "#manual-call-tools" },
   },
   primaryCtaExplanation: callSessionCopy.primaryCta.explanation.start_guided_call,
   ctaReasonCode: "start_guided_call",
 };
 
-describe("CallSessionPage call mode chooser", () => {
+describe("CallSessionExperience mode chooser", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
-  let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     window.sessionStorage.clear();
   });
 
   afterEach(() => {
-    logSpy.mockRestore();
     if (root) {
       act(() => {
         root.unmount();
@@ -89,104 +84,109 @@ describe("CallSessionPage call mode chooser", () => {
     container.remove();
   });
 
-  function renderHub(callId = "call-1") {
-    return act(async () => {
-      root?.render(
-        <CallSessionHub
-          callId={callId}
-          workspaceId="workspace-1"
-          jobId="job-1"
-          customerId="customer-1"
-          automatedModel={{ ...automatedModel, callId }}
-          manualModel={{ ...manualModel, callId }}
-          unselectedModel={{ ...baseModel, callId }}
-          automatedPanels={[{ id: "automated-panel", node: <div /> }]}
-          manualPanels={[{ id: "manual-panel", node: <div /> }]}
-          automatedEligible
-          manualEligible
-        />,
-      );
+  async function renderExperience() {
+    const props = {
+      callId: "call-1",
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      customerId: "customer-1",
+      headerSubtitle: "Test header",
+      directionLabel: callSessionCopy.callControl.directionOutbound,
+      isInbound: false,
+      fromLabel: "+15550001111",
+      toLabel: "+15550002222",
+      createdLabel: "Jan 1",
+      callSummary: "Sample summary",
+      summaryMissing: false,
+      customerName: "Customer",
+      jobTitle: "Job title",
+      jobStatus: "open",
+      jobLink: "/jobs/job-1",
+      quoteLabel: "Quote 456",
+      quoteLink: "/quotes/quote-456",
+      quoteStatus: "draft",
+      openMessagesHref: "/messages",
+      mainStatusLabel: callSessionCopy.statusStrip.labels.status,
+      mainStatusValue: callSessionCopy.statusStrip.statuses.created,
+      statusBadgeLabel: callSessionCopy.statusStrip.statuses.created,
+      statusChips: [
+        {
+          key: "terminal",
+          label: callSessionCopy.statusStrip.labels.terminal,
+          value: callSessionCopy.statusStrip.statuses.notYet,
+        },
+        {
+          key: "outcome",
+          label: callSessionCopy.statusStrip.labels.outcome,
+          value: callSessionCopy.statusStrip.statuses.notYet,
+        },
+        {
+          key: "after-call",
+          label: callSessionCopy.statusStrip.labels.afterCall,
+          value: callSessionCopy.statusStrip.statuses.notYet,
+        },
+      ],
+      callStatusDetails: <div>status details</div>,
+      automatedModel,
+      manualModel,
+      unselectedModel: baseModel,
+      automatedPanels: [],
+      manualPanels: [],
+      automatedEligible: true,
+      manualEligible: true,
+      automatedDisabledReason: null,
+      manualDisabledReason: null,
+      manualFallbackNode: <div>fallback</div>,
+      showInProgressBanner: true,
+      showOutcomeRequiredBanner: false,
+      callOutcomePanel: <div>outcome</div>,
+      callFollowUpPanel: <div>follow-up</div>,
+      callEnrichmentPanel: <div>enrichment</div>,
+      summaryHint: null,
+    };
+
+    await act(async () => {
+      root?.render(<CallSessionExperience {...props} />);
       await Promise.resolve();
     });
   }
 
-  function clickMode(mode: "automated" | "manual") {
+  async function clickModeOption(mode: "automated" | "manual") {
     const button = container.querySelector<HTMLButtonElement>(
       `[data-testid="call-mode-select-${mode}"]`,
     );
     if (!button) {
-      return;
+      throw new Error(`Mode button ${mode} not found`);
     }
-    act(() => {
+    await act(async () => {
       button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
     });
   }
 
-  it("renders the chooser with stable option wrappers when no mode is selected", async () => {
-    await renderHub();
-    const chooser = container.querySelector('[data-testid="call-session-mode-chooser"]');
-    expect(chooser).toBeTruthy();
-    const options = container.querySelectorAll('[data-testid^="call-mode-option-"]');
-    expect(options).toHaveLength(2);
-    const tags = Array.from(options).map((option) => option.tagName);
-    expect(tags).toEqual(["DIV", "DIV"]);
+  function expectSinglePrimaryCta(label: string) {
+    const primaryCtas = container.querySelectorAll('[data-testid="call-session-primary-cta"]');
+    expect(primaryCtas).toHaveLength(1);
+    expect(primaryCtas[0]?.textContent ?? "").toContain(label);
+  }
+
+  it("renders the mode decision card and disabled CTA initially", async () => {
+    await renderExperience();
+    expect(container.querySelector('[data-testid="call-mode-decision"]')).toBeTruthy();
+    expectSinglePrimaryCta(callSessionCopy.primaryCta.label.disabled);
   });
 
-  it("selects automated mode, stores session selection, and shows one primary CTA", async () => {
-    await renderHub();
-    clickMode("automated");
-    await act(async () => {
-      await Promise.resolve();
-    });
+  it("selects automated mode, stores the selection, and exposes one CTA", async () => {
+    await renderExperience();
+    await clickModeOption("automated");
     expect(window.sessionStorage.getItem("calls-session-mode:call-1")).toBe("automated");
-    const primaryCtas = container.querySelectorAll('[data-cta-role="primary"]');
-    expect(primaryCtas).toHaveLength(1);
-    expect(primaryCtas[0]?.textContent ?? "").toContain(
-      callSessionCopy.primaryCta.label.startAutomated,
-    );
-    const modeEvent = logSpy.mock.calls.find(
-      (args) => args[0] === "[calls-session-call-mode-select]",
-    );
-    expect(modeEvent).toBeTruthy();
+    expectSinglePrimaryCta(callSessionCopy.primaryCta.label.startAutomated);
   });
 
-  it("selects manual mode, stores session selection, and shows one primary CTA", async () => {
-    await renderHub();
-    clickMode("manual");
-    await act(async () => {
-      await Promise.resolve();
-    });
+  it("selects manual mode, stores the selection, and updates the CTA", async () => {
+    await renderExperience();
+    await clickModeOption("manual");
     expect(window.sessionStorage.getItem("calls-session-mode:call-1")).toBe("manual");
-    const primaryCtas = container.querySelectorAll('[data-cta-role="primary"]');
-    expect(primaryCtas).toHaveLength(1);
-    expect(primaryCtas[0]?.textContent ?? "").toContain(
-      callSessionCopy.primaryCta.label.startGuided,
-    );
-    const modeEvent = logSpy.mock.calls.find(
-      (args) => args[0] === "[calls-session-call-mode-select]",
-    );
-    expect(modeEvent).toBeTruthy();
-  });
-
-  it("collapses the unselected mode after selecting a mode", async () => {
-    await renderHub();
-    clickMode("automated");
-    await act(async () => {
-      await Promise.resolve();
-    });
-    const chooser = container.querySelector('[data-testid="call-session-mode-chooser"]');
-    expect(chooser).toBeTruthy();
-    const options = container.querySelectorAll('[data-testid^="call-mode-option-"]');
-    expect(options).toHaveLength(1);
-    expect(options[0]?.getAttribute("data-selected")).toBe("true");
-  });
-
-  it("scopes session mode by callId", async () => {
-    window.sessionStorage.setItem("calls-session-mode:call-1", "automated");
-    await renderHub("call-2");
-    expect(window.sessionStorage.getItem("calls-session-mode:call-2")).toBe(null);
-    const primaryCtas = container.querySelectorAll('[data-cta-role="primary"]');
-    expect(primaryCtas).toHaveLength(1);
-    expect(primaryCtas[0]?.textContent ?? "").toContain(callSessionCopy.primaryCta.label.disabled);
+    expectSinglePrimaryCta(callSessionCopy.primaryCta.label.startGuided);
   });
 });

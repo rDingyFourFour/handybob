@@ -1,10 +1,12 @@
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Window } from "happy-dom";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
-import CallWorkspaceCard from "@/app/(app)/calls/[id]/CallWorkspaceCard";
-import CallManualNumberCard from "@/app/(app)/calls/[id]/CallManualNumberCard";
 import CallSessionPage from "@/app/(app)/calls/[id]/page";
+import CallManualNumberCard from "@/app/(app)/calls/[id]/CallManualNumberCard";
+import CallWorkspaceHost from "@/app/(app)/calls/[id]/CallWorkspaceHost";
 import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
@@ -32,6 +34,8 @@ vi.mock("@/lib/domain/workspaces", async () => {
 
 describe("Call session workspace modes", () => {
   let supabaseState = setupSupabaseMock();
+  let container: HTMLDivElement;
+  let root: Root | null = null;
 
   beforeEach(() => {
     supabaseState = setupSupabaseMock();
@@ -46,6 +50,19 @@ describe("Call session workspace modes", () => {
         role: "owner",
       },
     });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    if (root) {
+      act(() => {
+        root?.unmount();
+      });
+      root = null;
+    }
+    container.remove();
   });
 
   it("renders a single workspace surface on the call session page", async () => {
@@ -94,17 +111,11 @@ describe("Call session workspace modes", () => {
     const window = new Window();
     window.document.body.innerHTML = markup;
 
-    const workspaceCards = window.document.querySelectorAll(
-      '[data-testid="call-workspace-card"]',
-    );
-    const guidedWorkspaceCards = window.document.querySelectorAll(
-      '[data-testid="guided-call-workspace"]',
-    );
+    const workspaceCards = window.document.querySelectorAll("#call-workspace");
     expect(workspaceCards).toHaveLength(1);
-    expect(guidedWorkspaceCards).toHaveLength(0);
   });
 
-  it("renders manual tools only when manual mode is active", () => {
+  it("renders manual tools only when manual mode is active", async () => {
     const manualPanel = (
       <CallManualNumberCard
         workspaceId="workspace-1"
@@ -117,37 +128,47 @@ describe("Call session workspace modes", () => {
     );
     const automatedPanel = <div>Automated-only tools</div>;
 
-    const manualMarkup = renderToStaticMarkup(
-      <CallWorkspaceCard
-        callId="call-1"
-        workspaceId="workspace-1"
-        jobId="job-1"
-        customerId="customer-1"
-        selectedMode="manual"
-        automatedEligible
-        manualEligible
-        automatedPanels={[{ id: "automated-tools", node: automatedPanel }]}
-        manualPanels={[{ id: "manual-tools", node: manualPanel }]}
-      />,
-    );
-    expect(manualMarkup).toContain(callSessionCopy.manualTools.copyPhone);
-    expect(manualMarkup).not.toContain("Automated-only tools");
+    await act(async () => {
+      root?.render(
+        <CallWorkspaceHost
+          mode="manual"
+          workspaceId="workspace-1"
+          callId="call-1"
+          jobId="job-1"
+          customerId="customer-1"
+          automatedEligible
+          manualEligible
+          automatedPanels={[{ id: "automated-tools", node: automatedPanel }]}
+          manualPanels={[{ id: "manual-tools", node: manualPanel }]}
+          manualFallbackNode={<div>fallback</div>}
+        />,
+      );
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain(callSessionCopy.manualTools.copyPhone);
+    expect(container.textContent).not.toContain("Automated-only tools");
 
-    const automatedMarkup = renderToStaticMarkup(
-      <CallWorkspaceCard
-        callId="call-1"
-        workspaceId="workspace-1"
-        jobId="job-1"
-        customerId="customer-1"
-        selectedMode="automated"
-        automatedEligible
-        manualEligible
-        automatedPanels={[{ id: "automated-tools", node: automatedPanel }]}
-        manualPanels={[{ id: "manual-tools", node: manualPanel }]}
-      />,
-    );
-    expect(automatedMarkup).not.toContain(callSessionCopy.manualTools.copyPhone);
-    expect(automatedMarkup).toContain("Automated-only tools");
+    await act(async () => {
+      root?.unmount();
+      root = createRoot(container);
+      root.render(
+        <CallWorkspaceHost
+          mode="automated"
+          workspaceId="workspace-1"
+          callId="call-1"
+          jobId="job-1"
+          customerId="customer-1"
+          automatedEligible
+          manualEligible
+          automatedPanels={[{ id: "automated-tools", node: automatedPanel }]}
+          manualPanels={[{ id: "manual-tools", node: manualPanel }]}
+          manualFallbackNode={<div>fallback</div>}
+        />,
+      );
+      await Promise.resolve();
+    });
+    expect(container.textContent).not.toContain(callSessionCopy.manualTools.copyPhone);
+    expect(container.textContent).toContain("Automated-only tools");
   });
 
   it("renders follow-up controls only inside the wrap-up card", async () => {
@@ -212,11 +233,10 @@ describe("Call session workspace modes", () => {
     const window = new Window();
     window.document.body.innerHTML = markup;
 
-    const followupCards = window.document.querySelectorAll("#askbob-after-call");
     const wrapUpCard = window.document.querySelector('[data-testid="call-wrap-up-card"]');
-    const callControlCard = window.document.querySelector('[data-testid="call-control-card"]');
-    expect(followupCards).toHaveLength(1);
-    expect(wrapUpCard?.querySelector("#askbob-after-call")).toBeTruthy();
-    expect(callControlCard?.querySelector("#askbob-after-call")).toBeFalsy();
+    const wrapUpFollowups = wrapUpCard?.querySelectorAll("#askbob-after-call") ?? [];
+    expect(wrapUpFollowups).toHaveLength(1);
+    const allFollowups = window.document.querySelectorAll("#askbob-after-call");
+    expect(allFollowups).toHaveLength(wrapUpFollowups.length);
   });
 });

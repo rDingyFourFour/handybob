@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MaterialsSummaryContext } from "@/components/askbob/AskBobMaterialsPanel";
 
 const pushMock = vi.fn();
 
@@ -13,6 +14,7 @@ vi.mock("next/navigation", () => ({
 let capturedPanelProps: Record<string, unknown> | null = null;
 let capturedFollowupProps: Record<string, unknown> | null = null;
 let capturedContainerProps: Record<string, unknown> | null = null;
+let capturedMaterialsProps: Record<string, unknown> | null = null;
 
 vi.mock("@/components/askbob/AskBobCallAssistPanel", () => ({
   __esModule: true,
@@ -35,6 +37,14 @@ vi.mock("@/components/askbob/JobAskBobContainer", () => ({
   default: (props: Record<string, unknown>) => {
     capturedContainerProps = props;
     return <div data-testid="mock-container" />;
+  },
+}));
+
+vi.mock("@/components/askbob/AskBobMaterialsPanel", () => ({
+  __esModule: true,
+  default: (props: Record<string, unknown>) => {
+    capturedMaterialsProps = props;
+    return <div data-testid="mock-materials" />;
   },
 }));
 
@@ -254,5 +264,60 @@ describe("JobAskBobFlow wiring", () => {
     expect(capturedPanelProps?.stepCompleted).toBe(false);
     expect(capturedFollowupProps?.stepCollapsed).toBe(true);
     expect(capturedPanelProps?.stepCollapsed).toBe(false);
+  });
+
+  it("handles materials summary updates without throwing due to missing call script persona setter", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { default: JobAskBobFlow } = await import("@/components/askbob/JobAskBobFlow");
+    await act(async () => {
+      root?.render(
+        <JobAskBobFlow
+          workspaceId="workspace-1"
+          userId="user-1"
+          jobId="job-1"
+          customerId="customer-1"
+          customerDisplayName="Customer"
+          customerPhoneNumber="+15551234567"
+          jobDescription="desc"
+          jobTitle="title"
+          askBobLastTaskLabel={null}
+          askBobLastUsedAtDisplay={null}
+          askBobLastUsedAtIso={null}
+          askBobRunsSummary={null}
+          initialLastQuoteId={null}
+          lastQuoteCreatedAt={null}
+          lastQuoteCreatedAtFriendly={null}
+          initialDiagnoseSnapshot={null}
+          initialMaterialsSnapshot={null}
+          initialQuoteSnapshot={null}
+          initialFollowupSnapshot={{
+            recommendedAction: "Call to check in",
+            rationale: "Need an update",
+            steps: [],
+            shouldSendMessage: false,
+            shouldScheduleVisit: false,
+            shouldCall: true,
+            shouldWait: false,
+            modelLatencyMs: 0,
+            callRecommended: true,
+            callPurpose: "Explain quote",
+            callTone: "friendly and confident",
+          }}
+          lastQuoteSummary={null}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    expect(capturedMaterialsProps).toBeTruthy();
+    const context: MaterialsSummaryContext = { materialsSummary: "Updated summary" };
+    await act(async () => {
+      expect(() =>
+        capturedMaterialsProps?.onMaterialsSummaryChange?.(context),
+      ).not.toThrow();
+      await Promise.resolve();
+    });
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
   });
 });

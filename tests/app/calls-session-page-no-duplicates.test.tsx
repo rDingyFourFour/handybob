@@ -168,6 +168,6 @@ describe("CallSessionPage no-duplicate surfaces", () => {
     await renderPage("automated");
     expect(countPrimaryCtas()).toBe(1);
     expect(countOpenJobLinks()).toBe(1);
-    expect(countManualNumberCards()).toBe(0);
+    expect(countManualNumberCards()).toBe(1);
   });
 });

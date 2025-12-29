@@ -149,9 +149,9 @@ describe("CallSessionPage structure regression", () => {
   }
 
   function assertCoreSections() {
-    expect(container.querySelector('[data-testid="call-control-card"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="call-session-mode-chooser"]')).toBeTruthy();
-    expect(container.querySelector('[data-testid="call-workspace-card"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="call-mode-decision"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="call-status-compact-card"]')).toBeTruthy();
+    expect(container.querySelector("#call-workspace")).toBeTruthy();
     expect(container.querySelector('[data-testid="call-wrap-up-card"]')).toBeTruthy();
   }
 

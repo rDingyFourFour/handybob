@@ -370,7 +370,7 @@ export default function AskBobAfterCallCard({
   };
 
   return (
-    <HbCard id="askbob-after-call" className="space-y-3">
+    <HbCard className="space-y-3">
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
           {callSessionCopy.wrapUp.afterCall.badge}

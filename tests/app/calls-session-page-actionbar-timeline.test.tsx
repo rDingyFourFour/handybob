@@ -106,18 +106,15 @@ describe("CallSessionPage action bar and status strip", () => {
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-1" }) });
     const markup = renderToStaticMarkup(element);
 
-    expect(markup).toContain('data-testid="call-control-card"');
-    expect(markup).toContain('data-testid="call-control-card-status-strip"');
-    expect(markup).toContain('data-testid="call-status-strip"');
+    expect(markup).toContain('data-testid="call-primary-action-bar"');
+    expect(markup).toContain('data-testid="call-status-compact-card"');
+    expect(markup).toContain('data-testid="call-status-details"');
     expect(markup).toContain('data-testid="call-session-primary-cta"');
     expect(markup).toContain(callSessionCopy.primaryCta.label.disabled);
-    expect(markup).toContain('data-testid="call-workspace-card"');
-    expect(markup).toContain('data-testid="call-workspace-panel-unselected"');
+    expect(markup).toContain('id="call-workspace"');
     expect(markup).toContain('data-testid="call-wrap-up-card"');
     expect(markup).not.toContain("Agent tools");
-    expect(markup).not.toContain('data-testid="call-session-action-bar"');
     expect(markup).not.toContain('data-testid="call-session-timeline"');
-    expect(markup).not.toContain('data-testid="call-control-card-timeline"');
 
     const window = new Window();
     window.document.body.innerHTML = markup;
@@ -219,11 +216,11 @@ describe("CallSessionPage action bar and status strip", () => {
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-terminal" }) });
     const markup = renderToStaticMarkup(element);
 
-    expect(markup).toContain('data-testid="call-control-card"');
-    expect(markup).toContain('data-testid="call-control-card-status-strip"');
+    expect(markup).toContain('data-testid="call-primary-action-bar"');
+    expect(markup).toContain('data-testid="call-status-compact-card"');
     expect(markup).toContain('data-cta-kind="disabled"');
     expect(markup).toContain(callSessionCopy.primaryCta.label.disabled);
-    expect(markup).not.toContain('data-testid="call-session-action-bar"');
+    expect(markup).not.toContain('data-testid="call-status-strip"');
 
   });
 
@@ -396,16 +393,16 @@ describe("CallSessionPage action bar and status strip", () => {
     const fullWindow = new Window();
     fullWindow.document.body.innerHTML = fullMarkup;
 
-    const emptyWrapper = emptyWindow.document.querySelector('[data-testid="call-status-strip"]');
-    const fullWrapper = fullWindow.document.querySelector('[data-testid="call-status-strip"]');
+    const emptyWrapper = emptyWindow.document.querySelector(
+      '[data-testid="call-status-compact-card"]',
+    );
+    const fullWrapper = fullWindow.document.querySelector(
+      '[data-testid="call-status-compact-card"]',
+    );
     expect(emptyWrapper?.tagName).toBe(fullWrapper?.tagName);
 
-    const emptyItems = emptyWindow.document.querySelectorAll(
-      '[data-testid^="call-status-strip-"]',
-    );
-    const fullItems = fullWindow.document.querySelectorAll(
-      '[data-testid^="call-status-strip-"]',
-    );
+    const emptyItems = emptyWindow.document.querySelectorAll('[data-testid^="call-status-chip-"]');
+    const fullItems = fullWindow.document.querySelectorAll('[data-testid^="call-status-chip-"]');
     expect(emptyItems).toHaveLength(fullItems.length);
   });
 });

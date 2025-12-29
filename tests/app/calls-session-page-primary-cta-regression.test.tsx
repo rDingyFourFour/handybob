@@ -161,10 +161,8 @@ describe("CallSessionPage primary CTA regression", () => {
 
   it("renders a single workspace root and primary CTA", async () => {
     await renderWithCall({});
-    const workspaceRoots = container.querySelectorAll('[data-testid="call-workspace-card"]');
-    const guidedRoots = container.querySelectorAll('[data-testid="guided-call-workspace"]');
+    const workspaceRoots = container.querySelectorAll("#call-workspace");
     expect(workspaceRoots).toHaveLength(1);
-    expect(guidedRoots).toHaveLength(0);
     const primaryCtas = container.querySelectorAll('[data-cta-role="primary"]');
     expect(primaryCtas).toHaveLength(1);
   });

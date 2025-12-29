@@ -694,7 +694,6 @@ export default function JobAskBobFlow({
   const resetCallScriptState = () => {
     setCallScriptSummary(null);
     setCallScriptCollapsed(false);
-    setCallScriptPersona(null);
     setCallScriptResetToken((value) => value + 1);
   };
 

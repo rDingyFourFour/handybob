@@ -134,7 +134,7 @@ describe("CallSessionPage inbound flow", () => {
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-2" }) });
     const markup = renderToStaticMarkup(element);
 
-    expect(markup).toContain('data-testid="call-workspace-panel-unselected"');
+    expect(markup).toContain('data-testid="call-workspace-locked"');
     expect(markup).not.toContain("Link call context");
     expect(markup).not.toContain("Coaching for Roof repair");
   });
