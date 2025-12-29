@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 
 import HbCard from "@/components/ui/hb-card";
 import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
-import type { AskBobFollowupSnapshotPayload } from "@/lib/domain/askbob/types";
 import type { JobProgressStep, NextStepResult, NextStepStatusHints } from "@/lib/domain/askbob/nextStep";
 
 type ProgressStepInfo = {
@@ -17,62 +16,19 @@ type ProgressStepInfo = {
 type AskBobSummaryCardProps = {
   jobId: string;
   nextStep: NextStepResult;
-  hasDiagnoseSnapshot: boolean;
-  hasMaterialsSnapshot: boolean;
-  hasQuoteSnapshot: boolean;
-  followupSnapshot: AskBobFollowupSnapshotPayload | null;
-  hasCallSummary: boolean;
   progressSteps: ProgressStepInfo[];
   statusHints: NextStepStatusHints;
+  collapsedCopy: string;
 };
 
 export default function AskBobSummaryCard({
   jobId,
   nextStep,
-  hasDiagnoseSnapshot,
-  hasMaterialsSnapshot,
-  hasQuoteSnapshot,
-  followupSnapshot,
-  hasCallSummary,
   progressSteps,
   statusHints,
+  collapsedCopy,
 }: AskBobSummaryCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-
-  const artifactLabels = useMemo(() => {
-    const labels: string[] = [];
-    if (hasDiagnoseSnapshot) {
-      labels.push("Diagnosis");
-    }
-    if (hasMaterialsSnapshot) {
-      labels.push("Materials");
-    }
-    if (hasQuoteSnapshot) {
-      labels.push("Quote");
-    }
-    if (followupSnapshot) {
-      labels.push("Follow-up plan");
-    }
-    if (hasCallSummary) {
-      labels.push("Call summary");
-    }
-    return labels;
-  }, [hasCallSummary, hasDiagnoseSnapshot, hasMaterialsSnapshot, hasQuoteSnapshot, followupSnapshot]);
-
-  const collapsedCopy = useMemo(() => {
-    if (artifactLabels.length === 0) {
-      return "AskBob hasn’t generated any artifacts for this job yet.";
-    }
-    if (artifactLabels.length === 1) {
-      return `AskBob has generated ${artifactLabels[0]}.`;
-    }
-    if (artifactLabels.length === 2) {
-      return `AskBob has generated ${artifactLabels[0]} and ${artifactLabels[1]}.`;
-    }
-    const allButLast = artifactLabels.slice(0, -1).join(", ");
-    const lastLabel = artifactLabels[artifactLabels.length - 1];
-    return `AskBob has generated ${allButLast}, and ${lastLabel}.`;
-  }, [artifactLabels]);
 
   const toggleExpanded = () => {
     setIsExpanded((value) => {

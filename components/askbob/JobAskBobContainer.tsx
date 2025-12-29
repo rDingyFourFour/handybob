@@ -18,10 +18,9 @@ type StageStatusItem = {
 type JobAskBobContainerProps = {
   workspaceId: string;
   jobId: string;
-  askBobLastTaskLabel?: string | null;
-  askBobLastUsedAtDisplay?: string | null;
-  askBobLastUsedAtIso?: string | null;
-  askBobRunsSummary?: string | null;
+  hudActivityLine: string;
+  hudActivityTitle?: string | null;
+  hudScopeHint?: string | null;
   stageStatusItems: StageStatusItem[];
   nextActionLabel: string;
   nextActionMessage: string;
@@ -37,10 +36,9 @@ type JobAskBobContainerProps = {
 export default function JobAskBobContainer({
   workspaceId,
   jobId,
-  askBobLastTaskLabel,
-  askBobLastUsedAtDisplay,
-  askBobLastUsedAtIso,
-  askBobRunsSummary,
+  hudActivityLine,
+  hudActivityTitle,
+  hudScopeHint,
   stageStatusItems,
   nextActionLabel,
   nextActionMessage,
@@ -76,10 +74,9 @@ export default function JobAskBobContainer({
           AskBob reviews this job’s title and description to help you diagnose issues, list materials, draft quotes, and plan follow-ups. Treat every suggestion as approximate and review the details before sharing them with a customer.
         </p>
         <JobAskBobHud
-          lastTaskLabel={askBobLastTaskLabel}
-          lastUsedAtDisplay={askBobLastUsedAtDisplay}
-          lastUsedAtIso={askBobLastUsedAtIso}
-          runsSummary={askBobRunsSummary}
+          activityLine={hudActivityLine}
+          activityLineTitle={hudActivityTitle}
+          scopeHint={hudScopeHint}
         />
       </div>
       <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 px-4 py-3">

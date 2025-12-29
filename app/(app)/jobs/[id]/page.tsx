@@ -9,7 +9,7 @@ import { createServerClient } from "@/utils/supabase/server";
 import { mapWorkspaceResultToRouteOutcome, resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
-import { formatCurrency, formatFriendlyDateTime } from "@/utils/timeline/formatters";
+import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
 import {
   getJobAskBobHudSummary,
   getJobAskBobSnapshotsForJob,
@@ -28,17 +28,13 @@ import JobInvoiceSection from "@/app/(app)/jobs/[id]/JobInvoiceSection";
 import JobBriefCard from "@/app/(app)/jobs/[id]/JobBriefCard";
 import NextStepCard from "@/app/(app)/jobs/[id]/NextStepCard";
 import AskBobSummaryCard from "@/app/(app)/jobs/[id]/AskBobSummaryCard";
-import {
-  loadCallHistoryForJob,
-  computeCallSummarySignals,
-  describeCallOutcome,
-  type CallSummarySignals,
-} from "@/lib/domain/askbob/callHistory";
+import { loadCallHistoryForJob, computeCallSummarySignals } from "@/lib/domain/askbob/callHistory";
 import { getLatestCallOutcomeForJob } from "@/lib/domain/calls/latestCallOutcome";
 import {
   getInvoiceForJob,
   type InvoiceSnapshotRow as JobInvoiceSnapshotRow,
 } from "@/lib/domain/invoices/getInvoiceForJob";
+import { deriveJobDetailsAskBobDerivedCopy } from "@/lib/domain/askbob/jobDetailsDerivedCopy";
 import { deriveNextStepForJobDetails, type NextStepResult } from "@/lib/domain/askbob/nextStep";
 import { PROGRESS_STEPS } from "@/app/(app)/jobs/[id]/progressSteps";
 
@@ -140,31 +136,6 @@ function formatDate(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function buildCallHistoryHint(signals: CallSummarySignals): string {
-  const attemptPlural = signals.totalAttempts === 1 ? "attempt" : "attempts";
-  const parts = [
-    `${signals.totalAttempts} ${attemptPlural}`,
-    `${signals.answeredCount} answered`,
-    `${signals.voicemailCount} voicemail`,
-  ];
-  const outcomeLabel = describeCallOutcome(signals.lastOutcome);
-  if (outcomeLabel) {
-    parts.push(`last outcome ${outcomeLabel}`);
-  }
-  if (signals.lastAttemptAt) {
-    const friendlyLastAttempt = formatFriendlyDateTime(signals.lastAttemptAt, "");
-    if (friendlyLastAttempt) {
-      parts.push(`last attempt ${friendlyLastAttempt}`);
-    }
-  }
-  const windowLabel =
-    signals.bestGuessRetryWindow && signals.bestGuessRetryWindow.trim()
-      ? `Best retry window: ${signals.bestGuessRetryWindow}`
-      : null;
-  const baseHint = parts.join(" · ");
-  return [baseHint, windowLabel].filter(Boolean).join(" · ");
 }
 
 function fallbackCard(title: string, body: string, action?: ReactNode) {
@@ -292,25 +263,6 @@ export default async function JobDetailPage({
   } catch (error) {
     console.error("[job-detail] Failed to load AskBob HUD summary", error);
   }
-  const askBobLastTaskLabel = askBobHudSummary.lastTaskLabel;
-  const askBobLastUsedAtIso = askBobHudSummary.lastUsedAt;
-  const friendlyDate =
-    askBobLastUsedAtIso ? formatFriendlyDateTime(askBobLastUsedAtIso, "") : null;
-  const askBobLastUsedAtDisplay = friendlyDate?.trim() ? friendlyDate : null;
-  let askBobRunsSummary: string | null = null;
-  if (askBobHudSummary.totalRunsCount > 1) {
-    const baseText = `${askBobHudSummary.totalRunsCount} AskBob runs`;
-    const tasks = askBobHudSummary.tasksSeen;
-    if (tasks.length > 0) {
-      const visible = tasks.slice(0, 3);
-      const remainder = tasks.length - visible.length;
-      const suffix = remainder > 0 ? `, +${remainder} more` : "";
-      askBobRunsSummary = `${baseText} (${visible.join(", ")}${suffix})`;
-    } else {
-      askBobRunsSummary = baseText;
-    }
-  }
-
   let askBobSnapshots = {
     diagnoseSnapshot: null,
     materialsSnapshot: null,
@@ -410,17 +362,6 @@ export default async function JobDetailPage({
   const lastQuoteCreatedAtFriendly = lastQuoteCreatedAt
     ? formatFriendlyDateTime(lastQuoteCreatedAt, "")
     : null;
-  let lastQuoteSummary: string | null = null;
-  if (latestQuote) {
-    const summaryParts = ["Latest quote"];
-    if (latestQuote.total != null) {
-      summaryParts.push(`total ${formatCurrency(latestQuote.total)}`);
-    }
-    if (lastQuoteCreatedAtFriendly) {
-      summaryParts.push(lastQuoteCreatedAtFriendly);
-    }
-    lastQuoteSummary = summaryParts.join(" · ");
-  }
   if (!quotesError) {
     const aiCount = quotes.reduce(
       (count, quote) => (quote.smart_quote_used ? count + 1 : count),
@@ -512,11 +453,6 @@ export default async function JobDetailPage({
   }
   const latestCall = callHistory[0] ?? null;
   const callSummarySignals = computeCallSummarySignals(callHistory);
-  const callHistoryHint =
-    callSummarySignals.totalAttempts > 0
-      ? buildCallHistoryHint(callSummarySignals)
-      : null;
-
   let latestCallOutcome = null;
   try {
     latestCallOutcome = await getLatestCallOutcomeForJob(supabase, workspace.id, job.id);
@@ -553,6 +489,17 @@ export default async function JobDetailPage({
     invoiceStatus,
     invoicePresent,
   });
+  const hasFollowupSnapshot = Boolean(followupSnapshot);
+  const derivedAskBobCopy = deriveJobDetailsAskBobDerivedCopy({
+    nextStep,
+    hudSummary: askBobHudSummary,
+    hasDiagnoseSnapshot,
+    hasMaterialsSnapshot,
+    hasQuoteSnapshot,
+    hasFollowupSnapshot,
+    hasCallSummary,
+    callSummarySignals,
+  });
   console.log("[job-details-next-step-rendered]", {
     jobId: job.id,
     stepType: nextStep.stepType,
@@ -560,8 +507,8 @@ export default async function JobDetailPage({
   const progressStepMatch = PROGRESS_STEPS.find((step) => step.key === nextStep.stepType);
   const jobBriefStateLine =
     progressStepMatch !== undefined
-      ? nextStep.statusHints[progressStepMatch.key]
-      : nextStep.statusHints.quote;
+      ? derivedAskBobCopy.progressRowStatuses[progressStepMatch.key]
+      : derivedAskBobCopy.progressRowStatuses.quote;
   const defaultProgressRow =
     progressStepMatch !== undefined ? progressStepMatch.key : null;
 
@@ -618,13 +565,9 @@ export default async function JobDetailPage({
         <AskBobSummaryCard
           jobId={job.id}
           nextStep={nextStep}
-          hasDiagnoseSnapshot={hasDiagnoseSnapshot}
-          hasMaterialsSnapshot={hasMaterialsSnapshot}
-          hasQuoteSnapshot={hasQuoteSnapshot}
-          followupSnapshot={followupSnapshot ?? null}
-          hasCallSummary={hasCallSummary}
+          collapsedCopy={derivedAskBobCopy.askBobSummaryCollapsedLine}
           progressSteps={PROGRESS_STEPS}
-          statusHints={nextStep.statusHints}
+          statusHints={derivedAskBobCopy.progressRowStatuses}
         />
       </section>
       <section data-testid="job-details-job-progress" className="space-y-4">
@@ -656,17 +599,15 @@ export default async function JobDetailPage({
           materialsLatestSnapshotVersion={materialsLatestVersion}
           quoteLatestSnapshotVersion={quoteLatestVersion}
           initialFollowupSnapshot={followupSnapshot ?? undefined}
-          lastQuoteSummary={lastQuoteSummary}
-          callHistoryHint={callHistoryHint}
+          hudActivityLine={derivedAskBobCopy.askBobHudActivityLine}
+          hudActivityTitle={derivedAskBobCopy.askBobHudActivityTitle}
+          hudScopeHint={derivedAskBobCopy.askBobHudScopeHint}
+          callHistoryHint={derivedAskBobCopy.callHistoryHint}
           latestCallOutcome={latestCallOutcome}
-        progressSteps={PROGRESS_STEPS}
-        statusHints={nextStep.statusHints}
-        defaultProgressStep={defaultProgressRow}
-        showIntakePanel={false}
-        askBobLastTaskLabel={askBobLastTaskLabel}
-        askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
-        askBobLastUsedAtIso={askBobLastUsedAtIso}
-        askBobRunsSummary={askBobRunsSummary}
+          progressSteps={PROGRESS_STEPS}
+          statusHints={derivedAskBobCopy.progressRowStatuses}
+          defaultProgressStep={defaultProgressRow}
+          showIntakePanel={false}
         />
       </section>
       <section className="space-y-6" data-testid="job-details-secondary-content">

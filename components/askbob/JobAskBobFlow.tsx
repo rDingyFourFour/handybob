@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import AskBobSection from "@/components/askbob/AskBobSection";
@@ -42,6 +42,7 @@ import {
   PUBLIC_BOOKING_HANDOFF_SESSION_KEY,
 } from "@/lib/domain/publicBookingHandoff";
 import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
+import { buildJobProgressRowCopyMap } from "@/lib/domain/askbob/jobDetailsDerivedCopy";
 import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
 import type { JobProgressStep, NextStepStatusHints } from "@/lib/domain/askbob/nextStep";
 import type { ProgressStepInfo } from "@/app/(app)/jobs/[id]/progressSteps";
@@ -95,6 +96,9 @@ type JobAskBobFlowProps = {
   askBobLastUsedAtDisplay?: string | null;
   askBobLastUsedAtIso?: string | null;
   askBobRunsSummary?: string | null;
+  hudActivityLine?: string;
+  hudActivityTitle?: string | null;
+  hudScopeHint?: string | null;
   initialLastQuoteId?: string | null;
   lastQuoteCreatedAt?: string | null;
   lastQuoteCreatedAtFriendly?: string | null;
@@ -200,10 +204,9 @@ export default function JobAskBobFlow({
   jobTitle,
   jobStatus,
   showIntakePanel = true,
-  askBobLastTaskLabel,
-  askBobLastUsedAtDisplay,
-  askBobLastUsedAtIso,
-  askBobRunsSummary,
+  hudActivityLine = "No AskBob activity recorded yet for this job.",
+  hudActivityTitle = null,
+  hudScopeHint = null,
   initialLastQuoteId,
   lastQuoteCreatedAt,
   lastQuoteCreatedAtFriendly,
@@ -217,7 +220,7 @@ export default function JobAskBobFlow({
   materialsLatestSnapshotVersion = null,
   quoteLatestSnapshotVersion = null,
   initialFollowupSnapshot,
-  callHistoryHint,
+  callHistoryHint = null,
   latestCallOutcome,
   progressSteps = PROGRESS_STEPS,
   statusHints = DEFAULT_STATUS_HINTS,
@@ -782,6 +785,15 @@ export default function JobAskBobFlow({
     ),
   };
 
+  const progressRowCopy = useMemo(
+    () =>
+      buildJobProgressRowCopyMap({
+        statuses: statusHints,
+        callHistoryHint,
+      }),
+    [callHistoryHint, statusHints],
+  );
+
   const nextActionMessage =
     followupRecommendation?.recommendedActionLabel?.trim() || jobPipelineNextAction;
   const nextActionRationale = followupRecommendation?.rationale ?? null;
@@ -883,10 +895,9 @@ export default function JobAskBobFlow({
         <JobAskBobContainer
           workspaceId={workspaceId}
           jobId={jobId}
-          askBobLastTaskLabel={askBobLastTaskLabel}
-          askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
-          askBobLastUsedAtIso={askBobLastUsedAtIso}
-          askBobRunsSummary={askBobRunsSummary}
+          hudActivityLine={hudActivityLine}
+          hudActivityTitle={hudActivityTitle}
+          hudScopeHint={hudScopeHint}
           stageStatusItems={stageStatusItems}
           nextActionLabel={nextActionLabel}
           nextActionMessage={nextActionMessage}
@@ -898,12 +909,12 @@ export default function JobAskBobFlow({
         />
       ) : null}
       <div className="space-y-8">
-        <JobProgressAccordion
-          progressSteps={progressSteps}
-          statusHints={statusHints}
-          defaultExpandedStep={defaultProgressStep ?? null}
-          rowContent={progressRowContent}
-        />
+      <JobProgressAccordion
+        progressSteps={progressSteps}
+        rowCopyByStep={progressRowCopy}
+        defaultExpandedStep={defaultProgressStep ?? null}
+        rowContent={progressRowContent}
+      />
         {shouldShowScheduler && (
           <AskBobSection id="askbob-scheduler" testId="askbob-scheduler-section">
             <AskBobSchedulerPanel

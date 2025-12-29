@@ -82,6 +82,19 @@ export function bobifyPrimaryCtaVerb(value: string): string {
   return value;
 }
 
+export function normalizeBobStatus(value?: string | null): string {
+  return sanitizeForMessage(value ?? "");
+}
+
+export function normalizeBobCtaLabel(value?: string | null): string {
+  const trimmed = sanitizeForMessage(value ?? "");
+  if (!trimmed) {
+    return trimmed;
+  }
+  const rewritten = bobifyPrimaryCtaVerb(trimmed);
+  return sanitizeForMessage(rewritten);
+}
+
 export function containsForbiddenBobLanguage(text: string): { ok: boolean; hits: string[] } {
   const input = text ?? "";
   const hits = forbiddenBobPatterns

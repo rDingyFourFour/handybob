@@ -1,6 +1,7 @@
 "use strict";
 
 import type { AskBobFollowupSnapshotPayload } from "@/lib/domain/askbob/types";
+import { assertBobTone, normalizeBobCtaLabel, normalizeBobStatus } from "@/lib/domain/copy/bobVoice";
 import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
 
 export type JobProgressStep = "diagnose" | "materials" | "quote" | "followup" | "call";
@@ -140,6 +141,37 @@ const buildRationale = (step: NextStepType): string => {
   }
 };
 
+const JOB_PROGRESS_STEPS: JobProgressStep[] = ["diagnose", "materials", "quote", "followup", "call"];
+
+const enforceRationaleTone = (step: NextStepType, rationale: string): string => {
+  const label = rationale || jobDetailsCopy.nextStep.fallbackRationale;
+  assertBobTone(label, `nextStep.rationale.${step}`);
+  return label;
+};
+
+const enforcePrimaryCtaBobVoice = (cta: NextStepPrimaryCta | null, step: NextStepType): NextStepPrimaryCta | null => {
+  if (!cta) {
+    return null;
+  }
+  const normalizedLabel = normalizeBobCtaLabel(cta.label);
+  assertBobTone(normalizedLabel, `nextStep.primaryCta.${step}`);
+  return {
+    ...cta,
+    label: normalizedLabel,
+  };
+};
+
+const enforceStatusHintsBobVoice = (statusHints: NextStepStatusHints): NextStepStatusHints => {
+  const sanitizedHints = {} as NextStepStatusHints;
+  for (const step of JOB_PROGRESS_STEPS) {
+    const hint = statusHints[step];
+    const normalizedHint = normalizeBobStatus(hint);
+    assertBobTone(normalizedHint, `nextStep.statusHints.${step}`);
+    sanitizedHints[step] = normalizedHint;
+  }
+  return sanitizedHints;
+};
+
 export function deriveNextStepForJobDetails(input: NextStepInput): NextStepResult {
   const {
     hasDiagnoseSnapshot,
@@ -174,11 +206,11 @@ export function deriveNextStepForJobDetails(input: NextStepInput): NextStepResul
     step = "invoice";
   }
 
-  const rationale = buildRationale(step);
+  const rationale = enforceRationaleTone(step, buildRationale(step));
   return {
     stepType: step,
-    rationale: rationale || jobDetailsCopy.nextStep.fallbackRationale,
-    primaryCta: buildPrimaryAction(step),
-    statusHints: buildStatusHints(input),
+    rationale,
+    primaryCta: enforcePrimaryCtaBobVoice(buildPrimaryAction(step), step),
+    statusHints: enforceStatusHintsBobVoice(buildStatusHints(input)),
   };
 }

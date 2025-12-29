@@ -3,24 +3,23 @@
 import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
-import type {
-  JobProgressStep,
-  NextStepStatusHints,
-} from "@/lib/domain/askbob/nextStep";
+import type { JobProgressStep } from "@/lib/domain/askbob/nextStep";
+import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
+import type { JobProgressRowCopy } from "@/lib/domain/askbob/jobDetailsDerivedCopy";
 import type { ProgressStepInfo } from "@/app/(app)/jobs/[id]/progressSteps";
 
 type RowContentMap = Partial<Record<JobProgressStep, ReactNode>>;
 
 type JobProgressAccordionProps = {
   progressSteps: ProgressStepInfo[];
-  statusHints: NextStepStatusHints;
+  rowCopyByStep: Partial<Record<JobProgressStep, JobProgressRowCopy>>;
   rowContent: RowContentMap;
   defaultExpandedStep?: JobProgressStep | null;
 };
 
 export default function JobProgressAccordion({
   progressSteps,
-  statusHints,
+  rowCopyByStep,
   rowContent,
   defaultExpandedStep = null,
 }: JobProgressAccordionProps) {
@@ -77,6 +76,12 @@ export default function JobProgressAccordion({
     <div data-testid="progress-accordion" className="space-y-3">
       {progressSteps.map((step) => {
         const isExpanded = expandedStep === step.key;
+        const rowCopy = rowCopyByStep[step.key];
+        const stepLabelText =
+          rowCopy?.stepLabel ?? step.label ?? jobDetailsCopy.disabled.safeFailure;
+        const statusText = rowCopy?.statusText ?? jobDetailsCopy.disabled.safeFailure;
+        const hintText = rowCopy?.hintText ?? null;
+        const reviewLabel = rowCopy?.reviewActionLabel ?? jobDetailsCopy.progressRows.reviewAction;
         return (
           <section
             key={step.key}
@@ -89,13 +94,23 @@ export default function JobProgressAccordion({
               className="flex items-center justify-between gap-3"
             >
               <div>
-                <p className="text-sm font-semibold text-[var(--color-text-primary)]">{step.label}</p>
+                <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  {stepLabelText}
+                </p>
                 <p
                   data-testid={`progress-row-${step.key}-status`}
                   className="text-sm text-[var(--color-text-secondary)]"
                 >
-                  {statusHints[step.key]}
+                  {statusText}
                 </p>
+                {hintText ? (
+                  <p
+                    data-testid={`progress-row-${step.key}-hint`}
+                    className="text-xs text-[var(--color-text-secondary)]"
+                  >
+                    {hintText}
+                  </p>
+                ) : null}
               </div>
               <button
                 type="button"
@@ -106,7 +121,7 @@ export default function JobProgressAccordion({
                 className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
                 onClick={() => handleToggle(step.key)}
               >
-                Review
+                {reviewLabel}
               </button>
             </div>
             <div

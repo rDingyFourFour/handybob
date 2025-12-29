@@ -45,6 +45,16 @@ export const jobDetailsCopy = {
       ready: "Call ready",
     },
   },
+  progressRows: {
+    labels: {
+      diagnose: "Diagnose",
+      materials: "Materials",
+      quote: "Quote",
+      followup: "Follow-up",
+      call: "Call",
+    },
+    reviewAction: "Review",
+  },
   askBobSummary: {
     collapsedHint: "AskBob summary",
     expandedHint: "AskBob details",
@@ -54,6 +64,9 @@ export const jobDetailsCopy = {
   },
   history: {
     heading: "Job history",
+  },
+  disabled: {
+    safeFailure: "Something went wrong. Try again in a moment.",
   },
 };
 
@@ -79,9 +92,14 @@ export function validateJobDetailsCopy(): void {
       check(label, `progressStatus.${stepKey}.${statusKey}`);
     });
   });
+  Object.entries(jobDetailsCopy.progressRows.labels).forEach(([stepKey, label]) => {
+    check(label, `progressRows.labels.${stepKey}`);
+  });
+  check(jobDetailsCopy.progressRows.reviewAction, "progressRows.reviewAction");
 
   check(jobDetailsCopy.askBobSummary.collapsedHint, "askBobSummary.collapsedHint");
   check(jobDetailsCopy.askBobSummary.expandedHint, "askBobSummary.expandedHint");
   check(jobDetailsCopy.schedule.heading, "schedule.heading");
   check(jobDetailsCopy.history.heading, "history.heading");
+  check(jobDetailsCopy.disabled.safeFailure, "disabled.safeFailure");
 }

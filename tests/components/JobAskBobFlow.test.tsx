@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MaterialsSummaryContext } from "@/components/askbob/AskBobMaterialsPanel";
 import { PROGRESS_STEPS } from "@/app/(app)/jobs/[id]/progressSteps";
+import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
 
 const pushMock = vi.fn();
 
@@ -128,10 +129,21 @@ describe("JobAskBobFlow wiring", () => {
     expect(capturedAccordionProps).toBeTruthy();
     const steps = ((capturedAccordionProps?.progressSteps as Array<{ key: string }> | undefined) ?? []);
     expect(steps.map((step) => step.key)).toEqual(PROGRESS_STEPS.map((step) => step.key));
-    const statusHints = capturedAccordionProps?.statusHints as Record<string, string> | undefined;
+    const rowCopyByStep =
+      (capturedAccordionProps?.rowCopyByStep as Record<string, {
+        stepLabel?: string;
+        statusText?: string;
+        reviewActionLabel?: string;
+      }> | undefined) ?? {};
     for (const step of PROGRESS_STEPS) {
-      expect(statusHints?.[step.key]).toBeDefined();
+      const copy = rowCopyByStep[step.key];
+      expect(copy).toBeTruthy();
+      expect(copy?.statusText).toBeDefined();
+      expect(copy?.stepLabel).toBeDefined();
     }
+    expect(rowCopyByStep.diagnose?.reviewActionLabel).toBe(
+      jobDetailsCopy.progressRows.reviewAction,
+    );
     const rowContent = capturedAccordionProps?.rowContent as Record<string, unknown> | undefined;
     expect(rowContent?.followup).toBeTruthy();
     expect(rowContent?.call).toBeTruthy();
