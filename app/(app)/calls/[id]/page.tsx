@@ -44,6 +44,7 @@ import PostCallEnrichmentCard from "./PostCallEnrichmentCard";
 import CallManualNumberCard from "./CallManualNumberCard";
 import CallSessionHub from "./CallSessionHub";
 import WrapUpCard from "./WrapUpCard";
+import { type CallWorkspacePanel } from "./CallWorkspaceCard";
 import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 type CallRecord = {
@@ -983,17 +984,24 @@ export default async function CallSessionPage({
   };
 
   const showNoScriptPanel = !callScriptQuoteId;
-  const manualWorkspacePanel = (
-    <div className="space-y-4">
-      {isAskBobCallContext && (
+  const manualWorkspacePanels: CallWorkspacePanel[] = [];
+  if (isAskBobCallContext) {
+    manualWorkspacePanels.push({
+      id: "askbob-context",
+      node: (
         <AskBobCallContextStrip
           callId={call.id}
           jobId={job?.id ?? jobId}
           scriptBody={askBobScriptBody}
           scriptSummary={askBobScriptSource}
         />
-      )}
-      {showNoScriptPanel && !isAskBobCallContext && (
+      ),
+    });
+  }
+  if (showNoScriptPanel && !isAskBobCallContext) {
+    manualWorkspacePanels.push({
+      id: "no-script",
+      node: (
         <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call script</p>
           <h3 className="text-lg font-semibold text-white">No script yet</h3>
@@ -1001,8 +1009,13 @@ export default async function CallSessionPage({
             Attach a quote to generate a guided script and talking points.
           </p>
         </div>
-      )}
-      {job ? (
+      ),
+    });
+  }
+  if (job) {
+    manualWorkspacePanels.push({
+      id: "job-script",
+      node: (
         <>
           {console.log("[calls/[id]] Guided workspace context", {
             callId: call.id,
@@ -1024,12 +1037,22 @@ export default async function CallSessionPage({
             isInboundCall={isInboundCall}
           />
         </>
-      ) : (
+      ),
+    });
+  } else {
+    manualWorkspacePanels.push({
+      id: "job-missing",
+      node: (
         <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-400">
           Job record missing for this call. Please recreate the call from the job page or check your data.
         </div>
-      )}
-      {call && job && callScriptQuoteCandidate && (
+      ),
+    });
+  }
+  if (call && job && callScriptQuoteCandidate) {
+    manualWorkspacePanels.push({
+      id: "manual-how-it-works",
+      node: (
         <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">How this works</p>
           <ol className="space-y-1 text-sm text-slate-400">
@@ -1047,7 +1070,12 @@ export default async function CallSessionPage({
             </li>
           </ol>
         </div>
-      )}
+      ),
+    });
+  }
+  manualWorkspacePanels.push({
+    id: "manual-tools",
+    node: (
       <div className="space-y-2">
         <div className="space-y-1">
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
@@ -1064,7 +1092,12 @@ export default async function CallSessionPage({
           scriptSummary={scriptSummaryForManual}
         />
       </div>
-      {isInboundCall && (
+    ),
+  });
+  if (isInboundCall) {
+    manualWorkspacePanels.push({
+      id: "link-inbound-context",
+      node: (
         <LinkCallContextCard
           workspaceId={workspace.id}
           callId={call.id}
@@ -1076,8 +1109,13 @@ export default async function CallSessionPage({
           customerOptions={customerOptions}
           jobOptions={jobOptions}
         />
-      )}
-      {isInboundCall && linkedCustomerId && (
+      ),
+    });
+  }
+  if (isInboundCall && linkedCustomerId) {
+    manualWorkspacePanels.push({
+      id: "live-guidance",
+      node: (
         <AskBobLiveGuidanceCard
           workspaceId={workspace.id}
           callId={call.id}
@@ -1089,33 +1127,45 @@ export default async function CallSessionPage({
           customerName={customerName}
           jobTitle={job?.title ?? null}
         />
-      )}
-    </div>
-  );
+      ),
+    });
+  }
 
-  const automatedWorkspacePanel = (
-    <div className="space-y-4">
-      {isAskBobCallContext && (
+  const automatedWorkspacePanels: CallWorkspacePanel[] = [];
+  if (isAskBobCallContext) {
+    automatedWorkspacePanels.push({
+      id: "askbob-context",
+      node: (
         <AskBobCallContextStrip
           callId={call.id}
           jobId={job?.id ?? jobId}
           scriptBody={askBobScriptBody}
           scriptSummary={askBobScriptSource}
         />
-      )}
-      {isAskBobAutomatedCall ? (
+      ),
+    });
+  }
+  if (isAskBobAutomatedCall) {
+    automatedWorkspacePanels.push({
+      id: "automated-notes",
+      node: (
         <AutomatedCallNotesCard
           workspaceId={workspace.id}
           callId={call.id}
           initialNotes={sanitizedAutomatedNotes}
         />
-      ) : (
+      ),
+    });
+  } else {
+    automatedWorkspacePanels.push({
+      id: "automated-placeholder",
+      node: (
         <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-400">
           Automated call notes appear here when an automated session is active.
         </div>
-      )}
-    </div>
-  );
+      ),
+    });
+  }
 
   const wrapUpSummarySection = (
     <div className="space-y-4">
@@ -1405,8 +1455,8 @@ export default async function CallSessionPage({
           manualModel={manualCallControlModel}
           unselectedModel={unselectedCallControlModel}
           details={callStatusDetails}
-          automatedWorkspace={automatedWorkspacePanel}
-          manualWorkspace={manualWorkspacePanel}
+          automatedPanels={automatedWorkspacePanels}
+          manualPanels={manualWorkspacePanels}
           automatedEligible={canStartAutomatedCall}
           manualEligible={canStartGuidedCall}
           automatedDisabledReason={automatedDisabledReason}

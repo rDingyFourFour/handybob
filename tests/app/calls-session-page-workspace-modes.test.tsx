@@ -126,8 +126,8 @@ describe("Call session workspace modes", () => {
         selectedMode="manual"
         automatedEligible
         manualEligible
-        automatedPanel={automatedPanel}
-        manualPanel={manualPanel}
+        automatedPanels={[{ id: "automated-tools", node: automatedPanel }]}
+        manualPanels={[{ id: "manual-tools", node: manualPanel }]}
       />,
     );
     expect(manualMarkup).toContain(callSessionCopy.manualTools.copyPhone);
@@ -142,8 +142,8 @@ describe("Call session workspace modes", () => {
         selectedMode="automated"
         automatedEligible
         manualEligible
-        automatedPanel={automatedPanel}
-        manualPanel={manualPanel}
+        automatedPanels={[{ id: "automated-tools", node: automatedPanel }]}
+        manualPanels={[{ id: "manual-tools", node: manualPanel }]}
       />,
     );
     expect(automatedMarkup).not.toContain(callSessionCopy.manualTools.copyPhone);

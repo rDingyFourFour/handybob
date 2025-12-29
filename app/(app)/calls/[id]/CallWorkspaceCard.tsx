@@ -1,10 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, type ReactNode } from "react";
 
 import HbCard from "@/components/ui/hb-card";
 import { type CallSessionMode } from "@/components/calls/CallModeChooserCard";
 import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
+
+export type CallWorkspacePanel = {
+  id: string;
+  node: ReactNode;
+};
 
 type CallWorkspaceCardProps = {
   callId: string;
@@ -14,8 +19,8 @@ type CallWorkspaceCardProps = {
   selectedMode: CallSessionMode | null;
   automatedEligible: boolean;
   manualEligible: boolean;
-  automatedPanel: ReactNode;
-  manualPanel: ReactNode;
+  automatedPanels: CallWorkspacePanel[];
+  manualPanels: CallWorkspacePanel[];
 };
 
 const WORKSPACE_NAV_EVENT = "calls-session-workspace-navigate";
@@ -43,8 +48,8 @@ export default function CallWorkspaceCard({
   selectedMode,
   automatedEligible,
   manualEligible,
-  automatedPanel,
-  manualPanel,
+  automatedPanels,
+  manualPanels,
 }: CallWorkspaceCardProps) {
   const handleWorkspaceNavigate = useCallback((hash: string | null) => {
     if (!hash) {
@@ -147,7 +152,11 @@ export default function CallWorkspaceCard({
               {callSessionCopy.workspace.automatedHelper}
             </p>
           </div>
-          {automatedPanel}
+          <div className="space-y-4">
+            {automatedPanels.map((panel) => (
+              <Fragment key={panel.id}>{panel.node}</Fragment>
+            ))}
+          </div>
         </div>
       )}
 
@@ -162,7 +171,11 @@ export default function CallWorkspaceCard({
             </h3>
             <p className="text-sm text-slate-400">{callSessionCopy.workspace.manualHelper}</p>
           </div>
-          {manualPanel}
+          <div className="space-y-4">
+            {manualPanels.map((panel) => (
+              <Fragment key={panel.id}>{panel.node}</Fragment>
+            ))}
+          </div>
         </div>
       )}
     </HbCard>

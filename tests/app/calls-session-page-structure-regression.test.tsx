@@ -184,4 +184,18 @@ describe("CallSessionPage structure regression", () => {
     );
     assertSinglePrimaryCta(callSessionCopy.primaryCta.label.captureOutcome);
   });
+
+  it("does not emit key warnings for workspace panels", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await renderWithCall({}, "manual");
+      const errorMessages = errorSpy.mock.calls.map((call) => String(call[0]));
+      const keyWarning = errorMessages.find((message) =>
+        message.includes('Each child in a list should have a unique "key" prop'),
+      );
+      expect(keyWarning).toBeUndefined();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

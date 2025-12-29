@@ -100,8 +100,8 @@ describe("CallSessionPage call mode chooser", () => {
           automatedModel={{ ...automatedModel, callId }}
           manualModel={{ ...manualModel, callId }}
           unselectedModel={{ ...baseModel, callId }}
-          automatedWorkspace={<div />}
-          manualWorkspace={<div />}
+          automatedPanels={[{ id: "automated-panel", node: <div /> }]}
+          manualPanels={[{ id: "manual-panel", node: <div /> }]}
           automatedEligible
           manualEligible
         />,

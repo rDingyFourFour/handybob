@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 
 import CallModeChooserCard, { type CallSessionMode } from "@/components/calls/CallModeChooserCard";
 import CallControlCard from "./CallControlCard";
-import CallWorkspaceCard from "./CallWorkspaceCard";
+import CallWorkspaceCard, { type CallWorkspacePanel } from "./CallWorkspaceCard";
 import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 
 type CallSessionHubProps = {
@@ -16,8 +16,8 @@ type CallSessionHubProps = {
   manualModel: Parameters<typeof CallControlCard>[0]["model"];
   unselectedModel: Parameters<typeof CallControlCard>[0]["model"];
   details?: ReactNode;
-  automatedWorkspace: ReactNode;
-  manualWorkspace: ReactNode;
+  automatedPanels: CallWorkspacePanel[];
+  manualPanels: CallWorkspacePanel[];
   automatedEligible: boolean;
   manualEligible: boolean;
   automatedDisabledReason?: "missing_phone" | "missing_script" | null;
@@ -47,8 +47,8 @@ export default function CallSessionHub({
   manualModel,
   unselectedModel,
   details,
-  automatedWorkspace,
-  manualWorkspace,
+  automatedPanels,
+  manualPanels,
   automatedEligible,
   manualEligible,
   automatedDisabledReason,
@@ -188,8 +188,8 @@ export default function CallSessionHub({
         selectedMode={mode}
         automatedEligible={automatedEligible}
         manualEligible={manualEligible}
-        automatedPanel={automatedWorkspace}
-        manualPanel={manualWorkspace}
+        automatedPanels={automatedPanels}
+        manualPanels={manualPanels}
       />
     </div>
   );
