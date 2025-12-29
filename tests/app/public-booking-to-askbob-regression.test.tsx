@@ -36,6 +36,7 @@ describe("public booking to AskBob regression", () => {
   const mockResolveWorkspaceContext = vi.fn();
   const mockGetJobAskBobHudSummary = vi.fn();
   const mockGetJobAskBobSnapshotsForJob = vi.fn();
+  const mockGetJobAskBobSnapshotHistoryForJob = vi.fn();
   const mockLoadCallHistoryForJob = vi.fn();
   const mockGetLatestCallOutcomeForJob = vi.fn();
   const mockRedirect = vi.fn();
@@ -49,6 +50,7 @@ describe("public booking to AskBob regression", () => {
     mockResolveWorkspaceContext.mockReset();
     mockGetJobAskBobHudSummary.mockReset();
     mockGetJobAskBobSnapshotsForJob.mockReset();
+    mockGetJobAskBobSnapshotHistoryForJob.mockReset();
     mockLoadCallHistoryForJob.mockReset();
     mockGetLatestCallOutcomeForJob.mockReset();
     createServerClientMock.mockReset();
@@ -91,6 +93,11 @@ describe("public booking to AskBob regression", () => {
       followupSnapshot: null,
       afterCallSnapshot: null,
       postCallEnrichmentSnapshot: null,
+    });
+    mockGetJobAskBobSnapshotHistoryForJob.mockResolvedValue({
+      diagnose: [],
+      materials: [],
+      quote: [],
     });
     mockLoadCallHistoryForJob.mockResolvedValue([]);
     mockGetLatestCallOutcomeForJob.mockResolvedValue(null);
@@ -147,6 +154,8 @@ describe("public booking to AskBob regression", () => {
       getJobAskBobHudSummary: (...args: unknown[]) => mockGetJobAskBobHudSummary(...args),
       getJobAskBobSnapshotsForJob: (...args: unknown[]) =>
         mockGetJobAskBobSnapshotsForJob(...args),
+      getJobAskBobSnapshotHistoryForJob: (...args: unknown[]) =>
+        mockGetJobAskBobSnapshotHistoryForJob(...args),
     }));
     vi.doMock("@/lib/domain/askbob/callHistory", async () => {
       const actual = await vi.importActual<typeof import("@/lib/domain/askbob/callHistory")>(

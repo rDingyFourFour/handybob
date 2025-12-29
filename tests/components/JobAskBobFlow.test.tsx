@@ -231,34 +231,28 @@ describe("JobAskBobFlow wiring", () => {
     expect(capturedPanelProps?.latestCallOutcomeLabel).toBe(
       "Reached · Needs follow-up · 2025-01-01 10:00",
     );
-    const statusItems = (capturedContainerProps?.stepStatusItems ?? []) as Array<{
+    const statusItems = (capturedContainerProps?.stageStatusItems ?? []) as Array<{
       label: string;
-      done: boolean;
+      status: string;
     }>;
-    expect(statusItems.length).toBe(8);
+    expect(statusItems.length).toBe(5);
     expect(statusItems.map((item) => item.label)).toEqual([
-      "Step 1 Intake",
-      "Step 2 Diagnose",
-      "Step 3 Materials checklist",
-      "Step 4 Quote suggestion",
-      "Step 5 Follow-up guidance",
-      "Step 6 Schedule visit",
-      "Step 7 Prepare a phone call with AskBob",
-      "Step 8 · Manual after-call (job-only)",
+      "Diagnose",
+      "Materials",
+      "Quote",
+      "Follow-up",
+      "Call preparation",
     ]);
-    expect(statusItems.map((item) => item.done)).toEqual([
-      true,
-      false,
-      false,
-      false,
-      false,
-      false,
-      false,
-      false,
+    expect(statusItems.map((item) => item.status)).toEqual([
+      "not_started",
+      "not_started",
+      "not_started",
+      "drafted",
+      "not_started",
     ]);
     expect(capturedFollowupProps?.stepCompleted).toBe(false);
     expect(capturedPanelProps?.stepCompleted).toBe(false);
-    expect(capturedFollowupProps?.stepCollapsed).toBe(false);
+    expect(capturedFollowupProps?.stepCollapsed).toBe(true);
     expect(capturedPanelProps?.stepCollapsed).toBe(false);
   });
 });

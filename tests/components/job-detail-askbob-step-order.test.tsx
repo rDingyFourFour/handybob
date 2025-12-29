@@ -15,37 +15,32 @@ vi.mock("@/components/askbob/JobAskBobContainer", () => ({
 
 vi.mock("@/components/askbob/JobAskBobPanel", () => ({
   __esModule: true,
-  default: () => <div data-testid="askbob-step-2">Step 2</div>,
+  default: () => <div>Diagnose panel</div>,
 }));
 
 vi.mock("@/components/askbob/AskBobMaterialsPanel", () => ({
   __esModule: true,
-  default: () => <div data-testid="askbob-step-3">Step 3</div>,
+  default: () => <div>Materials panel</div>,
 }));
 
 vi.mock("@/components/askbob/AskBobQuotePanel", () => ({
   __esModule: true,
-  default: () => <div data-testid="askbob-step-4">Step 4</div>,
+  default: () => <div>Quote panel</div>,
 }));
 
 vi.mock("@/components/askbob/JobAskBobFollowupPanel", () => ({
   __esModule: true,
-  default: () => <div data-testid="askbob-step-5">Step 5</div>,
+  default: () => <div>Follow-up panel</div>,
 }));
 
 vi.mock("@/components/askbob/AskBobSchedulerPanel", () => ({
   __esModule: true,
-  default: () => <div data-testid="askbob-step-6">Step 6</div>,
+  default: () => <div>Scheduler panel</div>,
 }));
 
 vi.mock("@/components/askbob/AskBobCallAssistPanel", () => ({
   __esModule: true,
-  default: () => <div data-testid="askbob-step-7">Step 7</div>,
-}));
-
-vi.mock("@/components/askbob/JobAskBobAfterCallPanel", () => ({
-  __esModule: true,
-  default: () => <div data-testid="askbob-step-8">Step 8</div>,
+  default: () => <div>Call prep panel</div>,
 }));
 
 describe("job detail AskBob step order", () => {
@@ -68,7 +63,7 @@ describe("job detail AskBob step order", () => {
     container.remove();
   });
 
-  it("renders job pipeline before calling pipeline with steps ordered inside each group", async () => {
+  it("renders job pipeline before calling pipeline with panels ordered inside each group", async () => {
     const { default: JobAskBobFlow } = await import("@/components/askbob/JobAskBobFlow");
 
     await act(async () => {
@@ -79,6 +74,16 @@ describe("job detail AskBob step order", () => {
           jobId="job-1"
           jobTitle="Job"
           jobDescription="Description"
+          initialFollowupSnapshot={{
+            recommendedAction: "Schedule a visit",
+            rationale: "Appointment needed",
+            steps: [],
+            shouldSendMessage: false,
+            shouldScheduleVisit: true,
+            shouldCall: false,
+            shouldWait: false,
+            modelLatencyMs: 0,
+          }}
         />,
       );
       await Promise.resolve();
@@ -95,23 +100,20 @@ describe("job detail AskBob step order", () => {
     expect(groupOrder).toEqual(["askbob-job-pipeline", "askbob-calling-pipeline"]);
 
     const jobSteps = Array.from(
-      jobPipeline?.querySelectorAll('[data-testid^="askbob-step-"]') ?? [],
+      jobPipeline?.querySelectorAll('[data-testid$="-section"]') ?? [],
     ).map((node) => node.getAttribute("data-testid"));
     expect(jobSteps).toEqual([
-      "askbob-step-1",
-      "askbob-step-2",
-      "askbob-step-3",
-      "askbob-step-4",
+      "askbob-diagnose-section",
+      "askbob-materials-section",
+      "askbob-quote-section",
     ]);
 
     const callingSteps = Array.from(
-      callingPipeline?.querySelectorAll('[data-testid^="askbob-step-"]') ?? [],
+      callingPipeline?.querySelectorAll('[data-testid$="-section"]') ?? [],
     ).map((node) => node.getAttribute("data-testid"));
     expect(callingSteps).toEqual([
-      "askbob-step-5",
-      "askbob-step-6",
-      "askbob-step-7",
-      "askbob-step-8",
+      "askbob-followup-section",
+      "askbob-scheduler-section",
     ]);
   });
 });

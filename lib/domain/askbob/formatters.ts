@@ -1,89 +1,144 @@
-import type { AskBobResponseDTO } from "./types";
+import type {
+  AskBobMaterialItem,
+  AskBobResponseDTO,
+  AskBobResponseDTOSection,
+  AskBobSection,
+} from "./types";
 
-type JobNoteContext = {
-  jobId: string;
-  quoteId?: string | null;
-};
-
-type CustomerDraftContext = {
+type FormatAskBobContext = {
   jobId?: string | null;
   quoteId?: string | null;
 };
 
-const MAX_STEPS_NOTE = 4;
-const MAX_STEPS_MESSAGE = 3;
+type SectionFormatterOptions = {
+  bullet?: string;
+  orderedSteps?: boolean;
+};
+
+const SECTION_TITLE_FALLBACKS: Record<AskBobSection, string> = {
+  steps: "Steps",
+  materials: "Materials",
+  safety: "Safety cautions",
+  costTime: "Cost and time considerations",
+  escalation: "Escalation guidance",
+};
+
+function formatSectionBlock(
+  section: AskBobResponseDTOSection,
+  options: SectionFormatterOptions
+): string | null {
+  const items = (section.items ?? [])
+    .map((item) => item?.trim())
+    .filter(Boolean);
+  if (!items.length) {
+    return null;
+  }
+
+  const header = section.title?.trim() || SECTION_TITLE_FALLBACKS[section.type];
+  const bullet = options.bullet ?? "-";
+  const formattedItems = items.map((item, index) => {
+    if (options.orderedSteps && section.type === "steps") {
+      return `${index + 1}. ${item}`;
+    }
+    return `${bullet} ${item}`;
+  });
+
+  return `${header}\n${formattedItems.join("\n")}`;
+}
+
+function formatSectionBlocks(
+  sections: AskBobResponseDTOSection[] | null | undefined,
+  options: SectionFormatterOptions
+): string[] {
+  if (!sections?.length) {
+    return [];
+  }
+  return sections
+    .map((section) => formatSectionBlock(section, options))
+    .filter((block): block is string => Boolean(block));
+}
+
+function formatMaterialBlock(materials: AskBobMaterialItem[] | null | undefined): string | null {
+  if (!materials?.length) {
+    return null;
+  }
+  const entries = materials
+    .map((material) => {
+      const parts = [material.name?.trim()].filter(Boolean);
+      const quantity = material.quantity?.trim();
+      if (quantity) {
+        parts.push(`Qty: ${quantity}`);
+      }
+      const notes = material.notes?.trim();
+      if (notes) {
+        parts.push(notes);
+      }
+      return parts.join(" · ");
+    })
+    .filter(Boolean);
+  if (!entries.length) {
+    return null;
+  }
+  return `Materials\n${entries.map((entry) => `- ${entry}`).join("\n")}`;
+}
+
+function buildJobContextHeader(context: FormatAskBobContext): string {
+  const contextParts: string[] = [];
+  if (context.jobId) {
+    contextParts.push(`Job ${context.jobId}`);
+  }
+  if (context.quoteId) {
+    contextParts.push(`Quote ${context.quoteId}`);
+  }
+  if (!contextParts.length) {
+    return "AskBob job note";
+  }
+  return `AskBob job note · ${contextParts.join(" · ")}`;
+}
 
 export function formatAskBobJobNote(
-  response: AskBobResponseDTO,
-  context: JobNoteContext
+  dto: AskBobResponseDTO,
+  context: FormatAskBobContext = {}
 ): string {
-  const lines: string[] = [
-    "Tech note: AskBob recommendations for this job.",
-  ];
-
-  const stepsSection = response.sections.find((section) => section.type === "steps");
-  if (stepsSection && stepsSection.items.length > 0) {
-    const selectedSteps = stepsSection.items.slice(0, MAX_STEPS_NOTE);
-    lines.push(
-      `Steps:\n${selectedSteps
-        .map((step, index) => `${index + 1}. ${step}`)
-        .join("\n")}`
-    );
-  }
-
-  if (response.materials && response.materials.length > 0) {
-    const materialsLine = response.materials
-      .map((material) => {
-        const components = [material.name];
-        if (material.quantity) {
-          components.push(`Qty: ${material.quantity}`);
-        }
-        if (material.notes) {
-          components.push(material.notes);
-        }
-        return components.join(" · ");
-      })
-      .join("\n");
-
-    lines.push(`Materials:\n${materialsLine}`);
-  }
-
-  if (response.safetyCautions && response.safetyCautions.length > 0) {
-    lines.push(`Safety:\n- ${response.safetyCautions.join("\n- ")}`);
-  }
-
-  if (response.escalationGuidance && response.escalationGuidance.length > 0) {
-    lines.push(`Escalation triggers:\n- ${response.escalationGuidance.join("\n- ")}`);
-  }
-
-  if (context.quoteId) {
-    lines.push(`Reference quote: ${context.quoteId}`);
-  }
-
-  lines.push(`Job ID: ${context.jobId}`);
-
-  return lines.join("\n\n");
+  const blocks = formatSectionBlocks(dto.sections, { bullet: "-", orderedSteps: true });
+  const materialBlock = formatMaterialBlock(dto.materials);
+  const bodyBlocks = materialBlock ? [...blocks, materialBlock] : blocks;
+  const fallback =
+    bodyBlocks.length === 0
+      ? ["AskBob did not return any structured insights for this response."]
+      : bodyBlocks;
+  return [buildJobContextHeader(context), ...fallback].join("\n\n");
 }
 
 export function formatAskBobCustomerDraft(
-  response: AskBobResponseDTO,
-  context: CustomerDraftContext
+  dto: AskBobResponseDTO,
+  _context: FormatAskBobContext = {}
 ): string {
-  void context;
-  const stepsSection = response.sections.find((section) => section.type === "steps");
-  const stepSummary = stepsSection?.items.slice(0, MAX_STEPS_MESSAGE).join(" → ");
-  const safetySummary = response.safetyCautions?.slice(0, 2).join(" · ");
-  const costSummary = response.costTimeConsiderations?.slice(0, 2).join(" · ");
-  const escalationSummary = response.escalationGuidance?.slice(0, 2).join(" · ");
+  void _context;
+  const introduction = ["Hi,", "Here's a quick recap of AskBob's latest suggestions."];
+  const blocks = formatSectionBlocks(dto.sections, { bullet: "-", orderedSteps: true });
+  const materialBlock = formatMaterialBlock(dto.materials);
+  const summaryBlocks = materialBlock ? [...blocks, materialBlock] : blocks;
+  const body =
+    summaryBlocks.length === 0
+      ? [
+          "AskBob did not return any structured insights for this response.",
+        "I'll follow up once more information is available.",
+        ]
+      : summaryBlocks;
+  const closing =
+    "Let me know if you have any questions or want me to help move forward.";
+  return [...introduction, ...body, closing].join("\n\n");
+}
 
-  const parts: string[] = [
-    "Hi, here's what I'm planning for this visit.",
-    stepSummary ? `Plan: ${stepSummary}` : undefined,
-    costSummary ? `What to expect: ${costSummary}` : undefined,
-    safetySummary ? `Safety: ${safetySummary}` : undefined,
-    escalationSummary ? `Escalation: ${escalationSummary}` : undefined,
-    "I'll keep you posted as I make progress.",
-  ].filter((part): part is string => Boolean(part));
-
-  return parts.join("\n\n");
+export function formatSnapshotTimestamp(isoTimestamp: string | null | undefined): string | null {
+  if (!isoTimestamp) {
+    return null;
+  }
+  const parsed = new Date(isoTimestamp);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  const iso = parsed.toISOString();
+  return `${iso.slice(0, 16).replace("T", " ")} UTC`;
 }

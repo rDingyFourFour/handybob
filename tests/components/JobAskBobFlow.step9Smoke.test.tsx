@@ -34,12 +34,20 @@ vi.mock("@/components/askbob/JobAskBobAfterCallPanel", () => ({
   default: () => <div data-testid="mock-after-call" />,
 }));
 
-vi.mock("@/components/askbob/JobAskBobContainer", () => ({
-  __esModule: true,
-  default: () => <div data-testid="mock-container" />,
-}));
-
 const mockOpenCallSessionAction = openOrCreateCallSessionForJobAction as unknown as Mock;
+const followupSnapshot = {
+  recommendedAction: "Call the customer",
+  rationale: "Needs a follow-up",
+  steps: [],
+  shouldSendMessage: false,
+  shouldScheduleVisit: false,
+  shouldCall: true,
+  shouldWait: false,
+  modelLatencyMs: 0,
+  callRecommended: true,
+  callPurpose: "Confirm details",
+  callTone: "friendly",
+};
 
 function findOpenCallSessionButton(container: HTMLElement) {
   return Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
@@ -97,7 +105,7 @@ describe("JobAskBobFlow call session open", () => {
           initialDiagnoseSnapshot={null}
           initialMaterialsSnapshot={null}
           initialQuoteSnapshot={null}
-          initialFollowupSnapshot={null}
+          initialFollowupSnapshot={followupSnapshot}
           lastQuoteSummary={null}
         />,
       );
@@ -145,7 +153,7 @@ describe("JobAskBobFlow call session open", () => {
           initialDiagnoseSnapshot={null}
           initialMaterialsSnapshot={null}
           initialQuoteSnapshot={null}
-          initialFollowupSnapshot={null}
+          initialFollowupSnapshot={followupSnapshot}
           lastQuoteSummary={null}
         />,
       );
@@ -191,7 +199,7 @@ describe("JobAskBobFlow call session open", () => {
           initialDiagnoseSnapshot={null}
           initialMaterialsSnapshot={null}
           initialQuoteSnapshot={null}
-          initialFollowupSnapshot={null}
+          initialFollowupSnapshot={followupSnapshot}
           lastQuoteSummary={null}
         />,
       );

@@ -44,6 +44,7 @@ export type JobAskBobAfterCallPanelProps = {
   stepReadiness?: AskBobStepReadiness | null;
 };
 
+// Job-detail-only fallback for after-call summaries; primary home should be the call session wrap-up.
 const summaryFromSnapshot = (snapshot?: AskBobAfterCallSnapshotPayload | null): AskBobJobAfterCallResult | null => {
   if (!snapshot) {
     return null;
@@ -277,8 +278,8 @@ export default function JobAskBobAfterCallPanel({
     ? "This job-detail view generates a manual after-call summary from job context only. Use the call session page for richer after-call generation when a call is available."
     : null;
   const stepLabel = isCallSessionOverride
-    ? "Step 8 · After the call"
-    : "Step 8 · Manual after-call (job-only)";
+    ? "After-call"
+    : "Manual after-call";
 
   return (
     <HbCard className="space-y-4">
@@ -303,7 +304,7 @@ export default function JobAskBobAfterCallPanel({
               className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
               onClick={onToggleStepCollapsed}
             >
-              {stepCollapsed ? "Show step" : "Hide step"}
+              {stepCollapsed ? "Show section" : "Hide section"}
             </HbButton>
             {result && (
               <HbButton
@@ -312,7 +313,7 @@ export default function JobAskBobAfterCallPanel({
                 className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
                 onClick={handleReset}
               >
-                Reset this step
+                Reset section
               </HbButton>
             )}
           </div>

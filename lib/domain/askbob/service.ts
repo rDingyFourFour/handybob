@@ -43,8 +43,11 @@ import {
   createAskBobResponse,
   getLastAskBobActivityForJob,
   getJobTaskSnapshotsForJob,
+  getJobTaskSnapshotVersionsForJob,
+  insertJobTaskSnapshotVersion,
   upsertJobTaskSnapshot,
 } from "./repository";
+import { formatSnapshotTimestamp } from "./formatters";
 import {
   callAskBobMessageDraft,
   callAskBobModel,
@@ -64,6 +67,11 @@ import { isTerminalTwilioDialStatus } from "@/lib/domain/calls/sessions";
 type DbClient = SupabaseClient<Database>;
 
 const MIN_PROMPT_LENGTH = 10;
+const VERSIONED_TASKS = new Set<AskBobJobTaskSnapshotTask>([
+  "job.diagnose",
+  "materials.generate",
+  "quote.generate",
+]);
 
 export async function createAskBobSessionWithContext(
   supabase: DbClient,
@@ -1201,6 +1209,19 @@ export async function recordAskBobJobTaskSnapshot(
   }
 
   try {
+    if (VERSIONED_TASKS.has(params.task)) {
+      await insertJobTaskSnapshotVersion(supabase, {
+        workspaceId: params.workspaceId,
+        jobId: params.jobId,
+        task: params.task,
+        payload,
+      });
+      console.log("[askbob-snapshot-version-insert]", {
+        workspaceId: params.workspaceId,
+        jobId: params.jobId,
+        task: params.task,
+      });
+    }
     await upsertJobTaskSnapshot(supabase, {
       workspaceId: params.workspaceId,
       jobId: params.jobId,
@@ -1456,6 +1477,119 @@ export async function getJobAskBobSnapshotsForJob(
   }
 
   return snapshots;
+}
+
+export async function getJobAskBobSnapshotHistoryForJob(
+  supabase: DbClient,
+  params: { workspaceId: string; jobId: string }
+): Promise<{
+  diagnose: Array<{
+    id: string;
+    task: "job.diagnose";
+    payload: AskBobDiagnoseSnapshotPayload;
+    createdAt: string;
+    createdAtLabel: string | null;
+  }>;
+  materials: Array<{
+    id: string;
+    task: "materials.generate";
+    payload: AskBobMaterialsSnapshotPayload;
+    createdAt: string;
+    createdAtLabel: string | null;
+  }>;
+  quote: Array<{
+    id: string;
+    task: "quote.generate";
+    payload: AskBobQuoteSnapshotPayload;
+    createdAt: string;
+    createdAtLabel: string | null;
+  }>;
+}> {
+  const rows = await getJobTaskSnapshotVersionsForJob(supabase, {
+    workspaceId: params.workspaceId,
+    jobId: params.jobId,
+    tasks: ["job.diagnose", "materials.generate", "quote.generate"],
+  });
+  const history = {
+    diagnose: [] as Array<{
+      id: string;
+      task: "job.diagnose";
+      payload: AskBobDiagnoseSnapshotPayload;
+      createdAt: string;
+      createdAtLabel: string | null;
+    }>,
+    materials: [] as Array<{
+      id: string;
+      task: "materials.generate";
+      payload: AskBobMaterialsSnapshotPayload;
+      createdAt: string;
+      createdAtLabel: string | null;
+    }>,
+    quote: [] as Array<{
+      id: string;
+      task: "quote.generate";
+      payload: AskBobQuoteSnapshotPayload;
+      createdAt: string;
+      createdAtLabel: string | null;
+    }>,
+  };
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object") {
+      continue;
+    }
+    const createdAtLabel = formatSnapshotTimestamp(row.created_at);
+    switch (row.task) {
+      case "job.diagnose": {
+        const parsed = diagnoseSnapshotSchema.safeParse(row.payload);
+        if (parsed.success) {
+          history.diagnose.push({
+            id: row.id,
+            task: "job.diagnose",
+            payload: parsed.data,
+            createdAt: row.created_at,
+            createdAtLabel,
+          });
+        }
+        break;
+      }
+      case "materials.generate": {
+        const parsed = materialsSnapshotSchema.safeParse(row.payload);
+        if (parsed.success) {
+          history.materials.push({
+            id: row.id,
+            task: "materials.generate",
+            payload: parsed.data,
+            createdAt: row.created_at,
+            createdAtLabel,
+          });
+        }
+        break;
+      }
+      case "quote.generate": {
+        const parsed = quoteSnapshotSchema.safeParse(row.payload);
+        if (parsed.success) {
+          history.quote.push({
+            id: row.id,
+            task: "quote.generate",
+            payload: parsed.data,
+            createdAt: row.created_at,
+            createdAtLabel,
+          });
+        }
+        break;
+      }
+    }
+  }
+
+  const byCreatedAtDesc = <T extends { createdAt: string }>(items: T[]) =>
+    [...items].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+
+  return {
+    diagnose: byCreatedAtDesc(history.diagnose),
+    materials: byCreatedAtDesc(history.materials),
+    quote: byCreatedAtDesc(history.quote),
+  };
 }
 
 const TASK_LABELS: Record<AskBobTask, string> = {

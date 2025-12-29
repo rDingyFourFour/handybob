@@ -96,6 +96,31 @@ export interface Database {
           updated_at?: string;
         };
       };
+      askbob_job_task_snapshot_versions: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          job_id: string;
+          task: string;
+          payload: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          job_id: string;
+          task: string;
+          payload: Json;
+          created_at?: string;
+        };
+        Update: {
+          workspace_id?: string;
+          job_id?: string;
+          task?: string;
+          payload?: Json;
+          created_at?: string;
+        };
+      };
     };
     Views: {
       [_ in never]: never;

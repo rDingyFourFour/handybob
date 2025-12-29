@@ -9,6 +9,7 @@ const createServerClientMock = vi.fn();
 const mockResolveWorkspaceContext = vi.fn();
 const mockGetJobAskBobHudSummary = vi.fn();
 const mockGetJobAskBobSnapshotsForJob = vi.fn();
+const mockGetJobAskBobSnapshotHistoryForJob = vi.fn();
 const mockLoadCallHistoryForJob = vi.fn();
 const mockGetLatestCallOutcomeForJob = vi.fn();
 const mockRedirect = vi.fn();
@@ -66,6 +67,8 @@ vi.mock("@/lib/domain/askbob/service", () => ({
   getJobAskBobHudSummary: (...args: unknown[]) => mockGetJobAskBobHudSummary(...args),
   getJobAskBobSnapshotsForJob: (...args: unknown[]) =>
     mockGetJobAskBobSnapshotsForJob(...args),
+  getJobAskBobSnapshotHistoryForJob: (...args: unknown[]) =>
+    mockGetJobAskBobSnapshotHistoryForJob(...args),
 }));
 
 vi.mock("@/lib/domain/askbob/callHistory", async () => {
@@ -185,6 +188,12 @@ async function renderJobPage(
       afterCallSnapshot: null,
       postCallEnrichmentSnapshot: null,
     });
+    mockGetJobAskBobSnapshotHistoryForJob.mockReset();
+    mockGetJobAskBobSnapshotHistoryForJob.mockResolvedValue({
+      diagnose: [],
+      materials: [],
+      quote: [],
+    });
     mockLoadCallHistoryForJob.mockReset();
     mockLoadCallHistoryForJob.mockResolvedValue([]);
     mockGetLatestCallOutcomeForJob.mockReset();
@@ -215,57 +224,6 @@ async function renderJobPage(
       Promise.resolve({ afterCallKey: "cache-1", callId: "call-1" }),
     );
     expect(markup).toContain(JOB_HEADING);
-  });
-
-  it("passes normalized afterCall parameters into the AskBob flow", async () => {
-    const fixtures: Array<{
-      description: string;
-      params: Record<string, string | string[] | undefined>;
-      expectedKey: string | undefined;
-      expectedCallId: string | undefined;
-    }> = [
-      {
-        description: "undefined params",
-        params: {},
-        expectedKey: undefined,
-        expectedCallId: undefined,
-      },
-      {
-        description: "empty strings",
-        params: { afterCallKey: "", callId: "" },
-        expectedKey: undefined,
-        expectedCallId: undefined,
-      },
-      {
-        description: "whitespace strings",
-        params: { afterCallKey: "   ", callId: "   " },
-        expectedKey: "   ",
-        expectedCallId: "   ",
-      },
-      {
-        description: "normal strings",
-        params: { afterCallKey: "cache-2", callId: "call-2" },
-        expectedKey: "cache-2",
-        expectedCallId: "call-2",
-      },
-      {
-        description: "array inputs are ignored",
-        params: {
-          afterCallKey: ["array1", "array2"],
-          callId: ["call-array"],
-        },
-        expectedKey: undefined,
-        expectedCallId: undefined,
-      },
-    ];
-
-    for (const entry of fixtures) {
-      lastJobAskBobFlowProps = null;
-      await renderJobPage(Promise.resolve(entry.params));
-      expect(lastJobAskBobFlowProps).not.toBeNull();
-      expect(lastJobAskBobFlowProps?.afterCallCacheKey).toBe(entry.expectedKey);
-      expect(lastJobAskBobFlowProps?.afterCallCacheCallId).toBe(entry.expectedCallId);
-    }
   });
 
   it("passes job title and description into the AskBob flow", async () => {

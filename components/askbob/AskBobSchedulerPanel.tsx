@@ -247,7 +247,7 @@ export default function AskBobSchedulerPanel({
     }
   }, [schedulerResult, onScrollIntoView]);
 
-  const toggleLabel = stepCollapsed ? "Show step" : "Hide step";
+  const toggleLabel = stepCollapsed ? "Show section" : "Hide section";
 
   return (
     <HbCard className="space-y-4">
@@ -256,7 +256,7 @@ export default function AskBobSchedulerPanel({
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <h2 className="hb-heading-3 text-xl font-semibold">Step 6 · Schedule an appointment with AskBob</h2>
+              <h2 className="hb-heading-3 text-xl font-semibold">Scheduling</h2>
               {stepCompleted && (
                 <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
                   Done
@@ -281,7 +281,7 @@ export default function AskBobSchedulerPanel({
                 className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
                 onClick={handleReset}
               >
-                Reset this step
+                Reset section
               </HbButton>
             )}
           </div>

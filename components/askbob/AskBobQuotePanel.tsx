@@ -9,7 +9,10 @@ import AskBobStepReadinessBadge, {
   type AskBobStepReadiness,
 } from "@/components/askbob/AskBobStepReadinessBadge";
 import { formatCurrency } from "@/utils/timeline/formatters";
-import { runAskBobQuoteGenerateAction } from "@/app/(app)/askbob/quote-actions";
+import {
+  regenerateAskBobQuoteAction,
+  runAskBobQuoteGenerateAction,
+} from "@/app/(app)/askbob/quote-actions";
 import { createQuoteFromAskBobAction } from "@/app/(app)/quotes/askbob-actions";
 import {
   adaptAskBobQuoteToSmartQuote,
@@ -19,7 +22,10 @@ import {
 import type {
   AskBobQuoteGenerateResult,
   AskBobQuoteSnapshotPayload,
+  AskBobTaskSnapshotVersion,
 } from "@/lib/domain/askbob/types";
+import { buildQuoteSummaryFromSnapshot } from "@/lib/domain/askbob/summary";
+import { formatSnapshotTimestamp } from "@/lib/domain/askbob/formatters";
 
 type AskBobQuotePanelProps = {
   workspaceId: string;
@@ -38,6 +44,8 @@ type AskBobQuotePanelProps = {
   resetToken?: number;
   onQuoteReset?: () => void;
   initialQuoteSnapshot?: AskBobQuoteSnapshotPayload | null;
+  quoteSnapshotHistory?: AskBobTaskSnapshotVersion<AskBobQuoteSnapshotPayload>[];
+  latestSnapshotVersion?: AskBobTaskSnapshotVersion<AskBobQuoteSnapshotPayload> | null;
   stepReadiness?: AskBobStepReadiness | null;
 };
 
@@ -80,10 +88,10 @@ function buildQuoteExtraDetails({
     parts.push(`Job description: ${jobContext}`);
   }
   if (diagnosisSummary?.trim()) {
-    parts.push(`Diagnosis summary from Step 1: ${diagnosisSummary.trim()}`);
+    parts.push(`Diagnosis summary: ${diagnosisSummary.trim()}`);
   }
   if (materialsSummary?.trim()) {
-    parts.push(`Materials summary from Step 2: ${materialsSummary.trim()}`);
+    parts.push(`Materials summary: ${materialsSummary.trim()}`);
   }
   if (quoteNotes.trim()) {
     parts.push(`Technician quote notes: ${quoteNotes.trim()}`);
@@ -138,13 +146,17 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     stepCollapsed = false,
     onToggleStepCollapsed,
     initialQuoteSnapshot,
+    quoteSnapshotHistory = [],
+    latestSnapshotVersion = null,
     stepReadiness,
   } = props;
   const router = useRouter();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [appliedQuoteId, setAppliedQuoteId] = useState<string | null>(null);
   const initialQuoteSuggestion = initialQuoteSnapshot
@@ -157,6 +169,21 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
       } as AskBobQuoteGenerateResult)
     : null;
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(initialQuoteSuggestion);
+  const [historyEntries, setHistoryEntries] = useState(() =>
+    quoteSnapshotHistory.map((entry) => ({
+      id: entry.id,
+      createdAtLabel: entry.createdAtLabel,
+      suggestion: adaptAskBobQuoteToSmartQuote({
+        lines: entry.payload.lines,
+        materials: entry.payload.materials ?? null,
+        notes: entry.payload.notes ?? null,
+        modelLatencyMs: 0,
+        rawModelOutput: null,
+      } as AskBobQuoteGenerateResult),
+    })),
+  );
+  const [latestSnapshotMeta, setLatestSnapshotMeta] = useState(() => latestSnapshotVersion);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const hasResetEffectRun = useRef(false);
   useEffect(() => {
     if (resetToken === undefined) {
@@ -172,6 +199,8 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     setAppliedQuoteId(null);
     setIsLoading(false);
     setIsApplying(false);
+    setRegenerateError(null);
+    setIsRegenerating(false);
   }, [resetToken]);
 
   const normalizedJobTitle = jobTitle?.trim() ?? "";
@@ -228,6 +257,8 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     setAppliedQuoteId(null);
     setIsLoading(false);
     setIsApplying(false);
+    setRegenerateError(null);
+    setIsRegenerating(false);
     onQuoteReset?.();
     if (typeof document === "undefined") {
       return;
@@ -274,13 +305,88 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
         return;
       }
 
+      if (suggestion) {
+        setHistoryEntries((entries) => [
+          {
+            id: latestSnapshotMeta?.id ?? `${jobId}-${Date.now()}`,
+            createdAtLabel:
+              latestSnapshotMeta?.createdAtLabel ?? formatSnapshotTimestamp(new Date().toISOString()),
+            suggestion,
+          },
+          ...entries,
+        ]);
+      }
       setSuggestion(result.suggestion);
+      setLatestSnapshotMeta({
+        id: result.versionId,
+        task: "quote.generate",
+        payload: {
+          lines: result.suggestion.scopeLines ?? [],
+          materials: result.suggestion.materials ?? null,
+          notes: result.suggestion.notes ?? null,
+        },
+        createdAt: result.createdAt,
+        createdAtLabel: result.createdAtLabel,
+      });
       onQuoteSuccess?.();
     } catch (error) {
       console.error("[askbob-quote-ui] action failure", error);
       setError("AskBob couldn’t generate a quote. Please try again.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (isRegenerating) {
+      return;
+    }
+    console.log("[askbob-quote-regenerate-click]", { jobId });
+    setRegenerateError(null);
+    setIsRegenerating(true);
+    try {
+      const result = await regenerateAskBobQuoteAction({ jobId });
+      if (!result.ok) {
+        console.log("[askbob-quote-regenerate-failure]", {
+          jobId,
+          code: result.code,
+        });
+        setRegenerateError(result.message);
+        return;
+      }
+      if (suggestion) {
+        setHistoryEntries((entries) => [
+          {
+            id: latestSnapshotMeta?.id ?? `${jobId}-${Date.now()}`,
+            createdAtLabel:
+              latestSnapshotMeta?.createdAtLabel ?? formatSnapshotTimestamp(new Date().toISOString()),
+            suggestion,
+          },
+          ...entries,
+        ]);
+      }
+      setSuggestion(result.suggestion);
+      setLatestSnapshotMeta({
+        id: result.versionId,
+        task: "quote.generate",
+        payload: {
+          lines: result.suggestion.scopeLines ?? [],
+          materials: result.suggestion.materials ?? null,
+          notes: result.suggestion.notes ?? null,
+        },
+        createdAt: result.createdAt,
+        createdAtLabel: result.createdAtLabel,
+      });
+      onQuoteSuccess?.();
+      console.log("[askbob-quote-regenerate-success]", {
+        jobId,
+        versionId: result.versionId,
+      });
+    } catch (error) {
+      console.error("[askbob-quote-regenerate-error]", error);
+      setRegenerateError("AskBob couldn’t regenerate a quote. Please try again.");
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -312,7 +418,7 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     }
   };
 
-  const toggleLabel = stepCollapsed ? "Show step" : "Hide step";
+  const toggleLabel = stepCollapsed ? "Show section" : "Hide section";
   const handleToggle = () => onToggleStepCollapsed?.();
 
   return (
@@ -322,7 +428,7 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <h2 className="hb-heading-3 text-xl font-semibold">Step 4 · Draft a quote</h2>
+              <h2 className="hb-heading-3 text-xl font-semibold">Quote</h2>
               {stepCompleted && (
                 <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
                   Done
@@ -340,6 +446,15 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
             >
               {toggleLabel}
             </HbButton>
+            <HbButton
+              variant="ghost"
+              size="sm"
+              className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
+              onClick={handleRegenerate}
+              disabled={isRegenerating}
+            >
+              {isRegenerating ? "Regenerating…" : "Regenerate quote draft"}
+            </HbButton>
             {hasActiveSuggestion && (
               <HbButton
                 variant="ghost"
@@ -347,11 +462,12 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
                 className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
                 onClick={handleReset}
               >
-                Reset this step
+                Reset section
               </HbButton>
             )}
           </div>
         </div>
+        {regenerateError && <p className="text-xs text-rose-400">{regenerateError}</p>}
       </div>
       {!stepCollapsed && (
         <>
@@ -516,6 +632,74 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
                   )}
                 </div>
               )}
+            </div>
+          )}
+          {historyEntries.length > 0 && (
+            <div className="space-y-3 border-t border-slate-800 pt-3">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                Previous quote drafts
+              </p>
+              <div className="space-y-2">
+                {historyEntries.map((entry) => {
+                  const isExpanded = expandedHistoryId === entry.id;
+                  const summary =
+                    buildQuoteSummaryFromSnapshot({
+                      lines: entry.suggestion.scopeLines ?? [],
+                      materials: entry.suggestion.materials ?? null,
+                      notes: entry.suggestion.notes ?? null,
+                    }) ?? "Quote summary unavailable.";
+                  return (
+                    <div
+                      key={entry.id}
+                      className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-sm text-slate-200"
+                      data-testid="quote-history-item"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                          {entry.createdAtLabel ?? "Timestamp unavailable"}
+                        </p>
+                        <HbButton
+                          variant="ghost"
+                          size="xs"
+                          className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
+                          onClick={() =>
+                            setExpandedHistoryId(isExpanded ? null : entry.id)
+                          }
+                        >
+                          {isExpanded ? "Hide" : "View"}
+                        </HbButton>
+                      </div>
+                      <p className="text-xs text-slate-300">{summary}</p>
+                      {isExpanded && (
+                        <div className="mt-2 space-y-2 text-xs text-slate-300">
+                          {entry.suggestion.scopeLines?.length ? (
+                            entry.suggestion.scopeLines.map((line, index) => (
+                              <div key={`${line.description}-${index}`}>
+                                {line.description} · Qty {line.quantity}
+                              </div>
+                            ))
+                          ) : (
+                            <p>No scope lines listed.</p>
+                          )}
+                          {entry.suggestion.materials?.length ? (
+                            <div className="space-y-1">
+                              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                                Materials
+                              </p>
+                              {entry.suggestion.materials.map((material, index) => (
+                                <div key={`${material.name}-${index}`}>
+                                  {material.name} · Qty {material.quantity}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                          {entry.suggestion.notes && <p>Notes: {entry.suggestion.notes}</p>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </>

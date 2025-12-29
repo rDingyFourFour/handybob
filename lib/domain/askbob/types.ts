@@ -27,6 +27,29 @@ export type AskBobJobTaskSnapshotTask =
   | "call.live_guidance"
   | "call.post_enrichment";
 
+export type FollowUpRecommendationAction =
+  | "schedule_appointment"
+  | "call_customer"
+  | "send_message"
+  | "wait"
+  | "none";
+
+export type FollowUpRecommendation = {
+  recommendedNextAction: FollowUpRecommendationAction;
+  suggestedChannel?: "sms" | "email" | "call" | null;
+  priority?: "low" | "medium" | "high" | null;
+  rationale?: string | null;
+  recommendedActionLabel?: string | null;
+};
+
+export type AskBobTaskSnapshotVersion<TPayload> = {
+  id: string;
+  task: AskBobJobTaskSnapshotTask;
+  payload: TPayload;
+  createdAt: string;
+  createdAtLabel: string | null;
+};
+
 export interface AskBobDiagnoseSnapshotPayload {
   sessionId: string;
   responseId: string;

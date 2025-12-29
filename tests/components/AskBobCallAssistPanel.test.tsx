@@ -60,7 +60,7 @@ describe("AskBobCallAssistPanel", () => {
     await act(async () => {
       root?.render(
         <AskBobCallAssistPanel
-          stepNumber={7}
+
           workspaceId="workspace-1"
           userId="user-1"
           jobId="job-1"
@@ -114,7 +114,7 @@ describe("AskBobCallAssistPanel", () => {
     await act(async () => {
       root?.render(
         <AskBobCallAssistPanel
-          stepNumber={7}
+
           workspaceId="workspace-1"
           userId="user-1"
           jobId="job-1"
@@ -151,7 +151,7 @@ describe("AskBobCallAssistPanel", () => {
     await act(async () => {
       root?.render(
         <AskBobCallAssistPanel
-          stepNumber={7}
+
           workspaceId="workspace-1"
           userId="user-1"
           jobId="job-1"
@@ -197,7 +197,7 @@ describe("AskBobCallAssistPanel", () => {
     const actionPayload = mockRunAction.mock.calls[0][0];
     expect(actionPayload.callIntents).toEqual(["quote_followup", "schedule_visit"]);
 
-    const resetButton = findButton(container, "Reset this step");
+    const resetButton = findButton(container, "Reset section");
     await act(async () => {
       resetButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
@@ -210,7 +210,7 @@ describe("AskBobCallAssistPanel", () => {
     await act(async () => {
       root?.render(
         <AskBobCallAssistPanel
-          stepNumber={7}
+
           workspaceId="workspace-1"
           userId="user-1"
           jobId="job-1"
@@ -252,7 +252,7 @@ describe("AskBobCallAssistPanel", () => {
     await act(async () => {
       root?.render(
         <AskBobCallAssistPanel
-          stepNumber={7}
+
           workspaceId="workspace-1"
           userId="user-1"
           jobId="job-1"
@@ -299,7 +299,7 @@ describe("AskBobCallAssistPanel", () => {
     expect(actionPayload.callPersonaStyle).toBe("direct_concise");
     expect(personaChangeSpy).toHaveBeenCalledWith("direct_concise");
 
-    const resetButton = findButton(container, "Reset this step");
+    const resetButton = findButton(container, "Reset section");
     await act(async () => {
       resetButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
@@ -313,7 +313,7 @@ describe("AskBobCallAssistPanel", () => {
     await act(async () => {
       root?.render(
         <AskBobCallAssistPanel
-          stepNumber={7}
+
           workspaceId="workspace-1"
           userId="user-1"
           jobId="job-1"

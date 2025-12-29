@@ -73,7 +73,24 @@ describe("job detail AskBob readiness gating", () => {
 
     await act(async () => {
       root?.render(
-        <JobAskBobFlow workspaceId="workspace-1" userId="user-1" jobId="job-1" />,
+        <JobAskBobFlow
+          workspaceId="workspace-1"
+          userId="user-1"
+          jobId="job-1"
+          initialFollowupSnapshot={{
+            recommendedAction: "Call to confirm details",
+            rationale: "Needs clarification",
+            steps: [],
+            shouldSendMessage: false,
+            shouldScheduleVisit: false,
+            shouldCall: true,
+            shouldWait: false,
+            modelLatencyMs: 0,
+            callRecommended: true,
+            callPurpose: "Confirm details",
+            callTone: "friendly",
+          }}
+        />,
       );
       await Promise.resolve();
     });
@@ -85,10 +102,9 @@ describe("job detail AskBob readiness gating", () => {
     expect(container.querySelector('[data-testid="readiness-call-assist"]')?.textContent).toContain(
       "Not ready: Add a customer phone number first.",
     );
-    expect(container.textContent).toContain("Step 8 · Manual after-call (job-only)");
   });
 
-  it("shows the call session CTA when an automated call is in progress", async () => {
+  it("shows the call session CTA when follow-up recommends calling", async () => {
     const { default: JobAskBobFlow } = await import("@/components/askbob/JobAskBobFlow");
 
     await act(async () => {
@@ -100,20 +116,15 @@ describe("job detail AskBob readiness gating", () => {
           jobTitle="Job"
           jobDescription="Description"
           customerPhoneNumber="+15551234567"
-          automatedDialSnapshot={{
-            callId: "call-123",
-            workspaceId: "workspace-1",
-            twilioCallSid: "twilio-1",
-            twilioStatus: "ringing",
-            twilioStatusUpdatedAt: "2025-01-01T00:00:00Z",
-            isTerminal: false,
-            isInProgress: true,
-            hasRecordingMetadata: false,
-            hasRecordingReady: false,
-            hasTranscriptOrNotes: false,
-            hasOutcome: false,
-            hasOutcomeNotes: false,
-            reachedCustomer: null,
+          initialFollowupSnapshot={{
+            recommendedAction: "Call to confirm details",
+            rationale: "Needs clarification",
+            steps: [],
+            shouldSendMessage: false,
+            shouldScheduleVisit: false,
+            shouldCall: true,
+            shouldWait: false,
+            modelLatencyMs: 0,
           }}
         />,
       );
@@ -121,6 +132,5 @@ describe("job detail AskBob readiness gating", () => {
     });
 
     expect(container.textContent).toContain(callSessionCopy.jobDetail.openCallSessionCta);
-    expect(container.textContent).toContain(callSessionCopy.jobDetail.helper);
   });
 });

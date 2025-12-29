@@ -101,6 +101,13 @@ type AskBobJobTaskSnapshotRow = {
   updated_at: string | null;
 };
 
+type AskBobJobTaskSnapshotVersionRow = {
+  id: string;
+  task: AskBobJobTaskSnapshotTask;
+  payload: unknown;
+  created_at: string;
+};
+
 export interface AskBobJobActivitySummary {
   task: AskBobTask;
   createdAt: string;
@@ -269,4 +276,92 @@ export async function getJobTaskSnapshotsForJob(
   }
 
   return data ?? [];
+}
+
+export async function insertJobTaskSnapshotVersion(
+  supabase: DbClient,
+  params: {
+    workspaceId: string;
+    jobId: string;
+    task: AskBobJobTaskSnapshotTask;
+    payload: unknown;
+  }
+): Promise<{ id: string } | null> {
+  const { data, error } = await supabase
+    .from("askbob_job_task_snapshot_versions")
+    .insert({
+      workspace_id: params.workspaceId,
+      job_id: params.jobId,
+      task: params.task,
+      payload: params.payload,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    console.error("[askbob-repository] Failed to insert snapshot version", {
+      workspaceId: params.workspaceId,
+      jobId: params.jobId,
+      task: params.task,
+      errorMessage: error?.message ?? "Unknown error",
+    });
+    return null;
+  }
+
+  return { id: data.id };
+}
+
+export async function getJobTaskSnapshotVersionsForJob(
+  supabase: DbClient,
+  params: { workspaceId: string; jobId: string; tasks?: AskBobJobTaskSnapshotTask[] }
+): Promise<AskBobJobTaskSnapshotVersionRow[]> {
+  let query = supabase
+    .from("askbob_job_task_snapshot_versions")
+    .select("id, task, payload, created_at")
+    .eq("workspace_id", params.workspaceId)
+    .eq("job_id", params.jobId);
+
+  if (params.tasks && params.tasks.length > 0) {
+    query = query.in("task", params.tasks);
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("[askbob-repository] Failed to load snapshot versions", {
+      workspaceId: params.workspaceId,
+      jobId: params.jobId,
+      errorMessage: error?.message ?? "Unknown error",
+    });
+    return [];
+  }
+
+  return data ?? [];
+}
+
+export async function getLatestJobTaskSnapshotVersion(
+  supabase: DbClient,
+  params: { workspaceId: string; jobId: string; task: AskBobJobTaskSnapshotTask }
+): Promise<AskBobJobTaskSnapshotVersionRow | null> {
+  const { data, error } = await supabase
+    .from("askbob_job_task_snapshot_versions")
+    .select("id, task, payload, created_at")
+    .eq("workspace_id", params.workspaceId)
+    .eq("job_id", params.jobId)
+    .eq("task", params.task)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[askbob-repository] Failed to load latest snapshot version", {
+      workspaceId: params.workspaceId,
+      jobId: params.jobId,
+      task: params.task,
+      errorMessage: error?.message ?? "Unknown error",
+    });
+    return null;
+  }
+
+  return data ?? null;
 }

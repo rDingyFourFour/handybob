@@ -48,14 +48,11 @@ describe("JobAskBobFollowupPanel", () => {
     container.remove();
   });
 
-  it("shows the call suggestion hint and CTA when a call is recommended", async () => {
-    const onJump = vi.fn();
-
+  it("shows the call suggestion hint when a call is recommended", async () => {
     await act(async () => {
       root?.render(
         <JobAskBobFollowupPanel
           workspaceId="workspace-1"
-          userId="user-1"
           jobId="job-1"
           stepCollapsed={false}
           onToggleStepCollapsed={vi.fn()}
@@ -64,7 +61,6 @@ describe("JobAskBobFollowupPanel", () => {
           onFollowupCompleted={vi.fn()}
           onFollowupResult={vi.fn()}
           hasQuoteContextForFollowup={false}
-          onJumpToCallAssist={onJump}
           stepCompleted={false}
           onFollowupSummaryUpdate={vi.fn()}
           initialFollowupSnapshot={{
@@ -81,13 +77,7 @@ describe("JobAskBobFollowupPanel", () => {
     expect(container.textContent).toContain("AskBob suggests a phone call");
     expect(container.textContent).toContain("Purpose: Explain quote and get a decision");
     const button = findButton(container, "Use AskBob to prep this call");
-    expect(button).toBeTruthy();
-
-    await act(async () => {
-      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(onJump).toHaveBeenCalledTimes(1);
+    expect(button).toBeUndefined();
   });
 
   it("hides the call CTA when a call is not recommended", async () => {
@@ -95,7 +85,6 @@ describe("JobAskBobFollowupPanel", () => {
       root?.render(
         <JobAskBobFollowupPanel
           workspaceId="workspace-1"
-          userId="user-1"
           jobId="job-1"
           stepCollapsed={false}
           onToggleStepCollapsed={vi.fn()}

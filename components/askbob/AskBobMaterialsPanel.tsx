@@ -11,13 +11,18 @@ import { formatCurrency } from "@/utils/timeline/formatters";
 import type {
   AskBobMaterialsGenerateResult,
   AskBobMaterialsSnapshotPayload,
+  AskBobTaskSnapshotVersion,
 } from "@/lib/domain/askbob/types";
 import {
   adaptAskBobMaterialsToSmartQuote,
   SmartQuoteSuggestion,
   summarizeMaterialsSuggestion,
 } from "@/lib/domain/quotes/materials-askbob-adapter";
-import { runAskBobMaterialsGenerateAction } from "@/app/(app)/askbob/materials-actions";
+import {
+  regenerateAskBobMaterialsAction,
+  runAskBobMaterialsGenerateAction,
+} from "@/app/(app)/askbob/materials-actions";
+import { formatSnapshotTimestamp } from "@/lib/domain/askbob/formatters";
 
 export type MaterialsSummaryContext = {
   materialsSummary: string | null;
@@ -38,6 +43,8 @@ type AskBobMaterialsPanelProps = {
   stepCollapsed?: boolean;
   onToggleStepCollapsed?: () => void;
   initialMaterialsSnapshot?: AskBobMaterialsSnapshotPayload | null;
+  materialsSnapshotHistory?: AskBobTaskSnapshotVersion<AskBobMaterialsSnapshotPayload>[];
+  latestSnapshotVersion?: AskBobTaskSnapshotVersion<AskBobMaterialsSnapshotPayload> | null;
   stepReadiness?: AskBobStepReadiness | null;
 };
 
@@ -79,7 +86,7 @@ function buildMaterialsExtraDetails({
     parts.push(`Technician notes about materials: ${technicianNotes.trim()}`);
   }
   if (diagnosisSummary?.trim()) {
-    parts.push(`Diagnosis summary from Step 1: ${diagnosisSummary.trim()}`);
+    parts.push(`Diagnosis summary: ${diagnosisSummary.trim()}`);
   }
   if (!parts.length) {
     return null;
@@ -102,6 +109,8 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
     stepCollapsed = false,
     onToggleStepCollapsed,
     initialMaterialsSnapshot,
+    materialsSnapshotHistory = [],
+    latestSnapshotVersion = null,
     stepReadiness,
   } = props;
   const initialMaterialsSuggestion = initialMaterialsSnapshot
@@ -115,10 +124,26 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [extraDetails, setExtraDetails] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<SmartQuoteSuggestion | null>(
     initialMaterialsSuggestion,
   );
+  const [historyEntries, setHistoryEntries] = useState(() =>
+    materialsSnapshotHistory.map((entry) => ({
+      id: entry.id,
+      createdAtLabel: entry.createdAtLabel,
+      suggestion: adaptAskBobMaterialsToSmartQuote({
+        items: entry.payload.items,
+        notes: entry.payload.notes ?? null,
+        modelLatencyMs: 0,
+        rawModelOutput: null,
+      } as AskBobMaterialsGenerateResult),
+    })),
+  );
+  const [latestSnapshotMeta, setLatestSnapshotMeta] = useState(() => latestSnapshotVersion);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const hasResetEffectRun = useRef(false);
   const normalizedJobTitle = jobTitle?.trim() ?? "";
   const normalizedJobDescription = jobDescription?.trim() ?? "";
@@ -138,7 +163,7 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
   const materialsCount = materials.length;
   const hasMaterials = materialsCount > 0;
   const hasMaterialsSuggestion = Boolean(suggestion);
-  const toggleLabel = stepCollapsed ? "Show step" : "Hide step";
+  const toggleLabel = stepCollapsed ? "Show section" : "Hide section";
   const handleToggle = () => onToggleStepCollapsed?.();
 
   useEffect(() => {
@@ -152,12 +177,16 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
     setSuggestion(null);
     setError(null);
     setIsLoading(false);
+    setRegenerateError(null);
+    setIsRegenerating(false);
   }, [resetToken]);
 
   const handleReset = () => {
     setSuggestion(null);
     setError(null);
     setIsLoading(false);
+    setRegenerateError(null);
+    setIsRegenerating(false);
     onMaterialsSummaryChange?.({ materialsSummary: null, materialsCount: null });
     if (typeof document === "undefined") {
       return;
@@ -201,7 +230,28 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
         return;
       }
 
+      if (suggestion) {
+        setHistoryEntries((entries) => [
+          {
+            id: latestSnapshotMeta?.id ?? `${jobId}-${Date.now()}`,
+            createdAtLabel:
+              latestSnapshotMeta?.createdAtLabel ?? formatSnapshotTimestamp(new Date().toISOString()),
+            suggestion,
+          },
+          ...entries,
+        ]);
+      }
       setSuggestion(result.suggestion);
+      setLatestSnapshotMeta({
+        id: result.versionId,
+        task: "materials.generate",
+        payload: {
+          items: result.suggestion.materials ?? [],
+          notes: result.suggestion.notes ?? null,
+        },
+        createdAt: result.createdAt,
+        createdAtLabel: result.createdAtLabel,
+      });
       const summary = summarizeMaterialsSuggestion(result.suggestion);
       const trimmedSummary = summary?.trim();
       const materialsSummary = trimmedSummary && trimmedSummary.length ? trimmedSummary : null;
@@ -213,6 +263,63 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
       setError("AskBob couldn’t generate materials. Please try again.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (isRegenerating) {
+      return;
+    }
+    console.log("[askbob-materials-regenerate-click]", { jobId });
+    setRegenerateError(null);
+    setIsRegenerating(true);
+    try {
+      const result = await regenerateAskBobMaterialsAction({ jobId });
+      if (!result.ok) {
+        console.log("[askbob-materials-regenerate-failure]", {
+          jobId,
+          code: result.code,
+        });
+        setRegenerateError(result.message);
+        return;
+      }
+      if (suggestion) {
+        setHistoryEntries((entries) => [
+          {
+            id: latestSnapshotMeta?.id ?? `${jobId}-${Date.now()}`,
+            createdAtLabel:
+              latestSnapshotMeta?.createdAtLabel ?? formatSnapshotTimestamp(new Date().toISOString()),
+            suggestion,
+          },
+          ...entries,
+        ]);
+      }
+      setSuggestion(result.suggestion);
+      setLatestSnapshotMeta({
+        id: result.versionId,
+        task: "materials.generate",
+        payload: {
+          items: result.suggestion.materials ?? [],
+          notes: result.suggestion.notes ?? null,
+        },
+        createdAt: result.createdAt,
+        createdAtLabel: result.createdAtLabel,
+      });
+      const summary = summarizeMaterialsSuggestion(result.suggestion);
+      const trimmedSummary = summary?.trim();
+      const materialsSummary = trimmedSummary && trimmedSummary.length ? trimmedSummary : null;
+      const materialsCount = result.suggestion.materials?.length ?? null;
+      onMaterialsSummaryChange?.({ materialsSummary, materialsCount });
+      onMaterialsSuccess?.();
+      console.log("[askbob-materials-regenerate-success]", {
+        jobId,
+        versionId: result.versionId,
+      });
+    } catch (err) {
+      console.error("[askbob-materials-regenerate-error]", err);
+      setRegenerateError("AskBob couldn’t regenerate materials. Please try again.");
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -234,7 +341,7 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <h2 className="hb-heading-3 text-xl font-semibold">Step 3 · Build a materials checklist</h2>
+              <h2 className="hb-heading-3 text-xl font-semibold">Materials</h2>
               {stepCompleted && (
                 <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
                   Done
@@ -252,6 +359,15 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
             >
               {toggleLabel}
             </HbButton>
+            <HbButton
+              variant="ghost"
+              size="sm"
+              className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
+              onClick={handleRegenerate}
+              disabled={isRegenerating}
+            >
+              {isRegenerating ? "Regenerating…" : "Regenerate materials"}
+            </HbButton>
             {hasMaterialsSuggestion && (
               <HbButton
                 variant="ghost"
@@ -259,11 +375,12 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
                 className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
                 onClick={handleReset}
               >
-                Reset this step
+                Reset section
               </HbButton>
             )}
           </div>
         </div>
+        {regenerateError && <p className="text-xs text-rose-400">{regenerateError}</p>}
       </div>
       {!stepCollapsed && (
         <>
@@ -368,6 +485,65 @@ export default function AskBobMaterialsPanel(props: AskBobMaterialsPanelProps) {
               <p className="text-xs text-slate-400">
                 Reference or copy these materials into your official list once you confirm fit, price, and availability.
               </p>
+            </div>
+          )}
+          {historyEntries.length > 0 && (
+            <div className="space-y-3 border-t border-slate-800 pt-3">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+                Previous materials checklists
+              </p>
+              <div className="space-y-2">
+                {historyEntries.map((entry) => {
+                  const isExpanded = expandedHistoryId === entry.id;
+                  const summary =
+                    summarizeMaterialsSuggestion(entry.suggestion) ??
+                    "Materials summary unavailable.";
+                  return (
+                    <div
+                      key={entry.id}
+                      className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-sm text-slate-200"
+                      data-testid="materials-history-item"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                          {entry.createdAtLabel ?? "Timestamp unavailable"}
+                        </p>
+                        <HbButton
+                          variant="ghost"
+                          size="xs"
+                          className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
+                          onClick={() =>
+                            setExpandedHistoryId(isExpanded ? null : entry.id)
+                          }
+                        >
+                          {isExpanded ? "Hide" : "View"}
+                        </HbButton>
+                      </div>
+                      <p className="text-xs text-slate-300">{summary}</p>
+                      {isExpanded && (
+                        <div className="mt-2 space-y-2 text-xs text-slate-300">
+                          {entry.suggestion.materials?.length ? (
+                            entry.suggestion.materials.map((item, index) => (
+                              <div key={`${item.name}-${index}`} className="flex justify-between">
+                                <span>{item.name}</span>
+                                <span>
+                                  Qty: {item.quantity}
+                                  {item.unit ? ` ${item.unit}` : ""}
+                                </span>
+                              </div>
+                            ))
+                          ) : (
+                            <p>No materials listed.</p>
+                          )}
+                          {entry.suggestion.notes && (
+                            <p>Notes: {entry.suggestion.notes}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </>

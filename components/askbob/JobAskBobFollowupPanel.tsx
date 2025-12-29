@@ -13,10 +13,8 @@ import AskBobStepReadinessBadge, {
 import type {
   AskBobFollowupSnapshotPayload,
   AskBobJobFollowupResult,
-  AskBobJobScheduleSuggestion,
 } from "@/lib/domain/askbob/types";
 import { runAskBobJobFollowupAction } from "@/app/(app)/askbob/followup-actions";
-import { runAskBobJobScheduleAction, runAskBobScheduleAppointmentAction } from "@/app/(app)/askbob/job-schedule-actions";
 import { draftAskBobJobFollowupMessageAction } from "@/app/(app)/askbob/followup-message-draft-actions";
 import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
 import {
@@ -28,7 +26,6 @@ import {
 type JobAskBobFollowupPanelProps = {
   workspaceId: string;
   jobId: string;
-  userId: string;
   customerId?: string | null;
   jobTitle?: string | null;
   jobDescription?: string | null;
@@ -51,13 +48,7 @@ type JobAskBobFollowupPanelProps = {
     friendlyLabel: string | null;
     appointmentId?: string | null;
   };
-  onAskBobAppointmentScheduled?: (info: {
-    startAt: string;
-    friendlyLabel: string | null;
-    appointmentId?: string | null;
-  }) => void;
   onFollowupSummaryUpdate?: (summary: string | null) => void;
-  onJumpToCallAssist?: () => void;
   latestCallOutcome?: LatestCallOutcomeForJob | null;
   latestCallOutcomeHint?: string | null;
   callHistoryHint?: string | null;
@@ -67,7 +58,6 @@ type JobAskBobFollowupPanelProps = {
 export default function JobAskBobFollowupPanel({
   workspaceId,
   jobId,
-  userId,
   customerId,
   jobTitle,
   jobDescription,
@@ -87,7 +77,6 @@ export default function JobAskBobFollowupPanel({
   askBobAppointmentScheduled,
   onFollowupSummaryUpdate,
   onFollowupResult,
-  onJumpToCallAssist,
   latestCallOutcome,
   latestCallOutcomeHint,
   callHistoryHint,
@@ -106,14 +95,6 @@ export default function JobAskBobFollowupPanel({
   const [result, setResult] = useState<AskBobJobFollowupResult | null>(initialFollowupResult);
   const [isDrafting, setIsDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
-  const [scheduleLoading, setScheduleLoading] = useState(false);
-  const [scheduleError, setScheduleError] = useState<string | null>(null);
-  const [scheduleResult, setScheduleResult] = useState<{
-    suggestions: AskBobJobScheduleSuggestion[];
-    explanation?: string | null;
-  } | null>(null);
-  const [schedulingSuggestionId, setSchedulingSuggestionId] = useState<string | null>(null);
-  const [appointmentError, setAppointmentError] = useState<string | null>(null);
   const hasResetEffectRun = useRef(false);
   useEffect(() => {
     if (resetToken === undefined) {
@@ -188,10 +169,6 @@ export default function JobAskBobFollowupPanel({
     setDraftError(null);
     setIsDrafting(false);
     setIsLoading(false);
-    setScheduleError(null);
-    setScheduleResult(null);
-    setSchedulingSuggestionId(null);
-    setAppointmentError(null);
     onReset?.();
     if (typeof document === "undefined") {
       return;
@@ -235,62 +212,6 @@ export default function JobAskBobFollowupPanel({
     }
   };
 
-  const handleGetScheduleSuggestions = async () => {
-    setScheduleError(null);
-    setAppointmentError(null);
-    setScheduleLoading(true);
-    try {
-      const response = await runAskBobJobScheduleAction({
-        workspaceId,
-        jobId,
-      });
-      if (!response.ok) {
-        setScheduleResult(null);
-        setScheduleError("AskBob couldn’t suggest appointment times right now. Please try again.");
-        return;
-      }
-      setScheduleResult({
-        suggestions: response.suggestions,
-        explanation: response.explanation ?? null,
-      });
-    } catch (error) {
-      console.error("[askbob-job-schedule-ui] client error", error);
-      setScheduleResult(null);
-      setScheduleError("AskBob couldn’t suggest appointment times right now. Please try again.");
-    } finally {
-      setScheduleLoading(false);
-    }
-  };
-
-  const handleScheduleAppointment = async (suggestion: AskBobJobScheduleSuggestion) => {
-    setAppointmentError(null);
-    setSchedulingSuggestionId(suggestion.startAt);
-    try {
-      const response = await runAskBobScheduleAppointmentAction({
-        workspaceId,
-        jobId,
-        startAt: suggestion.startAt,
-        endAt: suggestion.endAt ?? null,
-        title: normalizedJobTitle ? `Visit for ${normalizedJobTitle}` : null,
-      });
-      if (!response.ok) {
-        setAppointmentError("AskBob couldn’t schedule the appointment right now. Please try again.");
-        return;
-      }
-      const friendlyLabel = formatFriendlyDateTime(response.startAt, "") ?? null;
-      onAskBobAppointmentScheduled?.({
-        startAt: response.startAt,
-        friendlyLabel,
-        appointmentId: response.appointmentId,
-      });
-    } catch (error) {
-      console.error("[askbob-job-schedule-appointment] client error", error);
-      setAppointmentError("AskBob couldn’t schedule the appointment right now. Please try again.");
-    } finally {
-      setSchedulingSuggestionId(null);
-    }
-  };
-
   useEffect(() => {
     console.log("[askbob-job-followup-ui-entry]", {
       workspaceId,
@@ -330,19 +251,10 @@ export default function JobAskBobFollowupPanel({
     onFollowupSummaryUpdate(summary.length ? summary : null);
   }, [onFollowupSummaryUpdate, result]);
 
-  useEffect(() => {
-    setScheduleError(null);
-    setScheduleResult(null);
-    setSchedulingSuggestionId(null);
-    setAppointmentError(null);
-  }, [result]);
-
   const followup = result;
   const callRecommended = Boolean(followup?.callRecommended);
   const callPurposeSuggestion = followup?.callPurpose?.trim() ?? null;
   const callToneSuggestion = followup?.callTone?.trim() ?? null;
-  const hasScheduleContext = Boolean(askBobAppointmentScheduled);
-  const showCallAssistCTA = callRecommended && Boolean(onJumpToCallAssist);
   const showMessageCTAs = Boolean(followup?.shouldSendMessage && customerId);
   const followupDraftHint =
     showMessageCTAs && followup
@@ -415,17 +327,6 @@ export default function JobAskBobFollowupPanel({
     }
   };
 
-  const handleJumpToCallAssist = () => {
-    console.log("[askbob-followup-to-call-assist-click]", {
-      workspaceId,
-      userId,
-      jobId,
-      hasCallRecommendation: callRecommended,
-      hasQuoteContext,
-      hasScheduleContext,
-    });
-    onJumpToCallAssist?.();
-  };
 
   const signalText = result
     ? `Send message: ${result.shouldSendMessage ? "yes" : "no"} · Schedule visit: ${
@@ -435,7 +336,7 @@ export default function JobAskBobFollowupPanel({
       }`
     : null;
 
-  const toggleLabel = stepCollapsed ? "Show step" : "Hide step";
+  const toggleLabel = stepCollapsed ? "Show section" : "Hide section";
   const handleToggle = () => onToggleStepCollapsed?.();
 
   return (
@@ -445,7 +346,7 @@ export default function JobAskBobFollowupPanel({
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <h2 className="hb-heading-3 text-xl font-semibold">Step 5 · Plan the follow-up</h2>
+              <h2 className="hb-heading-3 text-xl font-semibold">Follow-up</h2>
               {stepCompleted && (
                 <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
                   Done
@@ -470,7 +371,7 @@ export default function JobAskBobFollowupPanel({
                 className="px-2 py-0.5 text-[11px] tracking-[0.3em]"
                 onClick={handleReset}
               >
-                Reset this step
+                Reset section
               </HbButton>
             )}
           </div>
@@ -604,105 +505,6 @@ export default function JobAskBobFollowupPanel({
                   )}
                 </div>
               )}
-              {showCallAssistCTA && (
-                <div className="space-y-2 border-t border-slate-800 pt-3">
-                  <HbButton
-                    size="sm"
-                    variant="secondary"
-                    className="w-full"
-                    onClick={handleJumpToCallAssist}
-                  >
-                    Use AskBob to prep this call (Step 7)
-                  </HbButton>
-                  <p className="text-xs text-slate-400">
-                    Step 7 helps you draft a script to move this call forward.
-                  </p>
-                </div>
-              )}
-              <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-200">
-                <div className="space-y-1">
-                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-                    AskBob scheduling (optional)
-                  </p>
-                  <p className="text-sm text-slate-300">
-                    Ask AskBob to suggest a few visit windows based on this job’s status and your working hours. Choose one to book the appointment immediately.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <HbButton
-                    size="sm"
-                    variant="secondary"
-                    className="w-full"
-                    disabled={scheduleLoading}
-                    onClick={handleGetScheduleSuggestions}
-                  >
-                    {scheduleLoading
-                      ? "Getting suggested times…"
-                      : scheduleResult
-                        ? "Refresh suggested times"
-                        : "Get suggested times"}
-                  </HbButton>
-                  {scheduleError && <p className="text-sm text-rose-400">{scheduleError}</p>}
-                </div>
-                {scheduleResult?.explanation && (
-                  <p className="text-xs text-slate-400">{scheduleResult.explanation}</p>
-                )}
-                {scheduleResult?.suggestions.length ? (
-                  <div className="space-y-3">
-                    {scheduleResult.suggestions.map((suggestion) => {
-                      const friendlyTime = formatFriendlyDateTime(
-                        suggestion.startAt,
-                        "",
-                      );
-                      return (
-                        <div
-                          key={`${suggestion.startAt}-${suggestion.endAt}`}
-                          className="space-y-1 rounded-xl border border-slate-800 bg-slate-950/60 p-3"
-                        >
-                          <div className="flex items-baseline justify-between gap-3">
-                            <p className="text-sm font-semibold text-slate-100">
-                              {friendlyTime || suggestion.label}
-                            </p>
-                            {suggestion.urgency && (
-                              <span className="text-[11px] uppercase tracking-[0.3em] text-amber-400">
-                                {suggestion.urgency}
-                              </span>
-                            )}
-                          </div>
-                          {suggestion.label && (
-                            <p className="text-xs text-slate-400">{suggestion.label}</p>
-                          )}
-                          {suggestion.reason && (
-                            <p className="text-xs text-slate-500">{suggestion.reason}</p>
-                          )}
-                          <HbButton
-                            size="xs"
-                            variant="secondary"
-                            className="w-full"
-                            disabled={schedulingSuggestionId === suggestion.startAt}
-                            onClick={() => handleScheduleAppointment(suggestion)}
-                          >
-                            {schedulingSuggestionId === suggestion.startAt
-                              ? "Scheduling…"
-                              : "Schedule this appointment"}
-                          </HbButton>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : scheduleResult ? (
-                  <p className="text-sm text-slate-400">No suggestions available right now.</p>
-                ) : null}
-                {appointmentError && <p className="text-sm text-rose-400">{appointmentError}</p>}
-                {askBobAppointmentScheduled && !schedulingSuggestionId && (
-                  <div className="text-xs text-slate-300">
-                    <p className="m-0">
-                      Appointment scheduled for{" "}
-                      {appointmentScheduledLabel ?? "the selected time"} by AskBob.
-                    </p>
-                  </div>
-                )}
-              </div>
             </div>
           )}
         </>

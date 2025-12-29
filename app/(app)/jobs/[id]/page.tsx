@@ -13,6 +13,7 @@ import { formatCurrency, formatFriendlyDateTime } from "@/utils/timeline/formatt
 import {
   getJobAskBobHudSummary,
   getJobAskBobSnapshotsForJob,
+  getJobAskBobSnapshotHistoryForJob,
 } from "@/lib/domain/askbob/service";
 import JobDetailsCard from "@/components/JobDetailsCard";
 import {
@@ -31,10 +32,6 @@ import {
   type CallSummarySignals,
 } from "@/lib/domain/askbob/callHistory";
 import { getLatestCallOutcomeForJob } from "@/lib/domain/calls/latestCallOutcome";
-import {
-  buildCallAutomatedDialSnapshot,
-  type CallAutomatedDialSnapshot,
-} from "@/lib/domain/calls/sessions";
 import {
   getInvoiceForJob,
   type InvoiceSnapshotRow as JobInvoiceSnapshotRow,
@@ -137,25 +134,6 @@ function formatDate(value: string | null) {
   });
 }
 
-function buildCallLabel(call: LatestCallRecord | null): string | null {
-  if (!call) {
-    return null;
-  }
-  const when = call.started_at ?? call.created_at;
-  const whenLabel = when ? formatFriendlyDateTime(when, "") : null;
-  const outcome = friendlyCallOutcome(call);
-  const duration = describeCallDuration(call.duration_seconds);
-  const parts = [
-    whenLabel ? `Call on ${whenLabel}` : null,
-    outcome,
-    duration,
-  ].filter(Boolean);
-  if (!parts.length) {
-    return "Most recent call";
-  }
-  return parts.join(" · ");
-}
-
 function buildCallHistoryHint(signals: CallSummarySignals): string {
   const attemptPlural = signals.totalAttempts === 1 ? "attempt" : "attempts";
   const parts = [
@@ -181,25 +159,6 @@ function buildCallHistoryHint(signals: CallSummarySignals): string {
   return [baseHint, windowLabel].filter(Boolean).join(" · ");
 }
 
-function friendlyCallOutcome(call: LatestCallRecord): string | null {
-  const raw = call.outcome?.replace(/_/g, " ") || call.status;
-  if (!raw) {
-    return null;
-  }
-  return raw.charAt(0).toUpperCase() + raw.slice(1);
-}
-
-function describeCallDuration(durationSeconds: number | null): string | null {
-  if (durationSeconds == null) {
-    return null;
-  }
-  if (durationSeconds >= 60) {
-    const minutes = Math.round(durationSeconds / 60);
-    return `${minutes} min`;
-  }
-  return `${durationSeconds} sec`;
-}
-
 function fallbackCard(title: string, body: string, action?: ReactNode) {
   return (
     <div className="hb-shell pt-20 pb-8">
@@ -219,41 +178,12 @@ function startOfToday(date?: Date) {
   return base;
 }
 
-function normalizeParam(value?: string | string[] | null) {
-  if (!value) {
-    return null;
-  }
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function onlyStringParam(value?: string | string[] | null) {
-  if (typeof value === "string") {
-    return value;
-  }
-  return null;
-}
-
 export default async function JobDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<Record<string, string | string[] | undefined> | null>;
 }) {
   const { id } = await params;
-  const resolvedSearchParams: Record<string, string | string[] | undefined> =
-    (await searchParams) ?? {};
-  const afterCallCacheKey = normalizeParam(
-    onlyStringParam(resolvedSearchParams.afterCallKey ?? null),
-  );
-  const callIdParam = normalizeParam(onlyStringParam(resolvedSearchParams.callId ?? null));
-  const afterCallCallId = callIdParam;
-  const afterCallForceFlag = normalizeParam(
-    onlyStringParam(resolvedSearchParams.afterCallForce ?? null),
-  );
-  const forcedAfterCallCallId = afterCallForceFlag === "1" ? callIdParam : null;
-  const forcedAfterCallHasTranscript =
-    normalizeParam(onlyStringParam(resolvedSearchParams.hasCallTranscript ?? null)) === "1";
 
   if (!id || !id.trim()) {
     notFound();
@@ -395,8 +325,30 @@ export default async function JobDetailPage({
     materialsSnapshot,
     quoteSnapshot,
     followupSnapshot,
-    afterCallSnapshot,
   } = askBobSnapshots;
+
+  let askBobSnapshotHistory = {
+    diagnose: [],
+    materials: [],
+    quote: [],
+  };
+  try {
+    askBobSnapshotHistory = await getJobAskBobSnapshotHistoryForJob(supabase, {
+      workspaceId: workspace.id,
+      jobId: job.id,
+    });
+  } catch (error) {
+    console.error("[job-detail] Failed to load AskBob snapshot history", error);
+  }
+  const diagnoseHistory = askBobSnapshotHistory.diagnose;
+  const materialsHistory = askBobSnapshotHistory.materials;
+  const quoteHistory = askBobSnapshotHistory.quote;
+  const diagnoseLatestVersion = diagnoseHistory[0] ?? null;
+  const materialsLatestVersion = materialsHistory[0] ?? null;
+  const quoteLatestVersion = quoteHistory[0] ?? null;
+  const diagnosePreviousVersions = diagnoseHistory.slice(1);
+  const materialsPreviousVersions = materialsHistory.slice(1);
+  const quotePreviousVersions = quoteHistory.slice(1);
 
 
   let upcomingAppointments: JobAppointmentRow[] = [];
@@ -601,28 +553,6 @@ export default async function JobDetailPage({
   const followupStatusChipClass = latestCall
     ? followupStatusClasses[followupDueInfo.dueStatus]
     : "";
-  const latestCallLabelText = buildCallLabel(latestCall);
-  let automatedDialSnapshot: CallAutomatedDialSnapshot | null = null;
-  if (latestCall?.id) {
-    try {
-      const { data, error } = await supabase
-        .from("calls")
-        .select(
-          "id, workspace_id, twilio_call_sid, twilio_status, twilio_status_updated_at, twilio_recording_url, twilio_recording_sid, twilio_recording_duration_seconds, transcript, outcome_recorded_at, outcome_code, outcome_notes, reached_customer"
-        )
-        .eq("workspace_id", workspace.id)
-        .eq("id", latestCall.id)
-        .maybeSingle();
-
-      if (error) {
-        console.warn("[job-detail] Failed to load call session snapshot", error);
-      } else if (data) {
-        automatedDialSnapshot = buildCallAutomatedDialSnapshot(data);
-      }
-    } catch (error) {
-      console.warn("[job-detail] Call session snapshot lookup error", error);
-    }
-  }
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
@@ -667,18 +597,16 @@ export default async function JobDetailPage({
             initialDiagnoseSnapshot={diagnoseSnapshot ?? undefined}
             initialMaterialsSnapshot={materialsSnapshot ?? undefined}
             initialQuoteSnapshot={quoteSnapshot ?? undefined}
+            diagnoseSnapshotHistory={diagnosePreviousVersions}
+            materialsSnapshotHistory={materialsPreviousVersions}
+            quoteSnapshotHistory={quotePreviousVersions}
+            diagnoseLatestSnapshotVersion={diagnoseLatestVersion}
+            materialsLatestSnapshotVersion={materialsLatestVersion}
+            quoteLatestSnapshotVersion={quoteLatestVersion}
             initialFollowupSnapshot={followupSnapshot ?? undefined}
-            initialAfterCallSnapshot={afterCallSnapshot ?? undefined}
             lastQuoteSummary={lastQuoteSummary}
-            latestCallLabel={latestCallLabelText}
-            hasLatestCall={Boolean(latestCall)}
             callHistoryHint={callHistoryHint}
             latestCallOutcome={latestCallOutcome}
-            afterCallCacheKey={afterCallCacheKey ?? undefined}
-            afterCallCacheCallId={afterCallCallId ?? undefined}
-            forcedAfterCallCallId={forcedAfterCallCallId ?? undefined}
-            forcedAfterCallHasTranscript={forcedAfterCallHasTranscript}
-            automatedDialSnapshot={automatedDialSnapshot}
           />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">
