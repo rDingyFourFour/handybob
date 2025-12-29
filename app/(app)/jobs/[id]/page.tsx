@@ -25,6 +25,9 @@ import JobAskBobFlow from "@/components/askbob/JobAskBobFlow";
 import JobQuotesCard from "@/components/jobs/JobQuotesCard";
 import JobRecentActivityCard from "@/components/jobs/JobRecentActivityCard";
 import JobInvoiceSection from "@/app/(app)/jobs/[id]/JobInvoiceSection";
+import JobBriefCard from "@/app/(app)/jobs/[id]/JobBriefCard";
+import NextStepCard from "@/app/(app)/jobs/[id]/NextStepCard";
+import AskBobSummaryCard from "@/app/(app)/jobs/[id]/AskBobSummaryCard";
 import {
   loadCallHistoryForJob,
   computeCallSummarySignals,
@@ -36,6 +39,8 @@ import {
   getInvoiceForJob,
   type InvoiceSnapshotRow as JobInvoiceSnapshotRow,
 } from "@/lib/domain/invoices/getInvoiceForJob";
+import { deriveNextStepForJobDetails, type NextStepResult } from "@/lib/domain/askbob/nextStep";
+import { PROGRESS_STEPS } from "@/app/(app)/jobs/[id]/progressSteps";
 
 type JobRecord = {
   id: string;
@@ -520,6 +525,43 @@ export default async function JobDetailPage({
     });
   }
 
+  const hasDiagnoseSnapshot = Boolean(diagnoseSnapshot);
+  const hasMaterialsSnapshot = Boolean(materialsSnapshot);
+  const hasQuoteSnapshot = Boolean(quoteSnapshot);
+  const latestQuoteStatus = latestQuote?.status ?? null;
+  const latestQuoteId = latestQuote?.id ?? null;
+  const callRecommended = Boolean(followupSnapshot?.callRecommended);
+  const hasCallWithMissingOutcome = callHistory.some(
+    (record) => !(record.outcome ?? record.status ?? "").trim(),
+  );
+  const latestCallOutcomeRecorded = Boolean(latestCallOutcome);
+  const invoicePresent = Boolean(invoice);
+  const invoiceStatus = invoice?.invoice_status ?? null;
+  const hasCallSummary = Boolean(latestCallOutcome || callHistory.length > 0);
+  const nextStep: NextStepResult = deriveNextStepForJobDetails({
+    hasDiagnoseSnapshot,
+    hasMaterialsSnapshot,
+    latestQuoteStatus,
+    latestQuoteId,
+    followupSnapshot,
+    callRecommended,
+    hasCallWithMissingOutcome,
+    latestCallOutcomeRecorded,
+    invoiceStatus,
+    invoicePresent,
+  });
+  console.log("[job-details-next-step-rendered]", {
+    jobId: job.id,
+    stepType: nextStep.stepType,
+  });
+  const progressStepMatch = PROGRESS_STEPS.find((step) => step.key === nextStep.stepType);
+  const jobBriefStateLine =
+    progressStepMatch !== undefined
+      ? nextStep.statusHints[progressStepMatch.key]
+      : nextStep.statusHints.quote;
+  const defaultProgressRow =
+    progressStepMatch !== undefined ? progressStepMatch.key : null;
+
   const quoteCandidate = quotes.find((quote) => quote.id === callScriptQuoteId) ?? null;
   const quoteCreatedAt = quoteCandidate?.created_at ?? null;
   const followupDueInfo: FollowupDueInfo = computeFollowupDueInfo({
@@ -556,6 +598,34 @@ export default async function JobDetailPage({
 
   return (
     <div className="hb-shell pt-20 pb-8 space-y-6">
+      <section data-testid="job-details-job-brief">
+        <JobBriefCard
+          title={displayJobTitle}
+          customerName={customerName}
+          stateLine={jobBriefStateLine}
+        />
+      </section>
+      <section data-testid="job-details-next-step">
+        <NextStepCard jobId={job.id} nextStep={nextStep} />
+      </section>
+      <section data-testid="job-details-askbob-summary">
+        <AskBobSummaryCard
+          jobId={job.id}
+          nextStep={nextStep}
+          hasDiagnoseSnapshot={hasDiagnoseSnapshot}
+          hasMaterialsSnapshot={hasMaterialsSnapshot}
+          hasQuoteSnapshot={hasQuoteSnapshot}
+          followupSnapshot={followupSnapshot ?? null}
+          hasCallSummary={hasCallSummary}
+          progressSteps={PROGRESS_STEPS}
+          statusHints={nextStep.statusHints}
+        />
+      </section>
+      <section data-testid="job-details-job-progress-header" className="space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Job progress</p>
+        </div>
+      </section>
       <JobDetailsCard
         jobId={job.id}
         title={displayJobTitle}
@@ -577,37 +647,40 @@ export default async function JobDetailPage({
         customerName={customerName}
         description={job.description_raw}
       />
-          <JobAskBobFlow
-            workspaceId={workspace.id}
-            jobId={job.id}
-            userId={userId ?? workspace.id}
-            customerId={customerId ?? null}
-            customerDisplayName={customerName ?? null}
-            customerPhoneNumber={customerPhoneNumber ?? null}
-            jobDescription={job.description_raw ?? null}
-            jobTitle={askBobJobTitle}
-            jobStatus={job.status ?? null}
-            askBobLastTaskLabel={askBobLastTaskLabel}
-            askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
-            askBobLastUsedAtIso={askBobLastUsedAtIso}
-            askBobRunsSummary={askBobRunsSummary}
-            initialLastQuoteId={lastQuoteId ?? null}
-            lastQuoteCreatedAt={lastQuoteCreatedAt ?? null}
-            lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? null}
-            initialDiagnoseSnapshot={diagnoseSnapshot ?? undefined}
-            initialMaterialsSnapshot={materialsSnapshot ?? undefined}
-            initialQuoteSnapshot={quoteSnapshot ?? undefined}
-            diagnoseSnapshotHistory={diagnosePreviousVersions}
-            materialsSnapshotHistory={materialsPreviousVersions}
-            quoteSnapshotHistory={quotePreviousVersions}
-            diagnoseLatestSnapshotVersion={diagnoseLatestVersion}
-            materialsLatestSnapshotVersion={materialsLatestVersion}
-            quoteLatestSnapshotVersion={quoteLatestVersion}
-            initialFollowupSnapshot={followupSnapshot ?? undefined}
-            lastQuoteSummary={lastQuoteSummary}
-            callHistoryHint={callHistoryHint}
-            latestCallOutcome={latestCallOutcome}
-          />
+      <JobAskBobFlow
+        workspaceId={workspace.id}
+        jobId={job.id}
+        userId={userId ?? workspace.id}
+        customerId={customerId ?? null}
+        customerDisplayName={customerName ?? null}
+        customerPhoneNumber={customerPhoneNumber ?? null}
+        jobDescription={job.description_raw ?? null}
+        jobTitle={askBobJobTitle}
+        jobStatus={job.status ?? null}
+        askBobLastTaskLabel={askBobLastTaskLabel}
+        askBobLastUsedAtDisplay={askBobLastUsedAtDisplay}
+        askBobLastUsedAtIso={askBobLastUsedAtIso}
+        askBobRunsSummary={askBobRunsSummary}
+        initialLastQuoteId={lastQuoteId ?? null}
+        lastQuoteCreatedAt={lastQuoteCreatedAt ?? null}
+        lastQuoteCreatedAtFriendly={lastQuoteCreatedAtFriendly ?? null}
+        initialDiagnoseSnapshot={diagnoseSnapshot ?? undefined}
+        initialMaterialsSnapshot={materialsSnapshot ?? undefined}
+        initialQuoteSnapshot={quoteSnapshot ?? undefined}
+        diagnoseSnapshotHistory={diagnosePreviousVersions}
+        materialsSnapshotHistory={materialsPreviousVersions}
+        quoteSnapshotHistory={quotePreviousVersions}
+        diagnoseLatestSnapshotVersion={diagnoseLatestVersion}
+        materialsLatestSnapshotVersion={materialsLatestVersion}
+        quoteLatestSnapshotVersion={quoteLatestVersion}
+        initialFollowupSnapshot={followupSnapshot ?? undefined}
+        lastQuoteSummary={lastQuoteSummary}
+        callHistoryHint={callHistoryHint}
+        latestCallOutcome={latestCallOutcome}
+        progressSteps={PROGRESS_STEPS}
+        statusHints={nextStep.statusHints}
+        defaultProgressStep={defaultProgressRow}
+      />
       <HbCard className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
@@ -658,13 +731,13 @@ export default async function JobDetailPage({
           </div>
         )}
       </HbCard>
-        <JobInvoiceSection
-          workspaceId={workspace.id}
-          jobId={job.id}
-          acceptedQuoteId={acceptedQuote?.id ?? null}
-          invoice={invoice}
-          invoiceCreatedLabel={invoiceCreatedLabel}
-        />
+      <JobInvoiceSection
+        workspaceId={workspace.id}
+        jobId={job.id}
+        acceptedQuoteId={acceptedQuote?.id ?? null}
+        invoice={invoice}
+        invoiceCreatedLabel={invoiceCreatedLabel}
+      />
       <JobQuotesCard quotes={quotes} quotesError={quotesError} quoteHref={quoteHref} />
       <JobRecentActivityCard jobId={job.id} workspaceId={workspace.id} />
     </div>

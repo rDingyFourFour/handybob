@@ -1,7 +1,8 @@
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MaterialsSummaryContext } from "@/components/askbob/AskBobMaterialsPanel";
+import { PROGRESS_STEPS } from "@/app/(app)/jobs/[id]/progressSteps";
 
 const pushMock = vi.fn();
 
@@ -11,16 +12,25 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-let capturedPanelProps: Record<string, unknown> | null = null;
+let capturedAccordionProps: Record<string, unknown> | null = null;
 let capturedFollowupProps: Record<string, unknown> | null = null;
 let capturedContainerProps: Record<string, unknown> | null = null;
 let capturedMaterialsProps: Record<string, unknown> | null = null;
 
-vi.mock("@/components/askbob/AskBobCallAssistPanel", () => ({
+vi.mock("@/app/(app)/jobs/[id]/JobProgressAccordion", () => ({
   __esModule: true,
   default: (props: Record<string, unknown>) => {
-    capturedPanelProps = props;
-    return <div data-testid="mock-call-assist" />;
+    capturedAccordionProps = props;
+    const rowContent = (props.rowContent ?? {}) as Record<string, React.ReactNode>;
+    return (
+      <div data-testid="mock-progress-accordion">
+        {rowContent.diagnose}
+        {rowContent.materials}
+        {rowContent.quote}
+        {rowContent.followup}
+        {rowContent.call}
+      </div>
+    );
   },
 }));
 
@@ -56,9 +66,10 @@ describe("JobAskBobFlow wiring", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    capturedPanelProps = null;
+    capturedAccordionProps = null;
     capturedFollowupProps = null;
     capturedContainerProps = null;
+    capturedMaterialsProps = null;
     pushMock.mockClear();
   });
 
@@ -72,7 +83,7 @@ describe("JobAskBobFlow wiring", () => {
     container.remove();
   });
 
-  it("passes job/customer context into AskBobCallAssistPanel", async () => {
+  it("renders progress rows and status hints through the accordion", async () => {
     const { default: JobAskBobFlow } = await import("@/components/askbob/JobAskBobFlow");
     await act(async () => {
       root?.render(
@@ -114,23 +125,20 @@ describe("JobAskBobFlow wiring", () => {
       await Promise.resolve();
     });
 
-    expect(capturedPanelProps).toMatchObject({
-      workspaceId: "workspace-1",
-      jobId: "job-1",
-      customerId: "customer-1",
-      customerDisplayName: "Customer",
-      customerPhoneNumber: "+15551234567",
-      followupCallRecommended: true,
-      followupCallPurpose: "Explain quote",
-      followupCallTone: "friendly and confident",
-      followupCallIntents: null,
-      followupCallIntentsToken: 0,
-      latestCallOutcomeLabel: null,
-    });
-    expect(capturedPanelProps?.onStartCallWithScript).toBeUndefined();
+    expect(capturedAccordionProps).toBeTruthy();
+    const steps = ((capturedAccordionProps?.progressSteps as Array<{ key: string }> | undefined) ?? []);
+    expect(steps.map((step) => step.key)).toEqual(PROGRESS_STEPS.map((step) => step.key));
+    const statusHints = capturedAccordionProps?.statusHints as Record<string, string> | undefined;
+    for (const step of PROGRESS_STEPS) {
+      expect(statusHints?.[step.key]).toBeDefined();
+    }
+    const rowContent = capturedAccordionProps?.rowContent as Record<string, unknown> | undefined;
+    expect(rowContent?.followup).toBeTruthy();
+    expect(rowContent?.call).toBeTruthy();
+    expect(capturedAccordionProps?.defaultExpandedStep).toBeNull();
   });
 
-  it("provides the latest call outcome label when an outcome is available", async () => {
+  it("provides the latest call outcome to the follow-up panel and keeps stages intact", async () => {
     const { default: JobAskBobFlow } = await import("@/components/askbob/JobAskBobFlow");
     await act(async () => {
       root?.render(
@@ -180,67 +188,10 @@ describe("JobAskBobFlow wiring", () => {
       await Promise.resolve();
     });
 
-    expect(capturedPanelProps?.latestCallOutcomeLabel).toContain("Needs follow-up");
     expect(capturedFollowupProps?.latestCallOutcome).toMatchObject({
       callId: "call-1",
       outcomeCode: "reached_needs_followup",
     });
-    expect(capturedFollowupProps?.stepCompleted).toBe(false);
-  });
-
-  it("leaves AskBob steps incomplete and exposes the deterministic outcome label when only the latest call outcome exists", async () => {
-    const { default: JobAskBobFlow } = await import("@/components/askbob/JobAskBobFlow");
-    await act(async () => {
-      root?.render(
-        <JobAskBobFlow
-          workspaceId="workspace-1"
-          userId="user-1"
-          jobId="job-1"
-          customerId="customer-1"
-          customerDisplayName="Customer"
-          customerPhoneNumber="+15551234567"
-          jobDescription="desc"
-          jobTitle="title"
-          askBobLastTaskLabel={null}
-          askBobLastUsedAtDisplay={null}
-          askBobLastUsedAtIso={null}
-          askBobRunsSummary={null}
-          initialLastQuoteId={null}
-          lastQuoteCreatedAt={null}
-          lastQuoteCreatedAtFriendly={null}
-          initialDiagnoseSnapshot={null}
-          initialMaterialsSnapshot={null}
-          initialQuoteSnapshot={null}
-          initialFollowupSnapshot={{
-            recommendedAction: "Call to check in",
-            rationale: "Need an update",
-            steps: [],
-            shouldSendMessage: false,
-            shouldScheduleVisit: false,
-            shouldCall: true,
-            shouldWait: false,
-            modelLatencyMs: 0,
-            callRecommended: true,
-            callPurpose: "Explain quote",
-            callTone: "friendly and confident",
-          }}
-          lastQuoteSummary={null}
-          latestCallOutcome={{
-            callId: "call-1",
-            occurredAt: "2025-01-01T10:00:00Z",
-            reachedCustomer: true,
-            outcomeCode: "reached_needs_followup",
-            outcomeNotes: null,
-            isAskBobAssisted: false,
-          }}
-        />,
-      );
-      await Promise.resolve();
-    });
-
-    expect(capturedPanelProps?.latestCallOutcomeLabel).toBe(
-      "Reached · Needs follow-up · 2025-01-01 10:00",
-    );
     const statusItems = (capturedContainerProps?.stageStatusItems ?? []) as Array<{
       label: string;
       status: string;
@@ -261,9 +212,7 @@ describe("JobAskBobFlow wiring", () => {
       "not_started",
     ]);
     expect(capturedFollowupProps?.stepCompleted).toBe(false);
-    expect(capturedPanelProps?.stepCompleted).toBe(false);
     expect(capturedFollowupProps?.stepCollapsed).toBe(true);
-    expect(capturedPanelProps?.stepCollapsed).toBe(false);
   });
 
   it("handles materials summary updates without throwing due to missing call script persona setter", async () => {

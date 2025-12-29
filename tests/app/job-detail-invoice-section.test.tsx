@@ -7,6 +7,7 @@ const createServerClientMock = vi.fn();
 const mockResolveWorkspaceContext = vi.fn();
 const mockGetJobAskBobHudSummary = vi.fn();
 const mockGetJobAskBobSnapshotsForJob = vi.fn();
+const mockGetJobAskBobSnapshotHistoryForJob = vi.fn();
 const mockLoadCallHistoryForJob = vi.fn();
 const mockGetLatestCallOutcomeForJob = vi.fn();
 const mockRedirect = vi.fn();
@@ -60,6 +61,8 @@ vi.mock("@/lib/domain/askbob/service", () => ({
   getJobAskBobHudSummary: (...args: unknown[]) => mockGetJobAskBobHudSummary(...args),
   getJobAskBobSnapshotsForJob: (...args: unknown[]) =>
     mockGetJobAskBobSnapshotsForJob(...args),
+  getJobAskBobSnapshotHistoryForJob: (...args: unknown[]) =>
+    mockGetJobAskBobSnapshotHistoryForJob(...args),
 }));
 
 vi.mock("@/lib/domain/askbob/callHistory", async () => {
@@ -137,6 +140,7 @@ describe("Job detail invoice section", () => {
       tasksSeen: [],
     });
     mockGetJobAskBobSnapshotsForJob.mockReset();
+    mockGetJobAskBobSnapshotHistoryForJob.mockReset();
     mockGetJobAskBobSnapshotsForJob.mockResolvedValue({
       diagnoseSnapshot: null,
       materialsSnapshot: null,
@@ -144,6 +148,11 @@ describe("Job detail invoice section", () => {
       followupSnapshot: null,
       afterCallSnapshot: null,
       postCallEnrichmentSnapshot: null,
+    });
+    mockGetJobAskBobSnapshotHistoryForJob.mockResolvedValue({
+      diagnose: [],
+      materials: [],
+      quote: [],
     });
     mockLoadCallHistoryForJob.mockReset();
     mockLoadCallHistoryForJob.mockResolvedValue([]);

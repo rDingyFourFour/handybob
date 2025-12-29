@@ -1,22 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import AskBobSection from "@/components/askbob/AskBobSection";
 import AskBobMaterialsPanel, { type MaterialsSummaryContext } from "@/components/askbob/AskBobMaterialsPanel";
 import AskBobQuotePanel from "@/components/askbob/AskBobQuotePanel";
 import AskBobSchedulerPanel from "@/components/askbob/AskBobSchedulerPanel";
-import AskBobCallAssistPanel from "@/components/askbob/AskBobCallAssistPanel";
 import JobAskBobFollowupPanel from "@/components/askbob/JobAskBobFollowupPanel";
 import JobAskBobPanel, { type JobDiagnosisContext } from "@/components/askbob/JobAskBobPanel";
 import JobAskBobContainer from "@/components/askbob/JobAskBobContainer";
+import JobProgressAccordion from "@/app/(app)/jobs/[id]/JobProgressAccordion";
+import HbButton from "@/components/ui/hb-button";
 import { openOrCreateCallSessionForJobAction } from "@/app/(app)/jobs/actions/openOrCreateCallSessionForJobAction";
 import type { AskBobStepReadiness } from "@/components/askbob/AskBobStepReadinessBadge";
 import { formatFriendlyDateTime } from "@/utils/timeline/formatters";
 import {
   formatLatestCallOutcomeHint,
-  formatLatestCallOutcomeReference,
   type LatestCallOutcomeForJob,
 } from "@/lib/domain/calls/latestCallOutcome";
 import {
@@ -24,7 +24,6 @@ import {
   summarizeMaterialsSuggestion,
 } from "@/lib/domain/quotes/materials-askbob-adapter";
 import type {
-  AskBobCallIntent,
   AskBobDiagnoseSnapshotPayload,
   AskBobFollowupSnapshotPayload,
   AskBobTaskSnapshotVersion,
@@ -43,49 +42,21 @@ import {
   PUBLIC_BOOKING_HANDOFF_SESSION_KEY,
 } from "@/lib/domain/publicBookingHandoff";
 import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
+import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
+import type { JobProgressStep, NextStepStatusHints } from "@/lib/domain/askbob/nextStep";
+import type { ProgressStepInfo } from "@/app/(app)/jobs/[id]/progressSteps";
+import { PROGRESS_STEPS } from "@/app/(app)/jobs/[id]/progressSteps";
 
 const MAX_SCRIPT_QUERY_LENGTH = 4000;
 const PUBLIC_BOOKING_HANDOFF_MAX_AGE_MS = 15 * 60 * 1000;
 
-const FOLLOWUP_CALL_INTENT_HINTS: { pattern: RegExp; intents: AskBobCallIntent[] }[] = [
-  {
-    pattern: /quote|decision|approval|proposal|estimate|scope/i,
-    intents: ["quote_followup"],
-  },
-  {
-    pattern: /invoice|payment|bill|balance|recover/i,
-    intents: ["invoice_followup"],
-  },
-  {
-    pattern: /schedule|visit|appointment|book|resched|confirm/i,
-    intents: ["schedule_visit"],
-  },
-  {
-    pattern: /intake|details|intro|new customer|diagnos/i,
-    intents: ["intake_information"],
-  },
-  {
-    pattern: /check[- ]?in|update|touch[- ]?base|relationship|follow[- ]?up/i,
-    intents: ["general_checkin"],
-  },
-];
-
-function mapFollowupCallPurposeToCallIntents(callPurpose?: string | null): AskBobCallIntent[] {
-  if (!callPurpose?.trim()) {
-    return ["general_checkin"];
-  }
-  const normalized = callPurpose.trim();
-  const matchedIntents = new Set<AskBobCallIntent>();
-  for (const hint of FOLLOWUP_CALL_INTENT_HINTS) {
-    if (hint.pattern.test(normalized)) {
-      hint.intents.forEach((intent) => matchedIntents.add(intent));
-    }
-  }
-  if (!matchedIntents.size) {
-    return ["general_checkin"];
-  }
-  return Array.from(matchedIntents);
-}
+const DEFAULT_STATUS_HINTS: NextStepStatusHints = {
+  diagnose: jobDetailsCopy.progressStatus.diagnose.pending,
+  materials: jobDetailsCopy.progressStatus.materials.pending,
+  quote: jobDetailsCopy.progressStatus.quote.pending,
+  followup: jobDetailsCopy.progressStatus.followup.pending,
+  call: jobDetailsCopy.progressStatus.call.pending,
+};
 
 export function buildAskBobCallAssistUrl(params: {
   jobId: string;
@@ -114,9 +85,7 @@ export function buildAskBobCallAssistUrl(params: {
 type JobAskBobFlowProps = {
   workspaceId: string;
   jobId: string;
-  userId: string;
   customerId?: string | null;
-  customerDisplayName?: string | null;
   customerPhoneNumber?: string | null;
   jobDescription?: string | null;
   jobTitle?: string | null;
@@ -138,9 +107,11 @@ type JobAskBobFlowProps = {
   materialsLatestSnapshotVersion?: AskBobTaskSnapshotVersion<AskBobMaterialsSnapshotPayload> | null;
   quoteLatestSnapshotVersion?: AskBobTaskSnapshotVersion<AskBobQuoteSnapshotPayload> | null;
   initialFollowupSnapshot?: AskBobFollowupSnapshotPayload | null;
-  lastQuoteSummary?: string | null;
   callHistoryHint?: string | null;
   latestCallOutcome?: LatestCallOutcomeForJob | null;
+  progressSteps?: ProgressStepInfo[];
+  statusHints?: NextStepStatusHints;
+  defaultProgressStep?: JobProgressStep | null;
 };
 
 type SessionQuote = {
@@ -222,9 +193,7 @@ function deriveFollowupRecommendation(input: FollowupRecommendationInput): Follo
 export default function JobAskBobFlow({
   workspaceId,
   jobId,
-  userId,
   customerId,
-  customerDisplayName,
   customerPhoneNumber,
   jobDescription,
   jobTitle,
@@ -246,9 +215,11 @@ export default function JobAskBobFlow({
   materialsLatestSnapshotVersion = null,
   quoteLatestSnapshotVersion = null,
   initialFollowupSnapshot,
-  lastQuoteSummary,
   callHistoryHint,
   latestCallOutcome,
+  progressSteps = PROGRESS_STEPS,
+  statusHints = DEFAULT_STATUS_HINTS,
+  defaultProgressStep = null,
 }: JobAskBobFlowProps) {
   const diagnosisSummaryInitialValue = initialDiagnoseSnapshot
     ? buildDiagnosisSummary(initialDiagnoseSnapshot.response)
@@ -284,24 +255,9 @@ export default function JobAskBobFlow({
   const [followupRecommendation, setFollowupRecommendation] = useState<FollowUpRecommendation | null>(
     () => initialFollowupRecommendation,
   );
-  const [followupCallRecommended, setFollowupCallRecommended] = useState(
-    Boolean(initialFollowupSnapshot?.callRecommended),
-  );
-  const [followupCallPurpose, setFollowupCallPurpose] = useState(
-    initialFollowupSnapshot?.callPurpose ?? null,
-  );
-  const [followupCallTone, setFollowupCallTone] = useState(
-    initialFollowupSnapshot?.callTone ?? null,
-  );
   const [callScriptSummary, setCallScriptSummary] = useState<string | null>(null);
-  const [
-    callScriptFollowupCallIntents,
-    setCallScriptFollowupCallIntents,
-  ] = useState<AskBobCallIntent[] | null>(null);
-  const [
-    callScriptFollowupCallIntentsToken,
-    setCallScriptFollowupCallIntentsToken,
-  ] = useState(0);
+  const [callScriptCollapsed, setCallScriptCollapsed] = useState(false);
+  const [callScriptResetToken, setCallScriptResetToken] = useState(0);
   const [diagnoseCollapsed, setDiagnoseCollapsed] = useState(initialCollapsedDefaults.diagnose);
   const [materialsCollapsed, setMaterialsCollapsed] = useState(initialCollapsedDefaults.materials);
   const [quoteCollapsed, setQuoteCollapsed] = useState(initialCollapsedDefaults.quote);
@@ -318,18 +274,11 @@ export default function JobAskBobFlow({
   } | null>(null);
   const [schedulerDone, setSchedulerDone] = useState(false);
   const [schedulerCollapsed, setSchedulerCollapsed] = useState(initialCollapsedDefaults.scheduler);
-  const [callScriptCollapsed, setCallScriptCollapsed] = useState(initialCollapsedDefaults.callAssist);
-  const [callScriptResetToken, setCallScriptResetToken] = useState(0);
   const [schedulerResetToken, setSchedulerResetToken] = useState(0);
-  const [callPrepVisible, setCallPrepVisible] = useState(false);
   const handoffCheckedJobIdRef = useRef<string | null>(null);
   const resolvedLatestCallOutcome = latestCallOutcome ?? null;
   const latestCallOutcomeHint = resolvedLatestCallOutcome
     ? formatLatestCallOutcomeHint(resolvedLatestCallOutcome)
-    : null;
-  const latestCallOutcomeReference = resolvedLatestCallOutcome
-    ? resolvedLatestCallOutcome.displayLabel ??
-      formatLatestCallOutcomeReference(resolvedLatestCallOutcome)
     : null;
 
   const serverQuoteCandidate = initialLastQuoteId
@@ -674,17 +623,11 @@ export default function JobAskBobFlow({
   const handleFollowupResult = useCallback(
     (result: AskBobJobFollowupResult | null) => {
       if (!result) {
-        setFollowupCallRecommended(false);
-        setFollowupCallPurpose(null);
-        setFollowupCallTone(null);
         setFollowupRecommendation(null);
         applyRecommendationCollapse(null);
         return;
       }
       const recommendation = deriveFollowupRecommendation(result);
-      setFollowupCallRecommended(Boolean(result.callRecommended));
-      setFollowupCallPurpose(result.callPurpose ?? null);
-      setFollowupCallTone(result.callTone ?? null);
       setFollowupRecommendation(recommendation);
       applyRecommendationCollapse(recommendation);
     },
@@ -735,16 +678,139 @@ export default function JobAskBobFlow({
 
   const shouldShowScheduler =
     followupRecommendation?.recommendedNextAction === "schedule_appointment";
-  const shouldShowCallPrep =
-    followupRecommendation?.recommendedNextAction === "call_customer" || callPrepVisible;
 
-  const handleShowCallPrep = () => {
-    console.log("[askbob-job-assistant-call-prep-open]", {
-      workspaceId,
-      jobId,
-      recommendation: followupRecommendation?.recommendedNextAction ?? null,
-    });
-    handleJumpToCallAssist();
+  const progressRowContent: Record<JobProgressStep, ReactNode> = {
+    diagnose: (
+      <AskBobSection id="askbob-diagnose" testId="askbob-diagnose-section">
+        <JobAskBobPanel
+          workspaceId={workspaceId}
+          jobId={jobId}
+          customerId={customerId ?? undefined}
+          jobDescription={promptSeed}
+          jobTitle={normalizedJobTitle}
+          initialDiagnoseSnapshot={initialDiagnoseSnapshot ?? undefined}
+          diagnosisSnapshotHistory={diagnoseSnapshotHistory}
+          latestSnapshotVersion={diagnoseLatestSnapshotVersion}
+          onDiagnoseSuccess={() => scrollToSection("askbob-materials")}
+          onDiagnoseComplete={handleDiagnoseComplete}
+          stepCompleted={diagnosisDone}
+          stepCollapsed={diagnoseCollapsed}
+          onToggleStepCollapsed={() =>
+            handleToggleStep("diagnose", diagnoseCollapsed, setDiagnoseCollapsed)
+          }
+          stepReadiness={stepReadiness.diagnose}
+        />
+      </AskBobSection>
+    ),
+    materials: (
+      <AskBobSection id="askbob-materials" testId="askbob-materials-section">
+        <AskBobMaterialsPanel
+          workspaceId={workspaceId}
+          jobId={jobId}
+          customerId={customerId ?? null}
+          onMaterialsSuccess={() => scrollToSection("askbob-quote")}
+          diagnosisSummaryForMaterials={diagnosisSummary}
+          onMaterialsSummaryChange={handleMaterialsSummaryChange}
+          jobDescription={jobDescription ?? null}
+          jobTitle={normalizedJobTitle}
+          initialMaterialsSnapshot={initialMaterialsSnapshot ?? undefined}
+          materialsSnapshotHistory={materialsSnapshotHistory}
+          latestSnapshotVersion={materialsLatestSnapshotVersion}
+          stepCompleted={materialsDone}
+          resetToken={materialsResetToken}
+          stepCollapsed={materialsCollapsed}
+          onToggleStepCollapsed={() =>
+            handleToggleStep("materials", materialsCollapsed, setMaterialsCollapsed)
+          }
+          stepReadiness={stepReadiness.materials}
+        />
+      </AskBobSection>
+    ),
+    quote: (
+      <AskBobSection id="askbob-quote" testId="askbob-quote-section">
+        <AskBobQuotePanel
+          workspaceId={workspaceId}
+          jobId={jobId}
+          customerId={customerId ?? null}
+          onQuoteSuccess={() => scrollToSection("askbob-followup")}
+          diagnosisSummaryForQuote={diagnosisSummary}
+          materialsSummaryForQuote={materialsSummary}
+          jobDescription={jobDescription ?? null}
+          jobTitle={normalizedJobTitle}
+          onQuoteApplied={handleAskBobQuoteApplied}
+          onScrollToFollowup={() => scrollToSection("askbob-followup")}
+          stepCompleted={quoteDone}
+          resetToken={quoteResetToken}
+          onQuoteReset={handleQuoteReset}
+          stepCollapsed={quoteCollapsed}
+          onToggleStepCollapsed={() =>
+            handleToggleStep("quote", quoteCollapsed, setQuoteCollapsed)
+          }
+          initialQuoteSnapshot={initialQuoteSnapshot ?? undefined}
+          quoteSnapshotHistory={quoteSnapshotHistory}
+          latestSnapshotVersion={quoteLatestSnapshotVersion}
+          stepReadiness={stepReadiness.quote}
+        />
+      </AskBobSection>
+    ),
+    followup: (
+      <AskBobSection id="askbob-followup" testId="askbob-followup-section">
+        <JobAskBobFollowupPanel
+          workspaceId={workspaceId}
+          jobId={jobId}
+          customerId={customerId ?? null}
+          jobTitle={normalizedJobTitle}
+          jobDescription={jobDescription ?? null}
+          diagnosisSummaryForFollowup={diagnosisSummary}
+          materialsSummaryForFollowup={materialsSummary}
+          hasQuoteContextForFollowup={combinedHasQuoteContextForFollowup}
+          lastQuoteIdForFollowup={effectiveLastQuote?.quoteId ?? undefined}
+          lastQuoteCreatedAtForFollowup={effectiveLastQuote?.createdAtIso ?? undefined}
+          lastQuoteCreatedAtLabelForFollowup={effectiveLastQuote?.friendlyLabel ?? undefined}
+          stepCompleted={followupDone}
+          onFollowupCompleted={handleFollowupCompleted}
+          resetToken={followupResetToken}
+          onReset={handleFollowupReset}
+          stepCollapsed={followupCollapsed}
+          onToggleStepCollapsed={() =>
+            handleToggleStep("followup", followupCollapsed, setFollowupCollapsed)
+          }
+          initialFollowupSnapshot={initialFollowupSnapshot ?? undefined}
+          askBobAppointmentScheduled={sessionAskBobAppointment ?? undefined}
+          onFollowupSummaryUpdate={setFollowupSummary}
+          onFollowupResult={handleFollowupResult}
+          callHistoryHint={callHistoryHint ?? null}
+          latestCallOutcome={resolvedLatestCallOutcome}
+          latestCallOutcomeHint={latestCallOutcomeHint}
+          stepReadiness={stepReadiness.followup}
+        />
+      </AskBobSection>
+    ),
+    call: (
+      <AskBobSection id="askbob-call-session" testId="askbob-call-session-section">
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Call session</p>
+            <p className="text-sm text-slate-200">
+              {callHistoryHint ??
+                "Open or create a call session to capture the outcome for this job."}
+            </p>
+          </div>
+          <HbButton
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={handleOpenCallSessionClick}
+            disabled={openCallSessionState.status === "loading"}
+          >
+            Open call session
+          </HbButton>
+          {openCallSessionState.status === "error" && (
+            <p className="text-xs text-rose-400">{openCallSessionState.message}</p>
+          )}
+        </div>
+      </AskBobSection>
+    ),
   };
 
   const nextActionMessage =
@@ -780,26 +846,6 @@ export default function JobAskBobFlow({
       return;
     }
     scrollToSection("askbob-followup");
-  };
-
-  const handleJumpToCallAssist = () => {
-    console.log("[askbob-followup-to-call-assist-flow]", {
-      workspaceId,
-      userId,
-      jobId,
-      hasCallRecommendation: followupCallRecommended,
-    });
-    const trimmedFollowupCallPurpose = followupCallPurpose?.trim() ?? null;
-    if (trimmedFollowupCallPurpose) {
-      const mappedIntents = mapFollowupCallPurposeToCallIntents(trimmedFollowupCallPurpose);
-      if (mappedIntents.length) {
-        setCallScriptFollowupCallIntents(mappedIntents);
-        setCallScriptFollowupCallIntentsToken((value) => value + 1);
-      }
-    }
-    setCallPrepVisible(true);
-    setCallScriptCollapsed(false);
-    scrollToSection("askbob-call-script");
   };
 
   const handleAskBobAppointmentScheduled = (info: {
@@ -846,171 +892,39 @@ export default function JobAskBobFlow({
         nextActionDisabled={openCallSessionState.status === "loading"}
         onNextAction={handleAssistantNextAction}
         onStageSelect={handleStageSelect}
-        showCallPrepAction={!shouldShowCallPrep}
-        onShowCallPrep={handleShowCallPrep}
       />
       <div className="space-y-8">
-        <div data-testid="askbob-job-pipeline" className="space-y-4">
-          <AskBobSection id="askbob-diagnose" testId="askbob-diagnose-section">
-            <JobAskBobPanel
-              workspaceId={workspaceId}
-              jobId={jobId}
-              customerId={customerId ?? undefined}
-              jobDescription={promptSeed}
-              jobTitle={normalizedJobTitle}
-              initialDiagnoseSnapshot={initialDiagnoseSnapshot ?? undefined}
-              diagnosisSnapshotHistory={diagnoseSnapshotHistory}
-              latestSnapshotVersion={diagnoseLatestSnapshotVersion}
-              onDiagnoseSuccess={() => scrollToSection("askbob-materials")}
-              onDiagnoseComplete={handleDiagnoseComplete}
-              stepCompleted={diagnosisDone}
-              stepCollapsed={diagnoseCollapsed}
-              onToggleStepCollapsed={() =>
-                handleToggleStep("diagnose", diagnoseCollapsed, setDiagnoseCollapsed)
-              }
-              stepReadiness={stepReadiness.diagnose}
-            />
-          </AskBobSection>
-          <AskBobSection id="askbob-materials" testId="askbob-materials-section">
-            <AskBobMaterialsPanel
-              workspaceId={workspaceId}
-              jobId={jobId}
-              customerId={customerId ?? null}
-              onMaterialsSuccess={() => scrollToSection("askbob-quote")}
-              diagnosisSummaryForMaterials={diagnosisSummary}
-              onMaterialsSummaryChange={handleMaterialsSummaryChange}
-              jobDescription={jobDescription ?? null}
-              jobTitle={normalizedJobTitle}
-              initialMaterialsSnapshot={initialMaterialsSnapshot ?? undefined}
-              materialsSnapshotHistory={materialsSnapshotHistory}
-              latestSnapshotVersion={materialsLatestSnapshotVersion}
-              stepCompleted={materialsDone}
-              resetToken={materialsResetToken}
-              stepCollapsed={materialsCollapsed}
-              onToggleStepCollapsed={() =>
-                handleToggleStep("materials", materialsCollapsed, setMaterialsCollapsed)
-              }
-              stepReadiness={stepReadiness.materials}
-            />
-          </AskBobSection>
-          <AskBobSection id="askbob-quote" testId="askbob-quote-section">
-            <AskBobQuotePanel
-              workspaceId={workspaceId}
-              jobId={jobId}
-              customerId={customerId ?? null}
-              onQuoteSuccess={() => scrollToSection("askbob-followup")}
-              diagnosisSummaryForQuote={diagnosisSummary}
-              materialsSummaryForQuote={materialsSummary}
-              jobDescription={jobDescription ?? null}
-              jobTitle={normalizedJobTitle}
-              onQuoteApplied={handleAskBobQuoteApplied}
-              onScrollToFollowup={() => scrollToSection("askbob-followup")}
-              stepCompleted={quoteDone}
-              resetToken={quoteResetToken}
-              onQuoteReset={handleQuoteReset}
-              stepCollapsed={quoteCollapsed}
-              onToggleStepCollapsed={() =>
-                handleToggleStep("quote", quoteCollapsed, setQuoteCollapsed)
-              }
-              initialQuoteSnapshot={initialQuoteSnapshot ?? undefined}
-              quoteSnapshotHistory={quoteSnapshotHistory}
-              latestSnapshotVersion={quoteLatestSnapshotVersion}
-              stepReadiness={stepReadiness.quote}
-            />
-          </AskBobSection>
-        </div>
-        <div data-testid="askbob-calling-pipeline" className="space-y-4">
-          <AskBobSection id="askbob-followup" testId="askbob-followup-section">
-            <JobAskBobFollowupPanel
+        <JobProgressAccordion
+          progressSteps={progressSteps}
+          statusHints={statusHints}
+          defaultExpandedStep={defaultProgressStep ?? null}
+          rowContent={progressRowContent}
+        />
+        {shouldShowScheduler && (
+          <AskBobSection id="askbob-scheduler" testId="askbob-scheduler-section">
+            <AskBobSchedulerPanel
               workspaceId={workspaceId}
               jobId={jobId}
               customerId={customerId ?? null}
               jobTitle={normalizedJobTitle}
               jobDescription={jobDescription ?? null}
-              diagnosisSummaryForFollowup={diagnosisSummary}
-              materialsSummaryForFollowup={materialsSummary}
-              hasQuoteContextForFollowup={combinedHasQuoteContextForFollowup}
-              lastQuoteIdForFollowup={effectiveLastQuote?.quoteId ?? undefined}
-              lastQuoteCreatedAtForFollowup={effectiveLastQuote?.createdAtIso ?? undefined}
-              lastQuoteCreatedAtLabelForFollowup={effectiveLastQuote?.friendlyLabel ?? undefined}
-              stepCompleted={followupDone}
-              onFollowupCompleted={handleFollowupCompleted}
-              resetToken={followupResetToken}
-              onReset={handleFollowupReset}
-              stepCollapsed={followupCollapsed}
+              diagnosisSummaryForScheduler={diagnosisSummary}
+              materialsSummaryForScheduler={materialsSummary}
+              quoteSummaryForScheduler={quoteSummary}
+              followupSummaryForScheduler={followupSummary}
+              stepCompleted={schedulerDone}
+              resetToken={schedulerResetToken}
+              onReset={handleSchedulerReset}
+              stepCollapsed={schedulerCollapsed}
               onToggleStepCollapsed={() =>
-                handleToggleStep("followup", followupCollapsed, setFollowupCollapsed)
+                handleToggleStep("scheduler", schedulerCollapsed, setSchedulerCollapsed)
               }
-              initialFollowupSnapshot={initialFollowupSnapshot ?? undefined}
-              askBobAppointmentScheduled={sessionAskBobAppointment ?? undefined}
-              onFollowupSummaryUpdate={setFollowupSummary}
-              onFollowupResult={handleFollowupResult}
-              callHistoryHint={callHistoryHint ?? null}
-              latestCallOutcome={resolvedLatestCallOutcome}
-              latestCallOutcomeHint={latestCallOutcomeHint}
-              stepReadiness={stepReadiness.followup}
+              onAppointmentScheduled={handleAskBobAppointmentScheduled}
+              onScrollIntoView={() => scrollToSection("askbob-scheduler")}
+              stepReadiness={stepReadiness.scheduler}
             />
           </AskBobSection>
-          {shouldShowScheduler && (
-            <AskBobSection id="askbob-scheduler" testId="askbob-scheduler-section">
-              <AskBobSchedulerPanel
-                workspaceId={workspaceId}
-                jobId={jobId}
-                customerId={customerId ?? null}
-                jobTitle={normalizedJobTitle}
-                jobDescription={jobDescription ?? null}
-                diagnosisSummaryForScheduler={diagnosisSummary}
-                materialsSummaryForScheduler={materialsSummary}
-                quoteSummaryForScheduler={quoteSummary}
-                followupSummaryForScheduler={followupSummary}
-                stepCompleted={schedulerDone}
-                resetToken={schedulerResetToken}
-                onReset={handleSchedulerReset}
-                stepCollapsed={schedulerCollapsed}
-                onToggleStepCollapsed={() =>
-                  handleToggleStep("scheduler", schedulerCollapsed, setSchedulerCollapsed)
-                }
-                onAppointmentScheduled={handleAskBobAppointmentScheduled}
-                onScrollIntoView={() => scrollToSection("askbob-scheduler")}
-                stepReadiness={stepReadiness.scheduler}
-              />
-            </AskBobSection>
-          )}
-          {shouldShowCallPrep && (
-            <AskBobSection id="askbob-call-script" testId="askbob-call-prep-section">
-              <AskBobCallAssistPanel
-                stepCompleted={callScriptDone}
-                stepCollapsed={callScriptCollapsed}
-                onToggleCollapse={() =>
-                  handleToggleStep("callAssist", callScriptCollapsed, setCallScriptCollapsed)
-                }
-                workspaceId={workspaceId}
-                userId={userId}
-                jobId={jobId}
-                customerId={customerId ?? null}
-                customerDisplayName={customerDisplayName ?? null}
-                customerPhoneNumber={customerPhoneNumber ?? null}
-                jobTitle={normalizedJobTitle || null}
-                jobDescription={jobDescription ?? null}
-                diagnosisSummary={diagnosisSummary}
-                materialsSummary={materialsSummary}
-                lastQuoteSummary={lastQuoteSummary ?? null}
-                followupSummary={followupSummary}
-                followupCallRecommended={followupCallRecommended}
-                followupCallPurpose={followupCallPurpose}
-                followupCallTone={followupCallTone}
-                followupCallIntents={callScriptFollowupCallIntents}
-                followupCallIntentsToken={callScriptFollowupCallIntentsToken}
-                resetToken={callScriptResetToken}
-                callScriptSummary={callScriptSummary}
-                onCallScriptSummaryChange={setCallScriptSummary}
-                latestCallOutcome={resolvedLatestCallOutcome}
-                latestCallOutcomeLabel={latestCallOutcomeReference}
-                stepReadiness={stepReadiness.callAssist}
-              />
-            </AskBobSection>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );

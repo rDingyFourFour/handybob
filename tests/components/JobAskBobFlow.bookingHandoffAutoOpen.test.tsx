@@ -44,19 +44,11 @@ vi.mock("@/components/askbob/AskBobSchedulerPanel", () => ({
   __esModule: true,
   default: stubComponent,
 }));
-vi.mock("@/components/askbob/AskBobCallAssistPanel", () => ({
-  __esModule: true,
-  default: stubComponent,
-}));
 vi.mock("@/components/askbob/JobAskBobFollowupPanel", () => ({
   __esModule: true,
   default: stubComponent,
 }));
 vi.mock("@/components/askbob/JobAskBobAfterCallPanel", () => ({
-  __esModule: true,
-  default: stubComponent,
-}));
-vi.mock("@/components/askbob/AskBobAutomatedCallPanel", () => ({
   __esModule: true,
   default: stubComponent,
 }));

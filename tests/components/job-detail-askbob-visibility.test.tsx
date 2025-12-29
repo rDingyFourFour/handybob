@@ -3,7 +3,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let capturedSchedulerProps: Record<string, unknown> | null = null;
-let capturedCallPrepProps: Record<string, unknown> | null = null;
 let capturedDiagnoseProps: Record<string, unknown> | null = null;
 
 vi.mock("next/navigation", () => ({
@@ -43,14 +42,6 @@ vi.mock("@/components/askbob/AskBobSchedulerPanel", () => ({
   },
 }));
 
-vi.mock("@/components/askbob/AskBobCallAssistPanel", () => ({
-  __esModule: true,
-  default: (props: Record<string, unknown>) => {
-    capturedCallPrepProps = props;
-    return <div data-testid="mock-call-prep" data-collapsed={String(props.stepCollapsed)} />;
-  },
-}));
-
 import JobAskBobFlow from "@/components/askbob/JobAskBobFlow";
 
 const baseProps = {
@@ -77,7 +68,6 @@ describe("job detail AskBob panel visibility", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     capturedSchedulerProps = null;
-    capturedCallPrepProps = null;
     capturedDiagnoseProps = null;
   });
 
@@ -130,7 +120,7 @@ describe("job detail AskBob panel visibility", () => {
     expect(capturedDiagnoseProps?.stepCollapsed).toBe(true);
   });
 
-  it("renders call prep when follow-up recommends calling", async () => {
+  it("renders the call session doorway when follow-up recommends calling", async () => {
     await act(async () => {
       root?.render(
         <JobAskBobFlow
@@ -154,29 +144,18 @@ describe("job detail AskBob panel visibility", () => {
     });
     await flushEffects();
 
-    expect(container.querySelector('[data-testid="mock-call-prep"]')).toBeTruthy();
-    expect(capturedCallPrepProps?.stepCollapsed).toBe(false);
-  });
-
-  it("shows call prep when the assistant button is used", async () => {
+    const callToggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="progress-row-call-toggle"]',
+    );
     await act(async () => {
-      root?.render(<JobAskBobFlow {...baseProps} />);
-      await Promise.resolve();
-    });
-    await flushEffects();
-
-    expect(container.querySelector('[data-testid="mock-call-prep"]')).toBeNull();
-
-    const showCallPrepButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>("button"),
-    ).find((button) => button.textContent?.includes("Show call prep"));
-    expect(showCallPrepButton).toBeTruthy();
-
-    await act(async () => {
-      showCallPrepButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      callToggle?.click();
       await Promise.resolve();
     });
 
-    expect(container.querySelector('[data-testid="mock-call-prep"]')).toBeTruthy();
+    const callContent = container.querySelector('[data-testid="progress-row-call-content"]');
+    expect(callContent).toBeTruthy();
+    expect(callContent?.getAttribute("aria-hidden")).toBe("false");
+    expect(callContent?.textContent).toContain("Open call session");
+    expect(callContent?.textContent).not.toContain("Start automated call");
   });
 });

@@ -1,3 +1,5 @@
+import { assertBobTone } from "@/lib/domain/copy/bobVoice";
+
 export const callSessionCopy = {
   header: {
     title: "Call session",
@@ -223,3 +225,34 @@ export const callSessionCopy = {
     safeFailure: "Something went wrong. Try again in a moment.",
   },
 } as const;
+
+export function validateCallSessionCopy(): void {
+  const check = (value: string, label: string) => assertBobTone(value, label);
+
+  check(callSessionCopy.header.title, "header.title");
+  check(callSessionCopy.header.subtitleTemplate, "header.subtitleTemplate");
+  check(callSessionCopy.header.subtitleFallback, "header.subtitleFallback");
+  check(callSessionCopy.header.backToCalls, "header.backToCalls");
+
+  check(callSessionCopy.mode.kicker, "mode.kicker");
+  check(callSessionCopy.mode.title, "mode.title");
+  check(callSessionCopy.mode.helper, "mode.helper");
+  check(callSessionCopy.mode.unselectedHelper, "mode.unselectedHelper");
+
+  Object.entries(callSessionCopy.primaryCta.label).forEach(([labelKey, labelText]) => {
+    check(labelText, `primaryCta.label.${labelKey}`);
+  });
+
+  Object.entries(callSessionCopy.primaryCta.explanation).forEach(([explanationKey, explanationText]) => {
+    check(explanationText, `primaryCta.explanation.${explanationKey}`);
+  });
+
+  check(callSessionCopy.statusStrip.title, "statusStrip.title");
+  Object.entries(callSessionCopy.statusStrip.labels).forEach(([labelKey, labelText]) => {
+    check(labelText, `statusStrip.labels.${labelKey}`);
+  });
+
+  Object.entries(callSessionCopy.statusStrip.statuses).forEach(([statusKey, statusText]) => {
+    check(statusText, `statusStrip.statuses.${statusKey}`);
+  });
+}

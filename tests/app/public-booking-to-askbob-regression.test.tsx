@@ -248,10 +248,6 @@ describe("JobAskBobFlow lead logging", () => {
         replace: vi.fn(),
       }),
     }));
-    vi.doMock("@/components/askbob/AskBobCallAssistPanel", () => ({
-      __esModule: true,
-      default: () => <div data-testid="mock-call-assist" />,
-    }));
     vi.doMock("@/components/askbob/JobAskBobFollowupPanel", () => ({
       __esModule: true,
       default: () => <div data-testid="mock-followup" />,
@@ -260,11 +256,6 @@ describe("JobAskBobFlow lead logging", () => {
       __esModule: true,
       default: () => <div data-testid="mock-container" />,
     }));
-    vi.doMock("@/components/askbob/AskBobAutomatedCallPanel", () => ({
-      __esModule: true,
-      default: () => <div data-testid="mock-automated-call" />,
-    }));
-
     const { default: JobAskBobFlow } = await import("@/components/askbob/JobAskBobFlow");
     await act(async () => {
       root?.render(

@@ -41,13 +41,6 @@ vi.mock("@/components/askbob/AskBobSchedulerPanel", () => ({
   default: () => <div data-testid="readiness-scheduler" />,
 }));
 
-vi.mock("@/components/askbob/AskBobCallAssistPanel", () => ({
-  __esModule: true,
-  default: (props: { stepReadiness?: { isReady?: boolean; blockingReason?: string | null } }) => (
-    <div data-testid="readiness-call-assist">{renderReadiness(props.stepReadiness)}</div>
-  ),
-}));
-
 describe("job detail AskBob readiness gating", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
@@ -98,9 +91,6 @@ describe("job detail AskBob readiness gating", () => {
     expect(container.textContent).toContain("Not ready: Add a job title or description first.");
     expect(container.querySelector('[data-testid="readiness-materials"]')?.textContent).toContain(
       "Not ready: Run Diagnose first.",
-    );
-    expect(container.querySelector('[data-testid="readiness-call-assist"]')?.textContent).toContain(
-      "Not ready: Add a customer phone number first.",
     );
   });
 

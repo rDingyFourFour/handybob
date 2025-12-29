@@ -19,11 +19,6 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-vi.mock("@/components/askbob/AskBobCallAssistPanel", () => ({
-  __esModule: true,
-  default: () => <div data-testid="mock-call-assist" />,
-}));
-
 vi.mock("@/components/askbob/JobAskBobFollowupPanel", () => ({
   __esModule: true,
   default: () => <div data-testid="mock-followup" />,

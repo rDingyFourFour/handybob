@@ -2,6 +2,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PROGRESS_STEPS } from "@/app/(app)/jobs/[id]/progressSteps";
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: vi.fn(),
@@ -38,11 +40,6 @@ vi.mock("@/components/askbob/AskBobSchedulerPanel", () => ({
   default: () => <div>Scheduler panel</div>,
 }));
 
-vi.mock("@/components/askbob/AskBobCallAssistPanel", () => ({
-  __esModule: true,
-  default: () => <div>Call prep panel</div>,
-}));
-
 describe("job detail AskBob step order", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
@@ -63,7 +60,7 @@ describe("job detail AskBob step order", () => {
     container.remove();
   });
 
-  it("renders job pipeline before calling pipeline with panels ordered inside each group", async () => {
+  it("renders the progress rows in order with the scheduler rendered after the accordion", async () => {
     const { default: JobAskBobFlow } = await import("@/components/askbob/JobAskBobFlow");
 
     await act(async () => {
@@ -89,31 +86,19 @@ describe("job detail AskBob step order", () => {
       await Promise.resolve();
     });
 
-    const jobPipeline = container.querySelector('[data-testid="askbob-job-pipeline"]');
-    const callingPipeline = container.querySelector('[data-testid="askbob-calling-pipeline"]');
+    const accordion = container.querySelector('[data-testid="progress-accordion"]');
+    expect(accordion).toBeTruthy();
 
-    expect(jobPipeline).toBeTruthy();
-    expect(callingPipeline).toBeTruthy();
-    const groupOrder = Array.from(
-      container.querySelectorAll('[data-testid="askbob-job-pipeline"], [data-testid="askbob-calling-pipeline"]'),
-    ).map((node) => node.getAttribute("data-testid"));
-    expect(groupOrder).toEqual(["askbob-job-pipeline", "askbob-calling-pipeline"]);
+    const rows = Array.from(
+      accordion?.querySelectorAll<HTMLElement>('section[data-testid^="progress-row-"]') ?? [],
+    );
+    expect(rows).toHaveLength(PROGRESS_STEPS.length);
+    const rowIds = rows.map((section) => section.getAttribute("data-testid"));
+    expect(rowIds).toStrictEqual(PROGRESS_STEPS.map((step) => `progress-row-${step.key}`));
 
-    const jobSteps = Array.from(
-      jobPipeline?.querySelectorAll('[data-testid$="-section"]') ?? [],
+    const order = Array.from(
+      container.querySelectorAll('[data-testid="progress-accordion"], [data-testid="askbob-scheduler-section"]'),
     ).map((node) => node.getAttribute("data-testid"));
-    expect(jobSteps).toEqual([
-      "askbob-diagnose-section",
-      "askbob-materials-section",
-      "askbob-quote-section",
-    ]);
-
-    const callingSteps = Array.from(
-      callingPipeline?.querySelectorAll('[data-testid$="-section"]') ?? [],
-    ).map((node) => node.getAttribute("data-testid"));
-    expect(callingSteps).toEqual([
-      "askbob-followup-section",
-      "askbob-scheduler-section",
-    ]);
+    expect(order).toEqual(["progress-accordion", "askbob-scheduler-section"]);
   });
 });
