@@ -11,31 +11,37 @@ type AskBobSummaryCardProps = {
   jobId: string;
   nextStep: NextStepResult;
   summary: AskBobSummaryDisplayModel;
+  initiallyCollapsed?: boolean;
+  isMobile?: boolean;
 };
 
 export default function AskBobSummaryCard({
   jobId,
   nextStep,
   summary,
+  initiallyCollapsed = true,
+  isMobile = false,
 }: AskBobSummaryCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(() => !initiallyCollapsed);
 
   const toggleExpanded = () => {
-    setIsExpanded((value) => {
-      const next = !value;
-      if (next) {
-        console.log("[job-details-askbob-summary-expanded]", {
-          jobId,
-          stepType: nextStep.stepType,
-        });
-      } else {
-        console.log("[job-details-askbob-summary-collapsed]", {
-          jobId,
-          stepType: nextStep.stepType,
-        });
-      }
-      return next;
-    });
+      setIsExpanded((value) => {
+        const next = !value;
+        if (next) {
+          console.log("[job-details-askbob-summary-expanded]", {
+            jobId,
+            stepType: nextStep.stepType,
+            isMobile,
+          });
+        } else {
+          console.log("[job-details-askbob-summary-collapsed]", {
+            jobId,
+            stepType: nextStep.stepType,
+            isMobile,
+          });
+        }
+        return next;
+      });
   };
 
   return (

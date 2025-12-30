@@ -12,6 +12,7 @@ import {
   mockLoadCallHistoryForJob,
   mockResolveWorkspaceContext,
 } from "./test-helpers";
+import { resetNextHeadersUserAgent, setNextHeadersUserAgent } from "@/tests/setup/nextHeadersMock";
 import JobDetailPage from "@/app/(app)/jobs/[id]/page";
 import * as nextStepModule from "@/lib/domain/askbob/nextStep";
 import type { JobProgressStep, NextStepResult, NextStepStatusHints } from "@/lib/domain/askbob/nextStep";
@@ -133,4 +134,64 @@ describe("JobDetails next step row routing", () => {
       }
     },
   );
+
+  it("opens the targeted progress row via Next Step CTA on mobile", async () => {
+    setNextHeadersUserAgent(
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+    );
+    const stepKey: JobProgressStep = "materials";
+    const nextStepResult: NextStepResult = {
+      stepType: stepKey,
+      rationale: "Test rationale",
+      primaryCta: {
+        kind: "progress-step",
+        label: jobDetailsCopy.nextStepCta[stepKey],
+        actionTarget: PROGRESS_STEP_ANCHORS[stepKey],
+      },
+      statusHints: NEXT_STEP_STATUS_HINTS,
+    };
+    const deriveSpy = vi
+      .spyOn(nextStepModule, "deriveNextStepForJobDetails")
+      .mockImplementation(() => nextStepResult);
+    const scrollMock = vi.fn();
+    const fakeTarget = { scrollIntoView: scrollMock } as HTMLElement;
+    const originalGetElementById = document.getElementById;
+    document.getElementById = ((id: string) =>
+      originalGetElementById?.call(document, id) ?? fakeTarget) as typeof document.getElementById;
+    const element = await JobDetailPage({
+      params: Promise.resolve({ id: JOB_RECORD.id }),
+      searchParams: Promise.resolve({}),
+    });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    try {
+      act(() => {
+        root.render(element);
+      });
+      const primaryCta = container.querySelector<HTMLButtonElement>(
+        '[data-testid="job-details-next-step-primary-cta"]',
+      );
+      expect(primaryCta).toBeTruthy();
+      act(() => {
+        primaryCta?.click();
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const rowBody = container.querySelector(
+        `[data-testid="job-progress-row-body-${stepKey}"]`,
+      );
+      expect(rowBody).toBeTruthy();
+      const rowContent = rowBody?.closest('[data-testid$="-content"]');
+      expect(rowContent?.getAttribute("aria-hidden")).toBe("false");
+      expect(scrollMock).toHaveBeenCalledTimes(1);
+    } finally {
+      deriveSpy.mockRestore();
+      document.getElementById = originalGetElementById;
+      act(() => {
+        root.unmount();
+      });
+      resetNextHeadersUserAgent();
+    }
+  });
 });

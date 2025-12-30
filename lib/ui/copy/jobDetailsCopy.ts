@@ -64,6 +64,9 @@ export const jobDetailsCopy = {
       collapse: "Hide details",
     },
   },
+  secondary: {
+    moreLabel: "More job info",
+  },
   schedule: {
     heading: "Schedule & logistics",
   },
@@ -107,6 +110,7 @@ export function validateJobDetailsCopy(): void {
   check(jobDetailsCopy.askBobSummary.expandedHint, "askBobSummary.expandedHint");
   check(jobDetailsCopy.askBobSummary.toggle.expand, "askBobSummary.toggle.expand");
   check(jobDetailsCopy.askBobSummary.toggle.collapse, "askBobSummary.toggle.collapse");
+  check(jobDetailsCopy.secondary.moreLabel, "secondary.moreLabel");
   check(jobDetailsCopy.schedule.heading, "schedule.heading");
   check(jobDetailsCopy.history.heading, "history.heading");
   check(jobDetailsCopy.disabled.safeFailure, "disabled.safeFailure");

@@ -17,6 +17,7 @@ type JobProgressAccordionProps = {
   openStepId: JobProgressStep | null;
   onOpenStepIdChange: (nextId: JobProgressStep | null) => void;
   defaultExpandedStep?: JobProgressStep | null;
+  isMobile?: boolean;
 };
 
 export default function JobProgressAccordion({
@@ -26,6 +27,7 @@ export default function JobProgressAccordion({
   openStepId,
   onOpenStepIdChange,
   defaultExpandedStep,
+  isMobile = false,
 }: JobProgressAccordionProps) {
   void defaultExpandedStep;
   const stepAnchorMap = useMemo(
@@ -36,14 +38,14 @@ export default function JobProgressAccordion({
   const handleToggle = useCallback(
     (stepKey: JobProgressStep) => {
       if (openStepId === stepKey) {
-        console.log("[job-details-progress-row-collapse]", { stepKey });
+        console.log("[job-details-progress-row-collapse]", { stepKey, isMobile });
         onOpenStepIdChange(null);
         return;
       }
       if (openStepId) {
-        console.log("[job-details-progress-row-collapse]", { stepKey: openStepId });
+        console.log("[job-details-progress-row-collapse]", { stepKey: openStepId, isMobile });
       }
-      console.log("[job-details-progress-row-expand]", { stepKey });
+      console.log("[job-details-progress-row-expand]", { stepKey, isMobile });
       onOpenStepIdChange(stepKey);
       if (typeof document === "undefined") {
         return;
@@ -58,7 +60,7 @@ export default function JobProgressAccordion({
       }
       target.scrollIntoView({ behavior: "smooth", block: "start" });
     },
-    [openStepId, onOpenStepIdChange, stepAnchorMap],
+    [isMobile, openStepId, onOpenStepIdChange, stepAnchorMap],
   );
 
   return (

@@ -133,6 +133,7 @@ type JobAskBobFlowProps = {
   statusHints?: NextStepStatusHints;
   defaultProgressStep?: JobProgressStep | null;
   hasActionableFollowupDue?: boolean;
+  isMobile?: boolean;
 };
 
 type SessionQuote = {
@@ -242,6 +243,7 @@ export default function JobAskBobFlow({
   statusHints = DEFAULT_STATUS_HINTS,
   defaultProgressStep = null,
   hasActionableFollowupDue = false,
+  isMobile = false,
 }: JobAskBobFlowProps) {
   const diagnosisSummaryInitialValue = initialDiagnoseSnapshot
     ? buildDiagnosisSummary(initialDiagnoseSnapshot.response)
@@ -1071,14 +1073,15 @@ export default function JobAskBobFlow({
         />
       ) : null}
       <div className="space-y-8">
-      <JobProgressAccordion
-        progressSteps={progressSteps}
-      rowCopyByStep={progressRowCopy}
-      rowContent={progressRowContent}
-      openStepId={openProgressStepId}
-      onOpenStepIdChange={setOpenProgressStepId}
-      defaultExpandedStep={defaultProgressStep ?? null}
-    />
+        <JobProgressAccordion
+          progressSteps={progressSteps}
+          rowCopyByStep={progressRowCopy}
+          rowContent={progressRowContent}
+          openStepId={openProgressStepId}
+          onOpenStepIdChange={setOpenProgressStepId}
+          defaultExpandedStep={defaultProgressStep ?? null}
+          isMobile={isMobile}
+        />
         {shouldShowScheduler && (
           <AskBobSection id="askbob-scheduler" testId="askbob-scheduler-section">
             <AskBobSchedulerPanel

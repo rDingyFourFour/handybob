@@ -21,9 +21,10 @@ const PROGRESS_ANCHOR_TO_STEP_MAP = new Map<string, JobProgressStep>(
 type NextStepCardProps = {
   jobId: string;
   nextStep: NextStepResult;
+  isMobile: boolean;
 };
 
-export default function NextStepCard({ jobId, nextStep }: NextStepCardProps) {
+export default function NextStepCard({ jobId, nextStep, isMobile }: NextStepCardProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const primaryCta = nextStep.primaryCta;
@@ -46,9 +47,10 @@ export default function NextStepCard({ jobId, nextStep }: NextStepCardProps) {
         targetRowId,
         anchorId,
         routedToCallSession,
+        isMobile,
       });
     },
-    [jobId, nextStep.stepType],
+    [isMobile, jobId, nextStep.stepType],
   );
 
   const dispatchProgressEvent = useCallback((stepId: JobProgressStep) => {

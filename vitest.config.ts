@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    setupFiles: ["tests/setup/supabaseEnv.ts"],
+    setupFiles: ["tests/setup/supabaseEnv.ts", "tests/setup/nextHeadersMock.ts"],
     globals: true,
     environment: "happy-dom",
     alias: {

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import type { ReactNode } from "react";
 
+import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -41,6 +42,8 @@ import {
 } from "@/lib/domain/askbob/jobDetailsDerivedCopy";
 import { deriveNextStepForJobDetails, type NextStepResult } from "@/lib/domain/askbob/nextStep";
 import { PROGRESS_STEPS } from "@/app/(app)/jobs/[id]/progressSteps";
+import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
+import { getJobDetailsMobilePrimarySurfacePolicy } from "@/lib/domain/ui/mobilePrimarySurface";
 
 type JobRecord = {
   id: string;
@@ -154,6 +157,18 @@ function fallbackCard(title: string, body: string, action?: ReactNode) {
   );
 }
 
+const MOBILE_USER_AGENT_REGEX =
+  /(android|bb\d+|meego|iphone|ipod|ipad|mobile|blackberry|opera mini|windows phone)/i;
+
+async function resolveUserAgentFromHeaders(): Promise<string> {
+  const resolvedHeaders = await headers();
+  return resolvedHeaders.get("user-agent") ?? "";
+}
+
+function detectMobilePrimarySurfaceFromUserAgent(userAgent: string): boolean {
+  return MOBILE_USER_AGENT_REGEX.test(userAgent);
+}
+
 function startOfToday(date?: Date) {
   const base = date ? new Date(date) : new Date();
   base.setHours(0, 0, 0, 0);
@@ -171,6 +186,9 @@ export default async function JobDetailPage({
   if (!id || !id.trim()) {
     notFound();
   }
+
+  const resolvedUserAgent = await resolveUserAgentFromHeaders();
+  const isMobile = detectMobilePrimarySurfaceFromUserAgent(resolvedUserAgent);
 
   if (id === "new") {
     redirect("/jobs/new");
@@ -510,6 +528,16 @@ export default async function JobDetailPage({
   });
   const progressStepMatch = PROGRESS_STEPS.find((step) => step.key === nextStep.stepType);
   const defaultProgressRow = progressStepMatch !== undefined ? progressStepMatch.key : null;
+  const mobilePolicy = getJobDetailsMobilePrimarySurfacePolicy({
+    isMobile,
+    defaultProgressStep: defaultProgressRow,
+  });
+  console.log("[job-details-mobile-primary-surface-render]", {
+    isMobile,
+    nextStepType: nextStep.stepType,
+    defaultOpenStepId: mobilePolicy.progressAccordionDefaultOpenStepId,
+    askBobSummaryCollapsedByDefault: mobilePolicy.askBobSummaryCollapsedByDefault,
+  });
   const jobBriefDisplayModel = buildJobBriefDisplayModel({
     jobTitle: displayJobTitle,
     customerName,
@@ -552,6 +580,97 @@ export default async function JobDetailPage({
     ? followupStatusClasses[followupDueInfo.dueStatus]
     : "";
 
+  const secondarySections = (
+    <>
+      <JobDetailsCard
+        jobId={job.id}
+        title={displayJobTitle}
+        status={job.status}
+        quoteHref={quoteHref}
+        acceptedQuoteId={acceptedQuote?.id ?? null}
+        scheduleVisitHref={scheduleVisitHref}
+        unseenFollowupLabel={followupStatusChipLabel}
+        followupDueLabel={followupDueInfo.dueLabel}
+        followupStatusClass={followupStatusChipClass}
+        urgency={job.urgency}
+        source={job.source}
+        aiUrgency={job.ai_urgency}
+        priority={job.priority}
+        attentionReason={job.attention_reason}
+        attentionScore={job.attention_score}
+        createdLabel={createdLabel}
+        customerId={customerId}
+        customerName={customerName}
+        description={job.description_raw}
+      />
+      <HbCard className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">Upcoming visits</p>
+            <h2 className="hb-heading-3 text-xl font-semibold text-[var(--color-text-primary)]">
+              Scheduled appointments for this job
+            </h2>
+          </div>
+          <Link
+            href="/appointments"
+            className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
+          >
+            View all appointments
+          </Link>
+        </div>
+        {upcomingAppointmentsError ? (
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            Something went wrong loading upcoming visits. Try refreshing the page.
+          </p>
+        ) : upcomingAppointments.length === 0 ? (
+          <div className="space-y-2 text-sm text-[var(--color-text-secondary)]">
+            <p>No upcoming appointments for this job yet.</p>
+            <HbButton as={Link} href={`/appointments/new?jobId=${job.id}`} size="sm" variant="secondary">
+              Schedule a visit
+            </HbButton>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {upcomingAppointments.map((appointment) => (
+              <Link
+                key={appointment.id}
+                href={`/appointments/${appointment.id}`}
+                className="group flex items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 text-sm text-[var(--color-text-primary)] transition hover:border-[var(--color-border-strong)]"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                    {formatDate(appointment.start_time)}
+                  </p>
+                  <p className="text-xs text-[var(--color-text-secondary)]">
+                    {formatAppointmentTimeRange(appointment.start_time, appointment.end_time)}
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.3em] font-semibold ${appointmentStatusClass(
+                    appointment.status,
+                  )}`}
+                >
+                  {appointmentStatusLabel(appointment.status)}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </HbCard>
+      <section id="invoice-section" data-testid="job-details-invoice-section">
+        <JobInvoiceSection
+          workspaceId={workspace.id}
+          jobId={job.id}
+          acceptedQuoteId={acceptedQuote?.id ?? null}
+          invoice={invoice}
+          invoiceCreatedLabel={invoiceCreatedLabel}
+        />
+      </section>
+      <JobQuotesCard quotes={quotes} quotesError={quotesError} quoteHref={quoteHref} />
+      <JobRecentActivityCard jobId={job.id} workspaceId={workspace.id} />
+    </>
+  );
+
   return (
     <div
       className="hb-shell pt-20 pb-8 space-y-6 bg-[var(--color-background-paper)] text-[var(--color-text-primary)]"
@@ -561,10 +680,16 @@ export default async function JobDetailPage({
         <JobBriefCard model={jobBriefDisplayModel} />
       </section>
       <section data-testid="job-details-next-step">
-        <NextStepCard jobId={job.id} nextStep={nextStep} />
+        <NextStepCard jobId={job.id} nextStep={nextStep} isMobile={isMobile} />
       </section>
       <section data-testid="job-details-askbob-summary">
-        <AskBobSummaryCard jobId={job.id} nextStep={nextStep} summary={derivedAskBobCopy.askBobSummary} />
+        <AskBobSummaryCard
+          jobId={job.id}
+          nextStep={nextStep}
+          summary={derivedAskBobCopy.askBobSummary}
+          initiallyCollapsed={mobilePolicy.askBobSummaryCollapsedByDefault}
+          isMobile={isMobile}
+        />
       </section>
       <section data-testid="job-details-job-progress" className="space-y-4">
         <div data-testid="job-details-job-progress-header" className="space-y-2">
@@ -602,99 +727,37 @@ export default async function JobDetailPage({
           latestCallOutcome={latestCallOutcome}
           progressSteps={PROGRESS_STEPS}
           statusHints={derivedAskBobCopy.progressRowStatuses}
-          defaultProgressStep={defaultProgressRow}
+          defaultProgressStep={mobilePolicy.progressAccordionDefaultOpenStepId}
           hasActionableFollowupDue={hasActionableFollowupDue}
+          isMobile={isMobile}
           showIntakePanel={false}
         />
       </section>
-      <section className="space-y-6" data-testid="job-details-secondary-content">
-        <JobDetailsCard
-          jobId={job.id}
-          title={displayJobTitle}
-          status={job.status}
-          quoteHref={quoteHref}
-          acceptedQuoteId={acceptedQuote?.id ?? null}
-          scheduleVisitHref={scheduleVisitHref}
-          unseenFollowupLabel={followupStatusChipLabel}
-          followupDueLabel={followupDueInfo.dueLabel}
-          followupStatusClass={followupStatusChipClass}
-          urgency={job.urgency}
-          source={job.source}
-          aiUrgency={job.ai_urgency}
-          priority={job.priority}
-          attentionReason={job.attention_reason}
-          attentionScore={job.attention_score}
-          createdLabel={createdLabel}
-          customerId={customerId}
-          customerName={customerName}
-          description={job.description_raw}
-        />
-        <HbCard className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">Upcoming visits</p>
-              <h2 className="hb-heading-3 text-xl font-semibold text-[var(--color-text-primary)]">
-                Scheduled appointments for this job
-              </h2>
-            </div>
-            <Link
-              href="/appointments"
-              className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
+      {mobilePolicy.hideExecutionByDefault ? (
+        <section data-testid="job-details-secondary-content">
+          <details
+            className="space-y-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] p-5"
+            data-testid="job-details-secondary-more"
+          >
+            <summary
+              className="text-sm font-semibold uppercase tracking-[0.3em] text-[var(--color-text-secondary)]"
+              data-testid="job-details-secondary-more-toggle"
             >
-              View all appointments
-            </Link>
-          </div>
-          {upcomingAppointmentsError ? (
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              Something went wrong loading upcoming visits. Try refreshing the page.
-            </p>
-          ) : upcomingAppointments.length === 0 ? (
-            <div className="space-y-2 text-sm text-[var(--color-text-secondary)]">
-              <p>No upcoming appointments for this job yet.</p>
-              <HbButton as={Link} href={`/appointments/new?jobId=${job.id}`} size="sm" variant="secondary">
-                Schedule a visit
-              </HbButton>
+              {jobDetailsCopy.secondary.moreLabel}
+            </summary>
+            <div
+              className="space-y-6 pt-3"
+              data-testid="job-details-secondary-more-content"
+            >
+              {secondarySections}
             </div>
-          ) : (
-            <div className="space-y-2">
-              {upcomingAppointments.map((appointment) => (
-                <Link
-                  key={appointment.id}
-                  href={`/appointments/${appointment.id}`}
-                  className="group flex items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 text-sm text-[var(--color-text-primary)] transition hover:border-[var(--color-border-strong)]"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">
-                      {formatDate(appointment.start_time)}
-                    </p>
-                    <p className="text-xs text-[var(--color-text-secondary)]">
-                      {formatAppointmentTimeRange(appointment.start_time, appointment.end_time)}
-                    </p>
-                  </div>
-                  <span
-                    className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.3em] font-semibold ${appointmentStatusClass(
-                      appointment.status,
-                    )}`}
-                  >
-                    {appointmentStatusLabel(appointment.status)}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </HbCard>
-        <section id="invoice-section" data-testid="job-details-invoice-section">
-          <JobInvoiceSection
-            workspaceId={workspace.id}
-            jobId={job.id}
-            acceptedQuoteId={acceptedQuote?.id ?? null}
-            invoice={invoice}
-            invoiceCreatedLabel={invoiceCreatedLabel}
-          />
+          </details>
         </section>
-        <JobQuotesCard quotes={quotes} quotesError={quotesError} quoteHref={quoteHref} />
-        <JobRecentActivityCard jobId={job.id} workspaceId={workspace.id} />
-      </section>
+      ) : (
+        <section data-testid="job-details-secondary-content" className="space-y-6">
+          {secondarySections}
+        </section>
+      )}
     </div>
   );
 }
