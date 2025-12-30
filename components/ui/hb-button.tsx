@@ -5,14 +5,14 @@ type HbButtonVariant = "primary" | "secondary" | "ghost";
 type HbButtonSize = "sm" | "md";
 
 const baseClasses =
-  "inline-flex items-center justify-center rounded-full font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300";
+  "inline-flex items-center justify-center rounded-full font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-background-paper)] shadow-[var(--theme-shadow)]";
 
 const variantClasses: Record<HbButtonVariant, string> = {
   primary:
-    "bg-[var(--color-primary)] text-[var(--color-primary-text)] hover:bg-[var(--color-primary-dark)] disabled:bg-[var(--color-border)] disabled:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-background-paper)]",
+    "bg-[var(--theme-button-primary-bg)] text-[var(--theme-button-primary-text)] hover:bg-[var(--theme-button-primary-dark)] disabled:bg-[var(--color-border)] disabled:text-[var(--color-text-secondary)]",
   secondary:
-    "border border-[var(--color-border)] text-[var(--color-text-primary)] bg-[var(--color-card-elevated)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-card)] disabled:border-[var(--color-border)] disabled:text-[var(--color-text-secondary)]",
-  ghost: "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]",
+    "border border-[var(--theme-divider)] text-[var(--color-text-primary)] bg-[var(--theme-card-elevated)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-card)] disabled:border-[var(--theme-divider)] disabled:text-[var(--color-text-secondary)]",
+  ghost: "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] focus-visible:ring-transparent",
 };
 
 const sizeClasses: Record<HbButtonSize, string> = {

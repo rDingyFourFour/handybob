@@ -66,7 +66,8 @@ describe("JobDetails theme tokens", () => {
     const markup = await renderJobDetailPage();
     expect(markup).toContain('data-testid="job-details-shell"');
     expect(markup).toContain("bg-[var(--color-background-paper)]");
-    expect(markup).toContain("bg-[var(--color-primary)]");
-    expect(markup).toContain("text-[var(--color-text-primary)]");
+    expect(markup).toContain("bg-[var(--theme-button-primary-bg)]");
+    expect(markup).toContain("text-[var(--theme-button-primary-text)]");
+    expect(markup).toContain("shadow-[var(--theme-shadow)]");
   });
 });
