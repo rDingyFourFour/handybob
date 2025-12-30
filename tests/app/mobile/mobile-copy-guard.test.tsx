@@ -19,6 +19,8 @@ const bannedPatterns = [
   /["']Back to active job["']/,
   /["']Good morning["']/,
   /["']You're all caught up["']/,
+  /["']Everything's up to date\. I'll let you know if anything changes\.["']/,
+  /["']I'm tracking the job that needs a small nudge\.["']/,
 ];
 
 describe("Mobile flow copy guard", () => {

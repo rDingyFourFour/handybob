@@ -8,8 +8,8 @@ import { cn } from "@/lib/utils/cn";
 import {
   HomeOutlineIcon,
   JobsOutlineIcon,
-  MessagesOutlineIcon,
-  MoreOutlineIcon,
+  CallOutlineIcon,
+  SettingsOutlineIcon,
 } from "@/components/ui/icons";
 
 type MobileTab = {
@@ -21,20 +21,18 @@ type MobileTab = {
 const MOBILE_TABS: MobileTab[] = [
   { label: "Home", href: "/m", Icon: HomeOutlineIcon },
   { label: "Jobs", href: "/jobs", Icon: JobsOutlineIcon },
-  { label: "Messages", href: "/messages", Icon: MessagesOutlineIcon },
-  { label: "More", href: "/settings", Icon: MoreOutlineIcon },
+  { label: "Calls", href: "/calls", Icon: CallOutlineIcon },
+  { label: "Settings", href: "/settings", Icon: SettingsOutlineIcon },
 ];
 
 type MobileAppShellProps = {
   children: ReactNode;
   hideTabBar?: boolean;
-  messagesCount?: number;
 };
 
 export default function MobileAppShell({
   children,
   hideTabBar = false,
-  messagesCount = 0,
 }: MobileAppShellProps) {
   const pathname = usePathname() ?? "/";
   const normalizedPath = pathname.replace(/\/$/, "") || "/";
@@ -70,7 +68,6 @@ export default function MobileAppShell({
           >
             {MOBILE_TABS.map(({ label, href, Icon }) => {
               const isActive = activeTab ? activeTab === href : href === MOBILE_TABS[0].href;
-              const badgeVisible = label === "Messages" && messagesCount > 0;
 
               return (
                 <Link
@@ -84,9 +81,6 @@ export default function MobileAppShell({
                 >
                   <span className="relative flex h-6 w-6 items-center justify-center">
                     <Icon className="h-5 w-5" aria-hidden />
-                    {badgeVisible && (
-                      <span className="absolute -right-0.5 top-0.5 inline-flex h-2 w-2 rounded-full bg-[var(--theme-primary)]" />
-                    )}
                   </span>
                   <span>{label}</span>
                 </Link>

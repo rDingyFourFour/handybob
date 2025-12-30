@@ -47,7 +47,7 @@ describe("MobileAppShell navigation", () => {
 
   it("renders the tab bar and highlights the correct tab", () => {
     mockedUsePathname.mockReturnValue("/jobs");
-    renderShell({ messagesCount: 2 });
+    renderShell();
 
     const tabBar = container.querySelector('[data-testid="mobile-tab-bar"]');
     expect(tabBar).toBeTruthy();
@@ -62,15 +62,12 @@ describe("MobileAppShell navigation", () => {
     expect(container.querySelector('[data-testid="mobile-tab-bar"]')).toBeNull();
   });
 
-  it("shows a quiet badge on the messages tab when there are unread items", () => {
-    mockedUsePathname.mockReturnValue("/messages");
-    renderShell({ messagesCount: 4 });
+  it("renders the calls tab with a calm label", () => {
+    mockedUsePathname.mockReturnValue("/m");
+    renderShell();
 
-    const messagesLink = container.querySelector('a[href="/messages"]');
-    expect(messagesLink).toBeTruthy();
-    const badge = Array.from(messagesLink?.querySelectorAll("span") ?? []).find((span) =>
-      span.classList.contains("bg-[var(--theme-primary)]"),
-    );
-    expect(badge).toBeTruthy();
+    const callsLink = container.querySelector('a[href="/calls"]');
+    expect(callsLink).toBeTruthy();
+    expect(callsLink?.textContent?.trim()).toContain("Calls");
   });
 });

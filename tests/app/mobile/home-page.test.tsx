@@ -34,7 +34,7 @@ describe("Mobile home page", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders a recommendation card with one primary CTA and logs render telemetry", async () => {
+  it("renders a single primary CTA with Bob's CTA copy and logs render telemetry", async () => {
     const supabaseState = createSupabaseState({
       jobs: {
         data: [
@@ -95,12 +95,19 @@ describe("Mobile home page", () => {
 
     const ctaButtons = container.querySelectorAll('[data-testid="mobile-home-primary-cta"]');
     expect(ctaButtons).toHaveLength(1);
+    const primaryCta = ctaButtons[0];
+    expect(primaryCta?.textContent?.trim()).toBe(mobileFlowCopy.home.recommendationCtaLabel);
     const idleCard = container.querySelector('[data-testid="mobile-home-idle-card"]');
     expect(idleCard?.textContent).toContain(mobileFlowCopy.home.idleReassurance);
-    expect(logSpy).toHaveBeenCalledWith(
-      "[home-render]",
+
+    const logEntry = logSpy.mock.calls.find(([name]) => name === "[home-render]");
+    expect(logEntry).toBeTruthy();
+    const payload = logEntry?.[1] as Record<string, unknown> | undefined;
+    expect(payload).toEqual(
       expect.objectContaining({
         hasRecommendation: true,
+        isMobile: true,
+        recommendedStepType: expect.anything(),
       }),
     );
   });
@@ -127,10 +134,15 @@ describe("Mobile home page", () => {
     expect(ctaButton).toBeNull();
     const idleCard = container.querySelector('[data-testid="mobile-home-idle-card"]');
     expect(idleCard?.textContent).toContain(mobileFlowCopy.home.idleReassurance);
-    expect(logSpy).toHaveBeenCalledWith(
-      "[home-render]",
+
+    const logEntry = logSpy.mock.calls.find(([name]) => name === "[home-render]");
+    expect(logEntry).toBeTruthy();
+    const payload = logEntry?.[1] as Record<string, unknown> | undefined;
+    expect(payload).toEqual(
       expect.objectContaining({
         hasRecommendation: false,
+        isMobile: true,
+        recommendedStepType: null,
       }),
     );
   });

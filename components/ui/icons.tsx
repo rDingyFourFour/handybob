@@ -49,3 +49,27 @@ export function MoreOutlineIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export function CallOutlineIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...baseIconProps} {...props}>
+      <rect x="8" y="3" width="8" height="18" rx="2" />
+      <path d="M10.75 6h2.5" />
+      <path d="M10.75 17h2.5" />
+    </svg>
+  );
+}
+
+export function SettingsOutlineIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...baseIconProps} {...props}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 6.5V3.5" />
+      <path d="M12 20.5v-3" />
+      <path d="M7.5 8.5 5.5 6.5" />
+      <path d="M18.5 17.5l-2-2" />
+      <path d="M7.5 15.5 5.5 17.5" />
+      <path d="M18.5 8.5l-2 2" />
+    </svg>
+  );
+}

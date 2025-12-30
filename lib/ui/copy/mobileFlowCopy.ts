@@ -5,7 +5,10 @@ export const mobileFlowCopy = {
     title: "Home",
     greetingTemplate: "Good morning, {name}",
     greetingFallback: "Good morning",
-    idleReassurance: "You're all caught up. I'll let you know when the next job needs attention.",
+    statement: "I'm tracking the job that needs a small nudge.",
+    recommendationLabel: "Next step",
+    recommendationTitleFallback: "Untitled job",
+    idleReassurance: "Everything's up to date. I'll let you know if anything changes.",
     recommendationCtaLabel: "Review job",
   },
   activeJob: {
@@ -27,6 +30,12 @@ export function validateMobileFlowCopy(): void {
   check(mobileFlowCopy.home.title, "home.title");
   check(mobileFlowCopy.home.greetingTemplate, "home.greetingTemplate");
   check(mobileFlowCopy.home.greetingFallback, "home.greetingFallback");
+  check(mobileFlowCopy.home.statement, "home.statement");
+  check(mobileFlowCopy.home.recommendationLabel, "home.recommendationLabel");
+  check(
+    mobileFlowCopy.home.recommendationTitleFallback,
+    "home.recommendationTitleFallback",
+  );
   check(mobileFlowCopy.home.idleReassurance, "home.idleReassurance");
   check(mobileFlowCopy.home.recommendationCtaLabel, "home.recommendationCtaLabel");
 

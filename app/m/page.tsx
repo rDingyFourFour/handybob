@@ -173,6 +173,7 @@ export default async function MobileHomePage() {
   console.log("[home-render]", {
     hasRecommendation,
     recommendedStepType: recommendation?.recommendedStepType ?? null,
+    isMobile: true,
   });
 
   const metadata = user.user_metadata as { full_name?: string; name?: string } | undefined;
@@ -201,9 +202,17 @@ export default async function MobileHomePage() {
 
       {recommendation && (
         <HbCard data-testid="mobile-home-recommendation-card" className="space-y-3">
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">
+              {mobileFlowCopy.home.recommendationLabel}
+            </p>
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              {mobileFlowCopy.home.statement}
+            </p>
+          </div>
           <div>
             <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">
-              {recommendation.title ?? "Untitled job"}
+              {recommendation.title ?? mobileFlowCopy.home.recommendationTitleFallback}
             </h2>
             <p className="text-sm text-[var(--color-text-secondary)]">{recommendation.rationale}</p>
           </div>
@@ -213,6 +222,8 @@ export default async function MobileHomePage() {
             eventPayload={{
               jobId: recommendation.jobId,
               stepType: recommendation.recommendedStepType,
+              nextStepType: recommendation.recommendedStepType,
+              isMobile: true,
             }}
             variant="primary"
             size="md"
