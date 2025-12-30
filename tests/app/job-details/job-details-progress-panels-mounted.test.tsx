@@ -100,6 +100,10 @@ describe("JobDetails progress panels mounting", () => {
         }
         const panel = container.querySelector(`[data-testid="${ROW_TEST_IDS[step.key]}"]`);
         expect(panel).toBeTruthy();
+        const rowBody = container.querySelector(
+          `[data-testid="job-progress-row-body-${step.key}"]`,
+        );
+        expect(rowBody).toBeTruthy();
         const rowContent = container.querySelector(
           `[data-testid="progress-row-${step.key}-content"]`,
         );
@@ -108,6 +112,10 @@ describe("JobDetails progress panels mounting", () => {
           expect(rowContent?.textContent).toContain("Open call session");
           expect(rowContent?.textContent).not.toContain("Start automated call");
         }
+      }
+      const disallowedHeaders = ["Step 1", "Step 2", "Step 3", "Step 4", "Step 5"];
+      for (const header of disallowedHeaders) {
+        expect(container.textContent).not.toContain(header);
       }
     } finally {
       act(() => {

@@ -41,6 +41,7 @@ type JobAskBobPanelProps = {
   diagnosisSnapshotHistory?: AskBobTaskSnapshotVersion<AskBobDiagnoseSnapshotPayload>[];
   latestSnapshotVersion?: AskBobTaskSnapshotVersion<AskBobDiagnoseSnapshotPayload> | null;
   stepReadiness?: AskBobStepReadiness | null;
+  embeddedInProgressRow?: boolean;
 };
 
 export default function JobAskBobPanel({
@@ -59,6 +60,7 @@ export default function JobAskBobPanel({
   diagnosisSnapshotHistory = [],
   latestSnapshotVersion = null,
   stepReadiness,
+  embeddedInProgressRow = false,
 }: JobAskBobPanelProps) {
   useEffect(() => {
     console.log("[askbob-ui-entry]", {
@@ -258,11 +260,15 @@ export default function JobAskBobPanel({
   return (
     <HbCard className="space-y-4">
       <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
+        {!embeddedInProgressRow && (
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
+        )}
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <h2 className="hb-heading-3 text-xl font-semibold">Diagnose</h2>
+              {!embeddedInProgressRow && (
+                <h2 className="hb-heading-3 text-xl font-semibold">Diagnose</h2>
+              )}
               {stepCompleted && (
                 <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
                   Done

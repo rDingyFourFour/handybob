@@ -47,6 +47,7 @@ type AskBobQuotePanelProps = {
   quoteSnapshotHistory?: AskBobTaskSnapshotVersion<AskBobQuoteSnapshotPayload>[];
   latestSnapshotVersion?: AskBobTaskSnapshotVersion<AskBobQuoteSnapshotPayload> | null;
   stepReadiness?: AskBobStepReadiness | null;
+  embeddedInProgressRow?: boolean;
 };
 
 const DEFAULT_PROMPT = "Generate a standard quote for this job.";
@@ -149,6 +150,7 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
     quoteSnapshotHistory = [],
     latestSnapshotVersion = null,
     stepReadiness,
+    embeddedInProgressRow = false,
   } = props;
   const router = useRouter();
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
@@ -424,11 +426,15 @@ export default function AskBobQuotePanel(props: AskBobQuotePanelProps) {
   return (
     <HbCard className="space-y-4">
       <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob quote</p>
+        {!embeddedInProgressRow && (
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob quote</p>
+        )}
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <h2 className="hb-heading-3 text-xl font-semibold">Quote</h2>
+              {!embeddedInProgressRow && (
+                <h2 className="hb-heading-3 text-xl font-semibold">Quote</h2>
+              )}
               {stepCompleted && (
                 <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
                   Done

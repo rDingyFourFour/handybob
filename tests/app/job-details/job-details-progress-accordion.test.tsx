@@ -200,4 +200,65 @@ describe("JobDetails progress accordion", () => {
     }
     deriveSpy.mockRestore();
   });
+
+  it("keeps only one accordion row open and logs each transition", async () => {
+    const element = await JobDetailPage({
+      params: Promise.resolve({ id: JOB_RECORD.id }),
+      searchParams: Promise.resolve({}),
+    });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      act(() => {
+        root.render(element);
+      });
+      const expandedRows = () =>
+        Array.from(container.querySelectorAll('[data-testid$="-content"]')).filter(
+          (node) => node.getAttribute("aria-hidden") === "false",
+        );
+      expect(expandedRows()).toHaveLength(1);
+
+      const diagnoseToggle = container.querySelector<HTMLButtonElement>(
+        '[data-testid="progress-row-diagnose-toggle"]',
+      );
+      act(() => {
+        diagnoseToggle?.click();
+      });
+      expect(expandedRows()).toHaveLength(0);
+      const collapseCalls = logSpy.mock.calls.filter(
+        ([name]) => name === "[job-details-progress-row-collapse]",
+      );
+      expect(collapseCalls.length).toBeGreaterThanOrEqual(1);
+
+      const materialsToggle = container.querySelector<HTMLButtonElement>(
+        '[data-testid="progress-row-materials-toggle"]',
+      );
+      act(() => {
+        materialsToggle?.click();
+      });
+      expect(expandedRows()).toHaveLength(1);
+      expect(container.querySelector('[data-testid="progress-row-diagnose-content"]')?.getAttribute("aria-hidden")).toBe(
+        "true",
+      );
+      const expandCalls = logSpy.mock.calls.filter(
+        ([name]) => name === "[job-details-progress-row-expand]",
+      );
+      expect(expandCalls.length).toBeGreaterThanOrEqual(1);
+
+      act(() => {
+        materialsToggle?.click();
+      });
+      expect(expandedRows()).toHaveLength(0);
+      const collapseCountAfterSecond = logSpy.mock.calls.filter(
+        ([name]) => name === "[job-details-progress-row-collapse]",
+      );
+      expect(collapseCountAfterSecond.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      logSpy.mockRestore();
+      act(() => {
+        root.unmount();
+      });
+    }
+  });
 });

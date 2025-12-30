@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import type { ReactNode } from "react";
 
 import type { JobProgressStep } from "@/lib/domain/askbob/nextStep";
@@ -14,6 +14,8 @@ type JobProgressAccordionProps = {
   progressSteps: ProgressStepInfo[];
   rowCopyByStep: Partial<Record<JobProgressStep, JobProgressRowCopy>>;
   rowContent: RowContentMap;
+  openStepId: JobProgressStep | null;
+  onOpenStepIdChange: (nextId: JobProgressStep | null) => void;
   defaultExpandedStep?: JobProgressStep | null;
 };
 
@@ -21,19 +23,28 @@ export default function JobProgressAccordion({
   progressSteps,
   rowCopyByStep,
   rowContent,
-  defaultExpandedStep = null,
+  openStepId,
+  onOpenStepIdChange,
+  defaultExpandedStep,
 }: JobProgressAccordionProps) {
+  void defaultExpandedStep;
   const stepAnchorMap = useMemo(
     () => new Map<JobProgressStep, string>(progressSteps.map((step) => [step.key, step.anchor])),
     [progressSteps],
   );
 
-  const [expandedStep, setExpandedStep] = useState<JobProgressStep | null>(
-    () => defaultExpandedStep ?? null,
-  );
-
-  const scrollToAnchor = useCallback(
+  const handleToggle = useCallback(
     (stepKey: JobProgressStep) => {
+      if (openStepId === stepKey) {
+        console.log("[job-details-progress-row-collapse]", { stepKey });
+        onOpenStepIdChange(null);
+        return;
+      }
+      if (openStepId) {
+        console.log("[job-details-progress-row-collapse]", { stepKey: openStepId });
+      }
+      console.log("[job-details-progress-row-expand]", { stepKey });
+      onOpenStepIdChange(stepKey);
       if (typeof document === "undefined") {
         return;
       }
@@ -47,35 +58,13 @@ export default function JobProgressAccordion({
       }
       target.scrollIntoView({ behavior: "smooth", block: "start" });
     },
-    [stepAnchorMap],
-  );
-
-  const handleToggle = useCallback(
-    (stepKey: JobProgressStep) => {
-      let shouldScroll = false;
-      setExpandedStep((current) => {
-        if (current === stepKey) {
-          console.log("[job-details-progress-row-collapse]", { stepKey });
-          return null;
-        }
-        if (current) {
-          console.log("[job-details-progress-row-collapse]", { stepKey: current });
-        }
-        console.log("[job-details-progress-row-expand]", { stepKey });
-        shouldScroll = true;
-        return stepKey;
-      });
-      if (shouldScroll) {
-        scrollToAnchor(stepKey);
-      }
-    },
-    [scrollToAnchor],
+    [openStepId, onOpenStepIdChange, stepAnchorMap],
   );
 
   return (
     <div data-testid="progress-accordion" className="space-y-3">
       {progressSteps.map((step) => {
-        const isExpanded = expandedStep === step.key;
+        const isExpanded = openStepId === step.key;
         const rowCopy = rowCopyByStep[step.key];
         const stepLabelText =
           rowCopy?.stepLabel ?? step.label ?? jobDetailsCopy.disabled.safeFailure;

@@ -11,6 +11,7 @@ const forbiddenPatterns = [
   /'Completed'/,
   /"NOT READY"/,
   /'NOT READY'/,
+  /Step\s*\d/,
 ];
 
 describe("job askbob flow progress copy guard", () => {

@@ -8,7 +8,15 @@ import HbCard from "@/components/ui/hb-card";
 import HbButton from "@/components/ui/hb-button";
 import { openOrCreateCallSessionForJobAction } from "@/app/(app)/jobs/actions/openOrCreateCallSessionForJobAction";
 import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
-import type { NextStepResult } from "@/lib/domain/askbob/nextStep";
+import { PROGRESS_STEP_ANCHORS } from "@/lib/domain/askbob/progressSteps";
+import type { JobProgressStep, NextStepResult } from "@/lib/domain/askbob/nextStep";
+
+const NEXT_STEP_PROGRESS_EVENT = "job-details-next-step-progress";
+const PROGRESS_ANCHOR_TO_STEP_MAP = new Map<string, JobProgressStep>(
+  (Object.entries(PROGRESS_STEP_ANCHORS) as Array<[JobProgressStep, string]>).map(
+    ([step, anchor]) => [anchor, step],
+  ),
+);
 
 type NextStepCardProps = {
   jobId: string;
@@ -21,18 +29,38 @@ export default function NextStepCard({ jobId, nextStep }: NextStepCardProps) {
   const primaryCta = nextStep.primaryCta;
   const nextStepStatement = jobDetailsCopy.nextStep.statement;
   const nextStepConfirmation = jobDetailsCopy.nextStep.confirmation;
+  const primaryTargetRowId = primaryCta?.actionTarget
+    ? PROGRESS_ANCHOR_TO_STEP_MAP.get(primaryCta.actionTarget) ?? null
+    : null;
+  const primaryAnchorId = primaryCta?.actionTarget ?? null;
 
   const logPrimaryCtaClick = useCallback(
-    (routedToCallSession: boolean) => {
+    (
+      routedToCallSession: boolean,
+      targetRowId: JobProgressStep | null,
+      anchorId: string | null,
+    ) => {
       console.log("[job-details-next-step-primary-cta-click]", {
         stepType: nextStep.stepType,
         jobId,
-        target: primaryCta?.actionTarget ?? null,
+        targetRowId,
+        anchorId,
         routedToCallSession,
       });
     },
-    [jobId, nextStep.stepType, primaryCta],
+    [jobId, nextStep.stepType],
   );
+
+  const dispatchProgressEvent = useCallback((stepId: JobProgressStep) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.dispatchEvent(
+      new CustomEvent(NEXT_STEP_PROGRESS_EVENT, {
+        detail: { stepId },
+      }),
+    );
+  }, []);
 
   const handleCallAction = useCallback(async () => {
     if (!primaryCta) {
@@ -42,24 +70,33 @@ export default function NextStepCard({ jobId, nextStep }: NextStepCardProps) {
     try {
       const result = await openOrCreateCallSessionForJobAction({ jobId });
       if (result.ok) {
-        logPrimaryCtaClick(true);
+        logPrimaryCtaClick(true, primaryTargetRowId, primaryAnchorId);
         router.replace(`/calls/${result.callId}`);
         return;
       }
-      logPrimaryCtaClick(false);
+      logPrimaryCtaClick(false, primaryTargetRowId, primaryAnchorId);
     } catch (error) {
-      logPrimaryCtaClick(false);
+      logPrimaryCtaClick(false, primaryTargetRowId, primaryAnchorId);
       console.error("[job-details-next-step-call-action-error]", { jobId, error });
     } finally {
       setIsLoading(false);
     }
-  }, [primaryCta, jobId, logPrimaryCtaClick, router]);
+  }, [primaryCta, jobId, logPrimaryCtaClick, router, primaryTargetRowId, primaryAnchorId]);
+
+  const handleProgressCtaClick = useCallback(() => {
+    logPrimaryCtaClick(false, primaryTargetRowId, primaryAnchorId);
+    if (!primaryTargetRowId) {
+      return;
+    }
+    dispatchProgressEvent(primaryTargetRowId);
+  }, [dispatchProgressEvent, logPrimaryCtaClick, primaryTargetRowId, primaryAnchorId]);
 
   const primaryCtaButton = useMemo(() => {
     if (!primaryCta) {
       return null;
     }
     const isCallAction = primaryCta.actionTarget === "progress-call";
+    const isProgressStep = Boolean(primaryTargetRowId);
     if (isCallAction) {
       return (
         <HbButton
@@ -73,19 +110,39 @@ export default function NextStepCard({ jobId, nextStep }: NextStepCardProps) {
         </HbButton>
       );
     }
+    if (isProgressStep) {
+      return (
+        <HbButton
+          type="button"
+          onClick={handleProgressCtaClick}
+          data-testid="job-details-next-step-primary-cta"
+          className="w-full md:w-auto"
+        >
+          {primaryCta.label}
+        </HbButton>
+      );
+    }
 
     return (
       <HbButton
         as={Link}
         href={`#${primaryCta.actionTarget}`}
-        onClick={() => logPrimaryCtaClick(false)}
+        onClick={() => logPrimaryCtaClick(false, null, primaryAnchorId)}
         data-testid="job-details-next-step-primary-cta"
         className="w-full md:w-auto"
       >
         {primaryCta.label}
       </HbButton>
     );
-  }, [handleCallAction, isLoading, logPrimaryCtaClick, primaryCta]);
+  }, [
+    handleCallAction,
+    handleProgressCtaClick,
+    isLoading,
+    logPrimaryCtaClick,
+    primaryAnchorId,
+    primaryCta,
+    primaryTargetRowId,
+  ]);
 
   return (
     <HbCard className="space-y-4 border-[var(--color-border-strong)] bg-[var(--color-card-elevated)] p-5">

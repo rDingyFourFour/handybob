@@ -53,6 +53,7 @@ type JobAskBobFollowupPanelProps = {
   latestCallOutcomeHint?: string | null;
   callHistoryHint?: string | null;
   stepReadiness?: AskBobStepReadiness | null;
+  embeddedInProgressRow?: boolean;
 };
 
 export default function JobAskBobFollowupPanel({
@@ -81,6 +82,7 @@ export default function JobAskBobFollowupPanel({
   latestCallOutcomeHint,
   callHistoryHint,
   stepReadiness,
+  embeddedInProgressRow = false,
 }: JobAskBobFollowupPanelProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -342,11 +344,15 @@ export default function JobAskBobFollowupPanel({
   return (
     <HbCard className="space-y-4">
       <div className="space-y-1">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
+        {!embeddedInProgressRow && (
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">AskBob</p>
+        )}
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <h2 className="hb-heading-3 text-xl font-semibold">Follow-up</h2>
+              {!embeddedInProgressRow && (
+                <h2 className="hb-heading-3 text-xl font-semibold">Follow-up</h2>
+              )}
               {stepCompleted && (
                 <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tracking-[0.3em] text-emerald-200">
                   Done

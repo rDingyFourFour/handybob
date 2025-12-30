@@ -18,6 +18,7 @@ import {
 import JobDetailsCard from "@/components/JobDetailsCard";
 import {
   computeFollowupDueInfo,
+  isActionableFollowupDue,
   type FollowupDueStatus,
   type FollowupDueInfo,
 } from "@/lib/domain/communications/followupRecommendations";
@@ -524,6 +525,7 @@ export default async function JobDetailPage({
     invoiceDueAt: null,
     recommendedDelayDays: null,
   });
+  const hasActionableFollowupDue = isActionableFollowupDue(followupDueInfo.dueStatus);
   console.log("[job-followup-status]", {
     jobId: job.id,
     callId: latestCall?.id ?? null,
@@ -601,6 +603,7 @@ export default async function JobDetailPage({
           progressSteps={PROGRESS_STEPS}
           statusHints={derivedAskBobCopy.progressRowStatuses}
           defaultProgressStep={defaultProgressRow}
+          hasActionableFollowupDue={hasActionableFollowupDue}
           showIntakePanel={false}
         />
       </section>
