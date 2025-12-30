@@ -45,14 +45,25 @@ describe("MobileAppShell navigation", () => {
     });
   }
 
-  it("renders the tab bar and highlights the correct tab", () => {
-    mockedUsePathname.mockReturnValue("/jobs");
+  it("renders only the approved tabs with deterministic highlighting and no badge artifacts", () => {
+    mockedUsePathname.mockReturnValue("/jobs/123");
     renderShell();
 
     const tabBar = container.querySelector('[data-testid="mobile-tab-bar"]');
     expect(tabBar).toBeTruthy();
+    const links = Array.from(tabBar?.querySelectorAll("a") ?? []);
+    expect(links).toHaveLength(4);
+    expect(links.map((link) => link.textContent?.trim())).toEqual([
+      "Home",
+      "Jobs",
+      "Calls",
+      "Settings",
+    ]);
     const jobsLink = container.querySelector('a[href="/jobs"]');
     expect(jobsLink?.getAttribute("aria-current")).toBe("page");
+    expect(container.innerHTML.toLowerCase()).not.toContain("badge");
+    expect(container.querySelector('a[href="/calls"] svg')).toBeTruthy();
+    expect(container.querySelector('a[href="/settings"] svg')).toBeTruthy();
   });
 
   it("hides the tab bar when requested", () => {
@@ -62,12 +73,11 @@ describe("MobileAppShell navigation", () => {
     expect(container.querySelector('[data-testid="mobile-tab-bar"]')).toBeNull();
   });
 
-  it("renders the calls tab with a calm label", () => {
-    mockedUsePathname.mockReturnValue("/m");
+  it("marks the calls tab active when the pathname targets calls", () => {
+    mockedUsePathname.mockReturnValue("/calls/recent");
     renderShell();
 
     const callsLink = container.querySelector('a[href="/calls"]');
-    expect(callsLink).toBeTruthy();
-    expect(callsLink?.textContent?.trim()).toContain("Calls");
+    expect(callsLink?.getAttribute("aria-current")).toBe("page");
   });
 });

@@ -7,7 +7,7 @@ import {
 } from "@/lib/domain/askbob/nextStep";
 import { assertBobTone, normalizeBobCtaLabel } from "@/lib/domain/copy/bobVoice";
 import { isCompletedJobStatus } from "@/lib/domain/jobs/jobListUi";
-import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
+import { mobileHomeCopy } from "@/lib/domain/askbob/mobileFlowCopy";
 
 export type HomeRecommendationCandidate = {
   jobId: string;
@@ -48,7 +48,7 @@ const STEP_PRIORITY: Record<NextStepType, number> = {
 };
 
 const normalizeRecommendationCtaLabel = (() => {
-  const label = normalizeBobCtaLabel(mobileFlowCopy.home.recommendationCtaLabel);
+  const label = normalizeBobCtaLabel(mobileHomeCopy.recommendationCtaLabel);
   assertBobTone(label, "homeRecommendation.primaryCtaLabel");
   return label;
 })();

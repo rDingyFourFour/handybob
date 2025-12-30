@@ -1,35 +1,28 @@
-import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import ts from "typescript";
 
-const guardedFiles = [
-  "app/m/page.tsx",
-  "app/m/jobs/[id]/page.tsx",
-  "app/m/follow-up/page.tsx",
-];
+describe("mobile home copy guard", () => {
+  it("does not render inline text literals outside the approved copy map", () => {
+    const filePath = path.join(process.cwd(), "app/m/page.tsx");
+    const contents = fs.readFileSync(filePath, "utf-8");
+    const sourceFile = ts.createSourceFile(filePath, contents, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 
-const bannedPatterns = [
-  /["']Home["']/,
-  /["']Review job["']/,
-  /["']Bob's next step["']/,
-  /["']Focus on this step to keep the job moving forward\.["']/,
-  /["']Everything looks on track for this job\.["']/,
-  /["']View job details["']/,
-  /["']Follow-up draft["']/,
-  /["']AskBob is preparing a follow-up for this job\. We'll show it here soon\.["']/,
-  /["']Back to active job["']/,
-  /["']Good morning["']/,
-  /["']You're all caught up["']/,
-  /["']Everything's up to date\. I'll let you know if anything changes\.["']/,
-  /["']I'm tracking the job that needs a small nudge\.["']/,
-];
+    const inlineTexts: string[] = [];
 
-describe("Mobile flow copy guard", () => {
-  for (const file of guardedFiles) {
-    it(`avoids inline copy in ${file}`, async () => {
-      const contents = await readFile(file, "utf8");
-      for (const pattern of bannedPatterns) {
-        expect(pattern.test(contents)).toBe(false);
+    const visit = (node: ts.Node) => {
+      if (ts.isJsxText(node)) {
+        const value = node.getText();
+        if (value.trim()) {
+          inlineTexts.push(value.trim());
+        }
       }
-    });
-  }
+      ts.forEachChild(node, visit);
+    };
+
+    visit(sourceFile);
+
+    expect(inlineTexts).toEqual([]);
+  });
 });

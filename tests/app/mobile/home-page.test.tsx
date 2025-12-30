@@ -6,8 +6,9 @@ import {
   createSupabaseState,
   mockGetCurrentWorkspace,
 } from "@/tests/app/mobile/test-helpers";
-import MobileHomePage from "@/app/m/page";
+import MobileHomePage, { buildMobileHomePrimaryCta } from "@/app/m/page";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
+import type { HomeRecommendation } from "@/lib/domain/askbob/homeRecommendation";
 
 describe("Mobile home page", () => {
   let container: HTMLDivElement;
@@ -143,6 +144,25 @@ describe("Mobile home page", () => {
         hasRecommendation: false,
         isMobile: true,
         recommendedStepType: null,
+      }),
+    );
+  });
+
+  it("derives a CTA payload with deterministic telemetry flags", () => {
+    const sampleRecommendation: HomeRecommendation = {
+      jobId: "job-followup",
+      title: "Follow-up job",
+      rationale: "Keep momentum going",
+      primaryCtaLabel: mobileFlowCopy.home.recommendationCtaLabel,
+      destination: "/m/jobs/job-followup",
+      recommendedStepType: "followup",
+    };
+    const primaryCta = buildMobileHomePrimaryCta(sampleRecommendation);
+    expect(primaryCta.payload).toEqual(
+      expect.objectContaining({
+        isMobile: true,
+        stepType: "followup",
+        nextStepType: "followup",
       }),
     );
   });

@@ -4,7 +4,11 @@ import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import TrackedLinkButton from "@/components/mobile/TrackedLinkButton";
-import { deriveHomeRecommendation, type HomeRecommendationCandidate } from "@/lib/domain/askbob/homeRecommendation";
+import {
+  deriveHomeRecommendation,
+  type HomeRecommendation,
+  type HomeRecommendationCandidate,
+} from "@/lib/domain/askbob/homeRecommendation";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
 import type { AskBobFollowupSnapshotPayload, AskBobJobTaskSnapshotTask } from "@/lib/domain/askbob/types";
 
@@ -43,6 +47,30 @@ type JobArtifactState = {
   followupSnapshot: AskBobFollowupSnapshotPayload | null;
   lastActivityAt: string | null;
 };
+
+export type MobileHomePrimaryCtaPayload = {
+  jobId: string;
+  stepType: HomeRecommendation["recommendedStepType"];
+  nextStepType: HomeRecommendation["recommendedStepType"];
+  isMobile: true;
+};
+
+export type MobileHomePrimaryCta = {
+  href: string;
+  label: string;
+  payload: MobileHomePrimaryCtaPayload;
+};
+
+export const buildMobileHomePrimaryCta = (recommendation: HomeRecommendation): MobileHomePrimaryCta => ({
+  href: recommendation.destination,
+  label: recommendation.primaryCtaLabel,
+  payload: {
+    jobId: recommendation.jobId,
+    stepType: recommendation.recommendedStepType,
+    nextStepType: recommendation.recommendedStepType,
+    isMobile: true,
+  },
+});
 
 const updateMostRecent = (current: string | null, candidate: string | null): string | null => {
   if (!candidate) return current;
@@ -170,6 +198,7 @@ export default async function MobileHomePage() {
 
   const recommendation = deriveHomeRecommendation(candidates);
   const hasRecommendation = Boolean(recommendation);
+  const primaryCta = recommendation ? buildMobileHomePrimaryCta(recommendation) : null;
   console.log("[home-render]", {
     hasRecommendation,
     recommendedStepType: recommendation?.recommendedStepType ?? null,
@@ -216,22 +245,19 @@ export default async function MobileHomePage() {
             </h2>
             <p className="text-sm text-[var(--color-text-secondary)]">{recommendation.rationale}</p>
           </div>
-          <TrackedLinkButton
-            href={recommendation.destination}
-            eventName="[home-recommendation-click]"
-            eventPayload={{
-              jobId: recommendation.jobId,
-              stepType: recommendation.recommendedStepType,
-              nextStepType: recommendation.recommendedStepType,
-              isMobile: true,
-            }}
-            variant="primary"
-            size="md"
-            className="w-full justify-center"
-            data-testid="mobile-home-primary-cta"
-          >
-            {recommendation.primaryCtaLabel}
-          </TrackedLinkButton>
+          {primaryCta && (
+            <TrackedLinkButton
+              href={primaryCta.href}
+              eventName="[home-recommendation-click]"
+              eventPayload={primaryCta.payload}
+              variant="primary"
+              size="md"
+              className="w-full justify-center"
+              data-testid="mobile-home-primary-cta"
+            >
+              {primaryCta.label}
+            </TrackedLinkButton>
+          )}
         </HbCard>
       )}
 

@@ -1,16 +1,8 @@
 import { assertBobTone } from "@/lib/domain/copy/bobVoice";
+import { mobileHomeCopy, validateMobileHomeCopy } from "@/lib/domain/askbob/mobileFlowCopy";
 
 export const mobileFlowCopy = {
-  home: {
-    title: "Home",
-    greetingTemplate: "Good morning, {name}",
-    greetingFallback: "Good morning",
-    statement: "I'm tracking the job that needs a small nudge.",
-    recommendationLabel: "Next step",
-    recommendationTitleFallback: "Untitled job",
-    idleReassurance: "Everything's up to date. I'll let you know if anything changes.",
-    recommendationCtaLabel: "Review job",
-  },
+  home: mobileHomeCopy,
   activeJob: {
     nextStepHeading: "Bob's next step",
     nextStepHelper: "Focus on this step to keep the job moving forward.",
@@ -27,17 +19,7 @@ export const mobileFlowCopy = {
 export function validateMobileFlowCopy(): void {
   const check = (value: string, label: string) => assertBobTone(value, label);
 
-  check(mobileFlowCopy.home.title, "home.title");
-  check(mobileFlowCopy.home.greetingTemplate, "home.greetingTemplate");
-  check(mobileFlowCopy.home.greetingFallback, "home.greetingFallback");
-  check(mobileFlowCopy.home.statement, "home.statement");
-  check(mobileFlowCopy.home.recommendationLabel, "home.recommendationLabel");
-  check(
-    mobileFlowCopy.home.recommendationTitleFallback,
-    "home.recommendationTitleFallback",
-  );
-  check(mobileFlowCopy.home.idleReassurance, "home.idleReassurance");
-  check(mobileFlowCopy.home.recommendationCtaLabel, "home.recommendationCtaLabel");
+  validateMobileHomeCopy();
 
   check(mobileFlowCopy.activeJob.nextStepHeading, "activeJob.nextStepHeading");
   check(mobileFlowCopy.activeJob.nextStepHelper, "activeJob.nextStepHelper");
