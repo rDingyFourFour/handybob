@@ -10,8 +10,8 @@ import type {
   NextStepResult,
   NextStepStatusHints,
 } from "@/lib/domain/askbob/nextStep";
+import { PROGRESS_STEP_ANCHORS, PROGRESS_STEP_ORDER } from "@/lib/domain/askbob/progressSteps";
 
-const PROGRESS_STEPS: JobProgressStep[] = ["diagnose", "materials", "quote", "followup", "call"];
 
 export type JobProgressRowCopy = {
   stepLabel: string;
@@ -28,10 +28,37 @@ type AskBobHudSummary = {
   tasksSeen: string[];
 };
 
+type AskBobSummaryRow = {
+  key: JobProgressStep;
+  label: string;
+  anchor: string;
+  statusHint: string;
+  reviewActionLabel: string;
+};
+
+export type AskBobSummaryDisplayModel = {
+  collapsedHint: string;
+  expandedHint: string;
+  toggleLabels: {
+    expand: string;
+    collapse: string;
+  };
+  collapsedLine: string;
+  rows: AskBobSummaryRow[];
+};
+
+export type JobBriefDisplayModel = {
+  heading: string;
+  jobTitle: string;
+  stateLine: string;
+  backToJobsLabel: string;
+  customerLine: string | null;
+};
+
 export type JobDetailsAskBobDerivedCopy = {
   progressRowStatuses: NextStepStatusHints;
   progressRowSecondaryCtaLabels: Partial<Record<JobProgressStep, string>>;
-  askBobSummaryCollapsedLine: string;
+  askBobSummary: AskBobSummaryDisplayModel;
   callHistoryHint: string | null;
   askBobHudActivityLine: string;
   askBobHudScopeHint: string | null;
@@ -48,6 +75,39 @@ type JobDetailsDerivedCopyInput = {
   hasCallSummary: boolean;
   callSummarySignals: CallSummarySignals | null;
 };
+
+type BuildJobBriefDisplayModelInput = {
+  jobTitle: string;
+  customerName: string | null;
+  nextStep: NextStepResult;
+  progressRowStatuses: NextStepStatusHints;
+};
+
+export function buildJobBriefDisplayModel(input: BuildJobBriefDisplayModelInput): JobBriefDisplayModel {
+  const { jobTitle, customerName, nextStep, progressRowStatuses } = input;
+  const heading = jobDetailsCopy.jobBrief.heading;
+  assertBobTone(heading, "derived.jobBrief.heading");
+  const backToJobsLabel = jobDetailsCopy.jobBrief.backToJobs;
+  assertBobTone(backToJobsLabel, "derived.jobBrief.backToJobs");
+  const customerLabel = jobDetailsCopy.jobBrief.customerLabel;
+  assertBobTone(customerLabel, "derived.jobBrief.customerLabel");
+
+  const selectedStep = PROGRESS_STEP_ORDER.includes(nextStep.stepType as JobProgressStep)
+    ? (nextStep.stepType as JobProgressStep)
+    : "quote";
+  const stateLine = progressRowStatuses[selectedStep];
+  assertBobTone(stateLine, "derived.jobBrief.stateLine");
+
+  const customerLine = customerName ? `${customerLabel}: ${customerName}` : null;
+
+  return {
+    heading,
+    jobTitle,
+    stateLine,
+    backToJobsLabel,
+    customerLine,
+  };
+}
 
 const artifactLabels = ({
   hasDiagnoseSnapshot,
@@ -150,6 +210,50 @@ const buildCallHistoryHint = (signals: CallSummarySignals): string => {
   return [baseHint, windowLabel].filter(Boolean).join(" · ");
 };
 
+type BuildAskBobSummaryDisplayParams = {
+  collapsedLine: string;
+  statuses: NextStepStatusHints;
+};
+
+const buildAskBobSummaryDisplay = (params: BuildAskBobSummaryDisplayParams): AskBobSummaryDisplayModel => {
+  const { collapsedLine, statuses } = params;
+  const collapsedHint = jobDetailsCopy.askBobSummary.collapsedHint;
+  assertBobTone(collapsedHint, "derived.askBobSummary.collapsedHint");
+  const expandedHint = jobDetailsCopy.askBobSummary.expandedHint;
+  assertBobTone(expandedHint, "derived.askBobSummary.expandedHint");
+  const toggleExpand = jobDetailsCopy.askBobSummary.toggle.expand;
+  const toggleCollapse = jobDetailsCopy.askBobSummary.toggle.collapse;
+  assertBobTone(toggleExpand, "derived.askBobSummary.toggle.expand");
+  assertBobTone(toggleCollapse, "derived.askBobSummary.toggle.collapse");
+  const normalizedReviewActionLabel = normalizeBobCtaLabel(jobDetailsCopy.progressRows.reviewAction);
+  assertBobTone(normalizedReviewActionLabel, "derived.askBobSummary.reviewActionLabel");
+
+  const rows: AskBobSummaryRow[] = PROGRESS_STEP_ORDER.map((step) => {
+    const label = jobDetailsCopy.progressRows.labels[step] ?? jobDetailsCopy.disabled.safeFailure;
+    assertBobTone(label, `derived.askBobSummary.rows.${step}.label`);
+    const anchor = PROGRESS_STEP_ANCHORS[step] ?? "";
+    const statusHint = statuses[step];
+    return {
+      key: step,
+      label,
+      anchor,
+      statusHint,
+      reviewActionLabel: normalizedReviewActionLabel,
+    };
+  });
+
+  return {
+    collapsedHint,
+    expandedHint,
+    toggleLabels: {
+      expand: toggleExpand,
+      collapse: toggleCollapse,
+    },
+    collapsedLine,
+    rows,
+  };
+};
+
 type BuildJobProgressRowCopyParams = {
   statuses: NextStepStatusHints;
   callHistoryHint: string | null;
@@ -161,7 +265,7 @@ export function buildJobProgressRowCopyMap(params: BuildJobProgressRowCopyParams
   assertBobTone(normalizedReviewActionLabel, "derived.progressRowCopy.reviewActionLabel");
 
   const copyMap = {} as JobProgressRowCopyMap;
-  for (const step of PROGRESS_STEPS) {
+  for (const step of PROGRESS_STEP_ORDER) {
     const rawLabel = jobDetailsCopy.progressRows.labels[step] ?? jobDetailsCopy.disabled.safeFailure;
     assertBobTone(rawLabel, `derived.progressRowCopy.labels.${step}`);
     const statusSource =
@@ -198,7 +302,7 @@ export function deriveJobDetailsAskBobDerivedCopy(input: JobDetailsDerivedCopyIn
   } = input;
 
   const statuses: NextStepStatusHints = {} as NextStepStatusHints;
-  for (const step of PROGRESS_STEPS) {
+  for (const step of PROGRESS_STEP_ORDER) {
     const hint = nextStep.statusHints[step];
     const normalized = normalizeBobStatus(hint);
     assertBobTone(normalized, `derived.progressRowStatuses.${step}`);
@@ -206,7 +310,7 @@ export function deriveJobDetailsAskBobDerivedCopy(input: JobDetailsDerivedCopyIn
   }
 
   const secondaryCtaLabels: Partial<Record<JobProgressStep, string>> = {};
-  for (const step of PROGRESS_STEPS) {
+  for (const step of PROGRESS_STEP_ORDER) {
     const ctaLabel = jobDetailsCopy.nextStepCta[step];
     if (!ctaLabel) {
       continue;
@@ -224,7 +328,11 @@ export function deriveJobDetailsAskBobDerivedCopy(input: JobDetailsDerivedCopyIn
     hasCallSummary,
   });
   const summaryLine = buildCollapsedLine(summaryLabels);
-  assertBobTone(summaryLine, "derived.askBobSummaryCollapsedLine");
+  assertBobTone(summaryLine, "derived.askBobSummary.collapsedLine");
+  const askBobSummary = buildAskBobSummaryDisplay({
+    collapsedLine: summaryLine,
+    statuses,
+  });
 
   const activityLineData = buildActivityLine(hudSummary);
   assertBobTone(activityLineData.text, "derived.askBobHud.activityLine");
@@ -246,7 +354,7 @@ export function deriveJobDetailsAskBobDerivedCopy(input: JobDetailsDerivedCopyIn
   return {
     progressRowStatuses: statuses,
     progressRowSecondaryCtaLabels: secondaryCtaLabels,
-    askBobSummaryCollapsedLine: summaryLine,
+    askBobSummary,
     callHistoryHint: historyHint,
     askBobHudActivityLine: activityLineData.text,
     askBobHudScopeHint: scopeHint,

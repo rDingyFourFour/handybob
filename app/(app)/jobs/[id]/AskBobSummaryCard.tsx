@@ -4,29 +4,19 @@ import { useState } from "react";
 import Link from "next/link";
 
 import HbCard from "@/components/ui/hb-card";
-import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
-import type { JobProgressStep, NextStepResult, NextStepStatusHints } from "@/lib/domain/askbob/nextStep";
-
-type ProgressStepInfo = {
-  key: JobProgressStep;
-  label: string;
-  anchor: string;
-};
+import type { NextStepResult } from "@/lib/domain/askbob/nextStep";
+import type { AskBobSummaryDisplayModel } from "@/lib/domain/askbob/jobDetailsDerivedCopy";
 
 type AskBobSummaryCardProps = {
   jobId: string;
   nextStep: NextStepResult;
-  progressSteps: ProgressStepInfo[];
-  statusHints: NextStepStatusHints;
-  collapsedCopy: string;
+  summary: AskBobSummaryDisplayModel;
 };
 
 export default function AskBobSummaryCard({
   jobId,
   nextStep,
-  progressSteps,
-  statusHints,
-  collapsedCopy,
+  summary,
 }: AskBobSummaryCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -52,7 +42,7 @@ export default function AskBobSummaryCard({
     <HbCard className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">
-          {jobDetailsCopy.askBobSummary.collapsedHint}
+          {summary.collapsedHint}
         </p>
         <button
           type="button"
@@ -61,33 +51,33 @@ export default function AskBobSummaryCard({
           className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
           data-testid="job-details-askbob-summary-toggle"
         >
-          {isExpanded ? "Hide details" : "View details"}
+          {isExpanded ? summary.toggleLabels.collapse : summary.toggleLabels.expand}
         </button>
       </div>
       {!isExpanded ? (
         <div data-testid="job-details-askbob-summary-collapsed" className="text-sm text-[var(--color-text-secondary)]">
-          {collapsedCopy}
+          {summary.collapsedLine}
         </div>
       ) : (
         <div data-testid="job-details-askbob-summary-expanded" className="space-y-3">
           <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">
-            {jobDetailsCopy.askBobSummary.expandedHint}
+            {summary.expandedHint}
           </p>
           <div className="space-y-3">
-            {progressSteps.map((step) => (
+            {summary.rows.map((row) => (
               <div
-                key={step.key}
+                key={row.key}
                 className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm"
               >
                 <div>
-                  <p className="text-sm font-semibold text-[var(--color-text-primary)]">{step.label}</p>
-                  <p className="text-sm text-[var(--color-text-secondary)]">{statusHints[step.key]}</p>
+                  <p className="text-sm font-semibold text-[var(--color-text-primary)]">{row.label}</p>
+                  <p className="text-sm text-[var(--color-text-secondary)]">{row.statusHint}</p>
                 </div>
                 <Link
-                  href={`#${step.anchor}`}
+                  href={`#${row.anchor}`}
                   className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--color-text-secondary)] transition hover:text-[var(--color-text-primary)]"
                 >
-                  Review
+                  {row.reviewActionLabel}
                 </Link>
               </div>
             ))}

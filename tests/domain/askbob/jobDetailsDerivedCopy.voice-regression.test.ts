@@ -58,7 +58,7 @@ describe("Job details derived copy voice regression", () => {
   it("keeps each derived string calm across pipeline stages", () => {
     for (const scenario of scenarios) {
       const derived = buildDerived(scenario.overrides, scenario.callSignals);
-      assertBobTone(derived.askBobSummaryCollapsedLine, `${scenario.label}.summary`);
+      assertBobTone(derived.askBobSummary.collapsedLine, `${scenario.label}.summary`);
       assertBobTone(derived.askBobHudActivityLine, `${scenario.label}.hud`);
       if (derived.askBobHudScopeHint) {
         assertBobTone(derived.askBobHudScopeHint, `${scenario.label}.hudScope`);

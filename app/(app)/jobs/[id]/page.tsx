@@ -34,7 +34,10 @@ import {
   getInvoiceForJob,
   type InvoiceSnapshotRow as JobInvoiceSnapshotRow,
 } from "@/lib/domain/invoices/getInvoiceForJob";
-import { deriveJobDetailsAskBobDerivedCopy } from "@/lib/domain/askbob/jobDetailsDerivedCopy";
+import {
+  deriveJobDetailsAskBobDerivedCopy,
+  buildJobBriefDisplayModel,
+} from "@/lib/domain/askbob/jobDetailsDerivedCopy";
 import { deriveNextStepForJobDetails, type NextStepResult } from "@/lib/domain/askbob/nextStep";
 import { PROGRESS_STEPS } from "@/app/(app)/jobs/[id]/progressSteps";
 
@@ -505,12 +508,13 @@ export default async function JobDetailPage({
     stepType: nextStep.stepType,
   });
   const progressStepMatch = PROGRESS_STEPS.find((step) => step.key === nextStep.stepType);
-  const jobBriefStateLine =
-    progressStepMatch !== undefined
-      ? derivedAskBobCopy.progressRowStatuses[progressStepMatch.key]
-      : derivedAskBobCopy.progressRowStatuses.quote;
-  const defaultProgressRow =
-    progressStepMatch !== undefined ? progressStepMatch.key : null;
+  const defaultProgressRow = progressStepMatch !== undefined ? progressStepMatch.key : null;
+  const jobBriefDisplayModel = buildJobBriefDisplayModel({
+    jobTitle: displayJobTitle,
+    customerName,
+    nextStep,
+    progressRowStatuses: derivedAskBobCopy.progressRowStatuses,
+  });
 
   const quoteCandidate = quotes.find((quote) => quote.id === callScriptQuoteId) ?? null;
   const quoteCreatedAt = quoteCandidate?.created_at ?? null;
@@ -552,23 +556,13 @@ export default async function JobDetailPage({
       data-testid="job-details-shell"
     >
       <section data-testid="job-details-job-brief">
-        <JobBriefCard
-          title={displayJobTitle}
-          customerName={customerName}
-          stateLine={jobBriefStateLine}
-        />
+        <JobBriefCard model={jobBriefDisplayModel} />
       </section>
       <section data-testid="job-details-next-step">
         <NextStepCard jobId={job.id} nextStep={nextStep} />
       </section>
       <section data-testid="job-details-askbob-summary">
-        <AskBobSummaryCard
-          jobId={job.id}
-          nextStep={nextStep}
-          collapsedCopy={derivedAskBobCopy.askBobSummaryCollapsedLine}
-          progressSteps={PROGRESS_STEPS}
-          statusHints={derivedAskBobCopy.progressRowStatuses}
-        />
+        <AskBobSummaryCard jobId={job.id} nextStep={nextStep} summary={derivedAskBobCopy.askBobSummary} />
       </section>
       <section data-testid="job-details-job-progress" className="space-y-4">
         <div data-testid="job-details-job-progress-header" className="space-y-2">

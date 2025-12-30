@@ -1,6 +1,9 @@
 import type { CallSummarySignals } from "@/lib/domain/askbob/callHistory";
-import { deriveNextStepForJobDetails, type NextStepInput } from "@/lib/domain/askbob/nextStep";
-import { deriveJobDetailsAskBobDerivedCopy } from "@/lib/domain/askbob/jobDetailsDerivedCopy";
+import { deriveNextStepForJobDetails, type JobProgressStep, type NextStepInput } from "@/lib/domain/askbob/nextStep";
+import {
+  deriveJobDetailsAskBobDerivedCopy,
+  buildJobBriefDisplayModel,
+} from "@/lib/domain/askbob/jobDetailsDerivedCopy";
 import type { AskBobFollowupSnapshotPayload } from "@/lib/domain/askbob/types";
 import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
 import { assertBobTone } from "@/lib/domain/copy/bobVoice";
@@ -54,7 +57,7 @@ function deriveCopy(options: {
     followupSnapshot: options.followupSnapshot ?? null,
     hasCallWithMissingOutcome: options.nextStepInput.hasCallWithMissingOutcome,
   });
-  return deriveJobDetailsAskBobDerivedCopy({
+  const derived = deriveJobDetailsAskBobDerivedCopy({
     nextStep,
     hudSummary: options.hudSummary ?? BASE_HUD_SUMMARY,
     hasDiagnoseSnapshot: Boolean(options.nextStepInput.hasDiagnoseSnapshot),
@@ -64,22 +67,23 @@ function deriveCopy(options: {
     hasCallSummary: Boolean(options.hasCallSummary),
     callSummarySignals: options.callSignals ?? null,
   });
+  return { derived, nextStep };
 }
 
 describe("deriveJobDetailsAskBobDerivedCopy", () => {
   it("uses the fallback summary line when no artifacts exist", () => {
-    const derived = deriveCopy({ nextStepInput: buildNextStepInput() });
-    expect(derived.askBobSummaryCollapsedLine).toBe(
+    const { derived } = deriveCopy({ nextStepInput: buildNextStepInput() });
+    expect(derived.askBobSummary.collapsedLine).toBe(
       "AskBob hasn’t generated any artifacts for this job yet.",
     );
     expect(derived.callHistoryHint).toBeNull();
-    assertBobTone(derived.askBobSummaryCollapsedLine, "test");
+    assertBobTone(derived.askBobSummary.collapsedLine, "test");
     expect(derived.progressRowStatuses.diagnose).toBe(jobDetailsCopy.progressStatus.diagnose.pending);
     expect(derived.askBobHudActivityLine).toBe("No AskBob activity recorded yet for this job.");
   });
 
   it("lists multiple artifact labels in the collapsed summary", () => {
-    const derived = deriveCopy({
+    const { derived } = deriveCopy({
       nextStepInput: buildNextStepInput({
         hasDiagnoseSnapshot: true,
         hasMaterialsSnapshot: true,
@@ -87,10 +91,10 @@ describe("deriveJobDetailsAskBobDerivedCopy", () => {
       }),
       hasCallSummary: true,
     });
-    expect(derived.askBobSummaryCollapsedLine).toBe(
+    expect(derived.askBobSummary.collapsedLine).toBe(
       "AskBob has generated Diagnosis, Materials, and Call summary.",
     );
-    assertBobTone(derived.askBobSummaryCollapsedLine, "test");
+    assertBobTone(derived.askBobSummary.collapsedLine, "test");
   });
 
   it("includes follow-up plan when a followup snapshot exists", () => {
@@ -103,19 +107,19 @@ describe("deriveJobDetailsAskBobDerivedCopy", () => {
       shouldCall: false,
       shouldWait: false,
     };
-    const derived = deriveCopy({
+    const { derived } = deriveCopy({
       nextStepInput: buildNextStepInput({
         hasDiagnoseSnapshot: true,
         hasQuoteSnapshot: true,
       }),
       followupSnapshot,
     });
-    expect(derived.askBobSummaryCollapsedLine).toContain("Follow-up plan");
-    assertBobTone(derived.askBobSummaryCollapsedLine, "test");
+    expect(derived.askBobSummary.collapsedLine).toContain("Follow-up plan");
+    assertBobTone(derived.askBobSummary.collapsedLine, "test");
   });
 
   it("generates a call history hint when call signals exist", () => {
-    const derived = deriveCopy({
+    const { derived } = deriveCopy({
       nextStepInput: buildNextStepInput(),
       hasCallSummary: true,
       callSignals: CALL_SIGNALS,
@@ -125,7 +129,7 @@ describe("deriveJobDetailsAskBobDerivedCopy", () => {
   });
 
   it("formats the HUD line when AskBob activity exists", () => {
-    const derived = deriveCopy({
+    const { derived } = deriveCopy({
       nextStepInput: buildNextStepInput(),
       hudSummary: {
         lastTaskLabel: "Diagnose",
@@ -140,5 +144,65 @@ describe("deriveJobDetailsAskBobDerivedCopy", () => {
     if (derived.askBobHudScopeHint) {
       assertBobTone(derived.askBobHudScopeHint, "hud-scope");
     }
+  });
+});
+
+describe("buildJobBriefDisplayModel", () => {
+  it("exposes copy-driven headings, CTA, and state when a customer is known", () => {
+    const { derived, nextStep } = deriveCopy({
+      nextStepInput: buildNextStepInput({
+        hasDiagnoseSnapshot: true,
+        hasMaterialsSnapshot: true,
+        latestQuoteId: "quote-1",
+      }),
+    });
+    const model = buildJobBriefDisplayModel({
+      jobTitle: "Urgent repair",
+      customerName: "Acme Inc.",
+      nextStep,
+      progressRowStatuses: derived.progressRowStatuses,
+    });
+
+    expect(model.heading).toBe(jobDetailsCopy.jobBrief.heading);
+    expect(model.backToJobsLabel).toBe(jobDetailsCopy.jobBrief.backToJobs);
+    expect(model.customerLine).toBe(`${jobDetailsCopy.jobBrief.customerLabel}: Acme Inc.`);
+    expect(model.jobTitle).toBe("Urgent repair");
+    expect(model.stateLine).toBe(derived.progressRowStatuses[nextStep.stepType as JobProgressStep]);
+    assertBobTone(model.stateLine, "jobBrief.stateLine");
+  });
+
+  it("falls back to the quote status when the next step moves outside the progress steps", () => {
+    const nextStep = deriveNextStepForJobDetails({
+      hasDiagnoseSnapshot: true,
+      hasMaterialsSnapshot: true,
+      latestQuoteId: "quote-accepted",
+      latestQuoteStatus: "accepted",
+      followupSnapshot: null,
+      callRecommended: false,
+      hasCallWithMissingOutcome: false,
+      latestCallOutcomeRecorded: false,
+      invoiceStatus: null,
+      invoicePresent: false,
+    });
+    const derived = deriveJobDetailsAskBobDerivedCopy({
+      nextStep,
+      hudSummary: BASE_HUD_SUMMARY,
+      hasDiagnoseSnapshot: true,
+      hasMaterialsSnapshot: true,
+      hasQuoteSnapshot: true,
+      hasFollowupSnapshot: false,
+      hasCallSummary: false,
+      callSummarySignals: null,
+    });
+    const model = buildJobBriefDisplayModel({
+      jobTitle: "Invoice ready job",
+      customerName: null,
+      nextStep,
+      progressRowStatuses: derived.progressRowStatuses,
+    });
+
+    expect(model.customerLine).toBeNull();
+    expect(model.stateLine).toBe(derived.progressRowStatuses.quote);
+    assertBobTone(model.stateLine, "jobBrief.stateLine");
   });
 });

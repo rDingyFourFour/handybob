@@ -101,7 +101,12 @@ export default function NextStepCard({ jobId, nextStep }: NextStepCardProps) {
       </div>
       <div className="space-y-2">
         <p className="text-sm text-[var(--color-text-secondary)]">{nextStepStatement}</p>
-        <p className="text-lg font-semibold text-[var(--color-text-primary)]">{nextStep.rationale}</p>
+        <p
+          data-testid="job-details-next-step-rationale"
+          className="text-lg font-semibold text-[var(--color-text-primary)]"
+        >
+          {nextStep.rationale}
+        </p>
         <p className="text-sm text-[var(--color-text-secondary)]">
           {primaryCta ? nextStepConfirmation : jobDetailsCopy.nextStep.doneLabel}
         </p>

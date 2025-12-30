@@ -5,6 +5,7 @@ export const jobDetailsCopy = {
     heading: "Job brief",
     stateLabel: "Job state",
     backToJobs: "Back to jobs",
+    customerLabel: "Customer",
   },
   nextStep: {
     title: "Next step",
@@ -58,6 +59,10 @@ export const jobDetailsCopy = {
   askBobSummary: {
     collapsedHint: "AskBob summary",
     expandedHint: "AskBob details",
+    toggle: {
+      expand: "View details",
+      collapse: "Hide details",
+    },
   },
   schedule: {
     heading: "Schedule & logistics",
@@ -76,6 +81,7 @@ export function validateJobDetailsCopy(): void {
   check(jobDetailsCopy.jobBrief.heading, "jobBrief.heading");
   check(jobDetailsCopy.jobBrief.stateLabel, "jobBrief.stateLabel");
   check(jobDetailsCopy.jobBrief.backToJobs, "jobBrief.backToJobs");
+  check(jobDetailsCopy.jobBrief.customerLabel, "jobBrief.customerLabel");
 
   check(jobDetailsCopy.nextStep.title, "nextStep.title");
   check(jobDetailsCopy.nextStep.doneLabel, "nextStep.doneLabel");
@@ -99,6 +105,8 @@ export function validateJobDetailsCopy(): void {
 
   check(jobDetailsCopy.askBobSummary.collapsedHint, "askBobSummary.collapsedHint");
   check(jobDetailsCopy.askBobSummary.expandedHint, "askBobSummary.expandedHint");
+  check(jobDetailsCopy.askBobSummary.toggle.expand, "askBobSummary.toggle.expand");
+  check(jobDetailsCopy.askBobSummary.toggle.collapse, "askBobSummary.toggle.collapse");
   check(jobDetailsCopy.schedule.heading, "schedule.heading");
   check(jobDetailsCopy.history.heading, "history.heading");
   check(jobDetailsCopy.disabled.safeFailure, "disabled.safeFailure");
