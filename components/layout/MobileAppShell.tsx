@@ -19,7 +19,7 @@ type MobileTab = {
 };
 
 const MOBILE_TABS: MobileTab[] = [
-  { label: "Home", href: "/dashboard", Icon: HomeOutlineIcon },
+  { label: "Home", href: "/m", Icon: HomeOutlineIcon },
   { label: "Jobs", href: "/jobs", Icon: JobsOutlineIcon },
   { label: "Messages", href: "/messages", Icon: MessagesOutlineIcon },
   { label: "More", href: "/settings", Icon: MoreOutlineIcon },

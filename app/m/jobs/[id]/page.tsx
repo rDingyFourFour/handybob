@@ -1,0 +1,270 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+
+import { createServerClient } from "@/utils/supabase/server";
+import { getCurrentWorkspace } from "@/lib/domain/workspaces";
+import HbCard from "@/components/ui/hb-card";
+import TrackedLinkButton from "@/components/mobile/TrackedLinkButton";
+import { buildJobBriefDisplayModel } from "@/lib/domain/askbob/jobDetailsDerivedCopy";
+import { deriveNextStepForJobDetails, type NextStepType } from "@/lib/domain/askbob/nextStep";
+import { PROGRESS_STEP_ANCHORS, type JobProgressStep } from "@/lib/domain/askbob/progressSteps";
+import { getJobAskBobSnapshotsForJob } from "@/lib/domain/askbob/service";
+import { loadCallHistoryForJob } from "@/lib/domain/askbob/callHistory";
+import { getLatestCallOutcomeForJob } from "@/lib/domain/calls/latestCallOutcome";
+import { getInvoiceForJob } from "@/lib/domain/invoices/getInvoiceForJob";
+import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
+
+type JobRow = {
+  id: string;
+  title: string | null;
+  status: string | null;
+  customer_id: string | null;
+  customers:
+    | { id: string | null; name: string | null }[]
+    | { id: string | null; name: string | null }
+    | null
+    | undefined;
+};
+
+type JobQuoteRow = {
+  id: string;
+  status: string | null;
+};
+
+type PrimaryAction = {
+  href: string | null;
+  destinationType: string | null;
+};
+
+function resolvePrimaryAction(stepType: NextStepType, jobId: string): PrimaryAction {
+  if (stepType === "followup") {
+    return {
+      href: `/m/follow-up?jobId=${jobId}`,
+      destinationType: "followup",
+    };
+  }
+  if (stepType === "call") {
+    return {
+      href: `/calls/new?jobId=${jobId}`,
+      destinationType: "call",
+    };
+  }
+  if (stepType === "invoice") {
+    return {
+      href: `/jobs/${jobId}#invoice-section`,
+      destinationType: "job-details",
+    };
+  }
+  const anchor = PROGRESS_STEP_ANCHORS[stepType as JobProgressStep];
+  if (anchor) {
+    return {
+      href: `/jobs/${jobId}#${anchor}`,
+      destinationType: "job-details",
+    };
+  }
+  return {
+    href: `/jobs/${jobId}`,
+    destinationType: "job-details",
+  };
+}
+
+export default async function MobileActiveJobPage({
+  params,
+}: {
+  params: { id: string };
+}) {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    redirect("/");
+  }
+
+  const workspaceResult = await getCurrentWorkspace({ supabase });
+  const workspace = workspaceResult.workspace;
+  if (!workspace) {
+    redirect("/");
+  }
+
+  const { data: jobData, error: jobError } = await supabase
+    .from<JobRow>("jobs")
+    .select("id, title, status, customer_id, customers(id, name)")
+    .eq("workspace_id", workspace.id)
+    .eq("id", params.id)
+    .maybeSingle();
+
+  if (jobError) {
+    console.error("[mobile-active-job] Failed to load job", jobError);
+    redirect("/m");
+  }
+
+  if (!jobData) {
+    redirect("/m");
+  }
+
+  const customer =
+    Array.isArray(jobData.customers) && jobData.customers.length > 0
+      ? jobData.customers[0]
+      : jobData.customers ?? null;
+  const customerName = customer?.name ?? null;
+
+  let diagnoseSnapshot = null;
+  let materialsSnapshot = null;
+  let followupSnapshot = null;
+  try {
+    const snapshots = await getJobAskBobSnapshotsForJob(supabase, {
+      workspaceId: workspace.id,
+      jobId: jobData.id,
+    });
+    diagnoseSnapshot = snapshots.diagnoseSnapshot;
+    materialsSnapshot = snapshots.materialsSnapshot;
+    followupSnapshot = snapshots.followupSnapshot;
+  } catch (error) {
+    console.error("[mobile-active-job] Failed to load AskBob snapshots", error);
+  }
+
+  const { data: quotes } = await supabase
+    .from<JobQuoteRow>("quotes")
+    .select("id, status")
+    .eq("workspace_id", workspace.id)
+    .eq("job_id", jobData.id)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const latestQuote = quotes?.[0] ?? null;
+
+  let callHistory = [];
+  let hasCallWithMissingOutcome = false;
+  try {
+    callHistory = await loadCallHistoryForJob(supabase, workspace.id, jobData.id, { limit: 25 });
+    hasCallWithMissingOutcome = callHistory.some(
+      (record) => !(record.outcome ?? record.status ?? "").trim(),
+    );
+  } catch (error) {
+    console.error("[mobile-active-job] Failed to load call history", error);
+  }
+
+  let latestCallOutcome = null;
+  try {
+    latestCallOutcome = await getLatestCallOutcomeForJob(supabase, workspace.id, jobData.id);
+  } catch (error) {
+    console.error("[mobile-active-job] Failed to load latest call outcome", error);
+  }
+
+  let invoice = null;
+  try {
+    ({ invoice } = await getInvoiceForJob({
+      supabase,
+      workspaceId: workspace.id,
+      jobId: jobData.id,
+    }));
+  } catch (error) {
+    console.error("[mobile-active-job] Failed to load invoice", error);
+  }
+
+  const hasDiagnoseSnapshot = Boolean(diagnoseSnapshot);
+  const hasMaterialsSnapshot = Boolean(materialsSnapshot);
+  const latestQuoteStatus = latestQuote?.status ?? null;
+  const latestQuoteId = latestQuote?.id ?? null;
+  const callRecommended = Boolean(followupSnapshot?.callRecommended);
+  const latestCallOutcomeRecorded = Boolean(latestCallOutcome);
+  const invoicePresent = Boolean(invoice);
+  const invoiceStatus = invoice?.invoice_status ?? null;
+
+  const nextStep = deriveNextStepForJobDetails({
+    hasDiagnoseSnapshot,
+    hasMaterialsSnapshot,
+    latestQuoteStatus,
+    latestQuoteId,
+    followupSnapshot,
+    callRecommended,
+    hasCallWithMissingOutcome,
+    latestCallOutcomeRecorded,
+    invoiceStatus,
+    invoicePresent,
+  });
+
+  const jobBrief = buildJobBriefDisplayModel({
+    jobTitle: jobData.title ?? "Untitled job",
+    customerName,
+    nextStep,
+    progressRowStatuses: nextStep.statusHints,
+  });
+
+  const primaryAction = nextStep.primaryCta
+    ? resolvePrimaryAction(nextStep.stepType, jobData.id)
+    : { href: null, destinationType: null };
+
+  console.log("[active-job-render]", {
+    jobId: jobData.id,
+    nextStepType: nextStep.stepType,
+  });
+
+  return (
+    <div className="space-y-6 pb-8">
+      <header className="space-y-1">
+        <Link
+          href="/m"
+          className="text-sm font-semibold text-[var(--color-text-secondary)]"
+        >
+          {mobileFlowCopy.home.title}
+        </Link>
+        <h1 className="text-3xl font-semibold text-[var(--color-text-primary)]">
+          {jobBrief.jobTitle}
+        </h1>
+        {jobBrief.customerLine && (
+          <p className="text-sm text-[var(--color-text-secondary)]">{jobBrief.customerLine}</p>
+        )}
+        <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">
+          {jobBrief.stateLine}
+        </p>
+      </header>
+
+      <section>
+        <HbCard data-testid="mobile-active-job-next-step-card" className="space-y-5">
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">
+              {mobileFlowCopy.activeJob.nextStepHeading}
+            </p>
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              {mobileFlowCopy.activeJob.nextStepHelper}
+            </p>
+          </div>
+          <p className="text-lg text-[var(--color-text-primary)]">{nextStep.rationale}</p>
+          {primaryAction.href && nextStep.primaryCta ? (
+            <TrackedLinkButton
+              href={primaryAction.href}
+              eventName="[active-job-primary-cta-click]"
+              eventPayload={{
+                jobId: jobData.id,
+                nextStepType: nextStep.stepType,
+                destinationType: primaryAction.destinationType,
+              }}
+              variant="primary"
+              size="md"
+              className="w-full justify-center"
+              data-testid="mobile-active-job-primary-cta"
+            >
+              {nextStep.primaryCta.label}
+            </TrackedLinkButton>
+          ) : (
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              {mobileFlowCopy.activeJob.calmReassurance}
+            </p>
+          )}
+          <TrackedLinkButton
+            href={`/jobs/${jobData.id}`}
+            eventName="[active-job-view-details-click]"
+            eventPayload={{ jobId: jobData.id }}
+            variant="ghost"
+            size="md"
+            className="w-full justify-center"
+            data-testid="mobile-active-job-view-details-cta"
+          >
+            {mobileFlowCopy.activeJob.viewJobDetails}
+          </TrackedLinkButton>
+        </HbCard>
+      </section>
+    </div>
+  );
+}

@@ -18,6 +18,13 @@ const createHeadersResult = () => ({
     key.toLowerCase() === "user-agent" ? nextHeadersUserAgent : null,
 });
 
+const createCookiesResult = () => ({
+  get: vi.fn().mockReturnValue(null),
+  getAll: vi.fn().mockReturnValue([]),
+  has: vi.fn().mockReturnValue(false),
+});
+
 vi.mock("next/headers", () => ({
   headers: async () => createHeadersResult(),
+  cookies: () => createCookiesResult(),
 }));
