@@ -7,7 +7,7 @@ import {
 } from "@/lib/domain/askbob/nextStep";
 import { assertBobTone, normalizeBobCtaLabel } from "@/lib/domain/copy/bobVoice";
 import { isCompletedJobStatus } from "@/lib/domain/jobs/jobListUi";
-import { mobileHomeCopy } from "@/lib/domain/askbob/mobileFlowCopy";
+import { mobileHomeCopy } from "@/lib/domain/mobile/mobileHomeCopy";
 
 export type HomeRecommendationCandidate = {
   jobId: string;
@@ -35,6 +35,7 @@ export type HomeRecommendation = {
   primaryCtaLabel: string;
   destination: string;
   recommendedStepType: NextStepType;
+  nextStepType: NextStepType;
 };
 
 const STEP_PRIORITY: Record<NextStepType, number> = {
@@ -135,5 +136,6 @@ export function deriveHomeRecommendation(
     primaryCtaLabel: normalizeRecommendationCtaLabel,
     destination: `/m/jobs/${winner.candidate.jobId}`,
     recommendedStepType: winner.nextStep.stepType,
+    nextStepType: winner.nextStep.stepType,
   };
 }

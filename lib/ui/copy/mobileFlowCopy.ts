@@ -1,5 +1,5 @@
 import { assertBobTone } from "@/lib/domain/copy/bobVoice";
-import { mobileHomeCopy, validateMobileHomeCopy } from "@/lib/domain/askbob/mobileFlowCopy";
+import { mobileHomeCopy, validateMobileHomeCopy } from "@/lib/domain/mobile/mobileHomeCopy";
 
 export const mobileFlowCopy = {
   home: mobileHomeCopy,

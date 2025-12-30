@@ -62,6 +62,7 @@ describe("MobileAppShell navigation", () => {
     const jobsLink = container.querySelector('a[href="/jobs"]');
     expect(jobsLink?.getAttribute("aria-current")).toBe("page");
     expect(container.innerHTML.toLowerCase()).not.toContain("badge");
+    expect(container.innerHTML.toLowerCase()).not.toContain("message");
     expect(container.querySelector('a[href="/calls"] svg')).toBeTruthy();
     expect(container.querySelector('a[href="/settings"] svg')).toBeTruthy();
   });
@@ -79,5 +80,13 @@ describe("MobileAppShell navigation", () => {
 
     const callsLink = container.querySelector('a[href="/calls"]');
     expect(callsLink?.getAttribute("aria-current")).toBe("page");
+  });
+
+  it("marks the home tab active for the mobile root", () => {
+    mockedUsePathname.mockReturnValue("/m");
+    renderShell();
+
+    const homeLink = container.querySelector('a[href="/m"]');
+    expect(homeLink?.getAttribute("aria-current")).toBe("page");
   });
 });

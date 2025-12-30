@@ -99,7 +99,7 @@ describe("Mobile home page", () => {
     const primaryCta = ctaButtons[0];
     expect(primaryCta?.textContent?.trim()).toBe(mobileFlowCopy.home.recommendationCtaLabel);
     const idleCard = container.querySelector('[data-testid="mobile-home-idle-card"]');
-    expect(idleCard?.textContent).toContain(mobileFlowCopy.home.idleReassurance);
+    expect(idleCard).toBeNull();
 
     const logEntry = logSpy.mock.calls.find(([name]) => name === "[home-render]");
     expect(logEntry).toBeTruthy();
@@ -156,6 +156,7 @@ describe("Mobile home page", () => {
       primaryCtaLabel: mobileFlowCopy.home.recommendationCtaLabel,
       destination: "/m/jobs/job-followup",
       recommendedStepType: "followup",
+      nextStepType: "followup",
     };
     const primaryCta = buildMobileHomePrimaryCta(sampleRecommendation);
     expect(primaryCta.payload).toEqual(

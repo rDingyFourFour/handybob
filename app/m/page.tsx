@@ -51,7 +51,7 @@ type JobArtifactState = {
 export type MobileHomePrimaryCtaPayload = {
   jobId: string;
   stepType: HomeRecommendation["recommendedStepType"];
-  nextStepType: HomeRecommendation["recommendedStepType"];
+  nextStepType: HomeRecommendation["nextStepType"];
   isMobile: true;
 };
 
@@ -67,7 +67,7 @@ export const buildMobileHomePrimaryCta = (recommendation: HomeRecommendation): M
   payload: {
     jobId: recommendation.jobId,
     stepType: recommendation.recommendedStepType,
-    nextStepType: recommendation.recommendedStepType,
+    nextStepType: recommendation.nextStepType,
     isMobile: true,
   },
 });
@@ -229,7 +229,7 @@ export default async function MobileHomePage() {
         <p className="text-sm text-[var(--color-text-secondary)]">{greeting}</p>
       </header>
 
-      {recommendation && (
+      {recommendation ? (
         <HbCard data-testid="mobile-home-recommendation-card" className="space-y-3">
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">
@@ -259,11 +259,11 @@ export default async function MobileHomePage() {
             </TrackedLinkButton>
           )}
         </HbCard>
+      ) : (
+        <HbCard data-testid="mobile-home-idle-card">
+          <p className="text-sm text-[var(--color-text-secondary)]">{mobileFlowCopy.home.idleReassurance}</p>
+        </HbCard>
       )}
-
-      <HbCard data-testid="mobile-home-idle-card">
-        <p className="text-sm text-[var(--color-text-secondary)]">{mobileFlowCopy.home.idleReassurance}</p>
-      </HbCard>
     </div>
   );
 }
