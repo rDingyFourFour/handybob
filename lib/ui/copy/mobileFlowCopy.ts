@@ -8,6 +8,9 @@ export const mobileFlowCopy = {
     nextStepHelper: "Focus on this step to keep the job moving forward.",
     calmReassurance: "Everything looks on track for this job.",
     viewJobDetails: "View job details",
+    notFoundTitle: "Job not found",
+    notFoundBody: "We couldn’t find that job right now. Return to Home to continue.",
+    notFoundAction: "Back to home",
   },
   followupPlaceholder: {
     title: "Follow-up draft",
@@ -25,6 +28,9 @@ export function validateMobileFlowCopy(): void {
   check(mobileFlowCopy.activeJob.nextStepHelper, "activeJob.nextStepHelper");
   check(mobileFlowCopy.activeJob.calmReassurance, "activeJob.calmReassurance");
   check(mobileFlowCopy.activeJob.viewJobDetails, "activeJob.viewJobDetails");
+  check(mobileFlowCopy.activeJob.notFoundTitle, "activeJob.notFoundTitle");
+  check(mobileFlowCopy.activeJob.notFoundBody, "activeJob.notFoundBody");
+  check(mobileFlowCopy.activeJob.notFoundAction, "activeJob.notFoundAction");
   check(mobileFlowCopy.followupPlaceholder.title, "followupPlaceholder.title");
   check(mobileFlowCopy.followupPlaceholder.description, "followupPlaceholder.description");
   check(mobileFlowCopy.followupPlaceholder.backButton, "followupPlaceholder.backButton");

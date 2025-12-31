@@ -5,10 +5,9 @@ import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import TrackedLinkButton from "@/components/mobile/TrackedLinkButton";
 import {
-  deriveHomeRecommendation,
-  type HomeRecommendation,
-  type HomeRecommendationCandidate,
-} from "@/lib/domain/askbob/homeRecommendation";
+  deriveHomeInstruction,
+  type HomeInstructionCandidate,
+} from "@/lib/domain/askbob/homeInstruction";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
 import type { AskBobFollowupSnapshotPayload, AskBobJobTaskSnapshotTask } from "@/lib/domain/askbob/types";
 
@@ -46,42 +45,6 @@ type JobArtifactState = {
   hasMaterialsSnapshot: boolean;
   followupSnapshot: AskBobFollowupSnapshotPayload | null;
   lastActivityAt: string | null;
-};
-
-export type MobileHomePrimaryCtaPayload = {
-  jobId: string;
-  stepType: HomeRecommendation["stepType"];
-  nextStepType: HomeRecommendation["nextStepType"];
-  isMobile: boolean;
-};
-
-export type MobileHomePrimaryCta = {
-  href: string;
-  label: string;
-  isMobile: boolean;
-  stepType: HomeRecommendation["stepType"];
-  nextStepType: HomeRecommendation["nextStepType"];
-  payload: MobileHomePrimaryCtaPayload;
-};
-
-export const buildMobileHomePrimaryCta = (
-  recommendation: HomeRecommendation,
-  isMobile: boolean,
-): MobileHomePrimaryCta => {
-  const label = mobileFlowCopy.home.recommendationCtaLabel;
-  return {
-    href: recommendation.destination,
-    label,
-    isMobile,
-    stepType: recommendation.stepType,
-    nextStepType: recommendation.nextStepType,
-    payload: {
-      jobId: recommendation.jobId,
-      stepType: recommendation.stepType,
-      nextStepType: recommendation.nextStepType,
-      isMobile,
-    },
-  };
 };
 
 const updateMostRecent = (current: string | null, candidate: string | null): string | null => {
@@ -185,7 +148,7 @@ export default async function MobileHomePage() {
     }
   }
 
-  const candidates: HomeRecommendationCandidate[] = jobRows.map((job) => {
+  const candidates: HomeInstructionCandidate[] = jobRows.map((job) => {
     const artifact = artifactStates.get(job.id);
     const latestQuote = quoteMap.get(job.id);
     return {
@@ -208,13 +171,22 @@ export default async function MobileHomePage() {
     };
   });
 
-  const recommendation = deriveHomeRecommendation(candidates);
-  const hasRecommendation = Boolean(recommendation);
-  const primaryCta = recommendation ? buildMobileHomePrimaryCta(recommendation, true) : null;
+  const homeInstruction = deriveHomeInstruction(candidates);
+  const hasPrimaryCta =
+    Boolean(homeInstruction?.instruction.primaryCta) &&
+    !homeInstruction?.instruction.primaryCta?.disabled;
+  const hasRecommendation = Boolean(homeInstruction && hasPrimaryCta);
+  const fallbackTelemetry = {
+    stepType: "idle",
+    hasPrimaryCta: false,
+    isIdle: true,
+  };
+  const instructionTelemetry = homeInstruction?.instruction.telemetry ?? fallbackTelemetry;
   console.log("[home-render]", {
-    hasRecommendation,
-    recommendedStepType: recommendation?.recommendedStepType ?? null,
     isMobile: true,
+    hasRecommendation,
+    instructionStepType: instructionTelemetry.stepType,
+    instructionTelemetry,
   });
 
   const metadata = user.user_metadata as { full_name?: string; name?: string } | undefined;
@@ -241,33 +213,46 @@ export default async function MobileHomePage() {
         <p className="text-sm text-[var(--color-text-secondary)]">{greeting}</p>
       </header>
 
-      {recommendation ? (
+      {homeInstruction ? (
         <HbCard data-testid="mobile-home-recommendation-card" className="space-y-3">
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">
               {mobileFlowCopy.home.recommendationLabel}
             </p>
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              {mobileFlowCopy.home.statement}
-            </p>
+            <p className="text-sm text-[var(--color-text-secondary)]">{mobileFlowCopy.home.statement}</p>
           </div>
           <div>
             <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">
-              {recommendation.title ?? mobileFlowCopy.home.recommendationTitleFallback}
+              {homeInstruction.title ?? mobileFlowCopy.home.recommendationTitleFallback}
             </h2>
-            <p className="text-sm text-[var(--color-text-secondary)]">{recommendation.rationale}</p>
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              {homeInstruction.instruction.recommendation}
+            </p>
+            {homeInstruction.instruction.rationale ? (
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                {homeInstruction.instruction.rationale}
+              </p>
+            ) : null}
           </div>
-          {primaryCta && (
+          {homeInstruction.instruction.primaryCta && (
             <TrackedLinkButton
-              href={primaryCta.href}
+              href={homeInstruction.instruction.primaryCta.href ?? "#"}
               eventName="[home-recommendation-click]"
-              eventPayload={primaryCta.payload}
+              eventPayload={{
+                jobId: homeInstruction.jobId,
+                instructionStepType: homeInstruction.instruction.stepType,
+                instructionTelemetry: homeInstruction.instruction.telemetry,
+                actionType: homeInstruction.instruction.primaryCta.actionType,
+                destination: homeInstruction.instruction.primaryCta.href ?? null,
+                hasPrimaryCta,
+                nextStepType: homeInstruction.instruction.telemetry.nextStepType ?? null,
+              }}
               variant="primary"
               size="md"
               className="w-full justify-center"
               data-testid="mobile-home-primary-cta"
             >
-              {primaryCta.label}
+              {homeInstruction.instruction.primaryCta.label}
             </TrackedLinkButton>
           )}
         </HbCard>

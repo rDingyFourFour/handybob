@@ -1,15 +1,14 @@
 import type { AskBobFollowupSnapshotPayload } from "@/lib/domain/askbob/types";
-import {
-  deriveNextStepForJobDetails,
-  type NextStepInput,
-  type NextStepResult,
-  type NextStepType,
-} from "@/lib/domain/askbob/nextStep";
-import { assertBobTone, normalizeBobCtaLabel } from "@/lib/domain/copy/bobVoice";
+import { deriveNextStepForJobDetails } from "@/lib/domain/askbob/nextStep";
+import { deriveJobNextInstructionFromResult } from "@/lib/domain/askbob/jobNextInstruction";
+import { assertBobTone } from "@/lib/domain/copy/bobVoice";
 import { isCompletedJobStatus } from "@/lib/domain/jobs/jobListUi";
-import { mobileHomeCopy } from "@/lib/domain/mobile/mobileHomeCopy";
+import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
+import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
+import type { BobInstruction, BobInstructionPrimaryCta } from "@/lib/domain/bob/bobInstruction";
+import { normalizeBobCtaLabel } from "@/lib/domain/copy/bobVoice";
 
-export type HomeRecommendationCandidate = {
+export type HomeInstructionCandidate = {
   jobId: string;
   title: string | null;
   status: string | null;
@@ -28,18 +27,13 @@ export type HomeRecommendationCandidate = {
   invoiceStatus?: string | null;
 };
 
-export type HomeRecommendation = {
+export type HomeInstruction = {
   jobId: string;
   title: string | null;
-  rationale: string;
-  primaryCtaLabel: string;
-  destination: string;
-  stepType: NextStepType;
-  nextStepType: NextStepType;
-  recommendedStepType: NextStepType;
+  instruction: BobInstruction;
 };
 
-const STEP_PRIORITY: Record<NextStepType, number> = {
+const STEP_PRIORITY: Record<string, number> = {
   call: 1,
   followup: 2,
   quote: 3,
@@ -50,12 +44,12 @@ const STEP_PRIORITY: Record<NextStepType, number> = {
 };
 
 const normalizeRecommendationCtaLabel = (() => {
-  const label = normalizeBobCtaLabel(mobileHomeCopy.recommendationCtaLabel);
-  assertBobTone(label, "homeRecommendation.primaryCtaLabel");
-  return label;
+  const normalized = normalizeBobCtaLabel(mobileFlowCopy.home.recommendationCtaLabel);
+  assertBobTone(normalized, "homeInstruction.primaryCtaLabel");
+  return normalized;
 })();
 
-function buildNextStepInput(candidate: HomeRecommendationCandidate): NextStepInput {
+function buildNextStepInput(candidate: HomeInstructionCandidate) {
   return {
     hasDiagnoseSnapshot: candidate.hasDiagnoseSnapshot,
     hasMaterialsSnapshot: candidate.hasMaterialsSnapshot,
@@ -70,9 +64,9 @@ function buildNextStepInput(candidate: HomeRecommendationCandidate): NextStepInp
   };
 }
 
-function resolveTimestamp(candidate: HomeRecommendationCandidate): number {
-  const candidates = [candidate.lastActivityAt, candidate.updatedAt, candidate.createdAt];
-  const normalized = candidates
+function resolveTimestamp(candidate: HomeInstructionCandidate): number {
+  const timestamps = [candidate.lastActivityAt, candidate.updatedAt, candidate.createdAt];
+  const normalized = timestamps
     .map((value) => {
       if (!value) {
         return 0;
@@ -84,17 +78,36 @@ function resolveTimestamp(candidate: HomeRecommendationCandidate): number {
   return Math.max(...normalized);
 }
 
-function assertRationaleTone(rationale: string, jobId: string): string {
-  assertBobTone(rationale, `homeRecommendation.rationale.${jobId}`);
-  return rationale;
-}
+const overrideWithHomeCta = (
+  instruction: BobInstruction,
+  jobId: string,
+): BobInstruction => {
+  if (!instruction.primaryCta) {
+    return instruction;
+  }
+  const primaryCta: BobInstructionPrimaryCta = {
+    label: normalizeRecommendationCtaLabel,
+    actionType: "navigate",
+    href: `/m/jobs/${jobId}`,
+    disabled: instruction.primaryCta.disabled,
+    disabledReason: instruction.primaryCta.disabledReason,
+  };
+  const hasPrimaryCta = Boolean(primaryCta && !primaryCta.disabled);
+  return {
+    ...instruction,
+    primaryCta,
+    telemetry: {
+      ...instruction.telemetry,
+      hasPrimaryCta,
+    },
+  };
+};
 
-export function deriveHomeRecommendation(
-  candidates: HomeRecommendationCandidate[],
-): HomeRecommendation | null {
+export function deriveHomeInstruction(candidates: HomeInstructionCandidate[]): HomeInstruction | null {
   const actionable: Array<{
-    candidate: HomeRecommendationCandidate;
-    nextStep: NextStepResult;
+    candidate: HomeInstructionCandidate;
+    instruction: BobInstruction;
+    nextStepType: string;
     timestamp: number;
   }> = [];
 
@@ -106,9 +119,21 @@ export function deriveHomeRecommendation(
     if (nextStep.stepType === "done") {
       continue;
     }
+    const instruction = overrideWithHomeCta(
+      deriveJobNextInstructionFromResult(nextStep, {
+        statement: mobileFlowCopy.home.statement,
+        supportingRationale: null,
+        fallbackRecommendation: jobDetailsCopy.nextStep.fallbackRationale,
+      }),
+      candidate.jobId,
+    );
+    if (!instruction.primaryCta) {
+      continue;
+    }
     actionable.push({
       candidate,
-      nextStep,
+      instruction,
+      nextStepType: nextStep.stepType,
       timestamp: resolveTimestamp(candidate),
     });
   }
@@ -118,8 +143,8 @@ export function deriveHomeRecommendation(
   }
 
   actionable.sort((a, b) => {
-    const priorityA = STEP_PRIORITY[a.nextStep.stepType] ?? STEP_PRIORITY.done;
-    const priorityB = STEP_PRIORITY[b.nextStep.stepType] ?? STEP_PRIORITY.done;
+    const priorityA = STEP_PRIORITY[a.nextStepType] ?? STEP_PRIORITY.done;
+    const priorityB = STEP_PRIORITY[b.nextStepType] ?? STEP_PRIORITY.done;
     if (priorityA !== priorityB) {
       return priorityA - priorityB;
     }
@@ -133,11 +158,6 @@ export function deriveHomeRecommendation(
   return {
     jobId: winner.candidate.jobId,
     title: winner.candidate.title,
-    rationale: assertRationaleTone(winner.nextStep.rationale, winner.candidate.jobId),
-    primaryCtaLabel: normalizeRecommendationCtaLabel,
-    destination: `/m/jobs/${winner.candidate.jobId}`,
-    stepType: winner.nextStep.stepType,
-    nextStepType: winner.nextStep.stepType,
-    recommendedStepType: winner.nextStep.stepType,
+    instruction: winner.instruction,
   };
 }

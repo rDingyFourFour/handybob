@@ -10,6 +10,9 @@ describe("mobile flow copy contract", () => {
           "calmReassurance": "Everything looks on track for this job.",
           "nextStepHeading": "Bob's next step",
           "nextStepHelper": "Focus on this step to keep the job moving forward.",
+          "notFoundAction": "Back to home",
+          "notFoundBody": "We couldn’t find that job right now. Return to Home to continue.",
+          "notFoundTitle": "Job not found",
           "viewJobDetails": "View job details",
         },
         "followupPlaceholder": {

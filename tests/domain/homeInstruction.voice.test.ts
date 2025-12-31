@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { AskBobFollowupSnapshotPayload } from "@/lib/domain/askbob/types";
-import { deriveHomeRecommendation, type HomeRecommendationCandidate } from "@/lib/domain/askbob/homeRecommendation";
+import { deriveHomeInstruction, type HomeInstructionCandidate } from "@/lib/domain/askbob/homeInstruction";
 import { assertBobTone } from "@/lib/domain/copy/bobVoice";
 
 const now = new Date().toISOString();
 
-function buildCandidate(overrides: Partial<HomeRecommendationCandidate> = {}): HomeRecommendationCandidate {
+function buildCandidate(overrides: Partial<HomeInstructionCandidate> = {}): HomeInstructionCandidate {
   return {
     jobId: "job-voice",
     title: "Voice job",
@@ -39,18 +39,18 @@ const followupSnapshot: AskBobFollowupSnapshotPayload = {
   modelLatencyMs: 1,
 };
 
-describe("home recommendation Bob tone", () => {
-  it("keeps derived rationale in Bob tone", () => {
-    const recommendation = deriveHomeRecommendation([
+describe("home instruction Bob tone", () => {
+  it("keeps derived recommendations in Bob tone", () => {
+    const instruction = deriveHomeInstruction([
       buildCandidate({
         followupSnapshot,
         latestQuoteStatus: "accepted",
       }),
     ]);
-    expect(recommendation).toBeTruthy();
-    if (recommendation) {
+    expect(instruction).toBeTruthy();
+    if (instruction) {
       expect(() =>
-        assertBobTone(recommendation.rationale, "homeRecommendation.voice"),
+        assertBobTone(instruction.instruction.recommendation, "homeInstruction.voice"),
       ).not.toThrow();
     }
   });

@@ -40,6 +40,9 @@ import {
   deriveJobDetailsAskBobDerivedCopy,
   buildJobBriefDisplayModel,
 } from "@/lib/domain/askbob/jobDetailsDerivedCopy";
+import {
+  deriveJobNextInstructionFromResult,
+} from "@/lib/domain/askbob/jobNextInstruction";
 import { deriveNextStepForJobDetails, type NextStepResult } from "@/lib/domain/askbob/nextStep";
 import { PROGRESS_STEPS } from "@/app/(app)/jobs/[id]/progressSteps";
 import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
@@ -511,6 +514,11 @@ export default async function JobDetailPage({
     invoiceStatus,
     invoicePresent,
   });
+  const nextStepInstruction = deriveJobNextInstructionFromResult(nextStep, {
+    statement: jobDetailsCopy.nextStep.statement,
+    supportingRationale: jobDetailsCopy.nextStep.confirmation,
+    fallbackRecommendation: jobDetailsCopy.nextStep.fallbackRationale,
+  });
   const hasFollowupSnapshot = Boolean(followupSnapshot);
   const derivedAskBobCopy = deriveJobDetailsAskBobDerivedCopy({
     nextStep,
@@ -680,7 +688,7 @@ export default async function JobDetailPage({
         <JobBriefCard model={jobBriefDisplayModel} />
       </section>
       <section data-testid="job-details-next-step">
-        <NextStepCard jobId={job.id} nextStep={nextStep} isMobile={isMobile} />
+        <NextStepCard jobId={job.id} instruction={nextStepInstruction} isMobile={isMobile} />
       </section>
       <section data-testid="job-details-askbob-summary">
         <AskBobSummaryCard

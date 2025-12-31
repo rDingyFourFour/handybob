@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
+import HbButton from "@/components/ui/hb-button";
 import TrackedLinkButton from "@/components/mobile/TrackedLinkButton";
 import { buildJobBriefDisplayModel } from "@/lib/domain/askbob/jobDetailsDerivedCopy";
 import { deriveNextStepForJobDetails, type NextStepType } from "@/lib/domain/askbob/nextStep";
@@ -35,6 +36,21 @@ type PrimaryAction = {
   href: string | null;
   destinationType: string | null;
 };
+
+const JOB_ID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function normalizeJobId(value: string | undefined | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function isValidJobId(candidate: string | null): candidate is string {
+  return Boolean(candidate && JOB_ID_REGEX.test(candidate));
+}
 
 function resolvePrimaryAction(stepType: NextStepType, jobId: string): PrimaryAction {
   if (stepType === "followup") {
@@ -71,8 +87,11 @@ function resolvePrimaryAction(stepType: NextStepType, jobId: string): PrimaryAct
 export default async function MobileActiveJobPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id?: string | undefined }>;
 }) {
+  const { id: rawId } = await params;
+  const normalizedJobId = normalizeJobId(rawId);
+
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -87,20 +106,34 @@ export default async function MobileActiveJobPage({
     redirect("/");
   }
 
+  if (!isValidJobId(normalizedJobId)) {
+    return renderJobNotFoundState();
+  }
+
+  const jobId = normalizedJobId;
+
   const { data: jobData, error: jobError } = await supabase
     .from<JobRow>("jobs")
     .select("id, title, status, customer_id, customers(id, name)")
     .eq("workspace_id", workspace.id)
-    .eq("id", params.id)
+    .eq("id", jobId)
     .maybeSingle();
 
   if (jobError) {
-    console.error("[mobile-active-job] Failed to load job", jobError);
-    redirect("/m");
+    const jobErrorRecord = jobError as Record<string, unknown> | undefined;
+    const errorCode =
+      typeof jobErrorRecord?.code === "string" ? jobErrorRecord.code : "unknown";
+    const errorMessage =
+      typeof jobErrorRecord?.message === "string" ? jobErrorRecord.message : "Job lookup failed";
+    console.error("[mobile-active-job] Job lookup failed", {
+      code: errorCode,
+      message: errorMessage,
+    });
+    return renderJobNotFoundState();
   }
 
   if (!jobData) {
-    redirect("/m");
+    return renderJobNotFoundState();
   }
 
   const customer =
@@ -265,6 +298,33 @@ export default async function MobileActiveJobPage({
           </TrackedLinkButton>
         </HbCard>
       </section>
+    </div>
+  );
+}
+
+function renderJobNotFoundState() {
+  return (
+    <div className="hb-shell pt-20 pb-8">
+      <HbCard
+        data-testid="mobile-active-job-not-found"
+        className="space-y-3 text-center"
+      >
+        <h1 className="hb-heading-1 text-2xl font-semibold">
+          {mobileFlowCopy.activeJob.notFoundTitle}
+        </h1>
+        <p className="hb-muted text-sm">
+          {mobileFlowCopy.activeJob.notFoundBody}
+        </p>
+        <Link href="/m" className="block">
+          <HbButton
+            variant="primary"
+            size="md"
+            className="w-full justify-center"
+          >
+            {mobileFlowCopy.activeJob.notFoundAction}
+          </HbButton>
+        </Link>
+      </HbCard>
     </div>
   );
 }

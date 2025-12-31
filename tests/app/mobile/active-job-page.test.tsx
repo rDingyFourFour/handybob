@@ -16,7 +16,7 @@ import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
 import { PROGRESS_STEP_ANCHORS } from "@/lib/domain/askbob/progressSteps";
 
 const JOB_RECORD = {
-  id: "job-1",
+  id: "00000000-0000-4000-8000-000000000001",
   title: "Active job",
   status: "open",
   customer_id: "customer-1",

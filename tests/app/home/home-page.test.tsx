@@ -6,9 +6,23 @@ import {
   createSupabaseState,
   mockGetCurrentWorkspace,
 } from "@/tests/app/mobile/test-helpers";
-import MobileHomePage, { buildMobileHomePrimaryCta } from "@/app/m/page";
+import MobileHomePage from "@/app/m/page";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
-import type { HomeRecommendation } from "@/lib/domain/askbob/homeRecommendation";
+
+const PRIMARY_BUTTON_CLASS_TOKEN = "bg-[var(--theme-button-primary-bg)]";
+
+const findPrimaryStyledButtons = (root: HTMLElement) => {
+  const ctas = Array.from(root.querySelectorAll<HTMLElement>('[data-testid="mobile-home-primary-cta"]'));
+  if (ctas.length > 0) {
+    return ctas;
+  }
+  return Array.from(root.querySelectorAll<HTMLElement>("button, a")).filter((element) =>
+    element.className.includes(PRIMARY_BUTTON_CLASS_TOKEN),
+  );
+};
+
+const findHomeRenderLogs = (logSpy: ReturnType<typeof vi.spyOn>) =>
+  logSpy.mock.calls.filter(([name]) => name === "[home-render]");
 
 describe("Mobile home page", () => {
   let container: HTMLDivElement;
@@ -101,16 +115,26 @@ describe("Mobile home page", () => {
     const idleCard = container.querySelector('[data-testid="mobile-home-idle-card"]');
     expect(idleCard).toBeNull();
 
-    const logEntry = logSpy.mock.calls.find(([name]) => name === "[home-render]");
-    expect(logEntry).toBeTruthy();
-    const payload = logEntry?.[1] as Record<string, unknown> | undefined;
+    const primaryButtons = findPrimaryStyledButtons(container);
+    expect(primaryButtons).toHaveLength(1);
+
+    const renderLogs = findHomeRenderLogs(logSpy);
+    expect(renderLogs).toHaveLength(1);
+    const payload = renderLogs[0]?.[1] as Record<string, unknown> | undefined;
     expect(payload).toEqual(
       expect.objectContaining({
         hasRecommendation: true,
         isMobile: true,
-        recommendedStepType: expect.anything(),
       }),
     );
+    expect(payload?.instructionTelemetry).toEqual(
+      expect.objectContaining({
+        hasPrimaryCta: true,
+        isIdle: false,
+        stepType: expect.any(String),
+      }),
+    );
+    expect(payload?.instructionStepType).toBe(payload?.instructionTelemetry?.stepType);
   });
 
   it("renders only the idle reassurance when no recommendation exists", async () => {
@@ -136,39 +160,26 @@ describe("Mobile home page", () => {
     const idleCard = container.querySelector('[data-testid="mobile-home-idle-card"]');
     expect(idleCard?.textContent).toContain(mobileFlowCopy.home.idleReassurance);
 
-    const logEntry = logSpy.mock.calls.find(([name]) => name === "[home-render]");
-    expect(logEntry).toBeTruthy();
-    const payload = logEntry?.[1] as Record<string, unknown> | undefined;
+    const primaryButtons = findPrimaryStyledButtons(container);
+    expect(primaryButtons).toHaveLength(0);
+
+    const renderLogs = findHomeRenderLogs(logSpy);
+    expect(renderLogs).toHaveLength(1);
+    const payload = renderLogs[0]?.[1] as Record<string, unknown> | undefined;
     expect(payload).toEqual(
       expect.objectContaining({
         hasRecommendation: false,
         isMobile: true,
-        recommendedStepType: null,
       }),
     );
+    expect(payload?.instructionTelemetry).toEqual(
+      expect.objectContaining({
+        hasPrimaryCta: false,
+        isIdle: true,
+        stepType: "idle",
+      }),
+    );
+    expect(payload?.instructionStepType).toBe("idle");
   });
 
-  it("derives a CTA payload with deterministic telemetry flags", () => {
-    const sampleRecommendation: HomeRecommendation = {
-      jobId: "job-followup",
-      title: "Follow-up job",
-      rationale: "Keep momentum going",
-      primaryCtaLabel: mobileFlowCopy.home.recommendationCtaLabel,
-      destination: "/m/jobs/job-followup",
-      stepType: "followup",
-      recommendedStepType: "followup",
-      nextStepType: "followup",
-    };
-    const primaryCta = buildMobileHomePrimaryCta(sampleRecommendation, false);
-    expect(primaryCta.payload).toEqual(
-      expect.objectContaining({
-        isMobile: false,
-        stepType: "followup",
-        nextStepType: "followup",
-      }),
-    );
-    expect(primaryCta.isMobile).toBe(false);
-    expect(primaryCta.stepType).toBe("followup");
-    expect(primaryCta.nextStepType).toBe("followup");
-  });
 });

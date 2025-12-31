@@ -16,6 +16,8 @@ import {
   renderJobDetailPage,
 } from "./test-helpers";
 import { deriveNextStepForJobDetails } from "@/lib/domain/askbob/nextStep";
+import { deriveJobNextInstructionFromResult } from "@/lib/domain/askbob/jobNextInstruction";
+import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
 
 const diagnoseSnapshotStub: AskBobDiagnoseSnapshotPayload = {
   sessionId: "snapshot-1",
@@ -213,16 +215,21 @@ describe("Next Step copy matches derived output", () => {
         invoiceStatus: null,
         invoicePresent: false,
       });
+      const instruction = deriveJobNextInstructionFromResult(nextStep, {
+        statement: jobDetailsCopy.nextStep.statement,
+        supportingRationale: jobDetailsCopy.nextStep.confirmation,
+        fallbackRecommendation: jobDetailsCopy.nextStep.fallbackRationale,
+      });
 
       const cta = container.querySelector<HTMLButtonElement>(
         '[data-testid="job-details-next-step-primary-cta"]',
       );
-      expect(cta?.textContent?.trim()).toBe(nextStep.primaryCta?.label ?? "");
+      expect(cta?.textContent?.trim()).toBe(instruction.primaryCta?.label ?? "");
 
       const rationale = container.querySelector<HTMLElement>(
         '[data-testid="job-details-next-step-rationale"]',
       );
-      expect(rationale?.textContent?.trim()).toBe(nextStep.rationale);
+      expect(rationale?.textContent?.trim()).toBe(instruction.recommendation);
     },
   );
 });

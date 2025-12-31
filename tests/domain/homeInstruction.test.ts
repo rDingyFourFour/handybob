@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { AskBobFollowupSnapshotPayload } from "@/lib/domain/askbob/types";
-import { deriveHomeRecommendation, type HomeRecommendationCandidate } from "@/lib/domain/askbob/homeRecommendation";
+import { deriveHomeInstruction, type HomeInstructionCandidate } from "@/lib/domain/askbob/homeInstruction";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
 
 const now = new Date().toISOString();
 
-function buildCandidate(overrides: Partial<HomeRecommendationCandidate> = {}): HomeRecommendationCandidate {
+function buildCandidate(overrides: Partial<HomeInstructionCandidate> = {}): HomeInstructionCandidate {
   return {
     jobId: "job-1",
     title: "Test job",
@@ -39,7 +39,7 @@ const followupSnapshot: AskBobFollowupSnapshotPayload = {
   modelLatencyMs: 1,
 };
 
-describe("deriveHomeRecommendation", () => {
+describe("deriveHomeInstruction", () => {
   it("prefers actionable follow-up over jobs that are done", () => {
     const followupCandidate = buildCandidate({
       jobId: "job-followup",
@@ -51,11 +51,10 @@ describe("deriveHomeRecommendation", () => {
       latestQuoteStatus: "accepted",
       invoicePresent: true,
       invoiceStatus: "paid",
-      callRecommended: false,
       followupSnapshot: null,
     });
-    const recommendation = deriveHomeRecommendation([doneCandidate, followupCandidate]);
-    expect(recommendation?.jobId).toBe("job-followup");
+    const instruction = deriveHomeInstruction([doneCandidate, followupCandidate]);
+    expect(instruction?.jobId).toBe("job-followup");
   });
 
   it("prioritizes call recommendations over jobs stuck on quote", () => {
@@ -71,8 +70,8 @@ describe("deriveHomeRecommendation", () => {
       callRecommended: false,
       followupSnapshot: null,
     });
-    const recommendation = deriveHomeRecommendation([quoteCandidate, callCandidate]);
-    expect(recommendation?.jobId).toBe("job-call");
+    const instruction = deriveHomeInstruction([quoteCandidate, callCandidate]);
+    expect(instruction?.jobId).toBe("job-call");
   });
 
   it("returns null when no actionable jobs exist", () => {
@@ -81,24 +80,20 @@ describe("deriveHomeRecommendation", () => {
       latestQuoteStatus: "accepted",
       invoicePresent: true,
       invoiceStatus: "paid",
-      callRecommended: false,
       followupSnapshot: null,
     });
-    expect(deriveHomeRecommendation([doneCandidate])).toBeNull();
+    expect(deriveHomeInstruction([doneCandidate])).toBeNull();
   });
 
-  it("reuses the canonical CTA label and Bob-approved rationale", () => {
+  it("reuses the canonical CTA label when an instruction exists", () => {
     const followupCandidate = buildCandidate({
       jobId: "job-followup",
       followupSnapshot,
       latestQuoteStatus: "accepted",
     });
-    const recommendation = deriveHomeRecommendation([followupCandidate]);
-    expect(recommendation?.primaryCtaLabel).toBe(
-      mobileFlowCopy.home.recommendationCtaLabel,
-    );
-    expect(recommendation?.rationale).toBe(
-      "A follow-up plan is available. Share it with the customer to keep the conversation going.",
-    );
+    const instruction = deriveHomeInstruction([followupCandidate]);
+    expect(instruction?.instruction.primaryCta?.label).toBe(mobileFlowCopy.home.recommendationCtaLabel);
+    expect(instruction?.instruction.primaryCta?.href).toBe(`/m/jobs/${followupCandidate.jobId}`);
+    expect(instruction?.instruction.stepType).toBe("followup");
   });
 });

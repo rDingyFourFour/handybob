@@ -15,10 +15,10 @@ import {
 } from "./test-helpers";
 import JobDetailPage from "@/app/(app)/jobs/[id]/page";
 import { computeCallSummarySignals, type CallHistoryRecord } from "@/lib/domain/askbob/callHistory";
-import {
-  deriveJobDetailsAskBobDerivedCopy,
-} from "@/lib/domain/askbob/jobDetailsDerivedCopy";
+import { deriveJobDetailsAskBobDerivedCopy } from "@/lib/domain/askbob/jobDetailsDerivedCopy";
+import { deriveJobNextInstructionFromResult } from "@/lib/domain/askbob/jobNextInstruction";
 import { deriveNextStepForJobDetails } from "@/lib/domain/askbob/nextStep";
+import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
 import type {
   AskBobDiagnoseSnapshotPayload,
   AskBobMaterialsSnapshotPayload,
@@ -269,7 +269,12 @@ function buildExpectedForScenario(scenario: PipelineScenario) {
     hasCallSummary,
     callSummarySignals,
   });
-  return { nextStep, derivedCopy };
+  const instruction = deriveJobNextInstructionFromResult(nextStep, {
+    statement: jobDetailsCopy.nextStep.statement,
+    supportingRationale: jobDetailsCopy.nextStep.confirmation,
+    fallbackRecommendation: jobDetailsCopy.nextStep.fallbackRationale,
+  });
+  return { nextStep, derivedCopy, instruction };
 }
 
 function extractTextByTestId(markup: string, testId: string) {
@@ -306,7 +311,7 @@ describe("JobDetails pipeline-state regression", () => {
         expect(collapsedText).toBe(expected.derivedCopy.askBobSummary.collapsedLine);
 
         const rationaleText = extractTextByTestId(markup, "job-details-next-step-rationale");
-        expect(rationaleText).toBe(expected.nextStep.rationale);
+        expect(rationaleText).toBe(expected.instruction.recommendation);
       }
 
       const telemetryScenario = pipelineScenarios[4];
