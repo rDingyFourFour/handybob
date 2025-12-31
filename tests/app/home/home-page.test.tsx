@@ -155,16 +155,20 @@ describe("Mobile home page", () => {
       rationale: "Keep momentum going",
       primaryCtaLabel: mobileFlowCopy.home.recommendationCtaLabel,
       destination: "/m/jobs/job-followup",
+      stepType: "followup",
       recommendedStepType: "followup",
       nextStepType: "followup",
     };
-    const primaryCta = buildMobileHomePrimaryCta(sampleRecommendation);
+    const primaryCta = buildMobileHomePrimaryCta(sampleRecommendation, false);
     expect(primaryCta.payload).toEqual(
       expect.objectContaining({
-        isMobile: true,
+        isMobile: false,
         stepType: "followup",
         nextStepType: "followup",
       }),
     );
+    expect(primaryCta.isMobile).toBe(false);
+    expect(primaryCta.stepType).toBe("followup");
+    expect(primaryCta.nextStepType).toBe("followup");
   });
 });

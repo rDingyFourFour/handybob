@@ -34,8 +34,9 @@ export type HomeRecommendation = {
   rationale: string;
   primaryCtaLabel: string;
   destination: string;
-  recommendedStepType: NextStepType;
+  stepType: NextStepType;
   nextStepType: NextStepType;
+  recommendedStepType: NextStepType;
 };
 
 const STEP_PRIORITY: Record<NextStepType, number> = {
@@ -135,7 +136,8 @@ export function deriveHomeRecommendation(
     rationale: assertRationaleTone(winner.nextStep.rationale, winner.candidate.jobId),
     primaryCtaLabel: normalizeRecommendationCtaLabel,
     destination: `/m/jobs/${winner.candidate.jobId}`,
-    recommendedStepType: winner.nextStep.stepType,
+    stepType: winner.nextStep.stepType,
     nextStepType: winner.nextStep.stepType,
+    recommendedStepType: winner.nextStep.stepType,
   };
 }

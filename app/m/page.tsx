@@ -50,27 +50,39 @@ type JobArtifactState = {
 
 export type MobileHomePrimaryCtaPayload = {
   jobId: string;
-  stepType: HomeRecommendation["recommendedStepType"];
+  stepType: HomeRecommendation["stepType"];
   nextStepType: HomeRecommendation["nextStepType"];
-  isMobile: true;
+  isMobile: boolean;
 };
 
 export type MobileHomePrimaryCta = {
   href: string;
   label: string;
+  isMobile: boolean;
+  stepType: HomeRecommendation["stepType"];
+  nextStepType: HomeRecommendation["nextStepType"];
   payload: MobileHomePrimaryCtaPayload;
 };
 
-export const buildMobileHomePrimaryCta = (recommendation: HomeRecommendation): MobileHomePrimaryCta => ({
-  href: recommendation.destination,
-  label: recommendation.primaryCtaLabel,
-  payload: {
-    jobId: recommendation.jobId,
-    stepType: recommendation.recommendedStepType,
+export const buildMobileHomePrimaryCta = (
+  recommendation: HomeRecommendation,
+  isMobile: boolean,
+): MobileHomePrimaryCta => {
+  const label = mobileFlowCopy.home.recommendationCtaLabel;
+  return {
+    href: recommendation.destination,
+    label,
+    isMobile,
+    stepType: recommendation.stepType,
     nextStepType: recommendation.nextStepType,
-    isMobile: true,
-  },
-});
+    payload: {
+      jobId: recommendation.jobId,
+      stepType: recommendation.stepType,
+      nextStepType: recommendation.nextStepType,
+      isMobile,
+    },
+  };
+};
 
 const updateMostRecent = (current: string | null, candidate: string | null): string | null => {
   if (!candidate) return current;
@@ -198,7 +210,7 @@ export default async function MobileHomePage() {
 
   const recommendation = deriveHomeRecommendation(candidates);
   const hasRecommendation = Boolean(recommendation);
-  const primaryCta = recommendation ? buildMobileHomePrimaryCta(recommendation) : null;
+  const primaryCta = recommendation ? buildMobileHomePrimaryCta(recommendation, true) : null;
   console.log("[home-render]", {
     hasRecommendation,
     recommendedStepType: recommendation?.recommendedStepType ?? null,

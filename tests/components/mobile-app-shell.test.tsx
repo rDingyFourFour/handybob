@@ -45,7 +45,7 @@ describe("MobileAppShell navigation", () => {
     });
   }
 
-  it("renders only the approved tabs with deterministic highlighting and no badge artifacts", () => {
+  it("renders only the approved tabs and no badge artifacts", () => {
     mockedUsePathname.mockReturnValue("/jobs/123");
     renderShell();
 
@@ -67,26 +67,26 @@ describe("MobileAppShell navigation", () => {
     expect(container.querySelector('a[href="/settings"] svg')).toBeTruthy();
   });
 
+  it("highlights the active tab deterministically based on the pathname", () => {
+    const cases = [
+      { pathname: "/jobs/123", href: "/jobs" },
+      { pathname: "/calls/recent", href: "/calls" },
+      { pathname: "/m", href: "/m" },
+      { pathname: "/settings/profile", href: "/settings" },
+    ];
+    for (const { pathname, href } of cases) {
+      mockedUsePathname.mockReturnValue(pathname);
+      renderShell();
+      const activeLinks = container.querySelectorAll('a[aria-current="page"]');
+      expect(activeLinks).toHaveLength(1);
+      expect(activeLinks[0]?.getAttribute("href")).toBe(href);
+    }
+  });
+
   it("hides the tab bar when requested", () => {
     mockedUsePathname.mockReturnValue("/settings");
     renderShell({ hideTabBar: true });
 
     expect(container.querySelector('[data-testid="mobile-tab-bar"]')).toBeNull();
-  });
-
-  it("marks the calls tab active when the pathname targets calls", () => {
-    mockedUsePathname.mockReturnValue("/calls/recent");
-    renderShell();
-
-    const callsLink = container.querySelector('a[href="/calls"]');
-    expect(callsLink?.getAttribute("aria-current")).toBe("page");
-  });
-
-  it("marks the home tab active for the mobile root", () => {
-    mockedUsePathname.mockReturnValue("/m");
-    renderShell();
-
-    const homeLink = container.querySelector('a[href="/m"]');
-    expect(homeLink?.getAttribute("aria-current")).toBe("page");
   });
 });
