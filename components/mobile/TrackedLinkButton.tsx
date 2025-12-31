@@ -31,6 +31,8 @@ export default function TrackedLinkButton({
     console.log(eventName, eventPayload);
   };
 
+  const payloadString = JSON.stringify(eventPayload);
+
   return (
     <HbButton
       as={as}
@@ -38,6 +40,7 @@ export default function TrackedLinkButton({
       variant={variant}
       size={size}
       className={className}
+      data-event-payload={payloadString}
       onClick={handleClick}
       {...props}
     >

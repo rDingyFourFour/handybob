@@ -1,12 +1,17 @@
 import { assertBobTone } from "@/lib/domain/copy/bobVoice";
 import { mobileHomeCopy, validateMobileHomeCopy } from "@/lib/domain/mobile/mobileHomeCopy";
 
+const ACTIVE_JOB_INSTRUCTION_STATEMENT = "Here’s what Bob recommends next.";
+const ACTIVE_JOB_CALM_REASSURANCE = "Everything looks on track for this job.";
+
 export const mobileFlowCopy = {
   home: mobileHomeCopy,
   activeJob: {
     nextStepHeading: "Bob's next step",
     nextStepHelper: "Focus on this step to keep the job moving forward.",
-    calmReassurance: "Everything looks on track for this job.",
+    calmReassurance: ACTIVE_JOB_CALM_REASSURANCE,
+    instructionStatement: ACTIVE_JOB_INSTRUCTION_STATEMENT,
+    instructionFallback: ACTIVE_JOB_CALM_REASSURANCE,
     viewJobDetails: "View job details",
     notFoundTitle: "Job not found",
     notFoundBody: "We couldn’t find that job right now. Return to Home to continue.",
@@ -27,6 +32,8 @@ export function validateMobileFlowCopy(): void {
   check(mobileFlowCopy.activeJob.nextStepHeading, "activeJob.nextStepHeading");
   check(mobileFlowCopy.activeJob.nextStepHelper, "activeJob.nextStepHelper");
   check(mobileFlowCopy.activeJob.calmReassurance, "activeJob.calmReassurance");
+  check(mobileFlowCopy.activeJob.instructionStatement, "activeJob.instructionStatement");
+  check(mobileFlowCopy.activeJob.instructionFallback, "activeJob.instructionFallback");
   check(mobileFlowCopy.activeJob.viewJobDetails, "activeJob.viewJobDetails");
   check(mobileFlowCopy.activeJob.notFoundTitle, "activeJob.notFoundTitle");
   check(mobileFlowCopy.activeJob.notFoundBody, "activeJob.notFoundBody");

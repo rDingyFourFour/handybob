@@ -19,6 +19,14 @@ export type BobInstructionTelemetry = {
   hasPrimaryCta: boolean;
   isIdle: boolean;
   nextStepType?: NextStepType;
+  callId?: string;
+  workspaceId?: string;
+  jobId?: string;
+  customerId?: string;
+  mode?: string;
+  reasonCode?: string;
+  primaryCtaLabel?: string;
+  isMobile?: boolean;
 };
 
 export type BobInstruction = {

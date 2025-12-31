@@ -6,7 +6,7 @@ import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 import CallSessionPage from "@/app/(app)/calls/[id]/page";
 import { ASKBOB_AUTOMATED_SCRIPT_PREFIX } from "@/lib/domain/askbob/constants";
 import { SPEECH_PLAN_METADATA_MARKER } from "@/lib/domain/askbob/speechPlan";
-import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
+import { callSessionInstructionCopy } from "@/lib/ui/copy/callSessionInstructionCopy";
 
 const createServerClientMock = vi.fn();
 const mockResolveWorkspaceContext = vi.fn();
@@ -46,6 +46,7 @@ describe("CallSessionPage primary CTA regression", () => {
   let supabaseState = setupSupabaseMock();
   let container: HTMLDivElement;
   let root: Root | null = null;
+  let logSpy: ReturnType<typeof vi.spyOn>;
 
   const baseCall = {
     id: "call-1",
@@ -91,9 +92,11 @@ describe("CallSessionPage primary CTA regression", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+    logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
   afterEach(() => {
+    logSpy.mockRestore();
     if (root) {
       act(() => {
         root.unmount();
@@ -169,10 +172,10 @@ describe("CallSessionPage primary CTA regression", () => {
 
   it("switches the primary CTA between automated and manual modes", async () => {
     await renderWithCall({}, [], "automated");
-    assertSinglePrimaryCta(callSessionCopy.primaryCta.label.startAutomated);
+    assertSinglePrimaryCta(callSessionInstructionCopy.primaryCta.label.startAutomated);
 
     await renderWithCall({}, [], "manual");
-    assertSinglePrimaryCta(callSessionCopy.primaryCta.label.startGuided);
+    assertSinglePrimaryCta(callSessionInstructionCopy.primaryCta.label.startGuided);
   });
 
   it("updates the primary CTA by readiness state without creating duplicate primaries", async () => {
@@ -185,7 +188,7 @@ describe("CallSessionPage primary CTA regression", () => {
       [],
       "automated",
     );
-    assertSinglePrimaryCta(callSessionCopy.primaryCta.label.captureOutcome);
+    assertSinglePrimaryCta(callSessionInstructionCopy.primaryCta.label.captureOutcome);
 
     await renderWithCall(
       {
@@ -196,6 +199,30 @@ describe("CallSessionPage primary CTA regression", () => {
       [],
       "manual",
     );
-    assertSinglePrimaryCta(callSessionCopy.primaryCta.label.captureOutcome);
+    assertSinglePrimaryCta(callSessionInstructionCopy.primaryCta.label.captureOutcome);
+  });
+
+  it("shows an instruction explanation when a mode is unselected", async () => {
+    await renderWithCall({}, [], undefined);
+    const explanation = container.querySelector('[data-testid="call-session-primary-cta-explanation"] p');
+    expect(explanation?.textContent?.trim()).toBe(
+      callSessionInstructionCopy.primaryCta.explanation.select_call_mode,
+    );
+    const primaryCtas = container.querySelectorAll('[data-cta-role="primary"]');
+    expect(primaryCtas).toHaveLength(1);
+  });
+
+  it("bubbles instruction telemetry when the CTA is clicked", async () => {
+    await renderWithCall({}, [], "manual");
+    const primaryCta = container.querySelector('[data-testid="call-session-primary-cta"]');
+    expect(primaryCta).toBeTruthy();
+    act(() => {
+      primaryCta?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const clickEvent = logSpy.mock.calls.find((args) => args[0] === "[calls-session-primary-cta-click]");
+    expect(clickEvent).toBeTruthy();
+    const payload = clickEvent?.[1] as Record<string, unknown>;
+    expect(payload?.reasonCode).toBe("start_guided_call");
+    expect(payload?.primaryCtaLabel).toBe(callSessionInstructionCopy.primaryCta.label.startGuided);
   });
 });

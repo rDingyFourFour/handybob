@@ -8,6 +8,8 @@ describe("mobile flow copy contract", () => {
       {
         "activeJob": {
           "calmReassurance": "Everything looks on track for this job.",
+          "instructionFallback": "Everything looks on track for this job.",
+          "instructionStatement": "Here’s what Bob recommends next.",
           "nextStepHeading": "Bob's next step",
           "nextStepHelper": "Focus on this step to keep the job moving forward.",
           "notFoundAction": "Back to home",

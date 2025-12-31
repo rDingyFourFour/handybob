@@ -66,35 +66,7 @@ export const callSessionCopy = {
       followupReady: "Ready",
     },
   },
-  primaryCta: {
-    label: {
-      startAutomated: "Start automated call",
-      startGuided: "Start guided call",
-      refreshStatus: "Refresh call status",
-      captureOutcome: "Record outcome",
-      generateFollowup: "Go to wrap-up",
-      openComposer: "Open follow-up draft",
-      disabled: "Choose a call mode",
-      loadingAutomated: "Starting call...",
-    },
-    explanation: {
-      start_automated_call: "AskBob is ready to place the call.",
-      start_guided_call: "You're ready to place the call with guidance.",
-      select_call_mode: "Choose Automated or Guided to continue.",
-      ready: "Wrap-up is ready.",
-      not_terminal: "Call is still running. Wrap-up unlocks when it ends.",
-      missing_outcome: "Record the outcome to unlock the follow-up.",
-      missing_reached_flag: "Confirm whether the customer was reached.",
-      missing_call_context: "Add a script and customer phone number to start.",
-      missing_followup_context: "Add outcome notes or a call summary to generate a follow-up.",
-      missing_job_link: "Link a job to continue.",
-      draft_ready: "Draft is ready to review and send.",
-      draft_missing_body: "Draft is still generating.",
-      draft_missing_job: "Link a job to open the composer.",
-      no_call_session: "Call session data is missing. Refresh the page.",
-      fallback: "Check the call details to continue.",
-    },
-  },
+  // primary CTA copy now lives in callSessionInstructionCopy to keep user-facing instructions aligned
   secondaryActions: {
     title: "Secondary",
     openJob: "Open job",
@@ -207,7 +179,7 @@ export const callSessionCopy = {
       draftLabel: "Draft message",
       draftEmpty: "AskBob did not propose a message draft.",
       draftCharacters: "characters",
-      openComposer: "Open follow-up draft",
+      openComposer: "Review follow-up draft",
       reviewComposerHelper: "Review and send in the composer.",
     },
   },
@@ -238,14 +210,6 @@ export function validateCallSessionCopy(): void {
   check(callSessionCopy.mode.title, "mode.title");
   check(callSessionCopy.mode.helper, "mode.helper");
   check(callSessionCopy.mode.unselectedHelper, "mode.unselectedHelper");
-
-  Object.entries(callSessionCopy.primaryCta.label).forEach(([labelKey, labelText]) => {
-    check(labelText, `primaryCta.label.${labelKey}`);
-  });
-
-  Object.entries(callSessionCopy.primaryCta.explanation).forEach(([explanationKey, explanationText]) => {
-    check(explanationText, `primaryCta.explanation.${explanationKey}`);
-  });
 
   check(callSessionCopy.statusStrip.title, "statusStrip.title");
   Object.entries(callSessionCopy.statusStrip.labels).forEach(([labelKey, labelText]) => {

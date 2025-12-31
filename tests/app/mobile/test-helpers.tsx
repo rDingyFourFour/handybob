@@ -53,7 +53,12 @@ vi.mock("@/components/mobile/TrackedLinkButton", () => ({
     const { children, eventName, eventPayload, ...rest } = props;
     void eventName;
     void eventPayload;
-    return <button {...rest}>{children}</button>;
+    const payloadString = JSON.stringify(eventPayload ?? {});
+    return (
+      <button {...rest} data-event-payload={payloadString}>
+        {children}
+      </button>
+    );
   },
 }));
 

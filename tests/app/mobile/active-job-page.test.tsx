@@ -12,6 +12,7 @@ import {
 } from "@/tests/app/mobile/test-helpers";
 import MobileActiveJobPage from "@/app/m/jobs/[id]/page";
 import * as nextStepModule from "@/lib/domain/askbob/nextStep";
+import { deriveMobileActiveJobInstruction } from "@/lib/domain/mobile/activeJobInstruction";
 import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
 import { PROGRESS_STEP_ANCHORS } from "@/lib/domain/askbob/progressSteps";
 
@@ -120,16 +121,19 @@ describe("Mobile active job page", () => {
   });
 
   it("does not render a primary CTA when next step is done", async () => {
-    const deriveSpy = await renderWithNextStep(
-      buildNextStep({
-        stepType: "done",
-        primaryCta: null,
-      }),
-    );
+    const nextStep = buildNextStep({
+      stepType: "done",
+      primaryCta: null,
+    });
+    const deriveSpy = await renderWithNextStep(nextStep);
     const primary = container.querySelector('[data-testid="mobile-active-job-primary-cta"]');
     expect(primary).toBeNull();
-    const calmText = container.textContent ?? "";
-    expect(calmText).toContain("Everything looks on track for this job.");
+    const instruction = deriveMobileActiveJobInstruction({
+      jobId: JOB_RECORD.id,
+      nextStep,
+    });
+    const content = container.textContent ?? "";
+    expect(content).toContain(instruction.recommendation);
     deriveSpy.mockRestore();
   });
 
@@ -180,5 +184,48 @@ describe("Mobile active job page", () => {
       `/jobs/${JOB_RECORD.id}#${PROGRESS_STEP_ANCHORS.diagnose}`,
     );
     deriveSpy.mockRestore();
+  });
+
+  it("renders the instruction recommendation copy", async () => {
+    const nextStep = buildNextStep({
+      stepType: "diagnose",
+      primaryCta: {
+        kind: "progress-step",
+        label: jobDetailsCopy.nextStepCta.diagnose,
+        actionTarget: PROGRESS_STEP_ANCHORS.diagnose,
+      },
+    });
+    await renderWithNextStep(nextStep);
+    const instruction = deriveMobileActiveJobInstruction({
+      jobId: JOB_RECORD.id,
+      nextStep,
+    });
+    const content = container.textContent ?? "";
+    expect(content).toContain(instruction.recommendation);
+  });
+
+  it("includes instruction telemetry in the CTA click payload", async () => {
+    const nextStep = buildNextStep({
+      stepType: "diagnose",
+      primaryCta: {
+        kind: "progress-step",
+        label: jobDetailsCopy.nextStepCta.diagnose,
+        actionTarget: PROGRESS_STEP_ANCHORS.diagnose,
+      },
+    });
+    await renderWithNextStep(nextStep);
+    const instruction = deriveMobileActiveJobInstruction({
+      jobId: JOB_RECORD.id,
+      nextStep,
+    });
+    const primaryCta = container.querySelector('[data-testid="mobile-active-job-primary-cta"]');
+    expect(primaryCta).toBeTruthy();
+    const payloadString = primaryCta?.getAttribute("data-event-payload");
+    expect(payloadString).toBeTruthy();
+    const payload = JSON.parse(payloadString ?? "{}") as Record<string, unknown>;
+    expect(payload.instructionIsMobile).toBe(true);
+    expect(payload.instructionPrimaryCtaLabel).toBe(instruction.primaryCta?.label);
+    expect(payload.instructionReasonCode).toBe(instruction.telemetry.reasonCode);
+    expect(payload.instructionNextStepType).toBe(instruction.telemetry.nextStepType);
   });
 });

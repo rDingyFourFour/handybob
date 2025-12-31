@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
+import { callSessionInstructionCopy } from "@/lib/ui/copy/callSessionInstructionCopy";
 import { type CallSessionPrimaryCtaReasonCode } from "@/lib/domain/calls/sessions";
 
 const CTA_REASON_CODES: CallSessionPrimaryCtaReasonCode[] = [
@@ -37,13 +38,6 @@ const REQUIRED_STRINGS = [
   callSessionCopy.statusStrip.labels.terminal,
   callSessionCopy.statusStrip.statuses.inProgress,
   callSessionCopy.statusStrip.statuses.terminal,
-  callSessionCopy.primaryCta.label.startAutomated,
-  callSessionCopy.primaryCta.label.startGuided,
-  callSessionCopy.primaryCta.label.refreshStatus,
-  callSessionCopy.primaryCta.label.captureOutcome,
-  callSessionCopy.primaryCta.label.generateFollowup,
-  callSessionCopy.primaryCta.label.openComposer,
-  callSessionCopy.primaryCta.label.disabled,
   callSessionCopy.secondaryActions.openJob,
   callSessionCopy.secondaryActions.openCalls,
   callSessionCopy.secondaryActions.openMessages,
@@ -70,9 +64,19 @@ describe("callSessionCopy", () => {
     });
   });
 
-  it("covers CTA reason codes used by the explanation mapper", () => {
+});
+
+describe("callSessionInstructionCopy", () => {
+  it("defines CTA labels", () => {
+    Object.values(callSessionInstructionCopy.primaryCta.label).forEach((labelText) => {
+      expect(typeof labelText).toBe("string");
+      expect(labelText.trim().length).toBeGreaterThan(0);
+    });
+  });
+
+  it("covers CTA reason codes with explanations", () => {
     CTA_REASON_CODES.forEach((reasonCode) => {
-      const explanation = callSessionCopy.primaryCta.explanation[reasonCode];
+      const explanation = callSessionInstructionCopy.primaryCta.explanation[reasonCode];
       expect(typeof explanation).toBe("string");
       expect(explanation.trim().length).toBeGreaterThan(0);
     });

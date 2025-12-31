@@ -8,6 +8,7 @@ import HbButton from "@/components/ui/hb-button";
 import { cacheAskBobMessageDraft } from "@/utils/askbob/messageDraftCache";
 import { startAskBobAutomatedCall } from "@/app/(app)/calls/actions/startAskBobAutomatedCall";
 import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
+import { callSessionInstructionCopy } from "@/lib/ui/copy/callSessionInstructionCopy";
 import type { CallSessionCtaModel } from "./callSessionTypes";
 
 const WORKSPACE_NAVIGATION_ANCHORS = ["#call-workspace", "#call-wrapup"];
@@ -49,19 +50,10 @@ export default function CallPrimaryActionBar({ model }: CallPrimaryActionBarProp
         action,
         ctaKind: model.primaryCta.kind,
         ctaReasonCode: model.ctaReasonCode,
-        primaryCtaLabel: model.primaryCta.label,
-        primaryCtaExplanation: model.primaryCtaExplanation,
+        ...model.instruction.telemetry,
       });
     },
-    [
-      model.callContext.jobId,
-      model.callId,
-      model.ctaReasonCode,
-      model.primaryCta.kind,
-      model.primaryCta.label,
-      model.primaryCtaExplanation,
-      model.workspaceId,
-    ],
+    [model.callContext.jobId, model.callId, model.ctaReasonCode, model.primaryCta.kind, model.workspaceId, model.instruction.telemetry],
   );
 
   const handleOpenComposer = useCallback(() => {
@@ -160,6 +152,8 @@ export default function CallPrimaryActionBar({ model }: CallPrimaryActionBarProp
 
   const primaryButton = useMemo(() => {
     const primaryCta = model.primaryCta;
+    const instructionPrimaryCta = model.instruction.primaryCta;
+    const primaryCtaLabel = instructionPrimaryCta?.label ?? "";
     const sharedProps = {
       variant: "primary" as const,
       size: "md" as const,
@@ -171,7 +165,7 @@ export default function CallPrimaryActionBar({ model }: CallPrimaryActionBarProp
     if (primaryCta.kind === "refresh-status") {
       return (
         <HbButton {...sharedProps} onClick={handleRefreshStatus} disabled={primaryCta.disabled}>
-          {primaryCta.label}
+          {primaryCtaLabel}
         </HbButton>
       );
     }
@@ -180,8 +174,8 @@ export default function CallPrimaryActionBar({ model }: CallPrimaryActionBarProp
       return (
         <HbButton {...sharedProps} onClick={handleStartAutomatedCall} disabled={isDisabled}>
           {automatedCallState.status === "loading"
-            ? callSessionCopy.primaryCta.label.loadingAutomated
-            : primaryCta.label}
+            ? callSessionInstructionCopy.primaryCta.label.loadingAutomated
+            : primaryCtaLabel}
         </HbButton>
       );
     }
@@ -192,7 +186,7 @@ export default function CallPrimaryActionBar({ model }: CallPrimaryActionBarProp
           onClick={() => handleWorkspaceNavigate(primaryCta.workspaceNavigate!.hash)}
           disabled={primaryCta.disabled}
         >
-          {primaryCta.label}
+          {primaryCtaLabel}
         </HbButton>
       );
     }
@@ -203,20 +197,20 @@ export default function CallPrimaryActionBar({ model }: CallPrimaryActionBarProp
           onClick={handleOpenComposer}
           disabled={primaryCta.disabled || !hasDraft}
         >
-          {primaryCta.label}
+          {primaryCtaLabel}
         </HbButton>
       );
     }
     if (primaryCta.href) {
       return (
         <HbButton {...sharedProps} as={Link} href={primaryCta.href} disabled={primaryCta.disabled}>
-          {primaryCta.label}
+          {primaryCtaLabel}
         </HbButton>
       );
     }
     return (
       <HbButton {...sharedProps} disabled>
-        {primaryCta.label}
+        {primaryCtaLabel}
       </HbButton>
     );
   }, [
@@ -227,16 +221,22 @@ export default function CallPrimaryActionBar({ model }: CallPrimaryActionBarProp
     handleWorkspaceNavigate,
     hasDraft,
     model.primaryCta,
+    model.instruction.primaryCta,
   ]);
 
   return (
-    <div className="space-y-2 rounded-xl border border-slate-800/60 bg-slate-950/60 p-4" data-testid="call-primary-action-bar">
-      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
-        {callSessionCopy.callControl.primaryLabel}
-      </p>
-      {primaryButton}
-      <div data-testid="call-session-primary-cta-explanation">
-        <p className="text-xs text-slate-400">{model.primaryCtaExplanation}</p>
+    <div
+      className="space-y-2 rounded-xl border border-slate-800/60 bg-slate-950/60 p-4"
+      data-testid="call-primary-action-bar"
+    >
+      <div data-testid="call-session-instruction" className="space-y-2">
+        <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">
+          {callSessionCopy.callControl.primaryLabel}
+        </p>
+        {primaryButton}
+        <div data-testid="call-session-primary-cta-explanation">
+          <p className="text-xs text-slate-400">{model.instruction.recommendation}</p>
+        </div>
       </div>
       {automatedCallState.status === "error" && automatedCallState.message && (
         <p className="text-xs text-rose-300">{automatedCallState.message}</p>

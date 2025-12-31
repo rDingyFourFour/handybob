@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
+import { callSessionInstructionCopy } from "@/lib/ui/copy/callSessionInstructionCopy";
 
 const createServerClientMock = vi.fn();
 const mockResolveWorkspaceContext = vi.fn();
@@ -110,7 +111,7 @@ describe("CallSessionPage action bar and status strip", () => {
     expect(markup).toContain('data-testid="call-status-compact-card"');
     expect(markup).toContain('data-testid="call-status-details"');
     expect(markup).toContain('data-testid="call-session-primary-cta"');
-    expect(markup).toContain(callSessionCopy.primaryCta.label.disabled);
+    expect(markup).toContain(callSessionInstructionCopy.primaryCta.label.disabled);
     expect(markup).toContain('id="call-workspace"');
     expect(markup).toContain('data-testid="call-wrap-up-card"');
     expect(markup).not.toContain("Agent tools");
@@ -122,7 +123,7 @@ describe("CallSessionPage action bar and status strip", () => {
       '[data-testid="call-session-primary-cta"]',
     );
     expect(primaryCtas).toHaveLength(1);
-    expect(primaryCtas[0]?.textContent).toContain(callSessionCopy.primaryCta.label.disabled);
+    expect(primaryCtas[0]?.textContent).toContain(callSessionInstructionCopy.primaryCta.label.disabled);
     expect(primaryCtas[0]?.getAttribute("disabled")).not.toBeNull();
 
     const timelineEvent = logSpy.mock.calls.find(
@@ -219,7 +220,7 @@ describe("CallSessionPage action bar and status strip", () => {
     expect(markup).toContain('data-testid="call-primary-action-bar"');
     expect(markup).toContain('data-testid="call-status-compact-card"');
     expect(markup).toContain('data-cta-kind="disabled"');
-    expect(markup).toContain(callSessionCopy.primaryCta.label.disabled);
+    expect(markup).toContain(callSessionInstructionCopy.primaryCta.label.disabled);
     expect(markup).not.toContain('data-testid="call-status-strip"');
 
   });
@@ -293,7 +294,7 @@ describe("CallSessionPage action bar and status strip", () => {
     const element = await CallSessionPage({ params: Promise.resolve({ id: "call-ready" }) });
     const markup = renderToStaticMarkup(element);
 
-    expect(markup).toContain(callSessionCopy.primaryCta.label.disabled);
+    expect(markup).toContain(callSessionInstructionCopy.primaryCta.label.disabled);
     expect(markup).toContain('data-cta-kind="disabled"');
     expect(markup).toContain(callSessionCopy.wrapUp.afterCall.regenerate);
   });

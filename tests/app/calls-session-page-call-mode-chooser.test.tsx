@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CallSessionExperience from "@/app/(app)/calls/[id]/CallSessionExperience";
 import type { CallSessionCtaModel } from "@/app/(app)/calls/[id]/callSessionTypes";
 import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
+import { callSessionInstructionCopy } from "@/lib/ui/copy/callSessionInstructionCopy";
+import { deriveCallSessionInstruction } from "@/lib/domain/calls/callSessionInstruction";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -12,6 +14,47 @@ vi.mock("next/navigation", () => ({
     refresh: vi.fn(),
   }),
 }));
+
+const instructionInputBase = {
+  workspaceId: "workspace-1",
+  callId: "call-1",
+  jobId: "job-1",
+  customerId: "customer-1",
+};
+
+const unselectedInstruction = deriveCallSessionInstruction({
+  ...instructionInputBase,
+  mode: "unselected",
+  primaryCta: { kind: "disabled", disabled: true },
+  ctaReasonCode: "select_call_mode",
+});
+const automatedInstruction = deriveCallSessionInstruction({
+  ...instructionInputBase,
+  mode: "automated",
+  primaryCta: {
+    kind: "start-automated-call",
+    disabled: false,
+    automatedCallPayload: {
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+      customerId: "customer-1",
+      customerPhone: "+15550002222",
+      scriptBody: "script",
+      scriptSummary: "summary",
+    },
+  },
+  ctaReasonCode: "start_automated_call",
+});
+const manualInstruction = deriveCallSessionInstruction({
+  ...instructionInputBase,
+  mode: "manual",
+  primaryCta: {
+    kind: "start-guided-call",
+    disabled: false,
+    workspaceNavigate: { tab: "during", hash: "#manual-call-tools" },
+  },
+  ctaReasonCode: "start_guided_call",
+});
 
 const baseModel: CallSessionCtaModel = {
   workspaceId: "workspace-1",
@@ -25,9 +68,9 @@ const baseModel: CallSessionCtaModel = {
   },
   headerContext: { customerName: "Test customer", jobTitle: "Test job" },
   statusStripItems: [],
-  primaryCta: { kind: "disabled", label: callSessionCopy.primaryCta.label.disabled },
-  primaryCtaExplanation: callSessionCopy.primaryCta.explanation.select_call_mode,
+  primaryCta: { kind: "disabled", label: callSessionInstructionCopy.primaryCta.label.disabled },
   ctaReasonCode: "select_call_mode",
+  instruction: unselectedInstruction,
   secondaryActions: { jobHref: "/jobs/job-1", callsHref: "/calls", messagesHref: null },
   callContext: { jobId: "job-1", customerId: "customer-1" },
   afterCallDraft: { body: null },
@@ -38,7 +81,7 @@ const automatedModel: CallSessionCtaModel = {
   primaryCta: {
     ...baseModel.primaryCta,
     kind: "start-automated-call",
-    label: callSessionCopy.primaryCta.label.startAutomated,
+    label: callSessionInstructionCopy.primaryCta.label.startAutomated,
     automatedCallPayload: {
       workspaceId: "workspace-1",
       jobId: "job-1",
@@ -48,19 +91,19 @@ const automatedModel: CallSessionCtaModel = {
       scriptSummary: "summary",
     },
   },
-  primaryCtaExplanation: callSessionCopy.primaryCta.explanation.start_automated_call,
   ctaReasonCode: "start_automated_call",
+  instruction: automatedInstruction,
 };
 
 const manualModel: CallSessionCtaModel = {
   ...baseModel,
   primaryCta: {
     kind: "start-guided-call",
-    label: callSessionCopy.primaryCta.label.startGuided,
+    label: callSessionInstructionCopy.primaryCta.label.startGuided,
     workspaceNavigate: { tab: "during", hash: "#manual-call-tools" },
   },
-  primaryCtaExplanation: callSessionCopy.primaryCta.explanation.start_guided_call,
   ctaReasonCode: "start_guided_call",
+  instruction: manualInstruction,
 };
 
 describe("CallSessionExperience mode chooser", () => {
@@ -173,20 +216,20 @@ describe("CallSessionExperience mode chooser", () => {
   it("renders the mode decision card and disabled CTA initially", async () => {
     await renderExperience();
     expect(container.querySelector('[data-testid="call-mode-decision"]')).toBeTruthy();
-    expectSinglePrimaryCta(callSessionCopy.primaryCta.label.disabled);
+    expectSinglePrimaryCta(callSessionInstructionCopy.primaryCta.label.disabled);
   });
 
   it("selects automated mode, stores the selection, and exposes one CTA", async () => {
     await renderExperience();
     await clickModeOption("automated");
     expect(window.sessionStorage.getItem("calls-session-mode:call-1")).toBe("automated");
-    expectSinglePrimaryCta(callSessionCopy.primaryCta.label.startAutomated);
+    expectSinglePrimaryCta(callSessionInstructionCopy.primaryCta.label.startAutomated);
   });
 
   it("selects manual mode, stores the selection, and updates the CTA", async () => {
     await renderExperience();
     await clickModeOption("manual");
     expect(window.sessionStorage.getItem("calls-session-mode:call-1")).toBe("manual");
-    expectSinglePrimaryCta(callSessionCopy.primaryCta.label.startGuided);
+    expectSinglePrimaryCta(callSessionInstructionCopy.primaryCta.label.startGuided);
   });
 });

@@ -13,6 +13,7 @@ import { getJobAskBobSnapshotsForJob } from "@/lib/domain/askbob/service";
 import { loadCallHistoryForJob } from "@/lib/domain/askbob/callHistory";
 import { getLatestCallOutcomeForJob } from "@/lib/domain/calls/latestCallOutcome";
 import { getInvoiceForJob } from "@/lib/domain/invoices/getInvoiceForJob";
+import { deriveMobileActiveJobInstruction } from "@/lib/domain/mobile/activeJobInstruction";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
 
 type JobRow = {
@@ -224,6 +225,11 @@ export default async function MobileActiveJobPage({
     progressRowStatuses: nextStep.statusHints,
   });
 
+  const activeJobInstruction = deriveMobileActiveJobInstruction({
+    jobId: jobData.id,
+    nextStep,
+  });
+
   const primaryAction = nextStep.primaryCta
     ? resolvePrimaryAction(nextStep.stepType, jobData.id)
     : { href: null, destinationType: null };
@@ -263,8 +269,15 @@ export default async function MobileActiveJobPage({
               {mobileFlowCopy.activeJob.nextStepHelper}
             </p>
           </div>
-          <p className="text-lg text-[var(--color-text-primary)]">{nextStep.rationale}</p>
-          {primaryAction.href && nextStep.primaryCta ? (
+          {activeJobInstruction.statement && (
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              {activeJobInstruction.statement}
+            </p>
+          )}
+          <p className="text-lg text-[var(--color-text-primary)]">
+            {activeJobInstruction.recommendation}
+          </p>
+          {primaryAction.href && activeJobInstruction.primaryCta ? (
             <TrackedLinkButton
               href={primaryAction.href}
               eventName="[active-job-primary-cta-click]"
@@ -272,19 +285,22 @@ export default async function MobileActiveJobPage({
                 jobId: jobData.id,
                 nextStepType: nextStep.stepType,
                 destinationType: primaryAction.destinationType,
+                instructionStepType: activeJobInstruction.telemetry.stepType,
+                instructionHasPrimaryCta: activeJobInstruction.telemetry.hasPrimaryCta,
+                instructionIsIdle: activeJobInstruction.telemetry.isIdle,
+                instructionIsMobile: activeJobInstruction.telemetry.isMobile,
+                instructionPrimaryCtaLabel: activeJobInstruction.primaryCta?.label,
+                instructionReasonCode: activeJobInstruction.telemetry.reasonCode,
+                instructionNextStepType: activeJobInstruction.telemetry.nextStepType,
               }}
               variant="primary"
               size="md"
               className="w-full justify-center"
               data-testid="mobile-active-job-primary-cta"
             >
-              {nextStep.primaryCta.label}
+              {activeJobInstruction.primaryCta.label}
             </TrackedLinkButton>
-          ) : (
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              {mobileFlowCopy.activeJob.calmReassurance}
-            </p>
-          )}
+          ) : null}
           <TrackedLinkButton
             href={`/jobs/${jobData.id}`}
             eventName="[active-job-view-details-click]"

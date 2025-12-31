@@ -6,7 +6,7 @@ import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 import CallSessionPage from "@/app/(app)/calls/[id]/page";
 import { ASKBOB_AUTOMATED_SCRIPT_PREFIX } from "@/lib/domain/askbob/constants";
 import { SPEECH_PLAN_METADATA_MARKER } from "@/lib/domain/askbob/speechPlan";
-import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
+import { callSessionInstructionCopy } from "@/lib/ui/copy/callSessionInstructionCopy";
 
 const createServerClientMock = vi.fn();
 const mockResolveWorkspaceContext = vi.fn();
@@ -165,12 +165,12 @@ describe("CallSessionPage structure regression", () => {
   it("renders core sections with a disabled primary CTA when no mode is selected", async () => {
     await renderWithCall({});
     assertCoreSections();
-    assertSinglePrimaryCta(callSessionCopy.primaryCta.label.disabled);
+    assertSinglePrimaryCta(callSessionInstructionCopy.primaryCta.label.disabled);
   });
 
   it("shows the start CTA for automated mode", async () => {
     await renderWithCall({}, "automated");
-    assertSinglePrimaryCta(callSessionCopy.primaryCta.label.startAutomated);
+    assertSinglePrimaryCta(callSessionInstructionCopy.primaryCta.label.startAutomated);
   });
 
   it("shows the capture outcome CTA when the call is terminal and outcome is missing", async () => {
@@ -182,7 +182,7 @@ describe("CallSessionPage structure regression", () => {
       },
       "automated",
     );
-    assertSinglePrimaryCta(callSessionCopy.primaryCta.label.captureOutcome);
+    assertSinglePrimaryCta(callSessionInstructionCopy.primaryCta.label.captureOutcome);
   });
 
   it("does not emit key warnings for workspace panels", async () => {

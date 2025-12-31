@@ -32,11 +32,11 @@ import { getJobAskBobSnapshotsForJob } from "@/lib/domain/askbob/service";
 import {
   buildCallAutomatedDialSnapshot,
   buildCallSessionFollowupReadiness,
-  mapCtaReasonCodeToExplanation,
   getCallSessionAutomatedSpeechPlan,
   getCallSessionJobAndCustomer,
   sanitizeAutomatedCallNotes,
 } from "@/lib/domain/calls/sessions";
+import { deriveCallSessionInstruction } from "@/lib/domain/calls/callSessionInstruction";
 import LinkCallContextCard from "./LinkCallContextCard";
 import AskBobLiveGuidanceCard from "./AskBobLiveGuidanceCard";
 import PostCallEnrichmentCard from "./PostCallEnrichmentCard";
@@ -44,6 +44,7 @@ import CallManualNumberCard from "./CallManualNumberCard";
 import CallSessionExperience from "./CallSessionExperience";
 import { type CallWorkspacePanel } from "./callSessionTypes";
 import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
+import { callSessionInstructionCopy } from "@/lib/ui/copy/callSessionInstructionCopy";
 
 type CallRecord = {
   id: string;
@@ -782,7 +783,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "start-automated-call",
-          label: callSessionCopy.primaryCta.label.startAutomated,
+          label: callSessionInstructionCopy.primaryCta.label.startAutomated,
           disabled: !canStartAutomatedCall,
           automatedCallPayload: canStartAutomatedCall
             ? {
@@ -803,7 +804,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "refresh-status",
-          label: callSessionCopy.primaryCta.label.refreshStatus,
+          label: callSessionInstructionCopy.primaryCta.label.refreshStatus,
           disabled: false,
         },
         ctaReasonCode: callReadiness.ctaReasonCode,
@@ -813,7 +814,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "capture-outcome",
-          label: callSessionCopy.primaryCta.label.captureOutcome,
+          label: callSessionInstructionCopy.primaryCta.label.captureOutcome,
           workspaceNavigate: { tab: "after", hash: "#call-outcome-capture" },
         },
         ctaReasonCode: automatedOutcomeReason,
@@ -823,7 +824,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "generate-followup",
-          label: callSessionCopy.primaryCta.label.generateFollowup,
+          label: callSessionInstructionCopy.primaryCta.label.generateFollowup,
           workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
         },
         ctaReasonCode: "ready",
@@ -839,7 +840,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "open-composer",
-          label: callSessionCopy.primaryCta.label.openComposer,
+          label: callSessionInstructionCopy.primaryCta.label.openComposer,
           disabled: !isComposerEnabled,
           workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
         },
@@ -854,7 +855,7 @@ export default async function CallSessionPage({
     return {
       primaryCta: {
         kind: "generate-followup",
-        label: callSessionCopy.primaryCta.label.generateFollowup,
+        label: callSessionInstructionCopy.primaryCta.label.generateFollowup,
         disabled: true,
         workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
       },
@@ -867,7 +868,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "refresh-status",
-          label: callSessionCopy.primaryCta.label.refreshStatus,
+          label: callSessionInstructionCopy.primaryCta.label.refreshStatus,
           disabled: false,
         },
         ctaReasonCode: callReadiness.ctaReasonCode,
@@ -877,7 +878,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "capture-outcome",
-          label: callSessionCopy.primaryCta.label.captureOutcome,
+          label: callSessionInstructionCopy.primaryCta.label.captureOutcome,
           workspaceNavigate: { tab: "after", hash: "#call-outcome-capture" },
         },
         ctaReasonCode: automatedOutcomeReason,
@@ -887,7 +888,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "start-guided-call",
-          label: callSessionCopy.primaryCta.label.startGuided,
+          label: callSessionInstructionCopy.primaryCta.label.startGuided,
           disabled: !canStartGuidedCall,
           workspaceNavigate: { tab: "during", hash: "#manual-call-tools" },
         },
@@ -898,7 +899,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "generate-followup",
-          label: callSessionCopy.primaryCta.label.generateFollowup,
+          label: callSessionInstructionCopy.primaryCta.label.generateFollowup,
           workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
         },
         ctaReasonCode: "ready",
@@ -914,7 +915,7 @@ export default async function CallSessionPage({
       return {
         primaryCta: {
           kind: "open-composer",
-          label: callSessionCopy.primaryCta.label.openComposer,
+          label: callSessionInstructionCopy.primaryCta.label.openComposer,
           disabled: !isComposerEnabled,
           workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
         },
@@ -929,7 +930,7 @@ export default async function CallSessionPage({
     return {
       primaryCta: {
         kind: "generate-followup",
-        label: callSessionCopy.primaryCta.label.generateFollowup,
+        label: callSessionInstructionCopy.primaryCta.label.generateFollowup,
         disabled: true,
         workspaceNavigate: { tab: "after", hash: "#askbob-after-call" },
       },
@@ -940,11 +941,39 @@ export default async function CallSessionPage({
   const unselectedCtaState = {
     primaryCta: {
       kind: "disabled",
-      label: callSessionCopy.primaryCta.label.disabled,
+      label: callSessionInstructionCopy.primaryCta.label.disabled,
       disabled: true,
     },
     ctaReasonCode: "select_call_mode",
   };
+
+  const automatedInstruction = deriveCallSessionInstruction({
+    callId: call.id,
+    workspaceId: workspace.id,
+    jobId: jobId ?? null,
+    customerId,
+    mode: "automated",
+    primaryCta: automatedCtaState.primaryCta,
+    ctaReasonCode: automatedCtaState.ctaReasonCode,
+  });
+  const manualInstruction = deriveCallSessionInstruction({
+    callId: call.id,
+    workspaceId: workspace.id,
+    jobId: jobId ?? null,
+    customerId,
+    mode: "manual",
+    primaryCta: manualCtaState.primaryCta,
+    ctaReasonCode: manualCtaState.ctaReasonCode,
+  });
+  const unselectedInstruction = deriveCallSessionInstruction({
+    callId: call.id,
+    workspaceId: workspace.id,
+    jobId: jobId ?? null,
+    customerId,
+    mode: "unselected",
+    primaryCta: unselectedCtaState.primaryCta,
+    ctaReasonCode: unselectedCtaState.ctaReasonCode,
+  });
 
   const callControlModelBase = {
     workspaceId: workspace.id,
@@ -985,35 +1014,22 @@ export default async function CallSessionPage({
           .replace("{jobTitle}", job?.title)
       : callSessionCopy.header.subtitleFallback;
 
-  const automatedCtaExplanation = mapCtaReasonCodeToExplanation(
-    automatedCtaState.ctaReasonCode,
-    automatedCtaState.primaryCta.kind,
-  );
-  const manualCtaExplanation = mapCtaReasonCodeToExplanation(
-    manualCtaState.ctaReasonCode,
-    manualCtaState.primaryCta.kind,
-  );
-  const unselectedCtaExplanation = mapCtaReasonCodeToExplanation(
-    unselectedCtaState.ctaReasonCode,
-    unselectedCtaState.primaryCta.kind,
-  );
-
   const automatedCallControlModel = {
     ...callControlModelBase,
     primaryCta: automatedCtaState.primaryCta,
-    primaryCtaExplanation: automatedCtaExplanation,
+    instruction: automatedInstruction,
     ctaReasonCode: automatedCtaState.ctaReasonCode,
   };
   const manualCallControlModel = {
     ...callControlModelBase,
     primaryCta: manualCtaState.primaryCta,
-    primaryCtaExplanation: manualCtaExplanation,
+    instruction: manualInstruction,
     ctaReasonCode: manualCtaState.ctaReasonCode,
   };
   const unselectedCallControlModel = {
     ...callControlModelBase,
     primaryCta: unselectedCtaState.primaryCta,
-    primaryCtaExplanation: unselectedCtaExplanation,
+    instruction: unselectedInstruction,
     ctaReasonCode: unselectedCtaState.ctaReasonCode,
   };
 

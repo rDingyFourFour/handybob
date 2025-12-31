@@ -9,7 +9,6 @@ import {
   SPEECH_PLAN_METADATA_MARKER,
 } from "@/lib/domain/askbob/speechPlan";
 import { ASKBOB_AUTOMATED_CALL_SCRIPT_PREVIEW_LIMIT } from "@/lib/domain/askbob/automatedCallConfig";
-import { callSessionCopy } from "@/lib/ui/copy/callSessionCopy";
 type TwilioStatusEntry = {
   status: string;
   rank: number;
@@ -195,13 +194,6 @@ export function buildCallSessionFollowupReadiness({
     ? "missing_reached_flag"
     : "ready";
   return { isReady: reasons.length === 0, reasons, ctaReasonCode };
-}
-
-export function mapCtaReasonCodeToExplanation(
-  reasonCode: CallSessionPrimaryCtaReasonCode,
-): string {
-  const explanation = callSessionCopy.primaryCta.explanation[reasonCode];
-  return explanation ?? callSessionCopy.primaryCta.explanation.fallback;
 }
 
 type CallSessionForSnapshot = {

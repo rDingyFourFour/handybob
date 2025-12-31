@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { BobInstruction } from "@/lib/domain/bob/bobInstruction";
 
 export type CallSessionMode = "automated" | "manual";
 
@@ -47,8 +48,8 @@ export type CallSessionCtaModel = {
   };
   statusStripItems: CallStatusStripItem[];
   primaryCta: PrimaryCta;
-  primaryCtaExplanation: string;
   ctaReasonCode: string;
+  instruction: BobInstruction;
   secondaryActions: {
     jobHref: string | null;
     callsHref: string;
