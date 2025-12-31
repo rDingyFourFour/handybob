@@ -5,9 +5,11 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import {
   createSupabaseState,
   mockGetCurrentWorkspace,
+  readTrackedLinkButtonEventPayload,
 } from "@/tests/app/mobile/test-helpers";
 import MobileHomePage from "@/app/m/page";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
+import * as homeInstructionTelemetry from "@/app/m/homeInstructionTelemetry";
 
 const PRIMARY_BUTTON_CLASS_TOKEN = "bg-[var(--theme-button-primary-bg)]";
 
@@ -102,6 +104,10 @@ describe("Mobile home page", () => {
     };
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const telemetrySpy = vi.spyOn(
+      homeInstructionTelemetry,
+      "buildHomeInstructionTelemetryPayload",
+    );
     const element = await MobileHomePage();
 
     act(() => {
@@ -120,21 +126,29 @@ describe("Mobile home page", () => {
 
     const renderLogs = findHomeRenderLogs(logSpy);
     expect(renderLogs).toHaveLength(1);
-    const payload = renderLogs[0]?.[1] as Record<string, unknown> | undefined;
-    expect(payload).toEqual(
+    const renderPayload = renderLogs[0]?.[1] as Record<string, unknown> | undefined;
+    expect(telemetrySpy).toHaveBeenCalledTimes(1);
+    const telemetryResult = telemetrySpy.mock.results[0]?.value as Record<string, unknown> | undefined;
+    expect(renderPayload).toBe(telemetryResult);
+    expect(renderPayload).toEqual(
       expect.objectContaining({
         hasRecommendation: true,
         isMobile: true,
-      }),
-    );
-    expect(payload?.instructionTelemetry).toEqual(
-      expect.objectContaining({
-        hasPrimaryCta: true,
-        isIdle: false,
         stepType: expect.any(String),
       }),
     );
-    expect(payload?.instructionStepType).toBe(payload?.instructionTelemetry?.stepType);
+    expect(renderPayload?.stepType).not.toBe("idle");
+    if (renderPayload?.nextStepType) {
+      expect(typeof renderPayload.nextStepType).toBe("string");
+    }
+    const { payload: ctaPayload, raw: ctaRaw } = readTrackedLinkButtonEventPayload(
+      container,
+      "mobile-home-primary-cta",
+    );
+    expect(ctaPayload).toEqual(telemetryResult);
+    expect(ctaRaw).toBe(JSON.stringify(ctaPayload));
+    const listElements = container.querySelectorAll("ul, ol, [role='list']");
+    expect(listElements).toHaveLength(0);
   });
 
   it("renders only the idle reassurance when no recommendation exists", async () => {
@@ -149,6 +163,10 @@ describe("Mobile home page", () => {
       }),
     };
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const telemetrySpy = vi.spyOn(
+      homeInstructionTelemetry,
+      "buildHomeInstructionTelemetryPayload",
+    );
     const element = await MobileHomePage();
 
     act(() => {
@@ -165,21 +183,20 @@ describe("Mobile home page", () => {
 
     const renderLogs = findHomeRenderLogs(logSpy);
     expect(renderLogs).toHaveLength(1);
-    const payload = renderLogs[0]?.[1] as Record<string, unknown> | undefined;
-    expect(payload).toEqual(
+    const renderPayload = renderLogs[0]?.[1] as Record<string, unknown> | undefined;
+    expect(telemetrySpy).toHaveBeenCalledTimes(1);
+    const telemetryResult = telemetrySpy.mock.results[0]?.value as Record<string, unknown> | undefined;
+    expect(renderPayload).toBe(telemetryResult);
+    expect(renderPayload).toEqual(
       expect.objectContaining({
         hasRecommendation: false,
         isMobile: true,
-      }),
-    );
-    expect(payload?.instructionTelemetry).toEqual(
-      expect.objectContaining({
-        hasPrimaryCta: false,
-        isIdle: true,
         stepType: "idle",
       }),
     );
-    expect(payload?.instructionStepType).toBe("idle");
+    expect(renderPayload?.nextStepType).toBeUndefined();
+    const listElements = container.querySelectorAll("ul, ol, [role='list']");
+    expect(listElements).toHaveLength(0);
   });
 
 });

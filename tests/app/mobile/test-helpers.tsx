@@ -69,3 +69,23 @@ export function createSupabaseState(
   createServerClientMock.mockReturnValue(supabaseState.supabase);
   return supabaseState;
 }
+
+export function readTrackedLinkButtonEventPayload(
+  container: Element,
+  testId = "mobile-active-job-primary-cta",
+) {
+  const button = container.querySelector(`[data-testid="${testId}"]`);
+  if (!button) {
+    throw new Error(`TrackedLinkButton with testId "${testId}" not found`);
+  }
+  const payloadString = button.getAttribute("data-event-payload");
+  if (!payloadString) {
+    throw new Error(`TrackedLinkButton with testId "${testId}" missing data-event-payload`);
+  }
+  try {
+    const parsed = JSON.parse(payloadString);
+    return { payload: parsed as Record<string, unknown>, raw: payloadString };
+  } catch {
+    throw new Error(`Unable to parse data-event-payload for testId "${testId}": ${payloadString}`);
+  }
+}

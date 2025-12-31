@@ -8,6 +8,7 @@ import {
   deriveHomeInstruction,
   type HomeInstructionCandidate,
 } from "@/lib/domain/askbob/homeInstruction";
+import { buildHomeInstructionTelemetryPayload } from "./homeInstructionTelemetry";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
 import type { AskBobFollowupSnapshotPayload, AskBobJobTaskSnapshotTask } from "@/lib/domain/askbob/types";
 
@@ -172,22 +173,19 @@ export default async function MobileHomePage() {
   });
 
   const homeInstruction = deriveHomeInstruction(candidates);
-  const hasPrimaryCta =
-    Boolean(homeInstruction?.instruction.primaryCta) &&
-    !homeInstruction?.instruction.primaryCta?.disabled;
-  const hasRecommendation = Boolean(homeInstruction && hasPrimaryCta);
-  const fallbackTelemetry = {
-    stepType: "idle",
-    hasPrimaryCta: false,
-    isIdle: true,
-  };
-  const instructionTelemetry = homeInstruction?.instruction.telemetry ?? fallbackTelemetry;
-  console.log("[home-render]", {
-    isMobile: true,
+  const actionableInstruction =
+    homeInstruction &&
+    homeInstruction.instruction.primaryCta &&
+    !homeInstruction.instruction.primaryCta.disabled
+      ? homeInstruction
+      : null;
+  const actionablePrimaryCta = actionableInstruction?.instruction.primaryCta;
+  const hasRecommendation = Boolean(actionablePrimaryCta && !actionablePrimaryCta.disabled);
+  const renderTelemetry = buildHomeInstructionTelemetryPayload(
+    actionableInstruction?.instruction ?? null,
     hasRecommendation,
-    instructionStepType: instructionTelemetry.stepType,
-    instructionTelemetry,
-  });
+  );
+  console.log("[home-render]", renderTelemetry);
 
   const metadata = user.user_metadata as { full_name?: string; name?: string } | undefined;
   const displayName = (
@@ -204,60 +202,39 @@ export default async function MobileHomePage() {
   return (
     <div className="space-y-6 pb-8">
       <header data-testid="mobile-home-header" className="space-y-1">
-        <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">
-          {mobileFlowCopy.home.title}
-        </p>
         <h1 className="text-3xl font-semibold text-[var(--color-text-primary)]">
           {mobileFlowCopy.home.title}
         </h1>
         <p className="text-sm text-[var(--color-text-secondary)]">{greeting}</p>
       </header>
 
-      {homeInstruction ? (
-        <HbCard data-testid="mobile-home-recommendation-card" className="space-y-3">
-          <div className="space-y-1">
+      {hasRecommendation && actionableInstruction && actionablePrimaryCta ? (
+        <HbCard data-testid="mobile-home-recommendation-card" className="space-y-4">
+          <div className="space-y-2">
             <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">
               {mobileFlowCopy.home.recommendationLabel}
             </p>
-            <p className="text-sm text-[var(--color-text-secondary)]">{mobileFlowCopy.home.statement}</p>
-          </div>
-          <div>
-            <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">
-              {homeInstruction.title ?? mobileFlowCopy.home.recommendationTitleFallback}
-            </h2>
             <p className="text-sm text-[var(--color-text-secondary)]">
-              {homeInstruction.instruction.recommendation}
+              {actionableInstruction.instruction.statement}
             </p>
-            {homeInstruction.instruction.rationale ? (
-              <p className="text-sm text-[var(--color-text-secondary)]">
-                {homeInstruction.instruction.rationale}
-              </p>
-            ) : null}
           </div>
-          {homeInstruction.instruction.primaryCta && (
-            <TrackedLinkButton
-              href={homeInstruction.instruction.primaryCta.href ?? "#"}
-              eventName="[home-recommendation-click]"
-              eventPayload={{
-                jobId: homeInstruction.jobId,
-                instructionStepType: homeInstruction.instruction.stepType,
-                instructionTelemetry: homeInstruction.instruction.telemetry,
-                actionType: homeInstruction.instruction.primaryCta.actionType,
-                destination: homeInstruction.instruction.primaryCta.href ?? null,
-                hasPrimaryCta,
-                nextStepType: homeInstruction.instruction.telemetry.nextStepType ?? null,
-              }}
-              variant="primary"
-              size="md"
-              className="w-full justify-center"
-              data-testid="mobile-home-primary-cta"
-            >
-              {homeInstruction.instruction.primaryCta.label}
-            </TrackedLinkButton>
-          )}
+          <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">
+            {actionableInstruction.title ?? mobileFlowCopy.home.recommendationTitleFallback}
+          </h2>
+          <TrackedLinkButton
+            href={actionablePrimaryCta.href ?? "#"}
+            eventName="[home-recommendation-click]"
+            eventPayload={renderTelemetry}
+            variant="primary"
+            size="md"
+            className="w-full justify-center"
+            data-testid="mobile-home-primary-cta"
+          >
+            {mobileFlowCopy.home.recommendationCtaLabel}
+          </TrackedLinkButton>
         </HbCard>
       ) : (
-        <HbCard data-testid="mobile-home-idle-card">
+        <HbCard data-testid="mobile-home-idle-card" className="space-y-3">
           <p className="text-sm text-[var(--color-text-secondary)]">{mobileFlowCopy.home.idleReassurance}</p>
         </HbCard>
       )}

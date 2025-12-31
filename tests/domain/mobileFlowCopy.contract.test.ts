@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
+import { mobileHomeCopy } from "@/lib/domain/mobile/mobileHomeCopy";
 
 describe("mobile flow copy contract", () => {
+  it("re-exports the canonical home copy map", () => {
+    expect(mobileFlowCopy.home).toBe(mobileHomeCopy);
+  });
+
   it("exposes the expected keys and values", () => {
     expect(mobileFlowCopy).toMatchInlineSnapshot(`
       {
@@ -25,7 +30,7 @@ describe("mobile flow copy contract", () => {
         "home": {
           "greetingFallback": "Good morning",
           "greetingTemplate": "Good morning, {name}",
-          "idleReassurance": "Everything's up to date. I'll let you know if anything changes.",
+          "idleReassurance": "Everything else is up to date. I'll let you know if something changes.",
           "recommendationCtaLabel": "Review job",
           "recommendationLabel": "Next step",
           "recommendationTitleFallback": "Untitled job",

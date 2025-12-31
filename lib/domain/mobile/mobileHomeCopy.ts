@@ -18,7 +18,7 @@ export const mobileHomeCopy: MobileHomeCopy = {
   statement: "I'm tracking the job that needs a small nudge.",
   recommendationLabel: "Next step",
   recommendationTitleFallback: "Untitled job",
-  idleReassurance: "Everything's up to date. I'll let you know if anything changes.",
+  idleReassurance: "Everything else is up to date. I'll let you know if something changes.",
   recommendationCtaLabel: "Review job",
 };
 

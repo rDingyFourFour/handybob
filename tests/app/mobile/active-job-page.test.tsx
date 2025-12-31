@@ -15,6 +15,7 @@ import * as nextStepModule from "@/lib/domain/askbob/nextStep";
 import { deriveMobileActiveJobInstruction } from "@/lib/domain/mobile/activeJobInstruction";
 import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
 import { PROGRESS_STEP_ANCHORS } from "@/lib/domain/askbob/progressSteps";
+import { readTrackedLinkButtonEventPayload } from "@/tests/app/mobile/test-helpers";
 
 const JOB_RECORD = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -220,12 +221,29 @@ describe("Mobile active job page", () => {
     });
     const primaryCta = container.querySelector('[data-testid="mobile-active-job-primary-cta"]');
     expect(primaryCta).toBeTruthy();
-    const payloadString = primaryCta?.getAttribute("data-event-payload");
-    expect(payloadString).toBeTruthy();
-    const payload = JSON.parse(payloadString ?? "{}") as Record<string, unknown>;
+    const { payload, raw } = readTrackedLinkButtonEventPayload(container);
+    expect(raw).not.toContain("[object Object]");
+    expect(raw).not.toContain("undefined");
+    expect(typeof payload).toBe("object");
+    expect(payload).not.toBeNull();
+    expect(Array.isArray(payload)).toBe(false);
+    const requiredInstructionKeys = [
+      "instructionStepType",
+      "instructionHasPrimaryCta",
+      "instructionIsIdle",
+      "instructionIsMobile",
+      "instructionPrimaryCtaLabel",
+
+    ];
+    const missingKeys = requiredInstructionKeys.filter(
+      (key) => payload[key] === undefined || payload[key] === null,
+    );
+    if (missingKeys.length) {
+      throw new Error(`Missing instruction telemetry keys: ${missingKeys.join(", ")}`);
+    }
     expect(payload.instructionIsMobile).toBe(true);
     expect(payload.instructionPrimaryCtaLabel).toBe(instruction.primaryCta?.label);
     expect(payload.instructionReasonCode).toBe(instruction.telemetry.reasonCode);
-    expect(payload.instructionNextStepType).toBe(instruction.telemetry.nextStepType);
+    expect(payload.nextStepType).toBe(nextStep.stepType);
   });
 });
