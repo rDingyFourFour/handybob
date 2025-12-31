@@ -146,6 +146,7 @@ export default async function MobileActiveJobPage({
   let diagnoseSnapshot = null;
   let materialsSnapshot = null;
   let followupSnapshot = null;
+  let afterCallSnapshot = null;
   try {
     const snapshots = await getJobAskBobSnapshotsForJob(supabase, {
       workspaceId: workspace.id,
@@ -154,6 +155,7 @@ export default async function MobileActiveJobPage({
     diagnoseSnapshot = snapshots.diagnoseSnapshot;
     materialsSnapshot = snapshots.materialsSnapshot;
     followupSnapshot = snapshots.followupSnapshot;
+    afterCallSnapshot = snapshots.afterCallSnapshot;
   } catch (error) {
     console.error("[mobile-active-job] Failed to load AskBob snapshots", error);
   }
@@ -204,6 +206,7 @@ export default async function MobileActiveJobPage({
   const latestCallOutcomeRecorded = Boolean(latestCallOutcome);
   const invoicePresent = Boolean(invoice);
   const invoiceStatus = invoice?.invoice_status ?? null;
+  const followUpDraftReady = Boolean(afterCallSnapshot?.draftMessageBody?.trim());
 
   const nextStep = deriveNextStepForJobDetails({
     hasDiagnoseSnapshot,
@@ -216,6 +219,7 @@ export default async function MobileActiveJobPage({
     latestCallOutcomeRecorded,
     invoiceStatus,
     invoicePresent,
+    followUpDraftReady,
   });
 
   const jobBrief = buildJobBriefDisplayModel({
@@ -228,6 +232,7 @@ export default async function MobileActiveJobPage({
   const activeJobInstruction = deriveMobileActiveJobInstruction({
     jobId: jobData.id,
     nextStep,
+    jobStatus: jobData.status,
   });
 
   const primaryAction = nextStep.primaryCta

@@ -10,7 +10,11 @@ import {
 } from "@/lib/domain/askbob/homeInstruction";
 import { buildHomeInstructionTelemetryPayload } from "./homeInstructionTelemetry";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
-import type { AskBobFollowupSnapshotPayload, AskBobJobTaskSnapshotTask } from "@/lib/domain/askbob/types";
+import type {
+  AskBobAfterCallSnapshotPayload,
+  AskBobFollowupSnapshotPayload,
+  AskBobJobTaskSnapshotTask,
+} from "@/lib/domain/askbob/types";
 
 type JobRow = {
   id: string;
@@ -39,12 +43,14 @@ const SNAPSHOT_TASKS: AskBobJobTaskSnapshotTask[] = [
   "materials.generate",
   "quote.generate",
   "job.followup",
+  "job.after_call",
 ];
 
 type JobArtifactState = {
   hasDiagnoseSnapshot: boolean;
   hasMaterialsSnapshot: boolean;
   followupSnapshot: AskBobFollowupSnapshotPayload | null;
+  hasFollowupDraftReady: boolean;
   lastActivityAt: string | null;
 };
 
@@ -110,6 +116,7 @@ export default async function MobileHomePage() {
             hasDiagnoseSnapshot: false,
             hasMaterialsSnapshot: false,
             followupSnapshot: null,
+            hasFollowupDraftReady: false,
             lastActivityAt: null,
           };
           artifactStates.set(row.job_id, state);
@@ -123,6 +130,14 @@ export default async function MobileHomePage() {
         }
         if (row.task === "job.followup" && row.payload && typeof row.payload === "object") {
           state.followupSnapshot = row.payload as AskBobFollowupSnapshotPayload;
+        }
+        if (row.task === "job.after_call" && row.payload && typeof row.payload === "object") {
+          const payload = row.payload as AskBobAfterCallSnapshotPayload;
+          const draftBody =
+            typeof payload.draftMessageBody === "string" ? payload.draftMessageBody.trim() : "";
+          if (draftBody) {
+            state.hasFollowupDraftReady = true;
+          }
         }
         if (!state.lastActivityAt && row.updated_at) {
           state.lastActivityAt = row.updated_at;
@@ -162,12 +177,13 @@ export default async function MobileHomePage() {
       hasDiagnoseSnapshot: artifact?.hasDiagnoseSnapshot ?? false,
       hasMaterialsSnapshot: artifact?.hasMaterialsSnapshot ?? false,
       latestQuoteId: latestQuote?.id ?? null,
-      latestQuoteStatus: latestQuote?.status ?? null,
-      followupSnapshot: artifact?.followupSnapshot ?? null,
-      callRecommended: Boolean(artifact?.followupSnapshot?.callRecommended),
-      hasCallWithMissingOutcome: false,
-      latestCallOutcomeRecorded: false,
-      invoicePresent: false,
+    latestQuoteStatus: latestQuote?.status ?? null,
+    followupSnapshot: artifact?.followupSnapshot ?? null,
+    callRecommended: Boolean(artifact?.followupSnapshot?.callRecommended),
+    followUpDraftReady: artifact?.hasFollowupDraftReady ?? false,
+    hasCallWithMissingOutcome: false,
+    latestCallOutcomeRecorded: false,
+    invoicePresent: false,
       invoiceStatus: null,
     };
   });

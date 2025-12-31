@@ -43,6 +43,7 @@ function buildNextStep(overrides: Partial<nextStepModule.NextStepResult>) {
       actionTarget: PROGRESS_STEP_ANCHORS.diagnose,
     },
     statusHints: STATUS_HINTS,
+    followUpDraftReady: false,
     ...overrides,
   };
 }

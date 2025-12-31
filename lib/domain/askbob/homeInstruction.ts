@@ -25,6 +25,7 @@ export type HomeInstructionCandidate = {
   latestCallOutcomeRecorded?: boolean;
   invoicePresent?: boolean;
   invoiceStatus?: string | null;
+  followUpDraftReady?: boolean;
 };
 
 export type HomeInstruction = {
@@ -61,6 +62,7 @@ function buildNextStepInput(candidate: HomeInstructionCandidate) {
     latestCallOutcomeRecorded: Boolean(candidate.latestCallOutcomeRecorded),
     invoiceStatus: candidate.invoiceStatus ?? null,
     invoicePresent: Boolean(candidate.invoicePresent),
+    followUpDraftReady: Boolean(candidate.followUpDraftReady),
   };
 }
 
@@ -121,7 +123,6 @@ export function deriveHomeInstruction(candidates: HomeInstructionCandidate[]): H
     }
     const instruction = overrideWithHomeCta(
       deriveJobNextInstructionFromResult(nextStep, {
-        statement: mobileFlowCopy.home.statement,
         supportingRationale: null,
         fallbackRecommendation: jobDetailsCopy.nextStep.fallbackRationale,
       }),

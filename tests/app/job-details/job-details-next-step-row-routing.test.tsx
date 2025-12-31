@@ -89,6 +89,7 @@ describe("JobDetails next step row routing", () => {
           actionTarget: PROGRESS_STEP_ANCHORS[stepKey],
         },
         statusHints: NEXT_STEP_STATUS_HINTS,
+        followUpDraftReady: false,
       };
       const deriveSpy = vi
         .spyOn(nextStepModule, "deriveNextStepForJobDetails")
@@ -149,6 +150,7 @@ describe("JobDetails next step row routing", () => {
         actionTarget: PROGRESS_STEP_ANCHORS[stepKey],
       },
       statusHints: NEXT_STEP_STATUS_HINTS,
+      followUpDraftReady: false,
     };
     const deriveSpy = vi
       .spyOn(nextStepModule, "deriveNextStepForJobDetails")

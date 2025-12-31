@@ -14,7 +14,6 @@ describe("mobile flow copy contract", () => {
         "activeJob": {
           "calmReassurance": "Everything looks on track for this job.",
           "instructionFallback": "Everything looks on track for this job.",
-          "instructionStatement": "Here’s what Bob recommends next.",
           "nextStepHeading": "Bob's next step",
           "nextStepHelper": "Focus on this step to keep the job moving forward.",
           "notFoundAction": "Back to home",
@@ -34,7 +33,6 @@ describe("mobile flow copy contract", () => {
           "recommendationCtaLabel": "Review job",
           "recommendationLabel": "Next step",
           "recommendationTitleFallback": "Untitled job",
-          "statement": "I'm tracking the job that needs a small nudge.",
           "title": "Home",
         },
       }

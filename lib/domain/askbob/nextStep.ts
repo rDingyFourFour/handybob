@@ -21,6 +21,7 @@ export type NextStepResult = {
   rationale: string;
   primaryCta: NextStepPrimaryCta | null;
   statusHints: NextStepStatusHints;
+  followUpDraftReady: boolean;
 };
 
 export type NextStepInput = {
@@ -34,6 +35,7 @@ export type NextStepInput = {
   latestCallOutcomeRecorded?: boolean;
   invoiceStatus?: string | null;
   invoicePresent?: boolean;
+  followUpDraftReady?: boolean;
 };
 
 const normalizeStatus = (value?: string | null) =>
@@ -207,10 +209,12 @@ export function deriveNextStepForJobDetails(input: NextStepInput): NextStepResul
   }
 
   const rationale = enforceRationaleTone(step, buildRationale(step));
+  const followUpDraftReady = Boolean(input.followUpDraftReady);
   return {
     stepType: step,
     rationale,
     primaryCta: enforcePrimaryCtaBobVoice(buildPrimaryAction(step), step),
     statusHints: enforceStatusHintsBobVoice(buildStatusHints(input)),
+    followUpDraftReady,
   };
 }

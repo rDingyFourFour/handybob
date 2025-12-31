@@ -216,7 +216,6 @@ describe("Next Step copy matches derived output", () => {
         invoicePresent: false,
       });
       const instruction = deriveJobNextInstructionFromResult(nextStep, {
-        statement: jobDetailsCopy.nextStep.statement,
         supportingRationale: jobDetailsCopy.nextStep.confirmation,
         fallbackRecommendation: jobDetailsCopy.nextStep.fallbackRationale,
       });

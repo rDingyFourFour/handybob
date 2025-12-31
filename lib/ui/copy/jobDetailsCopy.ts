@@ -10,7 +10,6 @@ export const jobDetailsCopy = {
   nextStep: {
     title: "Next step",
     doneLabel: "All caught up",
-    statement: "Bob says keep momentum with the most important task for this job.",
     confirmation: "Tap the button when you’re ready to move forward.",
     fallbackRationale: "Everything looks on track for this job.",
   },
@@ -89,7 +88,6 @@ export function validateJobDetailsCopy(): void {
   check(jobDetailsCopy.nextStep.title, "nextStep.title");
   check(jobDetailsCopy.nextStep.doneLabel, "nextStep.doneLabel");
   check(jobDetailsCopy.nextStep.fallbackRationale, "nextStep.fallbackRationale");
-  check(jobDetailsCopy.nextStep.statement, "nextStep.statement");
   check(jobDetailsCopy.nextStep.confirmation, "nextStep.confirmation");
 
   Object.entries(jobDetailsCopy.nextStepCta).forEach(([ctaKey, ctaLabel]) => {

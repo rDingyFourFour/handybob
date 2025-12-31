@@ -270,7 +270,6 @@ function buildExpectedForScenario(scenario: PipelineScenario) {
     callSummarySignals,
   });
   const instruction = deriveJobNextInstructionFromResult(nextStep, {
-    statement: jobDetailsCopy.nextStep.statement,
     supportingRationale: jobDetailsCopy.nextStep.confirmation,
     fallbackRecommendation: jobDetailsCopy.nextStep.fallbackRationale,
   });

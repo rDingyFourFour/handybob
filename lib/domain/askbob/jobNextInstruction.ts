@@ -9,11 +9,15 @@ import { deriveNextStepForJobDetails } from "@/lib/domain/askbob/nextStep";
 import { PROGRESS_STEP_ANCHORS } from "@/lib/domain/askbob/progressSteps";
 import type { BobInstruction, BobInstructionPrimaryCta, BobInstructionStepType } from "@/lib/domain/bob/bobInstruction";
 import { buildBobInstruction } from "@/lib/domain/bob/bobInstruction";
+import {
+  getBobInstructionSentence,
+  type BobInstructionState,
+} from "@/lib/domain/askbob/bobInstructionSentenceCopy";
 
 type DeriveJobNextInstructionOptions = {
-  statement: string;
   supportingRationale?: string | null;
   fallbackRecommendation: string;
+  isJobCompleted?: boolean;
 };
 
 const PROGRESS_ANCHOR_TO_STEP = Object.fromEntries(
@@ -64,12 +68,36 @@ const mapPrimaryCta = (
 
 const buildSafeIdleInstruction = (options: DeriveJobNextInstructionOptions): BobInstruction =>
   buildBobInstruction({
-    statement: options.statement,
+    statement: getBobInstructionSentence(
+      options.isJobCompleted ? "completed" : "idle",
+    ),
     recommendation: options.fallbackRecommendation,
     rationale: options.supportingRationale ?? null,
     stepType: "idle",
     primaryCta: null,
   });
+
+export const resolveBobInstructionState = (
+  nextStep: NextStepResult,
+  isJobCompleted: boolean,
+): BobInstructionState => {
+  if (isJobCompleted) {
+    return "completed";
+  }
+  switch (nextStep.stepType) {
+    case "done":
+      return "idle";
+    case "call":
+      return "call_recommended";
+    case "followup":
+      return nextStep.followUpDraftReady ? "followup_draft_ready" : "followup_due";
+    case "invoice":
+    case "quote":
+      return "in_progress";
+    default:
+      return "in_progress";
+  }
+};
 
 export function deriveJobNextInstructionFromResult(
   result: NextStepResult,
@@ -78,8 +106,9 @@ export function deriveJobNextInstructionFromResult(
   const bobStepType = NEXT_STEP_TO_BOB_STEP[result.stepType] ?? "idle";
   const primaryCta = mapPrimaryCta(result.primaryCta, bobStepType);
   const recommendation = result.rationale || options.fallbackRecommendation;
+  const state = resolveBobInstructionState(result, Boolean(options.isJobCompleted));
   return buildBobInstruction({
-    statement: options.statement,
+    statement: getBobInstructionSentence(state),
     recommendation,
     rationale: options.supportingRationale ?? null,
     stepType: bobStepType,

@@ -165,6 +165,7 @@ describe("JobDetails progress accordion", () => {
         rationale: "Test rationale",
         primaryCta: null,
         statusHints: NEXT_STEP_STATUS_HINTS,
+        followUpDraftReady: false,
       };
       const deriveSpy = vi
         .spyOn(nextStepModule, "deriveNextStepForJobDetails")
@@ -188,6 +189,7 @@ describe("JobDetails progress accordion", () => {
       rationale: "All caught up",
       primaryCta: null,
       statusHints: NEXT_STEP_STATUS_HINTS,
+      followUpDraftReady: false,
     };
     const deriveSpy = vi
       .spyOn(nextStepModule, "deriveNextStepForJobDetails")

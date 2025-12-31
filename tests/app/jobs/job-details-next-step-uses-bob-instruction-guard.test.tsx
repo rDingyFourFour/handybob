@@ -84,7 +84,6 @@ describe("Job Details next step BobInstruction guard", () => {
     };
     const nextStep = deriveNextStepForJobDetails(expectedNextStepInput);
     const expectedInstruction = deriveJobNextInstructionFromResult(nextStep, {
-      statement: jobDetailsCopy.nextStep.statement,
       supportingRationale: jobDetailsCopy.nextStep.confirmation,
       fallbackRecommendation: jobDetailsCopy.nextStep.fallbackRationale,
     });

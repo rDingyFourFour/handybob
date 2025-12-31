@@ -4,9 +4,9 @@ import { normalizeBobCtaLabel } from "@/lib/domain/copy/bobVoice";
 import { deriveJobNextInstruction } from "@/lib/domain/askbob/jobNextInstruction";
 import type { NextStepInput } from "@/lib/domain/askbob/nextStep";
 import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
+import { getBobInstructionSentence } from "@/lib/domain/askbob/bobInstructionSentenceCopy";
 
 const instructionOptions = {
-  statement: jobDetailsCopy.nextStep.statement,
   supportingRationale: jobDetailsCopy.nextStep.confirmation,
   fallbackRecommendation: jobDetailsCopy.nextStep.fallbackRationale,
 };
@@ -43,7 +43,7 @@ describe("deriveJobNextInstruction", () => {
     expect(instruction.telemetry.stepType).toBe("diagnose");
     expect(instruction.telemetry.hasPrimaryCta).toBe(true);
     expect(instruction.telemetry.isIdle).toBe(false);
-    expect(instruction.statement).toBe(jobDetailsCopy.nextStep.statement);
+    expect(instruction.statement).toBe(getBobInstructionSentence("in_progress"));
     expect(instruction.recommendation).toBeTruthy();
   });
 

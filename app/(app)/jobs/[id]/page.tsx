@@ -47,6 +47,7 @@ import { deriveNextStepForJobDetails, type NextStepResult } from "@/lib/domain/a
 import { PROGRESS_STEPS } from "@/app/(app)/jobs/[id]/progressSteps";
 import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
 import { getJobDetailsMobilePrimarySurfacePolicy } from "@/lib/domain/ui/mobilePrimarySurface";
+import { isCompletedJobStatus } from "@/lib/domain/jobs/jobListUi";
 
 type JobRecord = {
   id: string;
@@ -310,6 +311,7 @@ export default async function JobDetailPage({
     materialsSnapshot,
     quoteSnapshot,
     followupSnapshot,
+    afterCallSnapshot,
   } = askBobSnapshots;
 
   let askBobSnapshotHistory = {
@@ -502,6 +504,7 @@ export default async function JobDetailPage({
   const invoicePresent = Boolean(invoice);
   const invoiceStatus = invoice?.invoice_status ?? null;
   const hasCallSummary = Boolean(latestCallOutcome || callHistory.length > 0);
+  const followUpDraftReady = Boolean(afterCallSnapshot?.draftMessageBody?.trim());
   const nextStep: NextStepResult = deriveNextStepForJobDetails({
     hasDiagnoseSnapshot,
     hasMaterialsSnapshot,
@@ -513,11 +516,13 @@ export default async function JobDetailPage({
     latestCallOutcomeRecorded,
     invoiceStatus,
     invoicePresent,
+    followUpDraftReady,
   });
+  const jobIsCompleted = isCompletedJobStatus(job.status);
   const nextStepInstruction = deriveJobNextInstructionFromResult(nextStep, {
-    statement: jobDetailsCopy.nextStep.statement,
     supportingRationale: jobDetailsCopy.nextStep.confirmation,
     fallbackRecommendation: jobDetailsCopy.nextStep.fallbackRationale,
+    isJobCompleted: jobIsCompleted,
   });
   const hasFollowupSnapshot = Boolean(followupSnapshot);
   const derivedAskBobCopy = deriveJobDetailsAskBobDerivedCopy({
