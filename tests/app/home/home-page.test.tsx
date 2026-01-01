@@ -118,8 +118,17 @@ describe("Mobile home page", () => {
     expect(ctaButtons).toHaveLength(1);
     const primaryCta = ctaButtons[0];
     expect(primaryCta?.textContent?.trim()).toBe(mobileFlowCopy.home.recommendationCtaLabel);
-    const idleCard = container.querySelector('[data-testid="mobile-home-idle-card"]');
-    expect(idleCard).toBeNull();
+    const reassuranceCard = container.querySelector(
+      '[data-testid="mobile-home-reassurance-card"]',
+    );
+    expect(reassuranceCard).toBeTruthy();
+    expect(reassuranceCard?.textContent).toContain(mobileFlowCopy.home.idleReassurance);
+
+    const mobileHomeRoot = container.querySelector(".mobile-home");
+    expect(mobileHomeRoot).toBeTruthy();
+    expect(container.querySelector(".mobile-home-header")).toBeTruthy();
+    expect(container.querySelector(".mobile-home-stack")).toBeTruthy();
+    expect(container.querySelector(".mobile-home-recommendation-label")).toBeTruthy();
 
     const primaryButtons = findPrimaryStyledButtons(container);
     expect(primaryButtons).toHaveLength(1);
@@ -175,8 +184,16 @@ describe("Mobile home page", () => {
 
     const ctaButton = container.querySelector('[data-testid="mobile-home-primary-cta"]');
     expect(ctaButton).toBeNull();
-    const idleCard = container.querySelector('[data-testid="mobile-home-idle-card"]');
-    expect(idleCard?.textContent).toContain(mobileFlowCopy.home.idleReassurance);
+    const reassuranceCard = container.querySelector(
+      '[data-testid="mobile-home-reassurance-card"]',
+    );
+    expect(reassuranceCard).toBeTruthy();
+    expect(reassuranceCard?.textContent).toContain(mobileFlowCopy.home.idleReassurance);
+
+    const header = container.querySelector(".mobile-home-header");
+    expect(header).toBeTruthy();
+    expect(container.querySelector(".mobile-home-stack")).toBeTruthy();
+    expect(container.querySelector(".mobile-home-reassurance-card")).toBeTruthy();
 
     const primaryButtons = findPrimaryStyledButtons(container);
     expect(primaryButtons).toHaveLength(0);

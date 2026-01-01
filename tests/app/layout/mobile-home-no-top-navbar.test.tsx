@@ -6,6 +6,7 @@ import { createSupabaseState, mockGetCurrentWorkspace } from "@/tests/app/mobile
 import MobileHomePage from "@/app/m/page";
 import MobileAppShell from "@/components/layout/MobileAppShell";
 import { usePathname } from "next/navigation";
+import { isMobileRoute } from "@/tests/app/layout/test-utils";
 
 vi.mock("next/navigation", () => ({
   usePathname: vi.fn(() => "/m"),
@@ -68,6 +69,10 @@ describe("Mobile home layout", () => {
     });
 
     expect(container.querySelector('[data-testid="app-shell-header"]')).toBeNull();
+    const layoutMain = container.querySelector("main");
+    expect(layoutMain?.className).not.toContain("pt-16");
+    expect(isMobileRoute("/m")).toBe(true);
+    expect(isMobileRoute("/jobs")).toBe(false);
     expect(container.querySelector('[data-testid="mobile-tab-bar"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="mobile-home-header"]')).toBeTruthy();
   });

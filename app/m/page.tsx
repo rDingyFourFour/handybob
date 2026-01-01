@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
+import { AskBobAvatarIcon } from "@/components/ui/icons";
 import TrackedLinkButton from "@/components/mobile/TrackedLinkButton";
 import {
   deriveHomeInstruction,
@@ -214,46 +215,72 @@ export default async function MobileHomePage() {
   const greeting = displayName
     ? mobileFlowCopy.home.greetingTemplate.replace("{name}", displayName)
     : mobileFlowCopy.home.greetingFallback;
+  const isIdle = !hasRecommendation;
+  const reassuranceCopy = mobileFlowCopy.home.idleReassurance;
+  const shouldShowReassuranceCard = Boolean(reassuranceCopy && (isIdle || hasRecommendation));
 
   return (
-    <div className="space-y-6 pb-8">
-      <header data-testid="mobile-home-header" className="space-y-1">
-        <h1 className="text-3xl font-semibold text-[var(--color-text-primary)]">
+    <div className="flex flex-col gap-5 pb-8 mobile-home">
+      <header data-testid="mobile-home-header" className="space-y-1 mobile-home-header">
+        <h1
+          className="text-3xl font-semibold text-[var(--color-text-primary)] mobile-home-title"
+        >
           {mobileFlowCopy.home.title}
         </h1>
-        <p className="text-sm text-[var(--color-text-secondary)]">{greeting}</p>
+        <p
+          className="text-sm font-light leading-relaxed text-[var(--color-text-secondary)] mobile-home-greeting"
+        >
+          {greeting}
+        </p>
       </header>
 
-      {hasRecommendation && actionableInstruction && actionablePrimaryCta ? (
-        <HbCard data-testid="mobile-home-recommendation-card" className="space-y-4">
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)]">
-              {mobileFlowCopy.home.recommendationLabel}
-            </p>
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              {actionableInstruction.instruction.statement}
-            </p>
-          </div>
-          <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">
-            {actionableInstruction.title ?? mobileFlowCopy.home.recommendationTitleFallback}
-          </h2>
-          <TrackedLinkButton
-            href={actionablePrimaryCta.href ?? "#"}
-            eventName="[home-recommendation-click]"
-            eventPayload={renderTelemetry}
-            variant="primary"
-            size="md"
-            className="w-full justify-center"
-            data-testid="mobile-home-primary-cta"
+      <div className="flex flex-col gap-5 mobile-home-stack">
+        {hasRecommendation && actionableInstruction && actionablePrimaryCta && (
+          <HbCard
+            data-testid="mobile-home-recommendation-card"
+            className="space-y-4 mobile-home-primary-card"
           >
-            {mobileFlowCopy.home.recommendationCtaLabel}
-          </TrackedLinkButton>
-        </HbCard>
-      ) : (
-        <HbCard data-testid="mobile-home-idle-card" className="space-y-3">
-          <p className="text-sm text-[var(--color-text-secondary)]">{mobileFlowCopy.home.idleReassurance}</p>
-        </HbCard>
-      )}
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)] mobile-home-recommendation-label">
+                {mobileFlowCopy.home.recommendationLabel}
+              </p>
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                {actionableInstruction.instruction.statement}
+              </p>
+            </div>
+            <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">
+              {actionableInstruction.title ?? mobileFlowCopy.home.recommendationTitleFallback}
+            </h2>
+            <TrackedLinkButton
+              href={actionablePrimaryCta.href ?? "#"}
+              eventName="[home-recommendation-click]"
+              eventPayload={renderTelemetry}
+              variant="primary"
+              size="md"
+              className="hb-mobile-primary-cta justify-center"
+              data-testid="mobile-home-primary-cta"
+            >
+              {mobileFlowCopy.home.recommendationCtaLabel}
+            </TrackedLinkButton>
+          </HbCard>
+        )}
+
+        {shouldShowReassuranceCard && (
+          <HbCard
+            data-testid="mobile-home-reassurance-card"
+            className="space-y-0 mobile-home-reassurance-card"
+          >
+            <div className="flex items-start gap-3 mobile-home-reassurance-content">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-background-paper)] mobile-home-reassurance-avatar">
+                <AskBobAvatarIcon className="h-8 w-8 text-[var(--color-primary)]" aria-hidden />
+              </div>
+              <p className="text-sm font-normal leading-relaxed text-[var(--color-text-secondary)] mobile-home-reassurance-text">
+                {reassuranceCopy}
+              </p>
+            </div>
+          </HbCard>
+        )}
+      </div>
     </div>
   );
 }

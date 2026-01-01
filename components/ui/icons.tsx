@@ -73,3 +73,26 @@ export function SettingsOutlineIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export function AskBobAvatarIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 32 32" role="presentation" {...props}>
+      <circle cx="16" cy="13" r="9.5" fill="currentColor" fillOpacity={0.12} />
+      <circle cx="16" cy="13" r="10" fill="none" stroke="currentColor" strokeWidth={1.2} />
+      <circle cx="11.5" cy="12" r="1.4" fill="currentColor" />
+      <circle cx="20.5" cy="12" r="1.4" fill="currentColor" />
+      <path
+        d="M22 19c0-2.7-2.5-4.5-6-4.5S10 16.3 10 19"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        strokeLinecap="round"
+      />
+      <path
+        d="M11 22.5h10"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}

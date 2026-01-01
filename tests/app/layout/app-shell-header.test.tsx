@@ -8,40 +8,22 @@ vi.mock("@/components/ui/MobileNav", () => ({
   ),
 }));
 
-const mockCreateServerClient = vi.fn();
-vi.mock("@/utils/supabase/server", () => ({
-  createServerClient: () => mockCreateServerClient(),
-}));
-
-const mockGetCurrentWorkspace = vi.fn();
-vi.mock("@/lib/domain/workspaces", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/domain/workspaces")>(
-    "@/lib/domain/workspaces",
-  );
-  return {
-    ...actual,
-    getCurrentWorkspace: () => mockGetCurrentWorkspace(),
-  };
-});
-
 import AppShellLayout, { AppShellHeader } from "@/app/(app)/layout";
+import {
+  mockGetCurrentWorkspace,
+  resetAppShellMocks,
+  supabaseAuthMock,
+} from "@/tests/app/layout/test-utils";
 
 describe("App shell layout", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot> | null = null;
-  const supabaseAuthMock = {
-    getUser: vi.fn(),
-  };
-  const supabaseClientMock = { auth: supabaseAuthMock };
 
   beforeEach(() => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
-    mockCreateServerClient.mockReset();
-    mockGetCurrentWorkspace.mockReset();
-    supabaseAuthMock.getUser.mockReset();
-    mockCreateServerClient.mockReturnValue(supabaseClientMock);
+    resetAppShellMocks();
   });
 
   afterEach(() => {
@@ -50,6 +32,7 @@ describe("App shell layout", () => {
       root = null;
     }
     container.remove();
+    resetAppShellMocks();
   });
 
   it("renders the desktop header with padding for app routes", async () => {
