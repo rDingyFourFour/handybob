@@ -36,6 +36,7 @@ export default function MobileAppShell({
 }: MobileAppShellProps) {
   const pathname = usePathname() ?? "/";
   const normalizedPath = pathname.replace(/\/$/, "") || "/";
+  const safeAreaTop = "env(safe-area-inset-top, 0px)";
 
   const activeTab = MOBILE_TABS.find(({ href }) =>
     normalizedPath === href || normalizedPath.startsWith(`${href}/`),
@@ -48,7 +49,7 @@ export default function MobileAppShell({
     >
       <main
         className="flex-1 px-4 py-6 sm:px-6"
-        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 1rem)" }}
+        style={{ paddingTop: safeAreaTop }}
       >
         <div className="mx-auto flex w-full max-w-[640px] flex-col gap-6">{children}</div>
       </main>
