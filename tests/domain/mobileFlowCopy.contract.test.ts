@@ -30,7 +30,7 @@ describe("mobile flow copy contract", () => {
           "greetingFallback": "Good morning",
           "greetingTemplate": "Good morning, {name}",
           "idleReassurance": "Everything else is up to date. I'll let you know if something changes.",
-          "recommendationCtaLabel": "Review job",
+          "recommendationCtaLabel": "Open job",
           "recommendationLabel": "Next step",
           "recommendationTitleFallback": "Untitled job",
           "title": "Home",

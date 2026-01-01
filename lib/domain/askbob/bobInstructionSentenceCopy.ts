@@ -27,7 +27,7 @@ export const bobInstructionSentenceCopy: Record<BobInstructionState, string> = {
   followup_draft_ready: "I drafted a brief follow-up and it’s ready to send.",
   call_recommended: "It’s time to call the customer about this job.",
   schedule_needed: "This job needs to be scheduled.",
-  in_progress: "This job is underway. I’ll flag anything that needs your attention.",
+  in_progress: "This job is underway. I’m keeping an eye on it.",
   waiting_on_user: "I need a bit more information before I can move this forward.",
   completed: "This job is wrapped up.",
 };
