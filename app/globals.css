@@ -19,12 +19,6 @@
   --theme-card-shadow: var(--theme-shadow);
   --theme-card-padding: 1.5rem;
   --theme-card-radius: var(--theme-radius-lg);
-  --mobile-home-gap: 1.25rem;
-  --mobile-home-stack-gap: 1.25rem;
-  --mobile-home-header-gap: 0.35rem;
-  --mobile-home-reassurance-border: #e4d3c2;
-  --mobile-home-reassurance-shadow: 0 12px 32px rgba(31, 20, 15, 0.04);
-
   --color-background-paper: var(--theme-background);
   --color-card: var(--theme-card);
   --color-card-elevated: var(--theme-card-elevated);
@@ -81,55 +75,72 @@
   --color-text-primary: var(--mobile-theme-heading-color);
   --color-text-secondary: var(--mobile-theme-secondary-color);
 
-  --mobile-home-stack-gap: 1.45rem;
-  --mobile-home-header-gap: 0.45rem;
-  --mobile-home-reassurance-gap: 0.55rem;
-  --mobile-home-reassurance-border: rgba(30, 30, 30, 0.03);
-  --mobile-home-reassurance-shadow: none;
-  --mobile-home-reassurance-radius: 1.25rem;
-  --mobile-home-reassurance-text-color: rgba(31, 20, 15, 0.55);
-  --mobile-home-reassurance-text-line-height: 1.45;
-  --mobile-home-reassurance-font-size: 0.92rem;
-  --mobile-home-reassurance-font-weight: 400;
-  --mobile-home-reassurance-card-bg: #fdfaf5;
-  --mobile-home-reassurance-padding-vertical: 1rem;
-  --mobile-home-reassurance-padding-horizontal: 1.4rem;
-  --mobile-home-reassurance-avatar-size: 2.3rem;
-  --mobile-home-reassurance-avatar-radius: 1rem;
-  --mobile-home-reassurance-avatar-border: 1px solid rgba(31, 20, 15, 0.12);
-  --mobile-home-reassurance-avatar-offset: 0.15rem;
-  --mobile-home-reassurance-icon-size: 1.75rem;
-  --mobile-home-primary-card-bg: var(--mobile-theme-card-cream);
-  --mobile-home-primary-card-border: 1px solid rgba(31, 20, 15, 0.04);
-  --mobile-home-primary-card-shadow: 0 16px 38px rgba(31, 20, 15, 0.035);
-  --mobile-home-primary-card-radius: 1.5rem;
-  --mobile-home-primary-card-padding-vertical: 1.75rem;
-  --mobile-home-primary-card-padding-horizontal: 1.5rem;
-  --mobile-home-cta-height: 3.35rem;
-  --mobile-home-cta-padding: 0.75rem 1.5rem;
-  --mobile-home-cta-font-size: 1rem;
-  --mobile-home-cta-font-weight: 500;
-  --mobile-home-cta-letter-spacing: -0.005em;
-  --mobile-home-cta-radius: 2rem;
-  --mobile-home-cta-shadow: 0 10px 22px rgba(31, 20, 15, 0.05);
-  --mobile-home-cta-shadow-hover: 0 12px 26px rgba(31, 20, 15, 0.06);
-  --mobile-home-cta-shadow-active: 0 6px 16px rgba(31, 20, 15, 0.04);
-  --mobile-home-title-min-size: 1.75rem;
-  --mobile-home-title-preferred-size: 3vw;
-  --mobile-home-title-max-size: 1.95rem;
-  --mobile-home-title-line-height: 1.25;
-  --mobile-home-title-weight: 400;
-  --mobile-home-title-letter-spacing: -0.03em;
-  --mobile-home-greeting-font-size: 1.15rem;
-  --mobile-home-greeting-line-height: 1.5;
-  --mobile-home-greeting-letter-spacing: 0;
-  --mobile-home-greeting-weight: 500;
-  --mobile-home-greeting-color: rgba(30, 33, 24, 0.78);
-  --mobile-home-padding-top: 2rem;
-  --mobile-home-padding-horizontal: 1.25rem;
-  --mobile-home-padding-bottom: 3.25rem;
-  --mobile-home-header-stack-gap: 1.8rem;
-  --mobile-home-gap: var(--mobile-home-header-stack-gap);
+  --hb-mobile-home-stack-max-width: 400px;
+
+  /* Mobile Home — Instruction-first (Review Job variant) tokens */
+  --hb-mobile-home-bg: #F8F3EC;
+  --hb-mobile-home-gutter-x: 16px;
+  --hb-mobile-home-rhythm-y: 8px;
+
+  --hb-mobile-home-header-top: 16px;
+  --hb-mobile-home-header-gap: 8px;
+  --hb-mobile-home-header-to-card: 24px;
+
+  --hb-mobile-home-title-size: 28px;
+  --hb-mobile-home-title-weight: 600;
+  --hb-mobile-home-title-line-height: 34px;
+  --hb-mobile-home-title-letter-spacing: -0.2px;
+  --hb-mobile-home-title-color: #1E1E1E;
+
+  --hb-mobile-home-greeting-size: 18px;
+  --hb-mobile-home-greeting-weight: 400;
+  --hb-mobile-home-greeting-line-height: 24px;
+  --hb-mobile-home-greeting-color: #6B6B6B;
+
+  --hb-mobile-home-card-radius: 24px;
+  --hb-mobile-home-card-pad-top: 20px;
+  --hb-mobile-home-card-pad-x: 20px;
+  --hb-mobile-home-card-pad-bottom: 24px;
+  --hb-mobile-home-card-after: 20px;
+  --hb-mobile-home-card-border: 1px solid #E7DED4;
+  --hb-mobile-home-card-bg: #FBF6F0;
+  --hb-mobile-home-card-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+
+  --hb-mobile-home-instruction-title-size: 17px;
+  --hb-mobile-home-instruction-title-weight: 600;
+  --hb-mobile-home-instruction-title-line-height: 23px;
+  --hb-mobile-home-instruction-title-color: #1E1E1E;
+
+  --hb-mobile-home-secondary-size: 15px;
+  --hb-mobile-home-secondary-weight: 400;
+  --hb-mobile-home-secondary-line-height: 22px;
+  --hb-mobile-home-secondary-color: #7A7268;
+
+  --hb-mobile-home-instruction-icon-size: 20px;
+  --hb-mobile-home-instruction-icon-color: #6E8B73;
+
+  --hb-mobile-home-reassurance-radius: 20px;
+  --hb-mobile-home-reassurance-pad: 16px;
+  --hb-mobile-home-reassurance-bg: #FFFFFF;
+  --hb-mobile-home-reassurance-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  --hb-mobile-home-reassurance-text-size: 15px;
+  --hb-mobile-home-reassurance-text-weight: 400;
+  --hb-mobile-home-reassurance-text-line-height: 22px;
+  --hb-mobile-home-reassurance-text-color: #8F877C;
+
+  --hb-mobile-home-avatar-size: 28px;
+  --hb-mobile-home-avatar-border: none;
+  --hb-mobile-home-avatar-shadow: none;
+
+  --hb-mobile-home-cta-height: 52px;
+  --hb-mobile-home-cta-padding-inline: 24px;
+  --hb-mobile-home-cta-radius: 26px;
+  --hb-mobile-home-cta-bg: #6E8B73;
+  --hb-mobile-home-cta-text-color: #FFFFFF;
+  --hb-mobile-home-cta-font-size: 16px;
+  --hb-mobile-home-cta-font-weight: 600;
+  --hb-mobile-home-cta-shadow: 0 4px 12px rgba(110, 139, 115, 0.35);
+  --hb-mobile-home-cta-space-top: 16px;
 }
 
 html,
@@ -226,92 +237,135 @@ body {
 }
 
 .hb-mobile-theme .mobile-home {
-  gap: var(--mobile-home-header-stack-gap);
   margin: 0 auto;
-  padding: var(--mobile-home-padding-top) var(--mobile-home-padding-horizontal) var(--mobile-home-padding-bottom);
   width: min(100%, 520px);
+  gap: var(--hb-mobile-home-header-to-card);
+  padding-top: 0;
+  padding-bottom: calc(var(--hb-mobile-home-rhythm-y) * 4);
+  padding-left: 0;
+  padding-right: 0;
+  background-color: var(--hb-mobile-home-bg);
+  background-image: none;
 }
 
 .hb-mobile-theme .mobile-home .mobile-home-header {
-  gap: var(--mobile-home-header-gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--hb-mobile-home-header-gap);
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--hb-mobile-home-header-top));
+}
+
+.hb-mobile-theme .mobile-home .mobile-home-header > * + * {
+  margin-top: 0;
 }
 
 .hb-mobile-theme .mobile-home .mobile-home-title {
-  font-size: clamp(var(--mobile-home-title-min-size), var(--mobile-home-title-preferred-size), var(--mobile-home-title-max-size)) !important;
-  letter-spacing: var(--mobile-home-title-letter-spacing) !important;
-  line-height: var(--mobile-home-title-line-height) !important;
-  font-weight: var(--mobile-home-title-weight) !important;
-  color: var(--color-text-primary) !important;
+  font-size: var(--hb-mobile-home-title-size) !important;
+  font-weight: var(--hb-mobile-home-title-weight) !important;
+  line-height: var(--hb-mobile-home-title-line-height) !important;
+  letter-spacing: var(--hb-mobile-home-title-letter-spacing) !important;
+  color: var(--hb-mobile-home-title-color) !important;
+  margin: 0;
 }
 
 .hb-mobile-theme .mobile-home .mobile-home-greeting {
-  color: var(--mobile-home-greeting-color) !important;
+  font-size: var(--hb-mobile-home-greeting-size);
+  font-weight: var(--hb-mobile-home-greeting-weight);
+  line-height: var(--hb-mobile-home-greeting-line-height);
+  color: var(--hb-mobile-home-greeting-color);
   margin: 0;
-  font-size: var(--mobile-home-greeting-font-size) !important;
-  letter-spacing: var(--mobile-home-greeting-letter-spacing) !important;
-  line-height: var(--mobile-home-greeting-line-height) !important;
-  font-weight: var(--mobile-home-greeting-weight) !important;
 }
 
 .hb-mobile-theme .mobile-home .mobile-home-stack {
-  gap: var(--mobile-home-stack-gap);
+  gap: var(--hb-mobile-home-card-after);
+  max-width: var(--hb-mobile-home-stack-max-width);
+  margin-inline: auto;
+  padding-inline: var(--hb-mobile-home-gutter-x);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.hb-mobile-theme .mobile-home .mobile-home-stack > * {
+  width: 100%;
 }
 
 .hb-mobile-theme .mobile-home .mobile-home-primary-card {
-  background-color: var(--mobile-home-primary-card-bg) !important;
-  border: var(--mobile-home-primary-card-border) !important;
-  box-shadow: var(--mobile-home-primary-card-shadow) !important;
-  border-radius: var(--mobile-home-primary-card-radius) !important;
-  padding: var(--mobile-home-primary-card-padding-vertical) var(--mobile-home-primary-card-padding-horizontal) !important;
+  background-color: var(--hb-mobile-home-card-bg);
+  border-radius: var(--hb-mobile-home-card-radius);
+  border: var(--hb-mobile-home-card-border) !important;
+  box-shadow: var(--hb-mobile-home-card-shadow) !important;
+  padding: var(--hb-mobile-home-card-pad-top) var(--hb-mobile-home-card-pad-x) var(--hb-mobile-home-card-pad-bottom) !important;
 }
 
 .hb-mobile-theme .mobile-home-recommendation-label {
-  letter-spacing: 0.3em;
-  font-weight: 600;
-  color: var(--color-text-secondary);
+  display: none;
 }
 
 .hb-mobile-theme .mobile-home-primary-card > div > p:last-child {
-  line-height: 1.45;
+  font-size: var(--hb-mobile-home-secondary-size);
+  line-height: var(--hb-mobile-home-secondary-line-height);
+  color: var(--hb-mobile-home-secondary-color) !important;
+  font-weight: var(--hb-mobile-home-secondary-weight);
+  margin: 0;
 }
 
 .hb-mobile-theme .mobile-home-primary-card h2 {
-  font-weight: 600;
-  line-height: 1.3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--hb-mobile-home-instruction-title-size);
+  font-weight: var(--hb-mobile-home-instruction-title-weight);
+  line-height: var(--hb-mobile-home-instruction-title-line-height);
+  color: var(--hb-mobile-home-instruction-title-color);
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.hb-mobile-theme .mobile-home-primary-card h2 svg,
+.hb-mobile-theme .mobile-home-primary-card h2 .icon,
+.hb-mobile-theme .mobile-home-primary-card h2 [class*="icon"] {
+  width: var(--hb-mobile-home-instruction-icon-size);
+  height: var(--hb-mobile-home-instruction-icon-size);
+  flex-shrink: 0;
+  color: var(--hb-mobile-home-instruction-icon-color);
+  fill: currentColor;
 }
 
 .hb-mobile-theme .mobile-home .mobile-home-reassurance-card {
-  border-color: var(--mobile-home-reassurance-border) !important;
-  background-color: var(--mobile-home-reassurance-card-bg) !important;
-  box-shadow: var(--mobile-home-reassurance-shadow) !important;
-  border-radius: var(--mobile-home-reassurance-radius) !important;
-  padding: var(--mobile-home-reassurance-padding-vertical) var(--mobile-home-reassurance-padding-horizontal) !important;
+  background-color: var(--hb-mobile-home-reassurance-bg) !important;
+  border: none !important;
+  box-shadow: var(--hb-mobile-home-reassurance-shadow) !important;
+  border-radius: var(--hb-mobile-home-reassurance-radius);
+  padding: var(--hb-mobile-home-reassurance-pad) !important;
 }
 
 .hb-mobile-theme .mobile-home-reassurance-content {
-  gap: var(--mobile-home-reassurance-gap);
+  gap: var(--hb-mobile-home-rhythm-y);
 }
 
 .hb-mobile-theme .mobile-home-reassurance-text {
-  font-size: var(--mobile-home-reassurance-font-size);
-  color: var(--mobile-home-reassurance-text-color);
-  line-height: var(--mobile-home-reassurance-text-line-height);
-  font-weight: var(--mobile-home-reassurance-font-weight);
+  font-size: var(--hb-mobile-home-reassurance-text-size);
+  font-weight: var(--hb-mobile-home-reassurance-text-weight);
+  line-height: var(--hb-mobile-home-reassurance-text-line-height);
+  color: var(--hb-mobile-home-reassurance-text-color) !important;
+  margin: 0;
 }
 
 .hb-mobile-theme .mobile-home .mobile-home-reassurance-avatar {
-  border: var(--mobile-home-reassurance-avatar-border) !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
   background-color: var(--color-background-paper);
-  height: var(--mobile-home-reassurance-avatar-size);
-  width: var(--mobile-home-reassurance-avatar-size);
-  border-radius: var(--mobile-home-reassurance-avatar-radius);
-  margin-top: var(--mobile-home-reassurance-avatar-offset);
+  height: var(--hb-mobile-home-avatar-size);
+  width: var(--hb-mobile-home-avatar-size);
+  border-radius: 50%;
+  margin: 0;
 }
 
 .hb-mobile-theme .mobile-home-reassurance-icon {
   opacity: 0.85;
-  height: var(--mobile-home-reassurance-icon-size);
-  width: var(--mobile-home-reassurance-icon-size);
 }
 
 .hb-mobile-theme .mobile-home .hb-mobile-primary-cta {
@@ -319,23 +373,24 @@ body {
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: var(--mobile-home-cta-height) !important;
-  padding: var(--mobile-home-cta-padding) !important;
-  border-radius: var(--mobile-home-cta-radius) !important;
-  font-size: var(--mobile-home-cta-font-size);
-  font-weight: var(--mobile-home-cta-font-weight) !important;
-  letter-spacing: var(--mobile-home-cta-letter-spacing) !important;
-  background-color: var(--theme-button-primary-bg);
-  color: var(--theme-button-primary-text);
-  box-shadow: var(--mobile-home-cta-shadow) !important;
+  height: var(--hb-mobile-home-cta-height);
+  padding-inline: var(--hb-mobile-home-cta-padding-inline);
+  padding-block: 0;
+  border-radius: var(--hb-mobile-home-cta-radius);
+  font-size: var(--hb-mobile-home-cta-font-size);
+  font-weight: var(--hb-mobile-home-cta-font-weight);
+  background-color: var(--hb-mobile-home-cta-bg);
+  color: var(--hb-mobile-home-cta-text-color);
+  box-shadow: var(--hb-mobile-home-cta-shadow);
+  margin-top: var(--hb-mobile-home-cta-space-top);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.hb-mobile-theme .mobile-home .hb-mobile-primary-cta:hover {
-  box-shadow: var(--mobile-home-cta-shadow-hover);
+.hb-mobile-theme .mobile-home .hb-mobile-primary-cta:focus-visible {
+  outline: none;
+  box-shadow: var(--hb-mobile-home-cta-shadow), 0 0 0 3px rgba(255, 255, 255, 0.6);
 }
 
 .hb-mobile-theme .mobile-home .hb-mobile-primary-cta:active {
   transform: translateY(1px);
-  box-shadow: var(--mobile-home-cta-shadow-active);
 }
