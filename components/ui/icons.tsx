@@ -42,10 +42,19 @@ export function MessagesOutlineIcon(props: SVGProps<SVGSVGElement>) {
 export function MoreOutlineIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...baseIconProps} {...props}>
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="9.25" cy="12" r="1.1" />
-      <circle cx="14.75" cy="12" r="1.1" />
-      <circle cx="12" cy="12" r="1.1" />
+      <path d="M7 12h0" />
+      <path d="M12 12h0" />
+      <path d="M17 12h0" />
+    </svg>
+  );
+}
+
+export function MoreHorizontalIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...baseIconProps} {...props}>
+      <circle cx="6" cy="12" r="1" />
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="18" cy="12" r="1" />
     </svg>
   );
 }
@@ -74,7 +83,7 @@ export function SettingsOutlineIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-export function AskBobAvatarIcon(props: SVGProps<SVGSVGElement>) {
+export function ReassuranceAvatarIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 32 32" role="presentation" {...props}>
       <circle cx="16" cy="13" r="9.5" fill="currentColor" fillOpacity={0.12} />
@@ -96,3 +105,5 @@ export function AskBobAvatarIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export { ReassuranceAvatarIcon as AskBobAvatarIcon };

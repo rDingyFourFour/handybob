@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { buildLog } from "@/utils/debug/buildLog";
+import { desktopNavDestinations } from "@/lib/domain/navigation/desktopNav";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import { MobileNav } from "@/components/ui/MobileNav";
 import HbButton from "@/components/ui/hb-button";
@@ -106,18 +107,7 @@ export default async function AppShellLayout({
     console.warn("[app-shell layout] Failed to resolve user/workspace context:", error);
   }
 
-  const navLinks = [
-    { label: "Dashboard", href: "/dashboard" },
-    { label: "Jobs", href: "/jobs" },
-    { label: "Customers", href: "/customers" },
-    { label: "Quotes", href: "/quotes" },
-    { label: "Invoices", href: "/invoices" },
-    { label: "Appointments", href: "/appointments" },
-    { label: "Calls", href: "/calls" },
-    { label: "Messages", href: "/messages" },
-    { label: "AskBob", href: "/askbob" },
-    { label: "Settings", href: "/settings" },
-  ];
+  const navLinks = desktopNavDestinations;
 
   const isAuthenticated = Boolean(user);
   const brandHref = isAuthenticated ? "/dashboard" : "/";

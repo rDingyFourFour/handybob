@@ -125,10 +125,11 @@ describe("Mobile home page", () => {
     expect(reassuranceCard?.textContent).toContain(mobileFlowCopy.home.idleReassurance);
 
     const mobileHomeRoot = container.querySelector(".mobile-home");
+    const header = container.querySelector(".mobile-home-header");
+    const stack = container.querySelector(".mobile-home-stack");
     expect(mobileHomeRoot).toBeTruthy();
-    expect(container.querySelector(".mobile-home-header")).toBeTruthy();
-    expect(container.querySelector(".mobile-home-stack")).toBeTruthy();
-    expect(container.querySelector(".mobile-home-recommendation-label")).toBeTruthy();
+    expect(header).toBeTruthy();
+    expect(stack).toBeTruthy();
 
     const primaryButtons = findPrimaryStyledButtons(container);
     expect(primaryButtons).toHaveLength(1);

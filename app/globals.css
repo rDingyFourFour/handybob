@@ -47,32 +47,54 @@
 }
 
 .hb-mobile-theme {
-  --theme-background: #f9f1e7;
-  --theme-card: #fff6ef;
-  --theme-card-elevated: #fff4ec;
-  --theme-primary: #3f6b57;
-  --theme-primary-dark: #2f533f;
-  --theme-primary-text: #fdf8f2;
-  --theme-muted: #7a6a60;
-  --theme-divider: #ddc9bb;
-  --theme-shadow: 0 20px 45px rgba(31, 20, 15, 0.08);
+  --mobile-theme-background-cream: #fdf7ef;
+  --mobile-theme-card-cream: #fff9f2;
+  --mobile-theme-border-warm: #ddc5b4;
+  --mobile-theme-soft-shadow: 0 22px 45px rgba(31, 20, 15, 0.06);
+  --mobile-theme-cta-green: #3c6b57;
+  --mobile-theme-cta-green-dark: #2f533f;
+  --mobile-theme-cta-text: #fdf9f3;
+  --mobile-theme-heading-color: #1e2118;
+  --mobile-theme-secondary-color: #6b5e53;
   --theme-radius-lg: 2rem;
-  --theme-button-primary-bg: #3f6b57;
-  --theme-button-primary-dark: #2f533f;
-  --theme-button-primary-text: #fdf8f2;
-  --theme-card-bg: #fff6ef;
-  --theme-card-border: #dfcfc0;
-  --theme-card-shadow: 0 20px 45px rgba(31, 20, 15, 0.08);
+
+  --theme-background: var(--mobile-theme-background-cream);
+  --theme-card: var(--mobile-theme-card-cream);
+  --theme-card-elevated: var(--mobile-theme-card-cream);
+  --theme-primary: var(--mobile-theme-cta-green);
+  --theme-primary-dark: var(--mobile-theme-cta-green-dark);
+  --theme-primary-text: #fdf9f3;
+  --theme-muted: var(--mobile-theme-secondary-color);
+  --theme-divider: var(--mobile-theme-border-warm);
+  --theme-shadow: var(--mobile-theme-soft-shadow);
+  --theme-card-bg: var(--mobile-theme-card-cream);
+  --theme-card-border: var(--mobile-theme-border-warm);
+  --theme-card-shadow: var(--mobile-theme-soft-shadow);
   --theme-card-padding: 1.75rem;
   --theme-card-radius: 2.25rem;
+  --theme-button-primary-bg: var(--mobile-theme-cta-green);
+  --theme-button-primary-dark: var(--mobile-theme-cta-green-dark);
+  --theme-button-primary-text: var(--mobile-theme-cta-text);
+
+  --mobile-card-radius: 2.25rem;
+  --mobile-card-padding: 1.75rem;
+  --mobile-card-border: var(--mobile-theme-border-warm);
+  --mobile-card-bg: var(--mobile-theme-card-cream);
+  --mobile-card-shadow: var(--mobile-theme-soft-shadow);
+
+  --color-text-primary: var(--mobile-theme-heading-color);
+  --color-text-secondary: var(--mobile-theme-secondary-color);
+
   --mobile-home-gap: 1.5rem;
   --mobile-home-stack-gap: 1.25rem;
-  --mobile-home-header-gap: 0.3rem;
+  --mobile-home-header-gap: 0.35rem;
+  --mobile-home-reassurance-gap: 0.85rem;
   --mobile-cta-height: 3.25rem;
-  --mobile-cta-padding: 0.9rem 1.5rem;
+  --mobile-cta-padding: 1rem 1.6rem;
   --mobile-cta-font-size: 1rem;
-  --mobile-home-reassurance-border: #e7d8c7;
-  --mobile-home-reassurance-shadow: 0 14px 32px rgba(31, 20, 15, 0.05);
+  --mobile-cta-radius: 999px;
+  --mobile-home-reassurance-border: rgba(31, 20, 15, 0.08);
+  --mobile-home-reassurance-shadow: 0 12px 28px rgba(31, 20, 15, 0.04);
   --mobile-home-reassurance-bg: #fffdf7;
 }
 
@@ -172,8 +194,8 @@ body {
 .hb-mobile-theme .mobile-home {
   gap: var(--mobile-home-gap);
   margin: 0 auto;
-  padding-top: 0.75rem;
-  width: 100%;
+  padding: 1rem 1.25rem 3rem;
+  width: min(100%, 520px);
 }
 
 .hb-mobile-theme .mobile-home-header {
@@ -182,13 +204,16 @@ body {
 
 .hb-mobile-theme .mobile-home-title {
   font-size: clamp(2.2rem, 4vw, 2.6rem);
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
   line-height: 1.1;
+  color: var(--color-text-primary);
 }
 
 .hb-mobile-theme .mobile-home-greeting {
   color: var(--color-text-secondary);
   margin: 0;
+  font-size: 0.97rem;
+  letter-spacing: 0.01em;
 }
 
 .hb-mobile-theme .mobile-home-stack {
@@ -198,16 +223,17 @@ body {
 .hb-mobile-theme .mobile-home-recommendation-label {
   letter-spacing: 0.3em;
   font-weight: 600;
+  color: var(--color-text-secondary);
 }
 
 .hb-mobile-theme .mobile-home-reassurance-card {
-  background-color: var(--mobile-home-reassurance-bg);
   border-color: var(--mobile-home-reassurance-border);
+  background-color: var(--mobile-home-reassurance-bg);
   box-shadow: var(--mobile-home-reassurance-shadow);
 }
 
 .hb-mobile-theme .mobile-home-reassurance-content {
-  gap: 1rem;
+  gap: var(--mobile-home-reassurance-gap);
 }
 
 .hb-mobile-theme .mobile-home-reassurance-text {
@@ -216,19 +242,35 @@ body {
 }
 
 .hb-mobile-theme .mobile-home-reassurance-avatar {
-  border: 1px solid rgba(63, 107, 87, 0.2);
+  border: 1px solid var(--mobile-theme-border-warm);
+  background-color: var(--color-background-paper);
+}
+
+.hb-mobile-theme .mobile-home-reassurance-icon {
+  opacity: 0.95;
 }
 
 .hb-mobile-theme .hb-mobile-primary-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   height: var(--mobile-cta-height);
   padding: var(--mobile-cta-padding);
   border-radius: var(--mobile-cta-radius);
   font-size: var(--mobile-cta-font-size);
-  letter-spacing: 0.025em;
-  box-shadow: none;
+  letter-spacing: 0.03em;
+  background-color: var(--theme-button-primary-bg);
+  color: var(--theme-button-primary-text);
+  box-shadow: 0 15px 35px rgba(31, 20, 15, 0.12);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .hb-mobile-theme .hb-mobile-primary-cta:hover {
-  box-shadow: 0 10px 25px rgba(31, 20, 15, 0.08);
+  box-shadow: 0 18px 30px rgba(31, 20, 15, 0.15);
+}
+
+.hb-mobile-theme .hb-mobile-primary-cta:active {
+  transform: translateY(1px);
+  box-shadow: 0 12px 20px rgba(31, 20, 15, 0.2);
 }

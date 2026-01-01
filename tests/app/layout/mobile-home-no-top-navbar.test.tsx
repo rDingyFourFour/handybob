@@ -2,15 +2,35 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const mockPush = vi.fn();
+const mockReplace = vi.fn();
+const mockSignOut = vi.fn(() => Promise.resolve({ error: null }));
+
+vi.mock("next/navigation", () => ({
+  usePathname: vi.fn(() => "/m"),
+  useRouter: () => ({
+    push: mockPush,
+    replace: mockReplace,
+    prefetch: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    refresh: vi.fn(),
+  }),
+}));
+
+vi.mock("@/utils/supabase/client", () => ({
+  createClient: () => ({
+    auth: {
+      signOut: mockSignOut,
+    },
+  }),
+}));
+
 import { createSupabaseState, mockGetCurrentWorkspace } from "@/tests/app/mobile/test-helpers";
 import MobileHomePage from "@/app/m/page";
 import MobileAppShell from "@/components/layout/MobileAppShell";
 import { usePathname } from "next/navigation";
 import { isMobileRoute } from "@/tests/app/layout/test-utils";
-
-vi.mock("next/navigation", () => ({
-  usePathname: vi.fn(() => "/m"),
-}));
 
 const mockedUsePathname = vi.mocked(usePathname);
 
@@ -23,6 +43,10 @@ describe("Mobile home layout", () => {
     root = createRoot(container);
     mockedUsePathname.mockReset();
     mockedUsePathname.mockReturnValue("/m");
+    mockPush.mockReset();
+    mockReplace.mockReset();
+    mockSignOut.mockReset();
+    mockSignOut.mockResolvedValue({ error: null });
     mockGetCurrentWorkspace.mockReset();
     mockGetCurrentWorkspace.mockResolvedValue({
       user: { id: "user-1", email: "owner@example.com" },

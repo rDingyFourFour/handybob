@@ -4,8 +4,28 @@ import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { join } from "node:path";
 
+const mockPush = vi.fn();
+const mockReplace = vi.fn();
+const mockSignOut = vi.fn(() => Promise.resolve({ error: null }));
+
 vi.mock("next/navigation", () => ({
   usePathname: vi.fn(() => "/dashboard"),
+  useRouter: () => ({
+    push: mockPush,
+    replace: mockReplace,
+    prefetch: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    refresh: vi.fn(),
+  }),
+}));
+
+vi.mock("@/utils/supabase/client", () => ({
+  createClient: () => ({
+    auth: {
+      signOut: mockSignOut,
+    },
+  }),
 }));
 
 import MobileAppShell from "@/components/layout/MobileAppShell";

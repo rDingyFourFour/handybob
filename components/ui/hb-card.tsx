@@ -4,11 +4,11 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils/cn";
 
 const baseClasses = cn(
-  "rounded-[var(--theme-card-radius)]",
-  "border border-[var(--theme-card-border)]",
-  "bg-[var(--theme-card-bg)]",
-  "shadow-[var(--theme-card-shadow)]",
-  "p-[var(--theme-card-padding)]",
+  "rounded-[var(--mobile-card-radius,var(--theme-card-radius))]",
+  "border border-[var(--mobile-card-border,var(--theme-card-border))]",
+  "bg-[var(--mobile-card-bg,var(--theme-card-bg))]",
+  "shadow-[var(--mobile-card-shadow,var(--theme-card-shadow))]",
+  "p-[var(--mobile-card-padding,var(--theme-card-padding))]",
   "transition-colors hover:border-[var(--color-border-strong)]",
 );
 

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
-import { AskBobAvatarIcon } from "@/components/ui/icons";
+import { ReassuranceAvatarIcon } from "@/components/ui/icons";
 import TrackedLinkButton from "@/components/mobile/TrackedLinkButton";
 import {
   deriveHomeInstruction,
@@ -272,7 +272,10 @@ export default async function MobileHomePage() {
           >
             <div className="flex items-start gap-3 mobile-home-reassurance-content">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-background-paper)] mobile-home-reassurance-avatar">
-                <AskBobAvatarIcon className="h-8 w-8 text-[var(--color-primary)]" aria-hidden />
+                <ReassuranceAvatarIcon
+                  className="h-8 w-8 text-[var(--color-primary)] mobile-home-reassurance-icon"
+                  aria-hidden
+                />
               </div>
               <p className="text-sm font-normal leading-relaxed text-[var(--color-text-secondary)] mobile-home-reassurance-text">
                 {reassuranceCopy}
