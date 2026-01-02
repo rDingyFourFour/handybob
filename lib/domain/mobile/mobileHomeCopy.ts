@@ -11,7 +11,7 @@ export type MobileHomeCopy = {
 };
 
 export const mobileHomeCopy: MobileHomeCopy = {
-  title: "Home",
+  title: "HandyBob",
   greetingTemplate: "Good morning, {name}",
   greetingFallback: "Good morning",
   recommendationLabel: "Next step",

@@ -33,7 +33,7 @@ describe("mobile flow copy contract", () => {
           "recommendationCtaLabel": "Review Job",
           "recommendationLabel": "Next step",
           "recommendationTitleFallback": "Untitled job",
-          "title": "Home",
+          "title": "HandyBob",
         },
       }
     `);
