@@ -9,6 +9,8 @@ import {
 } from "@/tests/app/mobile/test-helpers";
 import MobileHomePage from "@/app/m/page";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
+import { bobInstructionSentenceCopy } from "@/lib/domain/askbob/bobInstructionSentenceCopy";
+import { homeInstructionFirstCopy } from "@/lib/domain/mobile/homeInstructionCopy";
 import * as homeInstructionTelemetry from "@/app/m/homeInstructionTelemetry";
 
 const PRIMARY_BUTTON_CLASS_TOKEN = "bg-[var(--theme-button-primary-bg)]";
@@ -22,9 +24,6 @@ const findPrimaryStyledButtons = (root: HTMLElement) => {
     element.className.includes(PRIMARY_BUTTON_CLASS_TOKEN),
   );
 };
-
-const findHomeRenderLogs = (logSpy: ReturnType<typeof vi.spyOn>) =>
-  logSpy.mock.calls.filter(([name]) => name === "[home-render]");
 
 describe("Mobile home page", () => {
   let container: HTMLDivElement;
@@ -51,7 +50,7 @@ describe("Mobile home page", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders a single primary CTA with Bob's CTA copy and logs render telemetry", async () => {
+  it("renders a single primary CTA with Bob's CTA copy", async () => {
     const supabaseState = createSupabaseState({
       jobs: {
         data: [
@@ -103,7 +102,6 @@ describe("Mobile home page", () => {
       }),
     };
 
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const telemetrySpy = vi.spyOn(
       homeInstructionTelemetry,
       "buildHomeInstructionTelemetryPayload",
@@ -118,11 +116,17 @@ describe("Mobile home page", () => {
     expect(ctaButtons).toHaveLength(1);
     const primaryCta = ctaButtons[0];
     expect(primaryCta?.textContent?.trim()).toBe(mobileFlowCopy.home.recommendationCtaLabel);
+    expect(primaryCta?.textContent?.trim()).toBe("Review Job");
+    const primaryCard = container.querySelector(
+      '[data-testid="mobile-home-recommendation-card"]',
+    );
+    expect(primaryCard).toBeTruthy();
     const reassuranceCard = container.querySelector(
       '[data-testid="mobile-home-reassurance-card"]',
     );
     expect(reassuranceCard).toBeTruthy();
     expect(reassuranceCard?.textContent).toContain(mobileFlowCopy.home.idleReassurance);
+    expect(primaryCard?.nextElementSibling).toBe(reassuranceCard);
 
     const mobileHomeRoot = container.querySelector(".mobile-home");
     const header = container.querySelector(".mobile-home-header");
@@ -134,22 +138,24 @@ describe("Mobile home page", () => {
     const primaryButtons = findPrimaryStyledButtons(container);
     expect(primaryButtons).toHaveLength(1);
 
-    const renderLogs = findHomeRenderLogs(logSpy);
-    expect(renderLogs).toHaveLength(1);
-    const renderPayload = renderLogs[0]?.[1] as Record<string, unknown> | undefined;
+    const { instructionTitle, instructionSubcopy } = homeInstructionFirstCopy.followup_due;
+    const titleElement = container.querySelector(".mobile-home-primary-card h2");
+    expect(titleElement?.textContent).toContain(instructionTitle);
+    const subcopyElement = container.querySelector(".mobile-home-instruction-subcopy");
+    expect(subcopyElement?.textContent).toBe(instructionSubcopy);
+    expect(container.textContent).not.toContain(bobInstructionSentenceCopy.followup_due);
     expect(telemetrySpy).toHaveBeenCalledTimes(1);
     const telemetryResult = telemetrySpy.mock.results[0]?.value as Record<string, unknown> | undefined;
-    expect(renderPayload).toBe(telemetryResult);
-    expect(renderPayload).toEqual(
+    expect(telemetryResult).toEqual(
       expect.objectContaining({
         hasRecommendation: true,
         isMobile: true,
         stepType: expect.any(String),
       }),
     );
-    expect(renderPayload?.stepType).not.toBe("idle");
-    if (renderPayload?.nextStepType) {
-      expect(typeof renderPayload.nextStepType).toBe("string");
+    expect(telemetryResult?.stepType).not.toBe("idle");
+    if (telemetryResult?.nextStepType) {
+      expect(typeof telemetryResult.nextStepType).toBe("string");
     }
     const { payload: ctaPayload, raw: ctaRaw } = readTrackedLinkButtonEventPayload(
       container,
@@ -172,7 +178,6 @@ describe("Mobile home page", () => {
         data: { user: { id: "user-1", email: "owner@example.com", user_metadata: {} } },
       }),
     };
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const telemetrySpy = vi.spyOn(
       homeInstructionTelemetry,
       "buildHomeInstructionTelemetryPayload",
@@ -199,20 +204,16 @@ describe("Mobile home page", () => {
     const primaryButtons = findPrimaryStyledButtons(container);
     expect(primaryButtons).toHaveLength(0);
 
-    const renderLogs = findHomeRenderLogs(logSpy);
-    expect(renderLogs).toHaveLength(1);
-    const renderPayload = renderLogs[0]?.[1] as Record<string, unknown> | undefined;
     expect(telemetrySpy).toHaveBeenCalledTimes(1);
     const telemetryResult = telemetrySpy.mock.results[0]?.value as Record<string, unknown> | undefined;
-    expect(renderPayload).toBe(telemetryResult);
-    expect(renderPayload).toEqual(
+    expect(telemetryResult).toEqual(
       expect.objectContaining({
         hasRecommendation: false,
         isMobile: true,
         stepType: "idle",
       }),
     );
-    expect(renderPayload?.nextStepType).toBeUndefined();
+    expect(telemetryResult?.nextStepType).toBeUndefined();
     const listElements = container.querySelectorAll("ul, ol, [role='list']");
     expect(listElements).toHaveLength(0);
   });

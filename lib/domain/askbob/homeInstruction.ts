@@ -1,12 +1,23 @@
 import type { AskBobFollowupSnapshotPayload } from "@/lib/domain/askbob/types";
 import { deriveNextStepForJobDetails } from "@/lib/domain/askbob/nextStep";
-import { deriveJobNextInstructionFromResult } from "@/lib/domain/askbob/jobNextInstruction";
-import { assertBobTone } from "@/lib/domain/copy/bobVoice";
+import {
+  deriveJobNextInstructionFromResult,
+  resolveBobInstructionState,
+} from "@/lib/domain/askbob/jobNextInstruction";
+import {
+  assertBobTone,
+  normalizeBobCtaLabel,
+  normalizeBobStatus,
+} from "@/lib/domain/copy/bobVoice";
 import { isCompletedJobStatus } from "@/lib/domain/jobs/jobListUi";
 import { jobDetailsCopy } from "@/lib/ui/copy/jobDetailsCopy";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
 import type { BobInstruction, BobInstructionPrimaryCta } from "@/lib/domain/bob/bobInstruction";
-import { normalizeBobCtaLabel } from "@/lib/domain/copy/bobVoice";
+import {
+  getHomeInstructionFirstCopy,
+  HomeInstructionFirstCopyPayload,
+  validateHomeInstructionFirstCopy,
+} from "@/lib/domain/mobile/homeInstructionCopy";
 
 export type HomeInstructionCandidate = {
   jobId: string;
@@ -32,6 +43,7 @@ export type HomeInstruction = {
   jobId: string;
   title: string | null;
   instruction: BobInstruction;
+  instructionCopy?: HomeInstructionFirstCopyPayload;
 };
 
 const STEP_PRIORITY: Record<string, number> = {
@@ -49,6 +61,8 @@ const normalizeRecommendationCtaLabel = (() => {
   assertBobTone(normalized, "homeInstruction.primaryCtaLabel");
   return normalized;
 })();
+
+validateHomeInstructionFirstCopy();
 
 function buildNextStepInput(candidate: HomeInstructionCandidate) {
   return {
@@ -111,16 +125,20 @@ export function deriveHomeInstruction(candidates: HomeInstructionCandidate[]): H
     instruction: BobInstruction;
     nextStepType: string;
     timestamp: number;
+    instructionCopy?: HomeInstructionFirstCopyPayload;
   }> = [];
 
   for (const candidate of candidates) {
-    if (isCompletedJobStatus(candidate.status)) {
+    const isJobCompleted = isCompletedJobStatus(candidate.status);
+    if (isJobCompleted) {
       continue;
     }
     const nextStep = deriveNextStepForJobDetails(buildNextStepInput(candidate));
     if (nextStep.stepType === "done") {
       continue;
     }
+    const state = resolveBobInstructionState(nextStep, isJobCompleted);
+    const instructionCopy = getHomeInstructionFirstCopy(state);
     const instruction = overrideWithHomeCta(
       deriveJobNextInstructionFromResult(nextStep, {
         supportingRationale: null,
@@ -128,14 +146,21 @@ export function deriveHomeInstruction(candidates: HomeInstructionCandidate[]): H
       }),
       candidate.jobId,
     );
-    if (!instruction.primaryCta) {
+    const decoratedInstruction = instructionCopy
+      ? {
+          ...instruction,
+          statement: normalizeBobStatus(instructionCopy.instructionSubcopy),
+        }
+      : instruction;
+    if (!decoratedInstruction.primaryCta) {
       continue;
     }
     actionable.push({
       candidate,
-      instruction,
+      instruction: decoratedInstruction,
       nextStepType: nextStep.stepType,
       timestamp: resolveTimestamp(candidate),
+      instructionCopy,
     });
   }
 
@@ -160,5 +185,6 @@ export function deriveHomeInstruction(candidates: HomeInstructionCandidate[]): H
     jobId: winner.candidate.jobId,
     title: winner.candidate.title,
     instruction: winner.instruction,
+    instructionCopy: winner.instructionCopy,
   };
 }

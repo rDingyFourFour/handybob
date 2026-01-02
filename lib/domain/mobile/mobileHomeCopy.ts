@@ -17,7 +17,7 @@ export const mobileHomeCopy: MobileHomeCopy = {
   recommendationLabel: "Next step",
   recommendationTitleFallback: "Untitled job",
   idleReassurance: "Everything else is up to date. I'll let you know if something changes.",
-  recommendationCtaLabel: "Open job",
+  recommendationCtaLabel: "Review Job",
 };
 
 export function validateMobileHomeCopy(): void {

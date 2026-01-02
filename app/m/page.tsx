@@ -3,13 +3,14 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
-import { ReassuranceAvatarIcon } from "@/components/ui/icons";
+import { InstructionIcon, ReassuranceAvatarIcon } from "@/components/ui/icons";
 import TrackedLinkButton from "@/components/mobile/TrackedLinkButton";
 import {
   deriveHomeInstruction,
   type HomeInstructionCandidate,
 } from "@/lib/domain/askbob/homeInstruction";
 import { buildHomeInstructionTelemetryPayload } from "./homeInstructionTelemetry";
+import { homeInstructionFirstCopy } from "@/lib/domain/mobile/homeInstructionCopy";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
 import type {
   AskBobAfterCallSnapshotPayload,
@@ -198,11 +199,22 @@ export default async function MobileHomePage() {
       : null;
   const actionablePrimaryCta = actionableInstruction?.instruction.primaryCta;
   const hasRecommendation = Boolean(actionablePrimaryCta && !actionablePrimaryCta.disabled);
+  const instructionCopy = actionableInstruction?.instructionCopy;
+  const reviewJobInstructionCopy = homeInstructionFirstCopy.followup_due;
+  const instructionTitle =
+    instructionCopy?.instructionTitle ??
+    reviewJobInstructionCopy?.instructionTitle ??
+    actionableInstruction?.title ??
+    mobileFlowCopy.home.recommendationTitleFallback;
+  const instructionSubcopy =
+    instructionCopy?.instructionSubcopy ??
+    reviewJobInstructionCopy?.instructionSubcopy ??
+    actionableInstruction?.instruction.statement ??
+    "";
   const renderTelemetry = buildHomeInstructionTelemetryPayload(
     actionableInstruction?.instruction ?? null,
     hasRecommendation,
   );
-  console.log("[home-render]", renderTelemetry);
 
   const metadata = user.user_metadata as { full_name?: string; name?: string } | undefined;
   const displayName = (
@@ -218,6 +230,24 @@ export default async function MobileHomePage() {
   const isIdle = !hasRecommendation;
   const reassuranceCopy = mobileFlowCopy.home.idleReassurance;
   const shouldShowReassuranceCard = Boolean(reassuranceCopy && (isIdle || hasRecommendation));
+  const renderReassuranceCard = () => (
+    <HbCard
+      data-testid="mobile-home-reassurance-card"
+      className="space-y-0 mobile-home-reassurance-card"
+    >
+      <div className="flex items-start gap-3 mobile-home-reassurance-content">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-background-paper)] mobile-home-reassurance-avatar">
+          <ReassuranceAvatarIcon
+            className="h-8 w-8 text-[var(--color-primary)] mobile-home-reassurance-icon"
+            aria-hidden
+          />
+        </div>
+        <p className="text-sm font-normal leading-relaxed text-[var(--color-text-secondary)] mobile-home-reassurance-text">
+          {reassuranceCopy}
+        </p>
+      </div>
+    </HbCard>
+  );
 
   return (
     <div className="flex flex-col gap-5 pb-8 mobile-home">
@@ -236,53 +266,38 @@ export default async function MobileHomePage() {
 
       <div className="flex flex-col gap-5 mobile-home-stack">
         {hasRecommendation && actionableInstruction && actionablePrimaryCta && (
-          <HbCard
-            data-testid="mobile-home-recommendation-card"
-            className="space-y-4 mobile-home-primary-card"
-          >
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.3em] text-[var(--color-text-secondary)] mobile-home-recommendation-label">
-                {mobileFlowCopy.home.recommendationLabel}
-              </p>
-              <p className="text-sm text-[var(--color-text-secondary)]">
-                {actionableInstruction.instruction.statement}
-              </p>
-            </div>
-            <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">
-              {actionableInstruction.title ?? mobileFlowCopy.home.recommendationTitleFallback}
-            </h2>
-            <TrackedLinkButton
-              href={actionablePrimaryCta.href ?? "#"}
-              eventName="[home-recommendation-click]"
-              eventPayload={renderTelemetry}
-              variant="primary"
-              size="md"
-              className="hb-mobile-primary-cta justify-center"
-              data-testid="mobile-home-primary-cta"
+          <>
+            <HbCard
+              data-testid="mobile-home-recommendation-card"
+              className="mobile-home-primary-card"
             >
-              {mobileFlowCopy.home.recommendationCtaLabel}
-            </TrackedLinkButton>
-          </HbCard>
+              <div className="flex flex-col gap-2">
+                <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">
+                  <InstructionIcon className="mobile-home-instruction-icon" aria-hidden />
+                  <span>{instructionTitle}</span>
+                </h2>
+                {instructionSubcopy && (
+                  <p className="mobile-home-instruction-subcopy">
+                    {instructionSubcopy}
+                  </p>
+                )}
+              </div>
+              <TrackedLinkButton
+                href={actionablePrimaryCta.href ?? "#"}
+                eventName="[home-recommendation-click]"
+                eventPayload={renderTelemetry}
+                variant="primary"
+                size="md"
+                className="hb-mobile-primary-cta justify-center"
+                data-testid="mobile-home-primary-cta"
+              >
+                {mobileFlowCopy.home.recommendationCtaLabel}
+              </TrackedLinkButton>
+            </HbCard>
+          </>
         )}
 
-        {shouldShowReassuranceCard && (
-          <HbCard
-            data-testid="mobile-home-reassurance-card"
-            className="space-y-0 mobile-home-reassurance-card"
-          >
-            <div className="flex items-start gap-3 mobile-home-reassurance-content">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-background-paper)] mobile-home-reassurance-avatar">
-                <ReassuranceAvatarIcon
-                  className="h-8 w-8 text-[var(--color-primary)] mobile-home-reassurance-icon"
-                  aria-hidden
-                />
-              </div>
-              <p className="text-sm font-normal leading-relaxed text-[var(--color-text-secondary)] mobile-home-reassurance-text">
-                {reassuranceCopy}
-              </p>
-            </div>
-          </HbCard>
-        )}
+        {shouldShowReassuranceCard && renderReassuranceCard()}
       </div>
     </div>
   );

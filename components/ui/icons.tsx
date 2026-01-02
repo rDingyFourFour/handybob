@@ -59,6 +59,15 @@ export function MoreHorizontalIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function InstructionIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...baseIconProps} {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="m9 12.5 2.5 2.5L16 10" />
+    </svg>
+  );
+}
+
 export function CallOutlineIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...baseIconProps} {...props}>

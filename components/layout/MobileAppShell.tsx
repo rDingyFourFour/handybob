@@ -199,11 +199,15 @@ export default function MobileAppShell({
   return (
     <div
       data-testid="mobile-shell"
-      className="hb-mobile-theme flex min-h-screen flex-col bg-[var(--theme-background)] text-[var(--color-text-primary)]"
+      className="hb-mobile-shell hb-mobile-theme flex min-h-screen flex-col bg-[var(--theme-background)] text-[var(--color-text-primary)]"
     >
       <main
         className="flex-1 px-4 py-6 sm:px-6"
-        style={{ paddingTop: safeAreaTop }}
+        style={{
+          paddingTop: safeAreaTop,
+          paddingBottom:
+            "calc(var(--hb-mobile-bottom-nav-height) + env(safe-area-inset-bottom, 0px))",
+        }}
       >
         <div className="mx-auto flex w-full max-w-[640px] flex-col gap-6">{children}</div>
       </main>

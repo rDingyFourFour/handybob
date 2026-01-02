@@ -2,13 +2,13 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 
-import { getBobInstructionSentence } from "@/lib/domain/askbob/bobInstructionSentenceCopy";
 import type {
   AskBobAfterCallSnapshotPayload,
   AskBobDiagnoseSnapshotPayload,
   AskBobFollowupSnapshotPayload,
   AskBobMaterialsSnapshotPayload,
 } from "@/lib/domain/askbob/types";
+import { homeInstructionFirstCopy } from "@/lib/domain/mobile/homeInstructionCopy";
 import { createSupabaseState, mockGetCurrentWorkspace } from "@/tests/app/mobile/test-helpers";
 import MobileHomePage from "@/app/m/page";
 
@@ -133,7 +133,7 @@ describe("Mobile Home follow-up draft readiness", () => {
     vi.restoreAllMocks();
   });
 
-  async function renderStatement(includeDraft: boolean) {
+  async function renderSubcopy(includeDraft: boolean) {
     supabaseState.responses["askbob_job_task_snapshots"] = {
       data: buildSnapshotRows(includeDraft),
       error: null,
@@ -146,18 +146,18 @@ describe("Mobile Home follow-up draft readiness", () => {
 
     const card = container.querySelector('[data-testid="mobile-home-recommendation-card"]');
     expect(card).toBeTruthy();
-    const statementElement = card?.querySelector("div.space-y-2 > p.text-sm");
-    return statementElement?.textContent?.trim();
+    const subcopyElement = card?.querySelector(".mobile-home-instruction-subcopy");
+    return subcopyElement?.textContent?.trim();
   }
 
   it("shows the follow-up due statement when no draft is ready", async () => {
     // followUpDraftReady on Home is driven by the presence of a non-empty job.after_call draftMessageBody row.
-    const statement = await renderStatement(false);
-    expect(statement).toBe(getBobInstructionSentence("followup_due"));
+    const subcopy = await renderSubcopy(false);
+    expect(subcopy).toBe(homeInstructionFirstCopy.followup_due.instructionSubcopy);
   });
 
   it("shows the draft-ready statement when there is a draft", async () => {
-    const statement = await renderStatement(true);
-    expect(statement).toBe(getBobInstructionSentence("followup_draft_ready"));
+    const subcopy = await renderSubcopy(true);
+    expect(subcopy).toBe(homeInstructionFirstCopy.followup_draft_ready.instructionSubcopy);
   });
 });

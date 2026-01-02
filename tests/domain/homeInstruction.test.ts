@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AskBobFollowupSnapshotPayload } from "@/lib/domain/askbob/types";
 import { deriveHomeInstruction, type HomeInstructionCandidate } from "@/lib/domain/askbob/homeInstruction";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
+import { homeInstructionFirstCopy } from "@/lib/domain/mobile/homeInstructionCopy";
 
 const now = new Date().toISOString();
 
@@ -95,5 +96,18 @@ describe("deriveHomeInstruction", () => {
     expect(instruction?.instruction.primaryCta?.label).toBe(mobileFlowCopy.home.recommendationCtaLabel);
     expect(instruction?.instruction.primaryCta?.href).toBe(`/m/jobs/${followupCandidate.jobId}`);
     expect(instruction?.instruction.stepType).toBe("followup");
+  });
+
+  it("hydrates the follow-up copy payload when a recommendation is followup due", () => {
+    const followupCandidate = buildCandidate({
+      jobId: "job-followup",
+      followupSnapshot,
+      latestQuoteStatus: "accepted",
+    });
+    const instruction = deriveHomeInstruction([followupCandidate]);
+    expect(instruction?.instructionCopy).toEqual(homeInstructionFirstCopy.followup_due);
+    expect(instruction?.instruction.statement).toBe(
+      homeInstructionFirstCopy.followup_due.instructionSubcopy,
+    );
   });
 });
