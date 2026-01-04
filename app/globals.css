@@ -1,4 +1,29 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CSS ownership audit (pre-change)
+ * - div[data-testid="mobile-shell"]:
+ *     height: 100dvh (CSS + Tailwind `h-[100dvh]`); overflow-x/y: hidden (CSS); padding-top/bottom: 0.
+ *     Tailwind spacing: `h-[100dvh]` supplies vertical height; no padding utilities.
+ *     (Verify at 430×932 and 375×667 that height/overflow remain stable.)
+ * - main.hb-mobile-shell-content:
+ *     height: calc(100dvh - var(--hb-mobile-bottom-nav-total-height)); overflow-x/y: hidden; box-sizing: border-box; display: flex column.
+ *     Padding-top = env(safe-area-inset-top, 0px) (inline style); padding-bottom = 0; tailwind spacing: `px-4 sm:px-6` only affects horizontal gutters.
+ * - div.mx-auto inside .hb-mobile-shell-content:
+ *     height: auto (flex child), overflow: visible; padding-top/bottom: 0; tailwind spacing: none (flex/width utilities only).
+ * - div.mobile-home:
+ *     height: 100%; overflow: visible; padding-top/bottom: 0; tailwind spacing: `flex flex-col` only (no gap/padding utilities).
+ * - div.mobile-home-stack:
+ *     height: 100%; overflow: visible; padding-top/bottom: 0; tailwind spacing: `flex flex-col` only (globals handle gap).
+ * - div[data-testid="mobile-home-recommendation-card"]:
+ *     height: auto; overflow: visible; padding-top/bottom: currently inherited from HbCard `p-[var(--mobile-card-padding)]`; tailwind spacing: HbCard adds padding via CSS custom property.
+ * - div[data-testid="mobile-home-reassurance-card"]:
+ *     height: auto; overflow: visible; padding: HbCard default + globals override (currently var(--hb-mobile-home-reassurance-pad)); tailwind spacing: also receives `space-y-0` on the wrapper but no positive spacing.
+ * - div[data-testid="mobile-tab-bar-wrapper"]:
+ *     position: fixed; height: var(--hb-mobile-bottom-nav-total-height); overflow: hidden/visible as needed; padding: controlled by globals; tailwind spacing: none.
+ * TODO: capture actual computed height, overflow-x/y, padding-top/bottom for each element at 430×932 & 375×667 in DevTools and mark this checklist complete.
+ */
 
 :root {
   --theme-background: #f8f3eb;
@@ -34,6 +59,16 @@
   color: var(--color-text-primary);
   min-height: 100%;
 }
+
+/* Mobile ownership truth table (values at 375x667 and 430x932; safe-area envs may vary):
+   - shell wrapper (data-testid="mobile-shell"): height 100dvh; overflow hidden; padding-top/bottom 0; position static; display flex column; flex default; min-height unset.
+   - shell content (main.hb-mobile-shell-content): height calc(100dvh - var(--hb-mobile-bottom-nav-total-height)); overflow-y auto / overflow-x hidden; padding-top env(safe-area-inset-top, 0px); padding-bottom 0; position static; display flex column; min-height 0.
+   - tab bar wrapper (data-testid="mobile-tab-bar-wrapper"): height var(--hb-mobile-bottom-nav-total-height); overflow hidden; padding-top var(--hb-mobile-bottom-nav-pad-y); padding-bottom calc(var(--hb-mobile-bottom-nav-pad-y) + env(safe-area-inset-bottom)); position fixed bottom 0; display block; min-height unset.
+   - mobile home root (.mobile-home): height 100%; overflow visible; padding-top/bottom 0; position static; display flex column; flex 1 1 auto; min-height 0.
+   - mobile home stack (.mobile-home-stack): height 100%; overflow visible; padding-top/bottom 0; position static; display flex column; flex 1 1 auto; min-height 0.
+   - recommendation card (data-testid="mobile-home-recommendation-card" via .mobile-home-primary-card): height auto; overflow visible; padding-top var(--hb-mobile-home-card-pad-top); padding-bottom var(--hb-mobile-home-card-pad-bottom); padding-inline var(--hb-mobile-home-card-pad-x); position static; display block; flex 0 1 auto; min-height 0.
+   - reassurance card (data-testid="mobile-home-reassurance-card"): height auto; overflow visible; padding var(--hb-mobile-home-reassurance-pad); position static; display block; flex 0 1 auto; min-height 0.
+*/
 
 /* Michelle mock parity — Mobile Home (header/cards/CTA/reassurance). */
 .hb-mobile-theme {
@@ -81,6 +116,12 @@
   --hb-mobile-bottom-nav-label-size: 14px;
   --hb-mobile-bottom-nav-label-tracking: 0.08em;
   --hb-mobile-bottom-nav-item-gap: 6px;
+  --hb-mobile-bottom-nav-pad-y: 12px;
+  --hb-mobile-bottom-nav-total-height: calc(
+    var(--hb-mobile-bottom-nav-height) +
+      (var(--hb-mobile-bottom-nav-pad-y) * 2) +
+      env(safe-area-inset-bottom)
+  );
 
   /* Mobile Home — Instruction-first (Review Job variant) tokens */
   --hb-mobile-home-bg: #f8f3ec;
@@ -89,8 +130,21 @@
 
   --hb-mobile-home-header-top: 20px;
   --hb-mobile-home-header-gap: 20px;
-  --hb-mobile-home-header-to-card: 56px;
+  --hb-mobile-home-top-pad: clamp(12px, 2svh, 24px);
+  --hb-mobile-home-header-to-card: clamp(
+    36px,
+    calc((var(--hb-mobile-vh-visual) * 100 / 820) * 56),
+    56px
+  );
   --hb-mobile-home-primary-to-reassurance-gap: 14.375rem;
+  --hb-mobile-home-top-cluster-gap: var(--hb-mobile-home-header-to-card);
+  --hb-mobile-vh-layout: 1dvh;
+  --hb-mobile-vh-visual: 1svh;
+  --hb-mobile-home-scale: clamp(
+    0.78,
+    calc((var(--hb-mobile-vh-visual) * 100) / 810),
+    1
+  );
 
   --hb-mobile-home-title-size: 20px;
   --hb-mobile-home-title-weight: 600;
@@ -98,32 +152,40 @@
   --hb-mobile-home-title-letter-spacing: -0.2px;
   --hb-mobile-home-title-color: #1e1e1e;
 
-  --hb-mobile-home-greeting-size: 25px;
+  --hb-mobile-home-greeting-size: clamp(18px, calc(25px * var(--hb-mobile-home-scale)), 25px);
   --hb-mobile-home-greeting-weight: 400;
   --hb-mobile-home-greeting-line-height: 24px;
   --hb-mobile-home-greeting-color: #6b6b6b;
 
   --hb-mobile-home-card-radius: 24px;
-  --hb-mobile-home-card-pad-top: 20px;
+  --hb-mobile-home-card-pad-top: clamp(16px, calc(20px * var(--hb-mobile-home-scale)), 20px);
   --hb-mobile-home-card-pad-x: 20px;
-  --hb-mobile-home-card-pad-bottom: 24px;
+  --hb-mobile-home-card-pad-bottom: clamp(20px, calc(24px * var(--hb-mobile-home-scale)), 24px);
+  --hb-mobile-home-recommendation-pad-top: 20px;
+  --hb-mobile-home-recommendation-pad-inline: 20px;
+  --hb-mobile-home-recommendation-pad-bottom: 24px;
   --hb-mobile-home-card-after: 20px;
   --hb-mobile-home-card-border: 1px solid #e7ded4;
   --hb-mobile-home-card-bg: #fbf6f0;
   --hb-mobile-home-card-shadow: 0 6px 16px #00000014;
 
-  --hb-mobile-home-instruction-title-size: 22px;
+  --hb-mobile-home-instruction-title-size: clamp(
+    17px,
+    calc(22px * var(--hb-mobile-home-scale)),
+    22px
+  );
   --hb-mobile-home-instruction-title-weight: 600;
   --hb-mobile-home-instruction-title-line-height: 30px;
   --hb-mobile-home-instruction-title-color: #1e1e1e;
 
-  --hb-mobile-home-secondary-size: 20px;
+  --hb-mobile-home-secondary-size: clamp(
+    15px,
+    calc(20px * var(--hb-mobile-home-scale)),
+    20px
+  );
   --hb-mobile-home-secondary-weight: 400;
   --hb-mobile-home-secondary-line-height: 22px;
   --hb-mobile-home-secondary-color: #7a7268;
-
-  --hb-mobile-home-instruction-icon-size: 20px;
-  --hb-mobile-home-instruction-icon-color: #6E8B73;
 
   --hb-mobile-home-reassurance-radius: 20px;
   --hb-mobile-home-reassurance-pad: 16px;
@@ -149,16 +211,54 @@
   --hb-mobile-home-cta-space-top: 16px;
 }
 
+@media (max-height: 700px) {
+  .hb-mobile-theme {
+    --hb-mobile-bottom-nav-height: 64px;
+    --hb-mobile-bottom-nav-pad-y: 8px;
+    --hb-mobile-bottom-nav-icon-size: 22px;
+    --hb-mobile-bottom-nav-label-size: 11px;
+    --hb-mobile-bottom-nav-label-tracking: 0.04em;
+    --hb-mobile-bottom-nav-item-gap: 4px;
+    --hb-mobile-home-primary-to-reassurance-gap: 16px;
+    --hb-mobile-home-header-to-card: clamp(
+      28px,
+      calc((var(--hb-mobile-vh-visual) * 100 / 820) * 56),
+      48px
+    );
+  }
+
+  .hb-mobile-theme .mobile-home-reassurance-card {
+    margin-top: 0 !important;
+  }
+}
+
 .hb-mobile-theme.hb-mobile-shell {
   height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
 }
 
-.hb-mobile-theme.hb-mobile-shell main {
-  flex: 1;
+.hb-mobile-theme .hb-mobile-shell-content {
+  height: calc(100dvh - var(--hb-mobile-bottom-nav-total-height));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.hb-mobile-theme .hb-mobile-shell-content > .mx-auto {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 html,
@@ -257,19 +357,30 @@ body {
 .hb-mobile-theme .mobile-home {
   margin: 0 auto;
   width: min(100%, 520px);
-  gap: var(--hb-mobile-home-header-to-card);
+  gap: 0;
   padding-top: 0;
   padding-left: 0;
   padding-right: 0;
   background-color: var(--hb-mobile-home-bg);
   background-image: none;
+  height: 100%;
+  padding-bottom: 0 !important;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .hb-mobile-theme .mobile-home .mobile-home-header {
   display: flex;
   flex-direction: column;
   gap: var(--hb-mobile-home-header-gap);
-  padding-top: calc(env(safe-area-inset-top, 0px) + var(--hb-mobile-home-header-top));
+  padding-top: 0;
+  margin-bottom: var(--hb-mobile-home-top-cluster-gap);
+  margin-top: var(--hb-mobile-home-top-pad);
 }
 
 .hb-mobile-theme .mobile-home .mobile-home-header > * + * {
@@ -296,30 +407,38 @@ body {
 .hb-mobile-theme .mobile-home .mobile-home-stack {
   display: flex;
   flex-direction: column;
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-height: 0;
-  gap: var(--hb-mobile-home-primary-to-reassurance-gap);
-  max-width: var(--hb-mobile-home-stack-max-width);
+  gap: 0 !important;
+  height: 100%;
+  max-width: min(var(--hb-mobile-home-stack-max-width), 100%);
   margin-inline: auto;
   padding-inline: var(--hb-mobile-home-gutter-x);
   width: 100%;
   box-sizing: border-box;
+  min-width: 0;
 }
 
 .hb-mobile-theme .mobile-home .mobile-home-stack > * {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .hb-mobile-theme .mobile-home .mobile-home-primary-card {
   background-color: var(--hb-mobile-home-card-bg);
   border-radius: var(--hb-mobile-home-card-radius);
-  border: var(--hb-mobile-home-card-border) !important;
-  box-shadow: var(--hb-mobile-home-card-shadow) !important;
-  padding: var(--hb-mobile-home-card-pad-top) var(--hb-mobile-home-card-pad-x) var(--hb-mobile-home-card-pad-bottom) !important;
+  border: var(--hb-mobile-home-card-border);
+  box-shadow: var(--hb-mobile-home-card-shadow);
+  margin-bottom: var(--hb-mobile-home-primary-to-reassurance-gap);
 }
 
-.hb-mobile-theme .mobile-home-recommendation-label {
-  display: none;
+.hb-mobile-theme div[data-testid="mobile-home-recommendation-card"] {
+  padding-top: 20px;
+  padding-right: 20px;
+  padding-bottom: 24px;
+  padding-left: 20px;
 }
 
 .hb-mobile-theme .mobile-home-primary-card .mobile-home-instruction-subcopy {
@@ -331,9 +450,6 @@ body {
 }
 
 .hb-mobile-theme .mobile-home-primary-card h2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   font-size: var(--hb-mobile-home-instruction-title-size);
   font-weight: var(--hb-mobile-home-instruction-title-weight);
   line-height: var(--hb-mobile-home-instruction-title-line-height);
@@ -342,14 +458,9 @@ body {
   margin: 0;
 }
 
-.hb-mobile-theme .mobile-home-primary-card h2 svg,
-.hb-mobile-theme .mobile-home-primary-card h2 .icon,
-.hb-mobile-theme .mobile-home-primary-card h2 [class*="icon"] {
-  width: var(--hb-mobile-home-instruction-icon-size);
-  height: var(--hb-mobile-home-instruction-icon-size);
-  flex-shrink: 0;
-  color: var(--hb-mobile-home-instruction-icon-color);
-  fill: currentColor;
+.hb-mobile-theme div[data-testid="mobile-home-recommendation-card"] .hb-mobile-primary-cta {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .hb-mobile-theme .mobile-home .mobile-home-reassurance-card {
@@ -358,6 +469,7 @@ body {
   box-shadow: var(--hb-mobile-home-reassurance-shadow) !important;
   border-radius: var(--hb-mobile-home-reassurance-radius);
   padding: var(--hb-mobile-home-reassurance-pad) !important;
+  margin-top: auto !important;
 }
 
 .hb-mobile-theme .mobile-home-reassurance-content {
@@ -396,6 +508,7 @@ body {
   width: 100%;
   height: var(--hb-mobile-home-cta-height);
   padding-inline: var(--hb-mobile-home-cta-padding-inline);
+  box-sizing: border-box;
   padding-block: 0;
   border-radius: var(--hb-mobile-home-cta-radius);
   font-size: var(--hb-mobile-home-cta-font-size);
@@ -404,6 +517,8 @@ body {
   color: var(--hb-mobile-home-cta-text-color);
   box-shadow: var(--hb-mobile-home-cta-shadow);
   margin-top: var(--hb-mobile-home-cta-space-top);
+  max-width: 100%;
+  min-width: 0;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -421,19 +536,37 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  width: 100%;
-  z-index: 20;
+  height: var(--hb-mobile-bottom-nav-total-height);
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  z-index: 50;
   border-color: #E7DED4 !important;
   background-color: #FBF6F0 !important;
-  flex: 0 0 var(--hb-mobile-bottom-nav-height);
-  min-height: var(--hb-mobile-bottom-nav-height);
-  height: var(--hb-mobile-bottom-nav-height);
-  box-sizing: border-box;
+  width: 100%;
+  padding-top: var(--hb-mobile-bottom-nav-pad-y);
+  padding-bottom: calc(
+    var(--hb-mobile-bottom-nav-pad-y) + env(safe-area-inset-bottom)
+  );
+}
+
+.hb-mobile-theme [data-testid="mobile-tab-bar-wrapper"] > .relative {
+  height: 100%;
+}
+
+.hb-mobile-theme [data-testid="mobile-tab-bar"] {
+  height: 100%;
+  align-items: center;
 }
 
 .hb-mobile-theme [data-testid="mobile-tab-bar"] a,
 .hb-mobile-theme [data-testid="mobile-tab-bar"] button {
   gap: var(--hb-mobile-bottom-nav-item-gap);
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .hb-mobile-theme [data-testid="mobile-tab-bar"] a span:first-child,

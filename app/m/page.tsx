@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
-import { InstructionIcon, ReassuranceAvatarIcon } from "@/components/ui/icons";
+import { ReassuranceAvatarIcon } from "@/components/ui/icons";
 import TrackedLinkButton from "@/components/mobile/TrackedLinkButton";
 import {
   deriveHomeInstruction,
@@ -250,7 +250,7 @@ export default async function MobileHomePage() {
   );
 
   return (
-    <div className="flex flex-col gap-5 pb-8 mobile-home">
+    <div className="flex flex-col mobile-home">
       <header data-testid="mobile-home-header" className="space-y-1 mobile-home-header">
         <h1
           className="text-3xl font-semibold text-[var(--color-text-primary)] mobile-home-title"
@@ -264,7 +264,7 @@ export default async function MobileHomePage() {
         </p>
       </header>
 
-      <div className="flex flex-col gap-5 mobile-home-stack">
+      <div className="flex flex-col mobile-home-stack">
         {hasRecommendation && actionableInstruction && actionablePrimaryCta && (
           <>
             <HbCard
@@ -273,8 +273,7 @@ export default async function MobileHomePage() {
             >
               <div className="flex flex-col gap-2">
                 <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">
-                  <InstructionIcon className="mobile-home-instruction-icon" aria-hidden />
-                  <span>{instructionTitle}</span>
+                  {instructionTitle}
                 </h2>
                 {instructionSubcopy && (
                   <p className="mobile-home-instruction-subcopy">
