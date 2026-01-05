@@ -29,7 +29,7 @@
   --theme-background: #f8f3eb;
   --theme-card: #fff8f2;
   --theme-card-elevated: #fff5ed;
-  --theme-primary: #1e5c40;
+  --theme-primary: #008000;
   --theme-primary-dark: #164833;
   --theme-primary-text: #fdf8f2;
   --theme-muted: #6e6054;
@@ -76,7 +76,7 @@
   --mobile-theme-card-cream: #fff9f2;
   --mobile-theme-border-warm: #ddc5b4;
   --mobile-theme-soft-shadow: 0 22px 45px rgba(31, 20, 15, 0.06);
-  --mobile-theme-cta-green: #3c6b57;
+  --mobile-theme-cta-green: #008000;
   --mobile-theme-cta-green-dark: #2f533f;
   --mobile-theme-cta-text: #fdf9f3;
   --mobile-theme-heading-color: #1e2118;
@@ -199,6 +199,13 @@
   --hb-mobile-home-avatar-size: 28px;
   --hb-mobile-home-avatar-border: none;
   --hb-mobile-home-avatar-shadow: none;
+  --hb-mobile-office-menu-item-pad-block: clamp(12px, 1.6vw, 14px);
+  --hb-mobile-office-menu-item-line-height: 1.25;
+  --hb-mobile-home-recommendation-card-bg: var(--theme-primary);
+  --hb-mobile-home-recommendation-card-text: #fff;
+  --hb-mobile-home-recommendation-card-text-muted: rgba(255, 255, 255, 0.86);
+  --hb-mobile-home-recommendation-cta-bg: #fff;
+  --hb-mobile-home-recommendation-cta-text: var(--theme-primary);
 
   --hb-mobile-home-cta-height: 52px;
   --hb-mobile-home-cta-padding-inline: 24px;
@@ -381,6 +388,20 @@ body {
   padding-top: 0;
   margin-bottom: var(--hb-mobile-home-top-cluster-gap);
   margin-top: var(--hb-mobile-home-top-pad);
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.hb-mobile-theme .mobile-home header[data-testid="mobile-home-header"] {
+  padding-left: var(--hb-mobile-home-gutter-x);
+  padding-right: var(--hb-mobile-home-gutter-x);
+}
+
+.hb-mobile-theme .mobile-home .mobile-home-header > * {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .hb-mobile-theme .mobile-home .mobile-home-header > * + * {
@@ -434,11 +455,21 @@ body {
   margin-bottom: var(--hb-mobile-home-primary-to-reassurance-gap);
 }
 
-.hb-mobile-theme div[data-testid="mobile-home-recommendation-card"] {
+.hb-mobile-theme [data-testid="mobile-home-recommendation-card"] {
   padding-top: 20px;
   padding-right: 20px;
   padding-bottom: 24px;
   padding-left: 20px;
+  /* Recommendation card palette inversion works by overriding the owner surface/text vars here; do not change the global mobile theme tokens. */
+  --theme-card: var(--hb-mobile-home-recommendation-card-bg);
+  --theme-card-elevated: var(--hb-mobile-home-recommendation-card-bg);
+  --theme-card-bg: var(--hb-mobile-home-recommendation-card-bg);
+  --hb-mobile-home-card-bg: var(--hb-mobile-home-recommendation-card-bg);
+  --mobile-card-bg: var(--hb-mobile-home-recommendation-card-bg);
+  --color-text-primary: var(--hb-mobile-home-recommendation-card-text);
+  --color-text-secondary: var(--hb-mobile-home-recommendation-card-text-muted);
+  --hb-mobile-home-secondary-color: var(--hb-mobile-home-recommendation-card-text-muted);
+  --hb-mobile-home-instruction-title-color: var(--hb-mobile-home-recommendation-card-text);
 }
 
 .hb-mobile-theme .mobile-home-primary-card .mobile-home-instruction-subcopy {
@@ -461,6 +492,8 @@ body {
 .hb-mobile-theme div[data-testid="mobile-home-recommendation-card"] .hb-mobile-primary-cta {
   padding-left: 0;
   padding-right: 0;
+  background-color: var(--hb-mobile-home-recommendation-cta-bg);
+  color: var(--hb-mobile-home-recommendation-cta-text);
 }
 
 .hb-mobile-theme .mobile-home .mobile-home-reassurance-card {
@@ -559,6 +592,9 @@ body {
 .hb-mobile-theme [data-testid="mobile-tab-bar"] {
   height: 100%;
   align-items: center;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .hb-mobile-theme [data-testid="mobile-tab-bar"] a,
@@ -567,6 +603,8 @@ body {
   box-sizing: border-box;
   min-width: 0;
   max-width: 100%;
+  color: #6E8B73;
+  text-decoration: none;
 }
 
 .hb-mobile-theme [data-testid="mobile-tab-bar"] a span:first-child,
@@ -579,20 +617,79 @@ body {
 .hb-mobile-theme [data-testid="mobile-tab-bar"] button span:last-child {
   font-size: var(--hb-mobile-bottom-nav-label-size);
   letter-spacing: var(--hb-mobile-bottom-nav-label-tracking);
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
 }
 
 .hb-mobile-theme [data-testid="mobile-tab-bar"] svg {
   width: var(--hb-mobile-bottom-nav-icon-size);
   height: var(--hb-mobile-bottom-nav-icon-size);
   flex: 0 0 auto;
+  color: currentColor;
 }
 
 .hb-mobile-theme [data-testid="mobile-tab-bar"] [aria-current="page"] {
-  color: #6E8B73 !important;
+  color: var(--theme-primary) !important;
 }
 
 .hb-mobile-theme [data-testid="mobile-tab-bar"] [aria-current="page"] svg {
-  color: #6E8B73 !important;
+  color: var(--theme-primary) !important;
+}
+
+.hb-mobile-theme nav[data-testid="mobile-tab-bar"] {
+  padding-left: var(--hb-mobile-home-gutter-x);
+  padding-right: var(--hb-mobile-home-gutter-x);
+}
+
+.hb-mobile-theme [data-testid="mobile-tab-bar"] a:focus:not(:focus-visible),
+.hb-mobile-theme [data-testid="mobile-tab-bar"] button:focus:not(:focus-visible) {
+  outline-style: none;
+  box-shadow: none;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+}
+
+.hb-mobile-theme [data-testid="mobile-tab-bar"] button[data-testid="mobile-tab-office-button"]:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+}
+
+.hb-mobile-theme [data-testid="mobile-tab-bar"] button[data-testid="mobile-tab-office-button"] {
+  outline: none;
+  box-shadow: none;
+  border-color: transparent;
+  text-decoration: none;
+}
+
+.hb-mobile-theme [data-testid="mobile-tab-bar"] button[data-testid="mobile-tab-office-button"]:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(30, 92, 64, 0.35);
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+}
+
+.hb-mobile-theme [data-testid="mobile-tab-office-menu"] {
+  position: fixed;
+  left: auto;
+  right: var(--hb-mobile-home-gutter-x);
+  bottom: calc(var(--hb-mobile-bottom-nav-total-height) + 8px);
+  z-index: 70;
+  width: max-content;
+  max-width: calc(100vw - (var(--hb-mobile-home-gutter-x) * 2));
+}
+
+.hb-mobile-theme [data-testid="mobile-tab-office-menu"] > div {
+  gap: 0;
+}
+
+.hb-mobile-theme [data-testid="mobile-tab-office-menu"] [role="menuitem"] {
+  padding-block: var(--hb-mobile-office-menu-item-pad-block);
+  line-height: var(--hb-mobile-office-menu-item-line-height);
 }
 
 html:has(.hb-mobile-theme),
