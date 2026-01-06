@@ -10,10 +10,25 @@ import {
 import MobileHomePage from "@/app/m/page";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
 import { bobInstructionSentenceCopy } from "@/lib/domain/askbob/bobInstructionSentenceCopy";
-import { homeInstructionFirstCopy } from "@/lib/domain/mobile/homeInstructionCopy";
 import * as homeInstructionTelemetry from "@/app/m/homeInstructionTelemetry";
 
 const PRIMARY_BUTTON_CLASS_TOKEN = "bg-[var(--theme-button-primary-bg)]";
+
+const DIAGNOSE_SNAPSHOT = {
+  sessionId: "home-diagnose",
+  responseId: "home-response",
+  createdAt: new Date().toISOString(),
+  sections: [
+    {
+      type: "steps",
+      title: "Steps",
+      items: ["Home follow-up context"],
+    },
+  ],
+};
+const MATERIALS_SNAPSHOT = {
+  items: [],
+};
 
 const findPrimaryStyledButtons = (root: HTMLElement) => {
   const ctas = Array.from(root.querySelectorAll<HTMLElement>('[data-testid="mobile-home-primary-cta"]'));
@@ -68,6 +83,18 @@ describe("Mobile home page", () => {
         data: [
           {
             job_id: "job-followup",
+            task: "job.diagnose",
+            payload: DIAGNOSE_SNAPSHOT,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            job_id: "job-followup",
+            task: "materials.generate",
+            payload: MATERIALS_SNAPSHOT,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            job_id: "job-followup",
             task: "job.followup",
             payload: {
               recommendedAction: "Follow up with the customer",
@@ -116,7 +143,7 @@ describe("Mobile home page", () => {
     expect(ctaButtons).toHaveLength(1);
     const primaryCta = ctaButtons[0];
     expect(primaryCta?.textContent?.trim()).toBe(mobileFlowCopy.home.recommendationCtaLabel);
-    expect(primaryCta?.textContent?.trim()).toBe("Review Job");
+    expect(primaryCta?.textContent?.trim()).toBe("Send follow-up");
     const primaryCard = container.querySelector(
       '[data-testid="mobile-home-recommendation-card"]',
     );
@@ -138,11 +165,14 @@ describe("Mobile home page", () => {
     const primaryButtons = findPrimaryStyledButtons(container);
     expect(primaryButtons).toHaveLength(1);
 
-    const { instructionTitle, instructionSubcopy } = homeInstructionFirstCopy.followup_due;
+    const expectedInstructionTitle = "Send a follow-up for the Follow-up job";
     const titleElement = container.querySelector(".mobile-home-primary-card h2");
-    expect(titleElement?.textContent).toContain(instructionTitle);
+    expect(titleElement?.textContent).toContain(expectedInstructionTitle);
     const subcopyElement = container.querySelector(".mobile-home-instruction-subcopy");
-    expect(subcopyElement?.textContent).toBe(instructionSubcopy);
+    expect(subcopyElement?.textContent).toBe("The customer hasn't confirmed timing yet.");
+    expect(primaryCta?.getAttribute("href")).toBe(
+      "/m/follow-up?jobId=job-followup&workspaceId=workspace-1",
+    );
     expect(container.textContent).not.toContain(bobInstructionSentenceCopy.followup_due);
     expect(telemetrySpy).toHaveBeenCalledTimes(1);
     const telemetryResult = telemetrySpy.mock.results[0]?.value as Record<string, unknown> | undefined;

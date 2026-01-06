@@ -4,15 +4,25 @@ import HbCard from "@/components/ui/hb-card";
 import TrackedLinkButton from "@/components/mobile/TrackedLinkButton";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
 
-export default function MobileFollowUpPlaceholderPage({
+type FollowUpPageSearchParams = {
+  jobId?: string | string[] | undefined;
+  workspaceId?: string | string[] | undefined;
+};
+
+export default async function MobileFollowUpPlaceholderPage({
   searchParams,
 }: {
-  searchParams?: { jobId?: string | string[] | undefined };
+  searchParams?: Promise<FollowUpPageSearchParams>;
 }) {
-  const rawJobId = Array.isArray(searchParams?.jobId)
-    ? searchParams.jobId[0]
-    : searchParams?.jobId;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const rawJobId = Array.isArray(resolvedSearchParams.jobId)
+    ? resolvedSearchParams.jobId[0]
+    : resolvedSearchParams.jobId;
+  const rawWorkspaceId = Array.isArray(resolvedSearchParams.workspaceId)
+    ? resolvedSearchParams.workspaceId[0]
+    : resolvedSearchParams.workspaceId;
   const jobId = rawJobId?.trim() || null;
+  const workspaceId = rawWorkspaceId?.trim() || null;
   const backHref = jobId ? `/m/jobs/${jobId}` : "/m";
 
   return (
@@ -32,7 +42,7 @@ export default function MobileFollowUpPlaceholderPage({
         <TrackedLinkButton
           href={backHref}
           eventName="[followup-placeholder-back-click]"
-          eventPayload={{ jobId }}
+          eventPayload={{ jobId, workspaceId }}
           variant="secondary"
           size="md"
           className="w-full justify-center"

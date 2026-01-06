@@ -14,7 +14,7 @@ export const homeInstructionFirstCopy: Record<
 > = {
   followup_due: {
     instructionTitle: "Follow up on the kitchen cabinet job",
-    instructionSubcopy: "I recommend checking in with the customer today.",
+    instructionSubcopy: "The customer hasn't confirmed timing yet.",
   },
   followup_draft_ready: {
     instructionTitle: "Follow up on the kitchen cabinet job",

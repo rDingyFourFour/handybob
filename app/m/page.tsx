@@ -201,7 +201,17 @@ export default async function MobileHomePage() {
   const hasRecommendation = Boolean(actionablePrimaryCta && !actionablePrimaryCta.disabled);
   const instructionCopy = actionableInstruction?.instructionCopy;
   const reviewJobInstructionCopy = homeInstructionFirstCopy.followup_due;
+  const actionableJobTitle =
+    actionableInstruction?.title?.trim() ?? mobileFlowCopy.home.recommendationTitleFallback;
+  const isFollowupStep = actionableInstruction?.instruction.stepType === "followup";
+  const hasFollowupDraftReadyCopy =
+    instructionCopy === homeInstructionFirstCopy.followup_draft_ready;
+  const showFollowupIssueTitle = isFollowupStep && !hasFollowupDraftReadyCopy;
+  const followupInstructionTitle = showFollowupIssueTitle
+    ? `Send a follow-up for the ${actionableJobTitle}`
+    : undefined;
   const instructionTitle =
+    followupInstructionTitle ??
     instructionCopy?.instructionTitle ??
     reviewJobInstructionCopy?.instructionTitle ??
     actionableInstruction?.title ??
@@ -215,6 +225,13 @@ export default async function MobileHomePage() {
     actionableInstruction?.instruction ?? null,
     hasRecommendation,
   );
+  const followUpHref =
+    actionableInstruction?.jobId && workspace?.id
+      ? `/m/follow-up?${new URLSearchParams({
+          jobId: actionableInstruction.jobId,
+          workspaceId: workspace.id,
+        }).toString()}`
+      : actionablePrimaryCta?.href ?? "#";
 
   const metadata = user.user_metadata as { full_name?: string; name?: string } | undefined;
   const displayName = (
@@ -282,7 +299,7 @@ export default async function MobileHomePage() {
                 )}
               </div>
               <TrackedLinkButton
-                href={actionablePrimaryCta.href ?? "#"}
+                href={followUpHref}
                 eventName="[home-recommendation-click]"
                 eventPayload={renderTelemetry}
                 variant="primary"

@@ -123,7 +123,7 @@
       env(safe-area-inset-bottom)
   );
 
-  /* Mobile Home — Instruction-first (Review Job variant) tokens */
+  /* Mobile Home — Instruction-first (Send follow-up variant) tokens */
   --hb-mobile-home-bg: #f8f3ec;
   --hb-mobile-home-gutter-x: 10px;
   --hb-mobile-home-rhythm-y: 8px;
