@@ -73,6 +73,7 @@ describe("Mobile home layout", () => {
             status: "open",
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
+            customer: { name: "Layout customer" },
           },
         ],
         error: null,

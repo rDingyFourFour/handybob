@@ -37,6 +37,7 @@ export type HomeInstructionCandidate = {
   invoicePresent?: boolean;
   invoiceStatus?: string | null;
   followUpDraftReady?: boolean;
+  customerName?: string | null;
 };
 
 export type HomeInstruction = {
@@ -44,6 +45,7 @@ export type HomeInstruction = {
   title: string | null;
   instruction: BobInstruction;
   instructionCopy?: HomeInstructionFirstCopyPayload;
+  customerName?: string | null;
 };
 
 const STEP_PRIORITY: Record<string, number> = {
@@ -186,5 +188,6 @@ export function deriveHomeInstruction(candidates: HomeInstructionCandidate[]): H
     title: winner.candidate.title,
     instruction: winner.instruction,
     instructionCopy: winner.instructionCopy,
+    customerName: winner.candidate.customerName ?? null,
   };
 }

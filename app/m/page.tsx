@@ -17,6 +17,15 @@ import type {
   AskBobFollowupSnapshotPayload,
   AskBobJobTaskSnapshotTask,
 } from "@/lib/domain/askbob/types";
+import { resolveHomePrimaryCardPayload } from "@/lib/domain/bobflow/resolveHomePrimaryCardPayload";
+import { resolveBobFlowScenario } from "@/lib/domain/bobflow/resolveBobFlowScenario";
+import type {
+  AskBobAfterCallSnapshotPayload,
+  AskBobFollowupSnapshotPayload,
+  AskBobJobTaskSnapshotTask,
+} from "@/lib/domain/askbob/types";
+
+type CustomerRecord = { name: string | null };
 
 type JobRow = {
   id: string;
@@ -24,6 +33,25 @@ type JobRow = {
   status: string | null;
   created_at: string | null;
   updated_at: string | null;
+  customer?: CustomerRecord | CustomerRecord[] | null;
+};
+
+const resolveCustomerRecord = (
+  customer?: CustomerRecord | CustomerRecord[] | null,
+): CustomerRecord | null => {
+  if (!customer) {
+    return null;
+  }
+  if (Array.isArray(customer)) {
+    return customer[0] ?? null;
+  }
+  return customer;
+};
+
+const getCustomerNameFromRecord = (customer?: CustomerRecord | CustomerRecord[] | null): string | null => {
+  const record = resolveCustomerRecord(customer);
+  const trimmed = record?.name?.trim();
+  return trimmed ? trimmed : null;
 };
 
 type JobQuoteRow = {
@@ -83,7 +111,7 @@ export default async function MobileHomePage() {
 
   const jobsResponse = await supabase
     .from<JobRow>("jobs")
-    .select("id, title, status, created_at, updated_at")
+    .select("id, title, status, created_at, updated_at, customer:customers!inner(name)")
     .eq("workspace_id", workspace.id)
     .order("updated_at", { ascending: false, nulls: "last" })
     .limit(25);
@@ -166,11 +194,12 @@ export default async function MobileHomePage() {
     }
   }
 
-  const candidates: HomeInstructionCandidate[] = jobRows.map((job) => {
-    const artifact = artifactStates.get(job.id);
-    const latestQuote = quoteMap.get(job.id);
-    return {
-      jobId: job.id,
+    const candidates: HomeInstructionCandidate[] = jobRows.map((job) => {
+      const artifact = artifactStates.get(job.id);
+      const latestQuote = quoteMap.get(job.id);
+      const customerName = getCustomerNameFromRecord(job.customer);
+      return {
+        jobId: job.id,
       title: job.title,
       status: job.status,
       updatedAt: job.updated_at,
@@ -185,8 +214,9 @@ export default async function MobileHomePage() {
     followUpDraftReady: artifact?.hasFollowupDraftReady ?? false,
     hasCallWithMissingOutcome: false,
     latestCallOutcomeRecorded: false,
-    invoicePresent: false,
+      invoicePresent: false,
       invoiceStatus: null,
+      customerName,
     };
   });
 
@@ -199,39 +229,31 @@ export default async function MobileHomePage() {
       : null;
   const actionablePrimaryCta = actionableInstruction?.instruction.primaryCta;
   const hasRecommendation = Boolean(actionablePrimaryCta && !actionablePrimaryCta.disabled);
-  const instructionCopy = actionableInstruction?.instructionCopy;
-  const reviewJobInstructionCopy = homeInstructionFirstCopy.followup_due;
-  const actionableJobTitle =
-    actionableInstruction?.title?.trim() ?? mobileFlowCopy.home.recommendationTitleFallback;
-  const isFollowupStep = actionableInstruction?.instruction.stepType === "followup";
-  const hasFollowupDraftReadyCopy =
-    instructionCopy === homeInstructionFirstCopy.followup_draft_ready;
-  const showFollowupIssueTitle = isFollowupStep && !hasFollowupDraftReadyCopy;
-  const followupInstructionTitle = showFollowupIssueTitle
-    ? `Send a follow-up for the ${actionableJobTitle}`
-    : undefined;
-  const instructionTitle =
-    followupInstructionTitle ??
-    instructionCopy?.instructionTitle ??
-    reviewJobInstructionCopy?.instructionTitle ??
-    actionableInstruction?.title ??
-    mobileFlowCopy.home.recommendationTitleFallback;
-  const instructionSubcopy =
-    instructionCopy?.instructionSubcopy ??
-    reviewJobInstructionCopy?.instructionSubcopy ??
-    actionableInstruction?.instruction.statement ??
-    "";
   const renderTelemetry = buildHomeInstructionTelemetryPayload(
     actionableInstruction?.instruction ?? null,
     hasRecommendation,
   );
-  const followUpHref =
-    actionableInstruction?.jobId && workspace?.id
-      ? `/m/follow-up?${new URLSearchParams({
-          jobId: actionableInstruction.jobId,
-          workspaceId: workspace.id,
-        }).toString()}`
-      : actionablePrimaryCta?.href ?? "#";
+  const instructionCopy = actionableInstruction?.instructionCopy;
+  const hasFollowupDraftReadyCopy =
+    instructionCopy === homeInstructionFirstCopy.followup_draft_ready;
+  const scenario = resolveBobFlowScenario({
+    homeInstruction: actionableInstruction,
+    hasRecommendation,
+  });
+  const primaryCardPayload =
+    scenario === "Idle"
+      ? null
+      : resolveHomePrimaryCardPayload({
+          scenario,
+          jobId: actionableInstruction?.jobId ?? null,
+          jobTitle: actionableInstruction?.title ?? null,
+          workspaceId: workspace?.id ?? null,
+          isFollowupDraftReady: Boolean(hasFollowupDraftReadyCopy),
+          fallbackHref: actionablePrimaryCta?.href ?? null,
+          telemetryPayload: renderTelemetry,
+          customerName: actionableInstruction?.customerName ?? null,
+        });
+  const shouldShowPrimaryCard = Boolean(primaryCardPayload);
 
   const metadata = user.user_metadata as { full_name?: string; name?: string } | undefined;
   const displayName = (
@@ -282,35 +304,43 @@ export default async function MobileHomePage() {
       </header>
 
       <div className="flex flex-col mobile-home-stack">
-        {hasRecommendation && actionableInstruction && actionablePrimaryCta && (
-          <>
-            <HbCard
-              data-testid="mobile-home-recommendation-card"
-              className="mobile-home-primary-card"
-            >
-              <div className="flex flex-col gap-2">
-                <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">
-                  {instructionTitle}
-                </h2>
-                {instructionSubcopy && (
-                  <p className="mobile-home-instruction-subcopy">
-                    {instructionSubcopy}
-                  </p>
-                )}
-              </div>
+        {shouldShowPrimaryCard && primaryCardPayload && (
+          <HbCard
+            data-testid="mobile-home-recommendation-card"
+            className="mobile-home-primary-card"
+          >
+            <div className="flex flex-col gap-2">
+              <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">
+                {primaryCardPayload.title}
+              </h2>
+              {primaryCardPayload.customerLine && (
+                <p
+                  data-testid="mobile-home-primary-customer"
+                  className="text-sm text-[var(--color-text-secondary)]"
+                >
+                  {primaryCardPayload.customerLine}
+                </p>
+              )}
+              {primaryCardPayload.subcopy && (
+                <p className="mobile-home-instruction-subcopy">
+                  {primaryCardPayload.subcopy}
+                </p>
+              )}
+            </div>
+            {primaryCardPayload.ctaLabel && primaryCardPayload.href && (
               <TrackedLinkButton
-                href={followUpHref}
+                href={primaryCardPayload.href}
                 eventName="[home-recommendation-click]"
-                eventPayload={renderTelemetry}
+                eventPayload={primaryCardPayload.telemetryPayload}
                 variant="primary"
                 size="md"
                 className="hb-mobile-primary-cta justify-center"
                 data-testid="mobile-home-primary-cta"
               >
-                {mobileFlowCopy.home.recommendationCtaLabel}
+                {primaryCardPayload.ctaLabel}
               </TrackedLinkButton>
-            </HbCard>
-          </>
+            )}
+          </HbCard>
         )}
 
         {shouldShowReassuranceCard && renderReassuranceCard()}

@@ -11,13 +11,18 @@ import MobileHomePage from "@/app/m/page";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
 import { bobInstructionSentenceCopy } from "@/lib/domain/askbob/bobInstructionSentenceCopy";
 import * as homeInstructionTelemetry from "@/app/m/homeInstructionTelemetry";
+import { resolveHomePrimaryCardPayload } from "@/lib/domain/bobflow/resolveHomePrimaryCardPayload";
+import * as bobflowScenarioResolver from "@/lib/domain/bobflow/resolveBobFlowScenario";
+import { INTERNAL_REASSURANCE_SUBCOPY } from "@/lib/domain/bobflow/homePrimaryCardCopy";
 
 const PRIMARY_BUTTON_CLASS_TOKEN = "bg-[var(--theme-button-primary-bg)]";
+
+const FIXED_TIMESTAMP = "2025-01-01T00:00:00.000Z";
 
 const DIAGNOSE_SNAPSHOT = {
   sessionId: "home-diagnose",
   responseId: "home-response",
-  createdAt: new Date().toISOString(),
+  createdAt: FIXED_TIMESTAMP,
   sections: [
     {
       type: "steps",
@@ -38,6 +43,73 @@ const findPrimaryStyledButtons = (root: HTMLElement) => {
   return Array.from(root.querySelectorAll<HTMLElement>("button, a")).filter((element) =>
     element.className.includes(PRIMARY_BUTTON_CLASS_TOKEN),
   );
+};
+
+const createFollowupSupabaseState = (jobId = "job-followup", jobTitle = "Follow-up job") => {
+  const supabaseState = createSupabaseState({
+    jobs: {
+      data: [
+        {
+          id: jobId,
+          title: jobTitle,
+          status: "open",
+          created_at: FIXED_TIMESTAMP,
+          updated_at: FIXED_TIMESTAMP,
+          customer: { name: "Follow-up customer" },
+        },
+      ],
+      error: null,
+    },
+    askbob_job_task_snapshots: {
+      data: [
+        {
+          job_id: jobId,
+          task: "job.diagnose",
+          payload: DIAGNOSE_SNAPSHOT,
+          updated_at: FIXED_TIMESTAMP,
+        },
+        {
+          job_id: jobId,
+          task: "materials.generate",
+          payload: MATERIALS_SNAPSHOT,
+          updated_at: FIXED_TIMESTAMP,
+        },
+        {
+          job_id: jobId,
+          task: "job.followup",
+          payload: {
+            recommendedAction: "Follow up with the customer",
+            rationale: "Check in on the quote.",
+            steps: [],
+            shouldSendMessage: true,
+            shouldScheduleVisit: false,
+            shouldCall: false,
+            shouldWait: false,
+            modelLatencyMs: 1,
+          },
+          updated_at: FIXED_TIMESTAMP,
+        },
+      ],
+      error: null,
+    },
+    quotes: {
+      data: [
+        {
+          id: `quote-${jobId}`,
+          job_id: jobId,
+          status: "accepted",
+          created_at: FIXED_TIMESTAMP,
+        },
+      ],
+      error: null,
+    },
+  });
+  supabaseState.supabase.auth = {
+    getUser: vi.fn().mockResolvedValue({
+      data: { user: { id: "user-1", email: "owner@example.com", user_metadata: {} } },
+    }),
+  };
+  return supabaseState;
 };
 
 describe("Mobile home page", () => {
@@ -66,68 +138,7 @@ describe("Mobile home page", () => {
   });
 
   it("renders a single primary CTA with Bob's CTA copy", async () => {
-    const supabaseState = createSupabaseState({
-      jobs: {
-        data: [
-          {
-            id: "job-followup",
-            title: "Follow-up job",
-            status: "open",
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-        ],
-        error: null,
-      },
-      askbob_job_task_snapshots: {
-        data: [
-          {
-            job_id: "job-followup",
-            task: "job.diagnose",
-            payload: DIAGNOSE_SNAPSHOT,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            job_id: "job-followup",
-            task: "materials.generate",
-            payload: MATERIALS_SNAPSHOT,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            job_id: "job-followup",
-            task: "job.followup",
-            payload: {
-              recommendedAction: "Follow up with the customer",
-              rationale: "Check in on the quote.",
-              steps: [],
-              shouldSendMessage: true,
-              shouldScheduleVisit: false,
-              shouldCall: false,
-              shouldWait: false,
-              modelLatencyMs: 1,
-            },
-            updated_at: new Date().toISOString(),
-          },
-        ],
-        error: null,
-      },
-      quotes: {
-        data: [
-          {
-            id: "quote-1",
-            job_id: "job-followup",
-            status: "accepted",
-            created_at: new Date().toISOString(),
-          },
-        ],
-        error: null,
-      },
-    });
-    supabaseState.supabase.auth = {
-      getUser: vi.fn().mockResolvedValue({
-        data: { user: { id: "user-1", email: "owner@example.com", user_metadata: {} } },
-      }),
-    };
+    createFollowupSupabaseState();
 
     const telemetrySpy = vi.spyOn(
       homeInstructionTelemetry,
@@ -142,10 +153,20 @@ describe("Mobile home page", () => {
     const ctaButtons = container.querySelectorAll('[data-testid="mobile-home-primary-cta"]');
     expect(ctaButtons).toHaveLength(1);
     const primaryCta = ctaButtons[0];
-    expect(primaryCta?.textContent?.trim()).toBe(mobileFlowCopy.home.recommendationCtaLabel);
-    expect(primaryCta?.textContent?.trim()).toBe("Send follow-up");
+    const expectedFollowupPayload = resolveHomePrimaryCardPayload({
+      scenario: "External.msg.followup.schedule",
+      jobId: "job-followup",
+      jobTitle: "Follow-up job",
+      workspaceId: "workspace-1",
+      telemetryPayload: {},
+    });
+    expect(expectedFollowupPayload).not.toBeNull();
+    expect(primaryCta?.textContent?.trim()).toBe(expectedFollowupPayload?.ctaLabel);
     const primaryCard = container.querySelector(
       '[data-testid="mobile-home-recommendation-card"]',
+    );
+    expect(container.querySelectorAll('[data-testid="mobile-home-recommendation-card"]')).toHaveLength(
+      1,
     );
     expect(primaryCard).toBeTruthy();
     const reassuranceCard = container.querySelector(
@@ -170,9 +191,7 @@ describe("Mobile home page", () => {
     expect(titleElement?.textContent).toContain(expectedInstructionTitle);
     const subcopyElement = container.querySelector(".mobile-home-instruction-subcopy");
     expect(subcopyElement?.textContent).toBe("The customer hasn't confirmed timing yet.");
-    expect(primaryCta?.getAttribute("href")).toBe(
-      "/m/follow-up?jobId=job-followup&workspaceId=workspace-1",
-    );
+    expect(primaryCta?.getAttribute("href")).toBe(expectedFollowupPayload?.href);
     expect(container.textContent).not.toContain(bobInstructionSentenceCopy.followup_due);
     expect(telemetrySpy).toHaveBeenCalledTimes(1);
     const telemetryResult = telemetrySpy.mock.results[0]?.value as Record<string, unknown> | undefined;
@@ -195,6 +214,58 @@ describe("Mobile home page", () => {
     expect(ctaRaw).toBe(JSON.stringify(ctaPayload));
     const listElements = container.querySelectorAll("ul, ol, [role='list']");
     expect(listElements).toHaveLength(0);
+  });
+
+  it("renders the internal working copy when resolver drives Internal.msg", async () => {
+    const scenarioSpy = vi
+      .spyOn(bobflowScenarioResolver, "resolveBobFlowScenario")
+      .mockReturnValue("Internal.msg");
+    createFollowupSupabaseState();
+    const element = await MobileHomePage();
+
+    act(() => {
+      root?.render(element);
+    });
+
+    const expectedInternalPayload = resolveHomePrimaryCardPayload({
+      scenario: "Internal.msg",
+      jobId: "job-followup",
+      jobTitle: "Follow-up job",
+      workspaceId: "workspace-1",
+      telemetryPayload: {},
+      fallbackHref: "/m/jobs/job-followup",
+      customerName: "Follow-up customer",
+    });
+    expect(expectedInternalPayload).not.toBeNull();
+
+    const primaryCard = container.querySelector(
+      '[data-testid="mobile-home-recommendation-card"]',
+    );
+    expect(container.querySelectorAll('[data-testid="mobile-home-recommendation-card"]')).toHaveLength(
+      1,
+    );
+    expect(primaryCard).toBeTruthy();
+
+    expect(expectedInternalPayload?.ctaLabel).toBe("Move on");
+    expect(expectedInternalPayload?.ctaIntent).toBe("move_on");
+    expect(expectedInternalPayload?.subcopy).toBe(INTERNAL_REASSURANCE_SUBCOPY);
+    expect(expectedInternalPayload?.customerLine).toBe("Follow-up customer");
+
+    const titleElement = container.querySelector(".mobile-home-primary-card h2");
+    expect(titleElement?.textContent?.trim()).toBe(expectedInternalPayload?.title);
+    const customerLineElement = container.querySelector(
+      '[data-testid="mobile-home-primary-customer"]',
+    );
+    expect(customerLineElement?.textContent?.trim()).toBe("Follow-up customer");
+    const subcopyElement = container.querySelector(".mobile-home-instruction-subcopy");
+    expect(subcopyElement?.textContent?.trim()).toBe(INTERNAL_REASSURANCE_SUBCOPY);
+
+    const cta = container.querySelector('[data-testid="mobile-home-primary-cta"]');
+    expect(cta).toBeTruthy();
+    expect(cta?.textContent?.trim()).toBe("Move on");
+    expect(cta?.getAttribute("href")).toBe(expectedInternalPayload?.href);
+
+    scenarioSpy.mockRestore();
   });
 
   it("renders only the idle reassurance when no recommendation exists", async () => {
