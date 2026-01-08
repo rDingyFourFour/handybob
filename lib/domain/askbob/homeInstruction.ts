@@ -46,6 +46,7 @@ export type HomeInstruction = {
   instruction: BobInstruction;
   instructionCopy?: HomeInstructionFirstCopyPayload;
   customerName?: string | null;
+  followupSnapshot?: AskBobFollowupSnapshotPayload | null;
 };
 
 const STEP_PRIORITY: Record<string, number> = {
@@ -189,5 +190,6 @@ export function deriveHomeInstruction(candidates: HomeInstructionCandidate[]): H
     instruction: winner.instruction,
     instructionCopy: winner.instructionCopy,
     customerName: winner.candidate.customerName ?? null,
+    followupSnapshot: winner.candidate.followupSnapshot ?? null,
   };
 }

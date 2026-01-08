@@ -13,6 +13,7 @@ import { bobInstructionSentenceCopy } from "@/lib/domain/askbob/bobInstructionSe
 import * as homeInstructionTelemetry from "@/app/m/homeInstructionTelemetry";
 import { resolveHomePrimaryCardPayload } from "@/lib/domain/bobflow/resolveHomePrimaryCardPayload";
 import * as bobflowScenarioResolver from "@/lib/domain/bobflow/resolveBobFlowScenario";
+import * as deriveNextScenarioModule from "@/lib/domain/bobflow/deriveNextScenarioFromFollowupSnapshot";
 import { INTERNAL_REASSURANCE_SUBCOPY } from "@/lib/domain/bobflow/homePrimaryCardCopy";
 
 const PRIMARY_BUTTON_CLASS_TOKEN = "bg-[var(--theme-button-primary-bg)]";
@@ -161,7 +162,7 @@ describe("Mobile home page", () => {
       telemetryPayload: {},
     });
     expect(expectedFollowupPayload).not.toBeNull();
-    expect(primaryCta?.textContent?.trim()).toBe(expectedFollowupPayload?.ctaLabel);
+    expect(primaryCta?.textContent?.trim()).toBe("Send message");
     const primaryCard = container.querySelector(
       '[data-testid="mobile-home-recommendation-card"]',
     );
@@ -186,12 +187,16 @@ describe("Mobile home page", () => {
     const primaryButtons = findPrimaryStyledButtons(container);
     expect(primaryButtons).toHaveLength(1);
 
-    const expectedInstructionTitle = "Send a follow-up for the Follow-up job";
+    const expectedInstructionTitle = "Follow-up job";
     const titleElement = container.querySelector(".mobile-home-primary-card h2");
-    expect(titleElement?.textContent).toContain(expectedInstructionTitle);
+    expect(titleElement?.textContent?.trim()).toBe(expectedInstructionTitle);
     const subcopyElement = container.querySelector(".mobile-home-instruction-subcopy");
-    expect(subcopyElement?.textContent).toBe("The customer hasn't confirmed timing yet.");
+    expect(subcopyElement?.textContent).toBe("Here’s what Bob recommends next.");
     expect(primaryCta?.getAttribute("href")).toBe(expectedFollowupPayload?.href);
+    const customerLineElement = container.querySelector(
+      '[data-testid="mobile-home-primary-customer"]',
+    );
+    expect(customerLineElement?.textContent?.trim()).toBe("Follow-up customer");
     expect(container.textContent).not.toContain(bobInstructionSentenceCopy.followup_due);
     expect(telemetrySpy).toHaveBeenCalledTimes(1);
     const telemetryResult = telemetrySpy.mock.results[0]?.value as Record<string, unknown> | undefined;
@@ -220,12 +225,17 @@ describe("Mobile home page", () => {
     const scenarioSpy = vi
       .spyOn(bobflowScenarioResolver, "resolveBobFlowScenario")
       .mockReturnValue("Internal.msg");
+    const derivedScenarioSpy = vi
+      .spyOn(deriveNextScenarioModule, "deriveNextScenarioFromFollowupSnapshot")
+      .mockReturnValue(null);
     createFollowupSupabaseState();
     const element = await MobileHomePage();
 
     act(() => {
       root?.render(element);
     });
+
+    expect(derivedScenarioSpy).toHaveBeenCalled();
 
     const expectedInternalPayload = resolveHomePrimaryCardPayload({
       scenario: "Internal.msg",
@@ -266,6 +276,7 @@ describe("Mobile home page", () => {
     expect(cta?.getAttribute("href")).toBe(expectedInternalPayload?.href);
 
     scenarioSpy.mockRestore();
+    derivedScenarioSpy.mockRestore();
   });
 
   it("renders only the idle reassurance when no recommendation exists", async () => {

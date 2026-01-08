@@ -49,7 +49,7 @@ const FOLLOWUP_SNAPSHOT: AskBobFollowupSnapshotPayload = {
   recommendedAction: "Home follow-up",
   rationale: "Home rationale",
   steps: [{ label: "Send message" }],
-  shouldSendMessage: true,
+  shouldSendMessage: false,
   shouldScheduleVisit: false,
   shouldCall: false,
   shouldWait: false,

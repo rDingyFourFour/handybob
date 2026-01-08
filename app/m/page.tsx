@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { unstable_noStore } from "next/cache";
 
 import { createServerClient } from "@/utils/supabase/server";
 import { getCurrentWorkspace } from "@/lib/domain/workspaces";
@@ -18,12 +19,11 @@ import type {
   AskBobJobTaskSnapshotTask,
 } from "@/lib/domain/askbob/types";
 import { resolveHomePrimaryCardPayload } from "@/lib/domain/bobflow/resolveHomePrimaryCardPayload";
+import {
+  deriveNextScenarioFromFollowupSnapshot,
+  type DerivedFollowupScenario,
+} from "@/lib/domain/bobflow/deriveNextScenarioFromFollowupSnapshot";
 import { resolveBobFlowScenario } from "@/lib/domain/bobflow/resolveBobFlowScenario";
-import type {
-  AskBobAfterCallSnapshotPayload,
-  AskBobFollowupSnapshotPayload,
-  AskBobJobTaskSnapshotTask,
-} from "@/lib/domain/askbob/types";
 
 type CustomerRecord = { name: string | null };
 
@@ -95,6 +95,7 @@ const updateMostRecent = (current: string | null, candidate: string | null): str
 };
 
 export default async function MobileHomePage() {
+  unstable_noStore();
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -236,23 +237,33 @@ export default async function MobileHomePage() {
   const instructionCopy = actionableInstruction?.instructionCopy;
   const hasFollowupDraftReadyCopy =
     instructionCopy === homeInstructionFirstCopy.followup_draft_ready;
-  const scenario = resolveBobFlowScenario({
+  let scenario = resolveBobFlowScenario({
     homeInstruction: actionableInstruction,
     hasRecommendation,
   });
+  const derivedSnapshotScenario: DerivedFollowupScenario | null =
+    actionableInstruction && actionableInstruction.followupSnapshot
+      ? deriveNextScenarioFromFollowupSnapshot(actionableInstruction.followupSnapshot)
+      : null;
+  if (derivedSnapshotScenario && scenario === "Internal.msg") {
+    scenario = derivedSnapshotScenario;
+  }
+  const followupSnapshotDriven = derivedSnapshotScenario !== null;
+  const canRenderPrimaryCard = Boolean(actionableInstruction) && scenario !== "Idle";
   const primaryCardPayload =
-    scenario === "Idle"
-      ? null
-      : resolveHomePrimaryCardPayload({
+    canRenderPrimaryCard && actionableInstruction
+      ? resolveHomePrimaryCardPayload({
           scenario,
-          jobId: actionableInstruction?.jobId ?? null,
-          jobTitle: actionableInstruction?.title ?? null,
+          jobId: actionableInstruction.jobId ?? null,
+          jobTitle: actionableInstruction.title ?? null,
           workspaceId: workspace?.id ?? null,
           isFollowupDraftReady: Boolean(hasFollowupDraftReadyCopy),
           fallbackHref: actionablePrimaryCta?.href ?? null,
           telemetryPayload: renderTelemetry,
-          customerName: actionableInstruction?.customerName ?? null,
-        });
+          customerName: actionableInstruction.customerName ?? null,
+          followupSnapshotDriven,
+        })
+      : null;
   const shouldShowPrimaryCard = Boolean(primaryCardPayload);
 
   const metadata = user.user_metadata as { full_name?: string; name?: string } | undefined;

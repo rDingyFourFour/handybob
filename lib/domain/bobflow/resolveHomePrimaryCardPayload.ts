@@ -1,6 +1,9 @@
 import type { BobFlowScenario } from "./bobFlowScenario";
 import { homeInstructionFirstCopy } from "@/lib/domain/mobile/homeInstructionCopy";
-import { getHomePrimaryCardCopy } from "./homePrimaryCardCopy";
+import {
+  getHomePrimaryCardCopy,
+  FOLLOWUP_RECOMMENDATION_SUBCOPY,
+} from "./homePrimaryCardCopy";
 import type { HomePrimaryCardPayload } from "./homePrimaryCardPayload";
 
 type ResolveHomePrimaryCardPayloadArgs = {
@@ -12,6 +15,7 @@ type ResolveHomePrimaryCardPayloadArgs = {
   fallbackHref?: string | null;
   telemetryPayload?: Record<string, unknown>;
   customerName?: string | null;
+  followupSnapshotDriven?: boolean;
 };
 
 const assertNever = (value: never): never => {
@@ -129,6 +133,7 @@ const buildExternalFollowupPayload = (
   workspaceId?: string | null,
   fallbackHref?: string | null,
   telemetryPayload: Record<string, unknown>,
+  customerLine?: string,
 ): HomePrimaryCardPayload => {
   const href = buildFollowUpHref(jobId, workspaceId, fallbackHref);
   return createPayload(
@@ -141,6 +146,7 @@ const buildExternalFollowupPayload = (
     "follow_up",
     copy.ctaLabel ?? "Send follow-up",
     href,
+    customerLine,
   );
 };
 
@@ -175,15 +181,31 @@ export const resolveHomePrimaryCardPayload = ({
   fallbackHref,
   telemetryPayload = {},
   customerName,
+  followupSnapshotDriven = false,
 }: ResolveHomePrimaryCardPayloadArgs): HomePrimaryCardPayload | null => {
   if (scenario === "Idle") {
     return null;
   }
 
-  const copy = getHomePrimaryCardCopy(scenario, jobTitle ?? undefined);
-  if (isFollowupDraftReady && scenario === "Internal.msg") {
+  const normalizedCustomerLine = normalizeCustomerLine(customerName);
+
+  let copy = getHomePrimaryCardCopy(scenario, jobTitle ?? undefined);
+  const shouldShowFollowupDraftReadyCopy =
+    isFollowupDraftReady &&
+    (scenario === "Internal.msg" || scenario === "External.msg.followup.schedule");
+  if (shouldShowFollowupDraftReadyCopy) {
     copy.title = homeInstructionFirstCopy.followup_draft_ready.instructionTitle;
     copy.subcopy = homeInstructionFirstCopy.followup_draft_ready.instructionSubcopy;
+  }
+  const shouldShowDerivedScheduleCopy =
+    followupSnapshotDriven && scenario === "External.msg.followup.schedule" && !shouldShowFollowupDraftReadyCopy;
+  if (shouldShowDerivedScheduleCopy) {
+    copy = {
+      ...copy,
+      title: jobTitle ?? copy.title,
+      subcopy: FOLLOWUP_RECOMMENDATION_SUBCOPY,
+      ctaLabel: "Schedule visit",
+    };
   }
 
   switch (scenario) {
@@ -230,6 +252,7 @@ export const resolveHomePrimaryCardPayload = ({
         workspaceId,
         fallbackHref,
         telemetryPayload,
+        normalizedCustomerLine,
       );
 
     case "External.calls.notification.arrival_time":

@@ -1,47 +1,66 @@
-import { act } from "react";
-import { createRoot } from "react-dom/client";
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
 
 import MobileActionExecutionPage from "@/app/m/action/page";
 
+const renderPage = async (params: {
+  scenario?: string;
+  jobId?: string;
+  workspaceId?: string;
+  intent?: string;
+}) => {
+  const element = await MobileActionExecutionPage({
+    searchParams: Promise.resolve(params),
+  });
+  const html = renderToStaticMarkup(element);
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  return container;
+};
+
 describe("Mobile action execution page", () => {
-  let container: HTMLDivElement;
-  let root: ReturnType<typeof createRoot> | null = null;
-
-  beforeEach(() => {
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-  });
-
-  afterEach(() => {
-    if (root) {
-      act(() => root.unmount());
-      root = null;
-    }
-    container.remove();
-  });
-
-  it("renders the execution placeholder with scenario info and back link", async () => {
-    const element = await MobileActionExecutionPage({
-      searchParams: Promise.resolve({
-        scenario: "External.msg.notification.delay",
-        jobId: "job-action",
-        workspaceId: "workspace-action",
-        intent: "move_on",
-      }),
+  it("renders the execution UI for valid Internal scenario with hidden inputs and submit", async () => {
+    const container = await renderPage({
+      scenario: "Internal.msg",
+      jobId: "job-action",
+      workspaceId: "workspace-action",
+      intent: "move_on",
     });
 
-    act(() => root?.render(element));
+    const runForm = container.querySelector('[data-testid="mobile-action-run-form"]');
+    const runButton = container.querySelector('[data-testid="mobile-action-run-button"]');
+    expect(runForm).toBeTruthy();
+    expect(runButton).toBeTruthy();
+    expect(runButton?.textContent).toBe("Run next step");
+    expect(container.querySelector('[data-testid="mobile-action-error"]')).toBeNull();
+    expect(container.querySelector('input[name="scenario"]')?.getAttribute("value")).toBe("Internal.msg");
+    expect(container.querySelector('input[name="jobId"]')?.getAttribute("value")).toBe("job-action");
+    expect(container.querySelector('input[name="workspaceId"]')?.getAttribute("value")).toBe("workspace-action");
+    expect(container.querySelector('input[name="intent"]')?.getAttribute("value")).toBe("move_on");
+    expect(container.textContent).toContain("Job ID: job-action");
+  });
 
-    const rootElement = container.querySelector('[data-testid="mobile-action-root"]');
-    expect(rootElement).toBeTruthy();
-    const scenarioElement = container.querySelector('[data-testid="mobile-action-scenario"]');
-    expect(scenarioElement?.textContent).toContain("External");
-    const intentLabel = container.textContent;
-    const backButton = container.querySelector('[data-testid="mobile-action-back"]');
-    expect(backButton).toBeTruthy();
-    expect(backButton?.getAttribute("href")).toBe("/m");
-    expect(intentLabel).toContain("Intent: move_on");
+  it("renders an error when critical parameters are missing", async () => {
+    const container = await renderPage({
+      scenario: "Internal.msg",
+      workspaceId: "workspace-action",
+    });
+
+    const errorCard = container.querySelector('[data-testid="mobile-action-error"]');
+    expect(errorCard).toBeTruthy();
+    expect(container.textContent).toContain("Job context missing");
+    expect(container.querySelector('[data-testid="mobile-action-run-form"]')).toBeNull();
+  });
+
+  it("prompts the user when the scenario needs manual intervention", async () => {
+    const container = await renderPage({
+      scenario: "External.msg.notification.delay",
+      jobId: "job-action",
+      workspaceId: "workspace-action",
+    });
+
+    expect(container.querySelector('[data-testid="mobile-action-error"]')).toBeTruthy();
+    expect(container.textContent).toContain("requires your intervention");
+    expect(container.querySelector('[data-testid="mobile-action-run-form"]')).toBeNull();
   });
 });

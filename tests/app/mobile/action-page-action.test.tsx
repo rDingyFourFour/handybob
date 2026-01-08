@@ -1,0 +1,120 @@
+import { describe, expect, it, beforeEach, vi } from "vitest";
+
+import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
+
+const createServerClientMock = vi.fn();
+const mockResolveWorkspaceContext = vi.fn();
+const mockRunInternalScenarioStep = vi.fn();
+vi.mock("@/utils/supabase/server", () => ({
+  createServerClient: () => createServerClientMock(),
+}));
+
+vi.mock("@/lib/domain/workspaces", () => ({
+  resolveWorkspaceContext: () => mockResolveWorkspaceContext(),
+}));
+
+vi.mock("@/lib/domain/bobflow/runInternalScenario", () => ({
+  runInternalScenarioStep: (...args: unknown[]) => mockRunInternalScenarioStep(...args),
+}));
+
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  redirect: vi.fn(() => {
+    throw new Error("redirect");
+  }),
+}));
+
+import { revalidatePath as mockRevalidatePath } from "next/cache";
+import { redirect as mockRedirect } from "next/navigation";
+
+import { runInternalScenarioAction } from "@/app/m/action/page";
+
+describe("runInternalScenarioAction", () => {
+  const jobRow = { id: "job-1", workspace_id: "workspace-1" };
+  let supabaseState = setupSupabaseMock();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    supabaseState = setupSupabaseMock({
+      jobs: { data: [jobRow], error: null },
+    });
+    createServerClientMock.mockReturnValue(supabaseState.supabase);
+    mockResolveWorkspaceContext.mockResolvedValue({
+      ok: true,
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      membership: {
+        user: { id: "user-1", email: "owner@example.com", user_metadata: {} },
+        workspace: { id: "workspace-1", name: "Workspace", owner_id: "owner-1", slug: "workspace" },
+        role: "owner",
+      },
+    });
+    mockRunInternalScenarioStep.mockResolvedValue({
+      task: "job.followup",
+      executed: true,
+    });
+  });
+
+  it("runs the runner for Internal.* scenarios", async () => {
+    const formData = new FormData();
+    formData.set("scenario", "Internal.msg");
+    formData.set("jobId", jobRow.id);
+    formData.set("workspaceId", "workspace-1");
+    formData.set("intent", "move_on");
+
+    await expect(runInternalScenarioAction(formData)).rejects.toThrow("redirect");
+
+    expect(mockRunInternalScenarioStep).toHaveBeenCalledWith({
+      supabase: supabaseState.supabase,
+      scenario: "Internal.msg",
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+    });
+    expect(mockRevalidatePath).toHaveBeenCalledWith("/m");
+    expect(mockRedirect).toHaveBeenCalledWith("/m");
+  });
+
+  it("skips the runner for non-Internal scenarios", async () => {
+    const formData = new FormData();
+    formData.set("scenario", "External.msg.notification.delay");
+    formData.set("jobId", jobRow.id);
+    formData.set("workspaceId", "workspace-1");
+
+    await expect(runInternalScenarioAction(formData)).rejects.toThrow("redirect");
+
+    expect(mockRunInternalScenarioStep).not.toHaveBeenCalled();
+    expect(mockRevalidatePath).not.toHaveBeenCalled();
+    expect(mockRedirect).toHaveBeenCalledWith("/m");
+  });
+
+  it("logs skipped metadata when a usable snapshot already exists", async () => {
+    mockRunInternalScenarioStep.mockResolvedValueOnce({
+      task: "job.followup",
+      executed: false,
+      skipReason: "snapshot_exists",
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const formData = new FormData();
+      formData.set("scenario", "Internal.msg");
+      formData.set("jobId", jobRow.id);
+      formData.set("workspaceId", "workspace-1");
+
+      await expect(runInternalScenarioAction(formData)).rejects.toThrow("redirect");
+
+      expect(mockRunInternalScenarioStep).toHaveBeenCalled();
+      const logCall = logSpy.mock.calls.find((call) => call[0] === "[mobile-action-run]");
+      expect(logCall).toBeTruthy();
+      expect(logCall?.[2]).toMatchObject({
+        skipped: true,
+        skipReason: "snapshot_exists",
+        task: "job.followup",
+      });
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+});

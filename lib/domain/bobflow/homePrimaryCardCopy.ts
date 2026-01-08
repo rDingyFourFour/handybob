@@ -18,10 +18,24 @@ const INTERNAL_DEFAULT_COPY: HomePrimaryCardCopyTemplate = {
   ctaLabel: "Move on",
 };
 
+export const FOLLOWUP_RECOMMENDATION_SUBCOPY = "Here’s what Bob recommends next.";
+
 const EXTERNAL_FOLLOWUP_COPY: HomePrimaryCardCopyTemplate = {
   title: "Send a follow-up for the {jobTitle}",
   subcopy: "The customer hasn't confirmed timing yet.",
   ctaLabel: "Send follow-up",
+};
+
+const FOLLOWUP_MESSAGE_COPY: HomePrimaryCardCopyTemplate = {
+  title: JOB_TITLE_TOKEN,
+  subcopy: FOLLOWUP_RECOMMENDATION_SUBCOPY,
+  ctaLabel: "Send message",
+};
+
+const FOLLOWUP_CALL_COPY: HomePrimaryCardCopyTemplate = {
+  title: JOB_TITLE_TOKEN,
+  subcopy: FOLLOWUP_RECOMMENDATION_SUBCOPY,
+  ctaLabel: "Call customer",
 };
 
 const CALLS_NOTIFICATION_TEMPLATE: HomePrimaryCardCopyTemplate = {
@@ -51,14 +65,14 @@ const SCENARIO_COPY: Record<BobFlowScenario, HomePrimaryCardCopyTemplate> = {
   "Internal.call_script": INTERNAL_DEFAULT_COPY,
   "Internal.msg": INTERNAL_DEFAULT_COPY,
   "Internal.email": INTERNAL_DEFAULT_COPY,
-  "External.calls.followup.quote": EXTERNAL_FOLLOWUP_COPY,
+  "External.calls.followup.quote": FOLLOWUP_CALL_COPY,
   "External.calls.followup.schedule": {
     title: "Book a follow-up call for the {jobTitle}",
     subcopy: "Coordinate a call so the customer hears from you at the right time.",
     ctaLabel: "Send follow-up",
   },
   "External.calls.followup.invoice": EXTERNAL_FOLLOWUP_COPY,
-  "External.msg.followup.quote": EXTERNAL_FOLLOWUP_COPY,
+  "External.msg.followup.quote": FOLLOWUP_MESSAGE_COPY,
   "External.msg.followup.schedule": EXTERNAL_FOLLOWUP_COPY,
   "External.msg.followup.invoice": EXTERNAL_FOLLOWUP_COPY,
   "External.email.followup.quote": EXTERNAL_FOLLOWUP_COPY,

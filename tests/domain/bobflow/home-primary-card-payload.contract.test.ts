@@ -64,6 +64,8 @@ describe("BobFlow home primary card payload contract", () => {
         expect(payload.customerLine).toBe(BASE_CUSTOMER_NAME);
         expect(payload.title).toBe(`${scenario} job`);
         expect(payload.subcopy).toBe(INTERNAL_REASSURANCE_SUBCOPY);
+      } else if (scenario.includes(".followup.")) {
+        expect(payload.customerLine).toBe(BASE_CUSTOMER_NAME);
       } else {
         expect(payload.customerLine).toBeUndefined();
       }
@@ -133,9 +135,11 @@ describe("BobFlow home primary card payload contract", () => {
       jobTitle: "Message quote job",
       workspaceId: BASE_WORKSPACE_ID,
       telemetryPayload: BASE_TELEMETRY,
+      customerName: BASE_CUSTOMER_NAME,
     });
-    expect(externalMsgQuote?.ctaLabel).toBe("Send follow-up");
+    expect(externalMsgQuote?.ctaLabel).toBe("Send message");
     expect(externalMsgQuote?.ctaIntent).toBe("follow_up");
+    expect(externalMsgQuote?.customerLine).toBe(BASE_CUSTOMER_NAME);
 
     const externalCallsSchedule = resolveHomePrimaryCardPayload({
       scenario: "External.calls.followup.schedule",
@@ -143,6 +147,7 @@ describe("BobFlow home primary card payload contract", () => {
       jobTitle: "Call schedule job",
       workspaceId: BASE_WORKSPACE_ID,
       telemetryPayload: BASE_TELEMETRY,
+      customerName: BASE_CUSTOMER_NAME,
     });
     expect(externalCallsSchedule?.ctaLabel).toBe("Send follow-up");
     expect(externalCallsSchedule?.ctaIntent).toBe("follow_up");

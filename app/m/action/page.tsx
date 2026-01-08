@@ -1,8 +1,22 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
+import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
-import TrackedLinkButton from "@/components/mobile/TrackedLinkButton";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
+import RunNextStepButton from "./RunNextStepButton";
+import { createServerClient } from "@/utils/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
+import {
+  bobFlowScenarioList,
+  isInternalScenario,
+  type BobFlowScenario,
+} from "@/lib/domain/bobflow/bobFlowScenario";
+import {
+  runInternalScenarioStep,
+  type RunInternalScenarioResult,
+} from "@/lib/domain/bobflow/runInternalScenario";
 
 type ActionPageSearchParams = {
   scenario?: string | string[] | undefined;
@@ -10,6 +24,12 @@ type ActionPageSearchParams = {
   workspaceId?: string | string[] | undefined;
   intent?: string | string[] | undefined;
 };
+
+type ValidationState =
+  | { type: "missingScenario" }
+  | { type: "unknownScenario"; scenario: string }
+  | { type: "notInternal"; scenario: string }
+  | { type: "missingJobData" };
 
 const formatScenarioLabel = (value?: string | null): string => {
   if (!value) {
@@ -21,7 +41,7 @@ const formatScenarioLabel = (value?: string | null): string => {
     .map((segment) =>
       segment
         .replace(/_/g, " ")
-        .replace(/^\w/, (chr) => chr.toUpperCase())
+        .replace(/^(\w)/, (chr) => chr.toUpperCase())
         .replace(/([a-z])([A-Z])/g, "$1 $2"),
     )
     .join(" · ");
@@ -34,16 +54,165 @@ const normalizeSearchParam = (value?: string | string[] | undefined): string | n
   return Array.isArray(value) ? value[0]?.trim() || null : value.trim() || null;
 };
 
+const isKnownScenario = (value?: string | null): value is BobFlowScenario =>
+  typeof value === "string" && bobFlowScenarioList.includes(value as BobFlowScenario);
+
+const buildValidationState = (params: {
+  scenarioParam: string | null;
+  scenario: BobFlowScenario | null;
+  jobId: string | null;
+  workspaceId: string | null;
+}): ValidationState | null => {
+  if (!params.scenarioParam) {
+    return { type: "missingScenario" };
+  }
+  if (!params.scenario) {
+    return { type: "unknownScenario", scenario: params.scenarioParam };
+  }
+  if (!isInternalScenario(params.scenario)) {
+    return { type: "notInternal", scenario: params.scenario };
+  }
+  if (!params.jobId || !params.workspaceId) {
+    return { type: "missingJobData" };
+  }
+  return null;
+};
+
+const getValidationCopy = (state: ValidationState) => {
+  switch (state.type) {
+    case "missingScenario":
+      return {
+        title: "Scenario required",
+        body: "We couldn’t start the work without knowing what you need. Return to Home to continue.",
+      };
+    case "unknownScenario":
+      return {
+        title: "Unsupported scenario",
+        body: `The scenario ${state.scenario} isn’t recognized yet. Return to Home and try again.`,
+      };
+    case "notInternal":
+      return {
+        title: "This action requires your intervention",
+        body: "Only internal Bob work can run automatically from here. Head back to Home to continue manually.",
+      };
+    case "missingJobData":
+      return {
+        title: "Job context missing",
+        body: "We need a job and workspace to run the work. Return to Home to pick a job.",
+      };
+  }
+};
+
+const buildAssertionLog = (scenario: string, intent: string | null) => ({
+  scenario,
+  intent,
+});
+
+export async function runInternalScenarioAction(formData: FormData) {
+  "use server";
+  const scenarioParam = normalizeSearchParam(formData.get("scenario") as string | string[] | undefined);
+  const jobId = normalizeSearchParam(formData.get("jobId") as string | string[] | undefined);
+  const workspaceId = normalizeSearchParam(
+    formData.get("workspaceId") as string | string[] | undefined,
+  );
+  const intent = normalizeSearchParam(formData.get("intent") as string | string[] | undefined);
+
+  if (!scenarioParam || !jobId || !workspaceId || !isKnownScenario(scenarioParam)) {
+    return redirect("/m");
+  }
+
+  if (!isInternalScenario(scenarioParam)) {
+    return redirect("/m");
+  }
+
+  const validatedScenario = scenarioParam as BobFlowScenario;
+
+  const supabase = await createServerClient();
+  const workspaceResult = await resolveWorkspaceContext({
+    supabase,
+    allowAutoCreateWorkspace: false,
+  });
+
+  if (!workspaceResult.ok) {
+    console.error("[mobile-action] workspace not resolved", workspaceResult);
+    revalidatePath("/m");
+    return redirect("/m");
+  }
+
+  const { membership } = workspaceResult;
+  const currentWorkspaceId = membership.workspace.id;
+
+  const { data: job, error: jobError } = await supabase
+    .from("jobs")
+    .select("id, workspace_id")
+    .eq("id", jobId)
+    .eq("workspace_id", currentWorkspaceId)
+    .maybeSingle();
+
+  if (jobError || !job) {
+    console.error("[mobile-action] job not found", { jobId, workspaceId: currentWorkspaceId, jobError });
+    revalidatePath("/m");
+    return redirect("/m");
+  }
+
+  let runResult: RunInternalScenarioResult | null = null;
+  try {
+    runResult = await runInternalScenarioStep({
+      supabase,
+      scenario: validatedScenario,
+      workspaceId: currentWorkspaceId,
+      jobId: job.id,
+    });
+  } catch (error) {
+    console.error("[mobile-action] runner failed", {
+      scenario: validatedScenario,
+      jobId: job.id,
+      error,
+    });
+  } finally {
+    const resultToLog: RunInternalScenarioResult = runResult ?? {
+      task: "job.followup" as const,
+      executed: false,
+    };
+    console.log(
+      "[mobile-action-run]",
+      buildAssertionLog(validatedScenario, intent),
+      {
+        jobId: job.id,
+        workspaceId: currentWorkspaceId,
+        executed: resultToLog.executed,
+        skipped: !resultToLog.executed,
+        skipReason: resultToLog.skipReason,
+        task: resultToLog.task,
+      },
+    );
+  }
+
+  // Refresh the mobile home cache before sending the user back.
+  revalidatePath("/m");
+  return redirect("/m");
+}
+
 export default async function MobileActionExecutionPage({
   searchParams,
 }: {
   searchParams?: Promise<ActionPageSearchParams>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const scenario = normalizeSearchParam(resolvedSearchParams.scenario);
+  const scenarioParam = normalizeSearchParam(resolvedSearchParams.scenario);
   const jobId = normalizeSearchParam(resolvedSearchParams.jobId);
   const workspaceId = normalizeSearchParam(resolvedSearchParams.workspaceId);
   const intent = normalizeSearchParam(resolvedSearchParams.intent);
+  const scenario = isKnownScenario(scenarioParam) ? scenarioParam : null;
+  const validationState = buildValidationState({
+    scenarioParam,
+    scenario,
+    jobId,
+    workspaceId,
+  });
+  const scenarioLabel = formatScenarioLabel(scenarioParam);
+
+  const errorCopy = validationState ? getValidationCopy(validationState) : null;
 
   return (
     <div data-testid="mobile-action-root" className="space-y-6 pb-8">
@@ -62,32 +231,58 @@ export default async function MobileActionExecutionPage({
             data-testid="mobile-action-scenario"
             className="text-lg font-semibold text-[var(--color-text-primary)]"
           >
-            {formatScenarioLabel(scenario)}
+            {scenarioLabel}
           </p>
+          <p className="text-sm text-[var(--color-text-secondary)]">Job ID: {jobId ?? "Not available"}</p>
           <p className="text-sm text-[var(--color-text-secondary)]">
-            Job ID: {jobId ?? "Not available"}
+            Workspace ID: {workspaceId ?? "Not available"}
           </p>
-        <p className="text-sm text-[var(--color-text-secondary)]">
-          Workspace ID: {workspaceId ?? "Not available"}
-        </p>
-        <p className="text-sm text-[var(--color-text-secondary)]">
-          Intent: {intent ?? "Not available"}
-        </p>
+          <p className="text-sm text-[var(--color-text-secondary)]">Intent: {intent ?? "Not available"}</p>
         </div>
-        <p className="text-sm text-[var(--color-text-secondary)]">
-          This is the dedicated execution screen; Home stays the orchestrator.
-        </p>
-        <TrackedLinkButton
-          href="/m"
-          eventName="[mobile-action-back-click]"
-          eventPayload={{ scenario, jobId, workspaceId, intent }}
-          variant="primary"
-          size="md"
-          className="w-full justify-center"
-          data-testid="mobile-action-back"
-        >
-          Back to Home
-        </TrackedLinkButton>
+        {errorCopy ? (
+          <div className="space-y-2" data-testid="mobile-action-error">
+            <p className="text-base font-semibold text-[var(--color-text-primary)]">{errorCopy.title}</p>
+            <p className="text-sm text-[var(--color-text-secondary)]">{errorCopy.body}</p>
+            <HbButton
+              as={Link}
+              href="/m"
+              variant="primary"
+              size="md"
+              className="w-full justify-center"
+              data-testid="mobile-action-back"
+            >
+              Back to Home
+            </HbButton>
+          </div>
+        ) : (
+          <form
+            action={runInternalScenarioAction}
+            className="space-y-4"
+            data-testid="mobile-action-run-form"
+          >
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              Bob is working on the next internal step. Once it lands, you’ll be redirected back to Home.
+            </p>
+            <input type="hidden" name="scenario" value={scenarioParam ?? ""} />
+            <input type="hidden" name="jobId" value={jobId ?? ""} />
+            <input type="hidden" name="workspaceId" value={workspaceId ?? ""} />
+            <input type="hidden" name="intent" value={intent ?? ""} />
+            <RunNextStepButton
+              className="w-full justify-center"
+              data-testid="mobile-action-run-button"
+            />
+            <HbButton
+              as={Link}
+              href="/m"
+              variant="secondary"
+              size="md"
+              className="w-full justify-center"
+              data-testid="mobile-action-back"
+            >
+              Back to Home
+            </HbButton>
+          </form>
+        )}
       </HbCard>
     </div>
   );
