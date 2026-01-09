@@ -53,8 +53,10 @@ describe("runInternalScenarioAction", () => {
       },
     });
     mockRunInternalScenarioStep.mockResolvedValue({
-      task: "job.followup",
+      scenario: "Internal.diagnose",
+      task: "job.diagnose",
       executed: true,
+      skipped: false,
     });
   });
 
@@ -69,12 +71,14 @@ describe("runInternalScenarioAction", () => {
 
     expect(mockRunInternalScenarioStep).toHaveBeenCalledWith({
       supabase: supabaseState.supabase,
-      scenario: "Internal.msg",
+      scenario: "Internal.diagnose",
       workspaceId: "workspace-1",
       jobId: "job-1",
     });
     expect(mockRevalidatePath).toHaveBeenCalledWith("/m");
-    expect(mockRedirect).toHaveBeenCalledWith("/m");
+    expect(mockRedirect).toHaveBeenCalledWith(
+      "/m?handoff=1&jobId=job-1&scenario=Internal.diagnose&executedScenario=Internal.diagnose&executedTask=job.diagnose&executed=1",
+    );
   });
 
   it("skips the runner for non-Internal scenarios", async () => {
@@ -92,9 +96,11 @@ describe("runInternalScenarioAction", () => {
 
   it("logs skipped metadata when a usable snapshot already exists", async () => {
     mockRunInternalScenarioStep.mockResolvedValueOnce({
+      scenario: "Internal.msg",
       task: "job.followup",
       executed: false,
-      skipReason: "snapshot_exists",
+      skipped: true,
+      skipReason: "usable_snapshot_exists",
     });
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     try {
@@ -110,7 +116,7 @@ describe("runInternalScenarioAction", () => {
       expect(logCall).toBeTruthy();
       expect(logCall?.[2]).toMatchObject({
         skipped: true,
-        skipReason: "snapshot_exists",
+        skipReason: "usable_snapshot_exists",
         task: "job.followup",
       });
     } finally {

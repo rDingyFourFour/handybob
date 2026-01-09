@@ -1,4 +1,5 @@
 import type { BobFlowScenario } from "./bobFlowScenario";
+import type { DerivedFollowupScenario } from "./deriveNextScenarioFromFollowupSnapshot";
 
 type HomePrimaryCardCopyTemplate = {
   title: string;
@@ -11,6 +12,8 @@ const DEFAULT_JOB_TITLE = "your job";
 
 export const INTERNAL_REASSURANCE_SUBCOPY =
   "Everything's on track. Ready for the next step.";
+
+export const INTERNAL_HANDOFF_SUBCOPY = "Done. Ready for the next step.";
 
 const INTERNAL_DEFAULT_COPY: HomePrimaryCardCopyTemplate = {
   title: JOB_TITLE_TOKEN,
@@ -107,4 +110,18 @@ export const getHomePrimaryCardCopy = (
     subcopy: template.subcopy ? replaceJobTitle(template.subcopy, jobTitle) : undefined,
     ctaLabel: template.ctaLabel,
   };
+};
+
+const HANDOFF_REASSURANCE_COPY: Partial<Record<DerivedFollowupScenario, string>> = {
+  "External.msg.followup.quote": "I drafted a follow-up message based on your quote.",
+  "External.calls.followup.quote": "I put together a quick call plan based on your quote.",
+  "External.email.followup.quote": "I prepared an email follow-up based on your quote.",
+};
+
+const DEFAULT_HANDOFF_REASSURANCE_COPY = "I've prepared the next step for you.";
+
+export const getHomePrimaryCardHandoffCopy = (
+  scenario: DerivedFollowupScenario,
+): string => {
+  return HANDOFF_REASSURANCE_COPY[scenario] ?? DEFAULT_HANDOFF_REASSURANCE_COPY;
 };

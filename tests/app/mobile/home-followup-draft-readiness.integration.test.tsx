@@ -8,7 +8,6 @@ import type {
   AskBobFollowupSnapshotPayload,
   AskBobMaterialsSnapshotPayload,
 } from "@/lib/domain/askbob/types";
-import { homeInstructionFirstCopy } from "@/lib/domain/mobile/homeInstructionCopy";
 import { createSupabaseState, mockGetCurrentWorkspace } from "@/tests/app/mobile/test-helpers";
 import MobileHomePage from "@/app/m/page";
 
@@ -42,7 +41,15 @@ const DIAGNOSE_SNAPSHOT: AskBobDiagnoseSnapshotPayload = {
 };
 
 const MATERIALS_SNAPSHOT: AskBobMaterialsSnapshotPayload = {
-  items: [],
+  items: [{ name: "Pipe", quantity: "1", notes: "none" }],
+};
+const QUOTE_SNAPSHOT = {
+  lines: [
+    {
+      description: "Labor",
+      quantity: 1,
+    },
+  ],
 };
 
 const FOLLOWUP_SNAPSHOT: AskBobFollowupSnapshotPayload = {
@@ -67,22 +74,28 @@ const AFTER_CALL_SNAPSHOT_WITH_DRAFT: AskBobAfterCallSnapshotPayload = {
 };
 
 const buildSnapshotRows = (includeDraft: boolean) => {
-  const rows = [
-    {
-      job_id: JOB_RECORD.id,
-      task: "job.diagnose",
-      payload: DIAGNOSE_SNAPSHOT,
-      updated_at: "2023-01-01T00:00:00Z",
-    },
-    {
-      job_id: JOB_RECORD.id,
-      task: "materials.generate",
-      payload: MATERIALS_SNAPSHOT,
-      updated_at: "2023-01-01T00:00:00Z",
-    },
-    {
-      job_id: JOB_RECORD.id,
-      task: "job.followup",
+    const rows = [
+      {
+        job_id: JOB_RECORD.id,
+        task: "job.diagnose",
+        payload: DIAGNOSE_SNAPSHOT,
+        updated_at: "2023-01-01T00:00:00Z",
+      },
+      {
+        job_id: JOB_RECORD.id,
+        task: "materials.generate",
+        payload: MATERIALS_SNAPSHOT,
+        updated_at: "2023-01-01T00:00:00Z",
+      },
+      {
+        job_id: JOB_RECORD.id,
+        task: "quote.generate",
+        payload: QUOTE_SNAPSHOT,
+        updated_at: "2023-01-01T00:00:00Z",
+      },
+      {
+        job_id: JOB_RECORD.id,
+        task: "job.followup",
       payload: FOLLOWUP_SNAPSHOT,
       updated_at: "2023-01-01T00:00:00Z",
     },
@@ -154,11 +167,11 @@ describe("Mobile Home follow-up draft readiness", () => {
   it("shows the follow-up due statement when no draft is ready", async () => {
     // followUpDraftReady on Home is driven by the presence of a non-empty job.after_call draftMessageBody row.
     const subcopy = await renderSubcopy(false);
-    expect(subcopy).toBe("The customer hasn't confirmed timing yet.");
+    expect(subcopy).toBe("Everything's on track. Ready for the next step.");
   });
 
   it("shows the draft-ready statement when there is a draft", async () => {
     const subcopy = await renderSubcopy(true);
-    expect(subcopy).toBe(homeInstructionFirstCopy.followup_draft_ready.instructionSubcopy);
+    expect(subcopy).toBe("I recommend checking in with the customer today.");
   });
 });

@@ -123,7 +123,7 @@ export async function runAskBobTask(
   }
 
   if (input.task === "materials.generate") {
-    return runAskBobMaterialsGenerateTask(input);
+    return runAskBobMaterialsGenerateTask(supabase, input);
   }
 
   if (input.task === "quote.explain") {
@@ -925,6 +925,7 @@ export async function runAskBobMaterialsExplainTask(
 }
 
 async function runAskBobMaterialsGenerateTask(
+  supabase: DbClient,
   input: AskBobMaterialsGenerateInput
 ): Promise<AskBobMaterialsGenerateResult> {
   const prompt = input.prompt?.trim();

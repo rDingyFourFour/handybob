@@ -6,6 +6,8 @@ import { getCurrentWorkspace } from "@/lib/domain/workspaces";
 import HbCard from "@/components/ui/hb-card";
 import { ReassuranceAvatarIcon } from "@/components/ui/icons";
 import TrackedLinkButton from "@/components/mobile/TrackedLinkButton";
+import MobileHomeSubmitCtaButton from "@/app/m/components/MobileHomeSubmitCtaButton";
+import { runInternalScenarioAction } from "@/app/m/actions/runInternalScenarioAction";
 import {
   deriveHomeInstruction,
   type HomeInstructionCandidate,
@@ -24,6 +26,16 @@ import {
   type DerivedFollowupScenario,
 } from "@/lib/domain/bobflow/deriveNextScenarioFromFollowupSnapshot";
 import { resolveBobFlowScenario } from "@/lib/domain/bobflow/resolveBobFlowScenario";
+import { resolveNextInternalScenario } from "@/lib/domain/bobflow/resolveNextInternalScenario";
+import {
+  bobFlowScenarioList,
+  isInternalScenario,
+  type BobFlowScenario,
+} from "@/lib/domain/bobflow/bobFlowScenario";
+import {
+  getHomePrimaryCardHandoffCopy,
+  INTERNAL_HANDOFF_SUBCOPY,
+} from "@/lib/domain/bobflow/homePrimaryCardCopy";
 
 type CustomerRecord = { name: string | null };
 
@@ -76,6 +88,19 @@ const SNAPSHOT_TASKS: AskBobJobTaskSnapshotTask[] = [
   "job.after_call",
 ];
 
+type MobileHomePageSearchParams = Record<string, string | string[] | undefined>;
+
+type MobileHomePageProps = {
+  searchParams?: MobileHomePageSearchParams | Promise<MobileHomePageSearchParams>;
+};
+
+const normalizeSearchParam = (value?: string | string[] | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+  return Array.isArray(value) ? value[0]?.trim() || null : value.trim() || null;
+};
+
 type JobArtifactState = {
   hasDiagnoseSnapshot: boolean;
   hasMaterialsSnapshot: boolean;
@@ -94,8 +119,19 @@ const updateMostRecent = (current: string | null, candidate: string | null): str
   return candidateTime > currentTime ? candidate : current;
 };
 
-export default async function MobileHomePage() {
+export default async function MobileHomePage({ searchParams }: MobileHomePageProps = {}) {
   unstable_noStore();
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const handoffParam = normalizeSearchParam(resolvedSearchParams?.handoff);
+  const handoffJobIdParam = normalizeSearchParam(resolvedSearchParams?.jobId);
+  const handoffScenarioParam = normalizeSearchParam(resolvedSearchParams?.scenario);
+  const handoffExecutedParam = normalizeSearchParam(resolvedSearchParams?.executed);
+  const shouldShowHandoffSignal = handoffParam === "1" && handoffExecutedParam === "1";
+  const handoffScenarioFromParams =
+    handoffScenarioParam && bobFlowScenarioList.includes(handoffScenarioParam as BobFlowScenario)
+      ? (handoffScenarioParam as BobFlowScenario)
+      : null;
+  const handoffScenarioIsValid = Boolean(handoffScenarioFromParams);
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -124,6 +160,7 @@ export default async function MobileHomePage() {
   const jobIds = jobRows.map((job) => job.id);
   const artifactStates = new Map<string, JobArtifactState>();
   const quoteMap = new Map<string, JobQuoteRow>();
+  const snapshotsByJob = new Map<string, SnapshotRow[]>();
 
   if (jobIds.length > 0) {
     const snapshotResponse = await supabase
@@ -141,6 +178,9 @@ export default async function MobileHomePage() {
         if (!row?.job_id || !row.task) {
           continue;
         }
+        const jobSnapshots = snapshotsByJob.get(row.job_id) ?? [];
+        jobSnapshots.push(row);
+        snapshotsByJob.set(row.job_id, jobSnapshots);
         let state = artifactStates.get(row.job_id);
         if (!state) {
           state = {
@@ -237,7 +277,9 @@ export default async function MobileHomePage() {
   const instructionCopy = actionableInstruction?.instructionCopy;
   const hasFollowupDraftReadyCopy =
     instructionCopy === homeInstructionFirstCopy.followup_draft_ready;
-  let scenario = resolveBobFlowScenario({
+  const actionableJobId = actionableInstruction?.jobId ?? null;
+  const jobSnapshots = actionableJobId ? snapshotsByJob.get(actionableJobId) ?? [] : [];
+  const baseScenario = resolveBobFlowScenario({
     homeInstruction: actionableInstruction,
     hasRecommendation,
   });
@@ -245,12 +287,31 @@ export default async function MobileHomePage() {
     actionableInstruction && actionableInstruction.followupSnapshot
       ? deriveNextScenarioFromFollowupSnapshot(actionableInstruction.followupSnapshot)
       : null;
-  if (derivedSnapshotScenario && scenario === "Internal.msg") {
-    scenario = derivedSnapshotScenario;
-  }
   const followupSnapshotDriven = derivedSnapshotScenario !== null;
+  const derivedScenarioForHandoff =
+    derivedSnapshotScenario && derivedSnapshotScenario !== "Idle"
+      ? derivedSnapshotScenario
+      : null;
+  const nextInternalScenario = actionableInstruction
+    ? resolveNextInternalScenario(jobSnapshots)
+    : null;
+  const scenario =
+    nextInternalScenario ?? derivedScenarioForHandoff ?? baseScenario;
+  const primaryJobId = actionableInstruction?.jobId?.trim() ?? null;
+  const jobMatchesHandoff =
+    Boolean(handoffJobIdParam && primaryJobId && handoffJobIdParam === primaryJobId);
+  const handoffCopyScenario =
+    derivedScenarioForHandoff && handoffScenarioFromParams === derivedScenarioForHandoff
+      ? derivedScenarioForHandoff
+      : null;
+  const shouldShowInternalHandoffCopy =
+    shouldShowHandoffSignal &&
+    jobMatchesHandoff &&
+    handoffScenarioIsValid &&
+    isInternalScenario(scenario);
+  const shouldShowHandoff = shouldShowInternalHandoffCopy && Boolean(handoffCopyScenario);
   const canRenderPrimaryCard = Boolean(actionableInstruction) && scenario !== "Idle";
-  const primaryCardPayload =
+  let primaryCardPayload =
     canRenderPrimaryCard && actionableInstruction
       ? resolveHomePrimaryCardPayload({
           scenario,
@@ -265,6 +326,25 @@ export default async function MobileHomePage() {
         })
       : null;
   const shouldShowPrimaryCard = Boolean(primaryCardPayload);
+
+  if (shouldShowInternalHandoffCopy && primaryCardPayload) {
+    primaryCardPayload = {
+      ...primaryCardPayload,
+      subcopy: INTERNAL_HANDOFF_SUBCOPY,
+    };
+  }
+  if (shouldShowHandoff && primaryCardPayload && handoffCopyScenario) {
+    primaryCardPayload = {
+      ...primaryCardPayload,
+      subcopy: getHomePrimaryCardHandoffCopy(handoffCopyScenario),
+    };
+  }
+  const primaryCtaTelemetryPayload = primaryCardPayload?.telemetryPayload ?? {};
+  const primaryCtaPayloadString =
+    JSON.stringify(primaryCtaTelemetryPayload ?? {}) ?? "{}";
+  const isMoveOnPrimaryCta = primaryCardPayload?.ctaIntent === "move_on";
+  const actionJobId = actionableJobId ?? "";
+  const actionWorkspaceId = workspace?.id ?? "";
 
   const metadata = user.user_metadata as { full_name?: string; name?: string } | undefined;
   const displayName = (
@@ -338,18 +418,37 @@ export default async function MobileHomePage() {
                 </p>
               )}
             </div>
-            {primaryCardPayload.ctaLabel && primaryCardPayload.href && (
-              <TrackedLinkButton
-                href={primaryCardPayload.href}
-                eventName="[home-recommendation-click]"
-                eventPayload={primaryCardPayload.telemetryPayload}
-                variant="primary"
-                size="md"
-                className="hb-mobile-primary-cta justify-center"
-                data-testid="mobile-home-primary-cta"
-              >
-                {primaryCardPayload.ctaLabel}
-              </TrackedLinkButton>
+            {primaryCardPayload?.ctaLabel && (
+              isMoveOnPrimaryCta && shouldShowPrimaryCard ? (
+                <form
+                  action={runInternalScenarioAction}
+                  className="space-y-0"
+                  data-testid="mobile-home-primary-cta-form"
+                >
+                  <input type="hidden" name="scenario" value={scenario} />
+                  <input type="hidden" name="jobId" value={actionJobId} />
+                  <input type="hidden" name="workspaceId" value={actionWorkspaceId} />
+                  <input type="hidden" name="intent" value="move_on" />
+                  <MobileHomeSubmitCtaButton
+                    label={primaryCardPayload.ctaLabel}
+                    dataTestId="mobile-home-primary-cta"
+                    eventName="[home-recommendation-click]"
+                    eventPayloadJson={primaryCtaPayloadString}
+                  />
+                </form>
+              ) : primaryCardPayload.href ? (
+                <TrackedLinkButton
+                  href={primaryCardPayload.href}
+                  eventName="[home-recommendation-click]"
+                  eventPayload={primaryCardPayload.telemetryPayload}
+                  variant="primary"
+                  size="md"
+                  className="hb-mobile-primary-cta justify-center"
+                  data-testid="mobile-home-primary-cta"
+                >
+                  {primaryCardPayload.ctaLabel}
+                </TrackedLinkButton>
+              ) : null
             )}
           </HbCard>
         )}

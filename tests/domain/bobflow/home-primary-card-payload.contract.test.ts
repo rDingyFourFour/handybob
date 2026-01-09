@@ -48,17 +48,7 @@ describe("BobFlow home primary card payload contract", () => {
         expect(payload.requiresUserIntervention).toBe(false);
         expect(payload.ctaLabel).toBe("Move on");
         expect(payload.ctaIntent).toBe("move_on");
-        expect(payload.href).toBeTruthy();
-        if (!payload.href) {
-          throw new Error(`Payload missing href for ${scenario}`);
-        }
-        expect(payload.href).toContain("/m/action");
-        const [, queryString] = payload.href.split("?");
-        const searchParams = new URLSearchParams(queryString ?? "");
-        expect(searchParams.get("scenario")).toBe(scenario);
-        expect(searchParams.get("jobId")).toBe(BASE_JOB_ID);
-        expect(searchParams.get("workspaceId")).toBe(BASE_WORKSPACE_ID);
-        expect(searchParams.get("intent")).toBe("move_on");
+        expect(payload.href).toBeUndefined();
       }
       if (scenario.startsWith("Internal.")) {
         expect(payload.customerLine).toBe(BASE_CUSTOMER_NAME);
@@ -177,6 +167,17 @@ describe("BobFlow home primary card payload contract", () => {
         } else {
           expect(payload?.href).toContain("/m/action");
         }
+      } else {
+        const payload = resolveHomePrimaryCardPayload({
+          scenario,
+          jobId: BASE_JOB_ID,
+          jobTitle: "Internal job",
+          workspaceId: BASE_WORKSPACE_ID,
+          telemetryPayload: BASE_TELEMETRY,
+          customerName: BASE_CUSTOMER_NAME,
+        });
+        expect(payload?.requiresUserIntervention).toBe(false);
+        expect(payload?.href).toBeUndefined();
       }
     }
   });

@@ -4,11 +4,14 @@ import * as React from "react";
 
 import HbButton from "@/components/ui/hb-button";
 
-type RunNextStepButtonProps = Omit<React.ComponentProps<typeof HbButton>, "children">;
+type RunNextStepButtonProps = Omit<React.ComponentProps<typeof HbButton>, "children"> & {
+  label?: string;
+};
 
 export default function RunNextStepButton({
   className,
   disabled,
+  label = "Run next step",
   ...props
 }: RunNextStepButtonProps) {
   const formStatusHook = React.useFormStatus ?? (() => ({ pending: false }));
@@ -23,7 +26,7 @@ export default function RunNextStepButton({
       className={className}
       disabled={pending || disabled}
     >
-      {pending ? "Running…" : "Run next step"}
+      {pending ? "Running…" : label}
     </HbButton>
   );
 }

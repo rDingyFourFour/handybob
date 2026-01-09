@@ -14,7 +14,11 @@ import * as homeInstructionTelemetry from "@/app/m/homeInstructionTelemetry";
 import { resolveHomePrimaryCardPayload } from "@/lib/domain/bobflow/resolveHomePrimaryCardPayload";
 import * as bobflowScenarioResolver from "@/lib/domain/bobflow/resolveBobFlowScenario";
 import * as deriveNextScenarioModule from "@/lib/domain/bobflow/deriveNextScenarioFromFollowupSnapshot";
-import { INTERNAL_REASSURANCE_SUBCOPY } from "@/lib/domain/bobflow/homePrimaryCardCopy";
+import * as resolveNextInternalScenarioModule from "@/lib/domain/bobflow/resolveNextInternalScenario";
+import {
+  INTERNAL_HANDOFF_SUBCOPY,
+  INTERNAL_REASSURANCE_SUBCOPY,
+} from "@/lib/domain/bobflow/homePrimaryCardCopy";
 
 const PRIMARY_BUTTON_CLASS_TOKEN = "bg-[var(--theme-button-primary-bg)]";
 
@@ -33,7 +37,15 @@ const DIAGNOSE_SNAPSHOT = {
   ],
 };
 const MATERIALS_SNAPSHOT = {
-  items: [],
+  items: [{ name: "Pipe", quantity: "1", notes: "none" }],
+};
+const QUOTE_SNAPSHOT = {
+  lines: [
+    {
+      description: "Labor",
+      quantity: 1,
+    },
+  ],
 };
 
 const findPrimaryStyledButtons = (root: HTMLElement) => {
@@ -73,6 +85,12 @@ const createFollowupSupabaseState = (jobId = "job-followup", jobTitle = "Follow-
           job_id: jobId,
           task: "materials.generate",
           payload: MATERIALS_SNAPSHOT,
+          updated_at: FIXED_TIMESTAMP,
+        },
+        {
+          job_id: jobId,
+          task: "quote.generate",
+          payload: QUOTE_SNAPSHOT,
           updated_at: FIXED_TIMESTAMP,
         },
         {
@@ -154,15 +172,7 @@ describe("Mobile home page", () => {
     const ctaButtons = container.querySelectorAll('[data-testid="mobile-home-primary-cta"]');
     expect(ctaButtons).toHaveLength(1);
     const primaryCta = ctaButtons[0];
-    const expectedFollowupPayload = resolveHomePrimaryCardPayload({
-      scenario: "External.msg.followup.schedule",
-      jobId: "job-followup",
-      jobTitle: "Follow-up job",
-      workspaceId: "workspace-1",
-      telemetryPayload: {},
-    });
-    expect(expectedFollowupPayload).not.toBeNull();
-    expect(primaryCta?.textContent?.trim()).toBe("Send message");
+    expect(primaryCta?.textContent?.trim()).toBe("Move on");
     const primaryCard = container.querySelector(
       '[data-testid="mobile-home-recommendation-card"]',
     );
@@ -191,8 +201,10 @@ describe("Mobile home page", () => {
     const titleElement = container.querySelector(".mobile-home-primary-card h2");
     expect(titleElement?.textContent?.trim()).toBe(expectedInstructionTitle);
     const subcopyElement = container.querySelector(".mobile-home-instruction-subcopy");
-    expect(subcopyElement?.textContent).toBe("Here’s what Bob recommends next.");
-    expect(primaryCta?.getAttribute("href")).toBe(expectedFollowupPayload?.href);
+    expect(subcopyElement?.textContent?.trim()).toBe(INTERNAL_REASSURANCE_SUBCOPY);
+    const ctaForm = container.querySelector('[data-testid="mobile-home-primary-cta-form"]');
+    expect(ctaForm).toBeTruthy();
+    expect(primaryCta?.getAttribute("href")).toBeNull();
     const customerLineElement = container.querySelector(
       '[data-testid="mobile-home-primary-customer"]',
     );
@@ -219,6 +231,42 @@ describe("Mobile home page", () => {
     expect(ctaRaw).toBe(JSON.stringify(ctaPayload));
     const listElements = container.querySelectorAll("ul, ol, [role='list']");
     expect(listElements).toHaveLength(0);
+  });
+
+  it("shows the handoff reassurance copy when arriving from move-on", async () => {
+    createFollowupSupabaseState();
+    const element = await MobileHomePage({
+      searchParams: Promise.resolve({
+        handoff: "1",
+        jobId: "job-followup",
+        scenario: "External.msg.followup.quote",
+        executed: "1",
+      }),
+    });
+
+    act(() => {
+      root?.render(element);
+    });
+
+    const subcopyElement = container.querySelector(".mobile-home-instruction-subcopy");
+    expect(subcopyElement?.textContent?.trim()).toBe(
+      "I drafted a follow-up message based on your quote.",
+    );
+    expect(subcopyElement?.textContent).not.toBe("Here’s what Bob recommends next.");
+
+    const titleElement = container.querySelector(".mobile-home-primary-card h2");
+    expect(titleElement?.textContent?.trim()).toBe("Follow-up job");
+
+    const customerLineElement = container.querySelector(
+      '[data-testid="mobile-home-primary-customer"]',
+    );
+    expect(customerLineElement?.textContent?.trim()).toBe("Follow-up customer");
+
+    const primaryCta = container.querySelector('[data-testid="mobile-home-primary-cta"]');
+    expect(primaryCta?.textContent?.trim()).toBe("Move on");
+    const ctaForm = container.querySelector('[data-testid="mobile-home-primary-cta-form"]');
+    expect(ctaForm).toBeTruthy();
+    expect(primaryCta?.getAttribute("href")).toBeNull();
   });
 
   it("renders the internal working copy when resolver drives Internal.msg", async () => {
@@ -273,7 +321,120 @@ describe("Mobile home page", () => {
     const cta = container.querySelector('[data-testid="mobile-home-primary-cta"]');
     expect(cta).toBeTruthy();
     expect(cta?.textContent?.trim()).toBe("Move on");
-    expect(cta?.getAttribute("href")).toBe(expectedInternalPayload?.href);
+    expect(cta?.getAttribute("onClick")).toBeNull();
+    const ctaForm = container.querySelector('[data-testid="mobile-home-primary-cta-form"]');
+    expect(ctaForm).toBeTruthy();
+    expect(cta?.getAttribute("href")).toBeNull();
+
+    scenarioSpy.mockRestore();
+    derivedScenarioSpy.mockRestore();
+  });
+
+  it("keeps the internal Move on CTA when follow-up is derived but earlier steps remain", async () => {
+    const scenarioSpy = vi
+      .spyOn(bobflowScenarioResolver, "resolveBobFlowScenario")
+      .mockReturnValue("Internal.msg");
+    const derivedScenarioSpy = vi
+      .spyOn(deriveNextScenarioModule, "deriveNextScenarioFromFollowupSnapshot")
+      .mockReturnValue("External.msg.followup.quote");
+    const nextInternalScenarioSpy = vi
+      .spyOn(resolveNextInternalScenarioModule, "resolveNextInternalScenario")
+      .mockReturnValue("Internal.materials");
+    createFollowupSupabaseState();
+    const element = await MobileHomePage();
+
+    act(() => {
+      root?.render(element);
+    });
+
+    const primaryCards = container.querySelectorAll('[data-testid="mobile-home-recommendation-card"]');
+    expect(primaryCards).toHaveLength(1);
+    const primaryCtas = container.querySelectorAll('[data-testid="mobile-home-primary-cta"]');
+    expect(primaryCtas).toHaveLength(1);
+    const primaryCta = primaryCtas[0];
+    expect(primaryCta?.textContent?.trim()).toBe("Move on");
+    const ctaForm = container.querySelector('[data-testid="mobile-home-primary-cta-form"]');
+    expect(ctaForm).toBeTruthy();
+    expect(primaryCta?.getAttribute("href")).toBeNull();
+
+    scenarioSpy.mockRestore();
+    derivedScenarioSpy.mockRestore();
+    nextInternalScenarioSpy.mockRestore();
+  });
+
+  it("overrides the internal subcopy when arriving from a move-on handoff", async () => {
+    const scenarioSpy = vi
+      .spyOn(bobflowScenarioResolver, "resolveBobFlowScenario")
+      .mockReturnValue("Internal.msg");
+    const derivedScenarioSpy = vi
+      .spyOn(deriveNextScenarioModule, "deriveNextScenarioFromFollowupSnapshot")
+      .mockReturnValue(null);
+    createFollowupSupabaseState();
+    const element = await MobileHomePage({
+      searchParams: Promise.resolve({
+        handoff: "1",
+        jobId: "job-followup",
+        scenario: "Internal.msg",
+        executed: "1",
+      }),
+    });
+
+    act(() => {
+      root?.render(element);
+    });
+
+    expect(derivedScenarioSpy).toHaveBeenCalled();
+
+    const subcopyElement = container.querySelector(".mobile-home-instruction-subcopy");
+    expect(subcopyElement?.textContent?.trim()).toBe(INTERNAL_HANDOFF_SUBCOPY);
+
+    const primaryCta = container.querySelector('[data-testid="mobile-home-primary-cta"]');
+    const ctaForm = container.querySelector('[data-testid="mobile-home-primary-cta-form"]');
+    expect(ctaForm).toBeTruthy();
+    expect(primaryCta?.getAttribute("href")).toBeNull();
+
+    const customerLineElement = container.querySelector(
+      '[data-testid="mobile-home-primary-customer"]',
+    );
+    expect(customerLineElement?.textContent?.trim()).toBe("Follow-up customer");
+
+    scenarioSpy.mockRestore();
+    derivedScenarioSpy.mockRestore();
+  });
+
+  it("ignores handoff copy when derived scenario mismatch prevents override", async () => {
+    const scenarioSpy = vi
+      .spyOn(bobflowScenarioResolver, "resolveBobFlowScenario")
+      .mockReturnValue("Internal.msg");
+    const derivedScenarioSpy = vi
+      .spyOn(deriveNextScenarioModule, "deriveNextScenarioFromFollowupSnapshot")
+      .mockReturnValue(null);
+    createFollowupSupabaseState();
+    const element = await MobileHomePage({
+      searchParams: Promise.resolve({
+        handoff: "1",
+        jobId: "job-followup",
+        scenario: "External.msg.followup.quote",
+        executed: "1",
+      }),
+    });
+
+    act(() => {
+      root?.render(element);
+    });
+
+    const subcopyElement = container.querySelector(".mobile-home-instruction-subcopy");
+    expect(subcopyElement?.textContent?.trim()).toBe(INTERNAL_HANDOFF_SUBCOPY);
+
+    const primaryCta = container.querySelector('[data-testid="mobile-home-primary-cta"]');
+    const ctaForm = container.querySelector('[data-testid="mobile-home-primary-cta-form"]');
+    expect(ctaForm).toBeTruthy();
+    expect(primaryCta?.getAttribute("href")).toBeNull();
+
+    const customerLineElement = container.querySelector(
+      '[data-testid="mobile-home-primary-customer"]',
+    );
+    expect(customerLineElement?.textContent?.trim()).toBe("Follow-up customer");
 
     scenarioSpy.mockRestore();
     derivedScenarioSpy.mockRestore();

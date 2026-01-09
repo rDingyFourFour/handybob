@@ -1,22 +1,14 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
 import RunNextStepButton from "./RunNextStepButton";
-import { createServerClient } from "@/utils/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/domain/workspaces";
 import {
   bobFlowScenarioList,
   isInternalScenario,
   type BobFlowScenario,
 } from "@/lib/domain/bobflow/bobFlowScenario";
-import {
-  runInternalScenarioStep,
-  type RunInternalScenarioResult,
-} from "@/lib/domain/bobflow/runInternalScenario";
 
 type ActionPageSearchParams = {
   scenario?: string | string[] | undefined;
@@ -103,95 +95,8 @@ const getValidationCopy = (state: ValidationState) => {
   }
 };
 
-const buildAssertionLog = (scenario: string, intent: string | null) => ({
-  scenario,
-  intent,
-});
-
-export async function runInternalScenarioAction(formData: FormData) {
-  "use server";
-  const scenarioParam = normalizeSearchParam(formData.get("scenario") as string | string[] | undefined);
-  const jobId = normalizeSearchParam(formData.get("jobId") as string | string[] | undefined);
-  const workspaceId = normalizeSearchParam(
-    formData.get("workspaceId") as string | string[] | undefined,
-  );
-  const intent = normalizeSearchParam(formData.get("intent") as string | string[] | undefined);
-
-  if (!scenarioParam || !jobId || !workspaceId || !isKnownScenario(scenarioParam)) {
-    return redirect("/m");
-  }
-
-  if (!isInternalScenario(scenarioParam)) {
-    return redirect("/m");
-  }
-
-  const validatedScenario = scenarioParam as BobFlowScenario;
-
-  const supabase = await createServerClient();
-  const workspaceResult = await resolveWorkspaceContext({
-    supabase,
-    allowAutoCreateWorkspace: false,
-  });
-
-  if (!workspaceResult.ok) {
-    console.error("[mobile-action] workspace not resolved", workspaceResult);
-    revalidatePath("/m");
-    return redirect("/m");
-  }
-
-  const { membership } = workspaceResult;
-  const currentWorkspaceId = membership.workspace.id;
-
-  const { data: job, error: jobError } = await supabase
-    .from("jobs")
-    .select("id, workspace_id")
-    .eq("id", jobId)
-    .eq("workspace_id", currentWorkspaceId)
-    .maybeSingle();
-
-  if (jobError || !job) {
-    console.error("[mobile-action] job not found", { jobId, workspaceId: currentWorkspaceId, jobError });
-    revalidatePath("/m");
-    return redirect("/m");
-  }
-
-  let runResult: RunInternalScenarioResult | null = null;
-  try {
-    runResult = await runInternalScenarioStep({
-      supabase,
-      scenario: validatedScenario,
-      workspaceId: currentWorkspaceId,
-      jobId: job.id,
-    });
-  } catch (error) {
-    console.error("[mobile-action] runner failed", {
-      scenario: validatedScenario,
-      jobId: job.id,
-      error,
-    });
-  } finally {
-    const resultToLog: RunInternalScenarioResult = runResult ?? {
-      task: "job.followup" as const,
-      executed: false,
-    };
-    console.log(
-      "[mobile-action-run]",
-      buildAssertionLog(validatedScenario, intent),
-      {
-        jobId: job.id,
-        workspaceId: currentWorkspaceId,
-        executed: resultToLog.executed,
-        skipped: !resultToLog.executed,
-        skipReason: resultToLog.skipReason,
-        task: resultToLog.task,
-      },
-    );
-  }
-
-  // Refresh the mobile home cache before sending the user back.
-  revalidatePath("/m");
-  return redirect("/m");
-}
+import { runInternalScenarioAction } from "@/app/m/actions/runInternalScenarioAction";
+export { runInternalScenarioAction };
 
 export default async function MobileActionExecutionPage({
   searchParams,

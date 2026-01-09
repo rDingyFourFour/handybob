@@ -99,19 +99,10 @@ const createPayload = (
 const buildInternalPayload = (
   scenario: BobFlowScenario,
   copy: ReturnType<typeof getHomePrimaryCardCopy>,
-  jobId?: string | null,
-  workspaceId?: string | null,
-  fallbackHref?: string | null,
   telemetryPayload: Record<string, unknown>,
   customerLine: string,
 ): HomePrimaryCardPayload => {
-  const href = buildActionHref(
-    scenario,
-    jobId,
-    workspaceId,
-    fallbackHref,
-    { intent: "move_on" },
-  );
+  const href = undefined;
   return createPayload(
     scenario,
     copy.title,
@@ -228,9 +219,6 @@ export const resolveHomePrimaryCardPayload = ({
           return buildInternalPayload(
             scenario,
             copy,
-            jobId,
-            workspaceId,
-            fallbackHref,
             telemetryPayload,
             customerLine,
           );
