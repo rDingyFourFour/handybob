@@ -35,6 +35,7 @@ import {
 import {
   getHomePrimaryCardHandoffCopy,
   INTERNAL_HANDOFF_SUBCOPY,
+  COMPLETION_HANDOFF_SUBCOPY,
 } from "@/lib/domain/bobflow/homePrimaryCardCopy";
 
 type CustomerRecord = { name: string | null };
@@ -126,12 +127,14 @@ export default async function MobileHomePage({ searchParams }: MobileHomePagePro
   const handoffJobIdParam = normalizeSearchParam(resolvedSearchParams?.jobId);
   const handoffScenarioParam = normalizeSearchParam(resolvedSearchParams?.scenario);
   const handoffExecutedParam = normalizeSearchParam(resolvedSearchParams?.executed);
+  const handoffCompletedParam = normalizeSearchParam(resolvedSearchParams?.completed);
   const shouldShowHandoffSignal = handoffParam === "1" && handoffExecutedParam === "1";
   const handoffScenarioFromParams =
     handoffScenarioParam && bobFlowScenarioList.includes(handoffScenarioParam as BobFlowScenario)
       ? (handoffScenarioParam as BobFlowScenario)
       : null;
   const handoffScenarioIsValid = Boolean(handoffScenarioFromParams);
+  const handoffCompleted = handoffCompletedParam === "1";
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -309,7 +312,18 @@ export default async function MobileHomePage({ searchParams }: MobileHomePagePro
     jobMatchesHandoff &&
     handoffScenarioIsValid &&
     isInternalScenario(scenario);
-  const shouldShowHandoff = shouldShowInternalHandoffCopy && Boolean(handoffCopyScenario);
+  const shouldShowDerivedHandoffCopy =
+    shouldShowHandoffSignal &&
+    jobMatchesHandoff &&
+    handoffScenarioIsValid &&
+    Boolean(handoffCopyScenario) &&
+    scenario === handoffCopyScenario;
+  const shouldShowCompletionCopy =
+    handoffCompleted &&
+    jobMatchesHandoff &&
+    Boolean(derivedScenarioForHandoff) &&
+    !nextInternalScenario &&
+    scenario === derivedScenarioForHandoff;
   const canRenderPrimaryCard = Boolean(actionableInstruction) && scenario !== "Idle";
   let primaryCardPayload =
     canRenderPrimaryCard && actionableInstruction
@@ -333,10 +347,16 @@ export default async function MobileHomePage({ searchParams }: MobileHomePagePro
       subcopy: INTERNAL_HANDOFF_SUBCOPY,
     };
   }
-  if (shouldShowHandoff && primaryCardPayload && handoffCopyScenario) {
+  if (shouldShowDerivedHandoffCopy && primaryCardPayload && handoffCopyScenario) {
     primaryCardPayload = {
       ...primaryCardPayload,
       subcopy: getHomePrimaryCardHandoffCopy(handoffCopyScenario),
+    };
+  }
+  if (shouldShowCompletionCopy && primaryCardPayload) {
+    primaryCardPayload = {
+      ...primaryCardPayload,
+      subcopy: COMPLETION_HANDOFF_SUBCOPY,
     };
   }
   const primaryCtaTelemetryPayload = primaryCardPayload?.telemetryPayload ?? {};

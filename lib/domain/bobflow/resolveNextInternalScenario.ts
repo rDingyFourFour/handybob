@@ -1,4 +1,5 @@
 import type { AskBobJobTaskSnapshotTask } from "@/lib/domain/askbob/types";
+import type { InternalProgressScenario } from "./runnerRegistry";
 
 export type SnapshotRecord = {
   task: AskBobJobTaskSnapshotTask;
@@ -57,9 +58,11 @@ export const isUsableQuoteSnapshot = (payload: unknown): payload is { lines: unk
 const findSnapshot = (snapshots: SnapshotRecord[], task: AskBobJobTaskSnapshotTask) =>
   snapshots.find((snapshot) => snapshot.task === task);
 
+export type NextInternalScenario = InternalProgressScenario | null;
+
 export const resolveNextInternalScenario = (
   snapshots: SnapshotRecord[] | null | undefined,
-): "Internal.diagnose" | "Internal.materials" | "Internal.quotes" | "Internal.msg" => {
+): NextInternalScenario => {
   const rows = snapshots ?? [];
   if (!isUsableDiagnoseSnapshot(findSnapshot(rows, "job.diagnose")?.payload)) {
     return "Internal.diagnose";
@@ -70,7 +73,7 @@ export const resolveNextInternalScenario = (
   if (!isUsableQuoteSnapshot(findSnapshot(rows, "quote.generate")?.payload)) {
     return "Internal.quotes";
   }
-  return "Internal.msg";
+  return null;
 };
 
 export const internalSnapshotGuards = {

@@ -10,7 +10,10 @@ import {
 } from "@/lib/domain/bobflow/bobFlowScenario";
 import { getJobTaskSnapshotsForJob } from "@/lib/domain/askbob/repository";
 import { runInternalScenarioStep } from "@/lib/domain/bobflow/runInternalScenario";
-import { resolveNextInternalScenario } from "@/lib/domain/bobflow/resolveNextInternalScenario";
+import {
+  resolveNextInternalScenario,
+  type NextInternalScenario,
+} from "@/lib/domain/bobflow/resolveNextInternalScenario";
 import type { RunInternalScenarioResult } from "@/lib/domain/bobflow/runInternalScenario";
 
 const normalizeSearchParam = (value?: string | string[] | null): string | null => {
@@ -77,19 +80,32 @@ export async function runInternalScenarioAction(formData: FormData) {
   }
 
   let runResult: RunInternalScenarioResult | null = null;
+  let internalProgressionCompleted = false;
+  let nextScenario: NextInternalScenario = null;
   try {
     if (isMoveOnIntent) {
       const snapshots = await getJobTaskSnapshotsForJob(supabase, {
         workspaceId: currentWorkspaceId,
         jobId: job.id,
       });
-      const nextScenario = resolveNextInternalScenario(snapshots);
-      runResult = await runInternalScenarioStep({
-        supabase,
-        scenario: nextScenario,
-        workspaceId: currentWorkspaceId,
-        jobId: job.id,
-      });
+      nextScenario = resolveNextInternalScenario(snapshots);
+      if (nextScenario) {
+        runResult = await runInternalScenarioStep({
+          supabase,
+          scenario: nextScenario,
+          workspaceId: currentWorkspaceId,
+          jobId: job.id,
+        });
+      } else {
+        runResult = {
+          scenario: validatedScenario,
+          task: "job.followup",
+          executed: false,
+          skipped: true,
+          skipReason: "internal_progression_complete",
+        };
+        internalProgressionCompleted = true;
+      }
     } else {
       runResult = await runInternalScenarioStep({
         supabase,
@@ -129,6 +145,7 @@ export async function runInternalScenarioAction(formData: FormData) {
 
   // Refresh the mobile home cache before sending the user back.
   revalidatePath("/m");
+  const redirectScenario = nextScenario ?? validatedScenario;
   if (runResult?.executed) {
     const params = new URLSearchParams({
       handoff: "1",
@@ -137,6 +154,16 @@ export async function runInternalScenarioAction(formData: FormData) {
       executedScenario: runResult.scenario,
       executedTask: runResult.task,
       executed: "1",
+    });
+    return redirect(`/m?${params.toString()}`);
+  }
+  if (internalProgressionCompleted) {
+    const params = new URLSearchParams({
+      handoff: "1",
+      jobId: job.id,
+      scenario: redirectScenario,
+      executed: "0",
+      completed: "1",
     });
     return redirect(`/m?${params.toString()}`);
   }

@@ -119,7 +119,7 @@ export async function runAskBobTask(
   }
 
   if (input.task === "quote.generate") {
-    return runAskBobQuoteGenerateTask(input);
+    return runAskBobQuoteGenerateTask(supabase, input);
   }
 
   if (input.task === "materials.generate") {
@@ -251,6 +251,7 @@ async function runAskBobMessageDraftTask(
 }
 
 async function runAskBobQuoteGenerateTask(
+  supabase: DbClient,
   input: AskBobQuoteGenerateInput
 ): Promise<AskBobQuoteGenerateResult> {
   const prompt = input.prompt?.trim();

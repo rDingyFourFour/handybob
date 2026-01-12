@@ -5,6 +5,8 @@ import { setupSupabaseMock } from "@/tests/setup/supabaseClientMock";
 const createServerClientMock = vi.fn();
 const mockResolveWorkspaceContext = vi.fn();
 const mockRunInternalScenarioStep = vi.fn();
+const mockGetJobTaskSnapshots = vi.fn();
+const mockResolveNextInternalScenario = vi.fn();
 vi.mock("@/utils/supabase/server", () => ({
   createServerClient: () => createServerClientMock(),
 }));
@@ -15,6 +17,15 @@ vi.mock("@/lib/domain/workspaces", () => ({
 
 vi.mock("@/lib/domain/bobflow/runInternalScenario", () => ({
   runInternalScenarioStep: (...args: unknown[]) => mockRunInternalScenarioStep(...args),
+}));
+
+vi.mock("@/lib/domain/askbob/repository", () => ({
+  getJobTaskSnapshotsForJob: (...args: unknown[]) => mockGetJobTaskSnapshots(...args),
+}));
+
+vi.mock("@/lib/domain/bobflow/resolveNextInternalScenario", () => ({
+  resolveNextInternalScenario: (...args: unknown[]) =>
+    mockResolveNextInternalScenario(...args),
 }));
 
 vi.mock("next/cache", () => ({
@@ -58,6 +69,8 @@ describe("runInternalScenarioAction", () => {
       executed: true,
       skipped: false,
     });
+    mockGetJobTaskSnapshots.mockResolvedValue([]);
+    mockResolveNextInternalScenario.mockReturnValue("Internal.diagnose");
   });
 
   it("runs the runner for Internal.* scenarios", async () => {
@@ -79,6 +92,11 @@ describe("runInternalScenarioAction", () => {
     expect(mockRedirect).toHaveBeenCalledWith(
       "/m?handoff=1&jobId=job-1&scenario=Internal.diagnose&executedScenario=Internal.diagnose&executedTask=job.diagnose&executed=1",
     );
+    expect(mockGetJobTaskSnapshots).toHaveBeenCalledWith(supabaseState.supabase, {
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+    });
+    expect(mockResolveNextInternalScenario).toHaveBeenCalledWith([]);
   });
 
   it("skips the runner for non-Internal scenarios", async () => {
@@ -122,5 +140,25 @@ describe("runInternalScenarioAction", () => {
     } finally {
       logSpy.mockRestore();
     }
+  });
+
+  it("redirects with completed flag when all Internal.* steps are ready", async () => {
+    mockResolveNextInternalScenario.mockReturnValueOnce(null);
+    const formData = new FormData();
+    formData.set("scenario", "Internal.quotes");
+    formData.set("jobId", jobRow.id);
+    formData.set("workspaceId", "workspace-1");
+    formData.set("intent", "move_on");
+
+    await expect(runInternalScenarioAction(formData)).rejects.toThrow("redirect");
+
+    expect(mockRunInternalScenarioStep).not.toHaveBeenCalled();
+    expect(mockGetJobTaskSnapshots).toHaveBeenCalledWith(supabaseState.supabase, {
+      workspaceId: "workspace-1",
+      jobId: "job-1",
+    });
+    expect(mockRedirect).toHaveBeenCalledWith(
+      "/m?handoff=1&jobId=job-1&scenario=Internal.quotes&executed=0&completed=1",
+    );
   });
 });

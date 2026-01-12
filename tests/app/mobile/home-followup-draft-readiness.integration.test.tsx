@@ -167,7 +167,7 @@ describe("Mobile Home follow-up draft readiness", () => {
   it("shows the follow-up due statement when no draft is ready", async () => {
     // followUpDraftReady on Home is driven by the presence of a non-empty job.after_call draftMessageBody row.
     const subcopy = await renderSubcopy(false);
-    expect(subcopy).toBe("Everything's on track. Ready for the next step.");
+    expect(subcopy).toBe("The customer hasn't confirmed timing yet.");
   });
 
   it("shows the draft-ready statement when there is a draft", async () => {

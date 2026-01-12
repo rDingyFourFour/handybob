@@ -102,4 +102,52 @@ describe("runInternalScenarioAction", () => {
       jobId: "job-1",
     });
   });
+
+  it("redirects with completed flag when internal progression completes", async () => {
+    const supabaseState = setupSupabaseMock({
+      jobs: {
+        data: [
+          {
+            id: "job-1",
+            workspace_id: "workspace-test",
+          },
+        ],
+        error: null,
+      },
+    });
+    createServerClientMock.mockReturnValue(supabaseState.supabase);
+    resolveWorkspaceContextMock.mockResolvedValue({
+      ok: true,
+      membership: {
+        workspace: { id: "workspace-test" },
+        user: { id: "user-1" },
+        role: "owner",
+      },
+    });
+    getJobTaskSnapshotsMock.mockResolvedValue([]);
+    resolveNextInternalScenarioMock.mockReturnValue(null);
+    runInternalScenarioStepMock.mockResolvedValue({
+      scenario: "Internal.msg",
+      task: "job.followup",
+      executed: false,
+      skipped: true,
+    });
+
+    const formData = new FormData();
+    formData.set("scenario", "Internal.quotes");
+    formData.set("jobId", "job-1");
+    formData.set("workspaceId", "workspace-test");
+    formData.set("intent", "move_on");
+
+    await expect(runInternalScenarioAction(formData)).rejects.toThrow(
+      "/m?handoff=1&jobId=job-1&scenario=Internal.quotes&executed=0&completed=1",
+    );
+
+    expect(getJobTaskSnapshotsMock).toHaveBeenCalledWith(supabaseState.supabase, {
+      workspaceId: "workspace-test",
+      jobId: "job-1",
+    });
+    expect(runInternalScenarioStepMock).not.toHaveBeenCalled();
+    expect(resolveNextInternalScenarioMock).toHaveBeenCalledWith([]);
+  });
 });

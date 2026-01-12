@@ -18,6 +18,8 @@ import * as resolveNextInternalScenarioModule from "@/lib/domain/bobflow/resolve
 import {
   INTERNAL_HANDOFF_SUBCOPY,
   INTERNAL_REASSURANCE_SUBCOPY,
+  COMPLETION_HANDOFF_SUBCOPY,
+  FOLLOWUP_RECOMMENDATION_SUBCOPY,
 } from "@/lib/domain/bobflow/homePrimaryCardCopy";
 
 const PRIMARY_BUTTON_CLASS_TOKEN = "bg-[var(--theme-button-primary-bg)]";
@@ -172,7 +174,7 @@ describe("Mobile home page", () => {
     const ctaButtons = container.querySelectorAll('[data-testid="mobile-home-primary-cta"]');
     expect(ctaButtons).toHaveLength(1);
     const primaryCta = ctaButtons[0];
-    expect(primaryCta?.textContent?.trim()).toBe("Move on");
+    expect(primaryCta?.textContent?.trim()).toBe("Send message");
     const primaryCard = container.querySelector(
       '[data-testid="mobile-home-recommendation-card"]',
     );
@@ -201,10 +203,9 @@ describe("Mobile home page", () => {
     const titleElement = container.querySelector(".mobile-home-primary-card h2");
     expect(titleElement?.textContent?.trim()).toBe(expectedInstructionTitle);
     const subcopyElement = container.querySelector(".mobile-home-instruction-subcopy");
-    expect(subcopyElement?.textContent?.trim()).toBe(INTERNAL_REASSURANCE_SUBCOPY);
+    expect(subcopyElement?.textContent?.trim()).toBe(FOLLOWUP_RECOMMENDATION_SUBCOPY);
     const ctaForm = container.querySelector('[data-testid="mobile-home-primary-cta-form"]');
-    expect(ctaForm).toBeTruthy();
-    expect(primaryCta?.getAttribute("href")).toBeNull();
+    expect(ctaForm).toBeNull();
     const customerLineElement = container.querySelector(
       '[data-testid="mobile-home-primary-customer"]',
     );
@@ -252,7 +253,7 @@ describe("Mobile home page", () => {
     expect(subcopyElement?.textContent?.trim()).toBe(
       "I drafted a follow-up message based on your quote.",
     );
-    expect(subcopyElement?.textContent).not.toBe("Here’s what Bob recommends next.");
+    expect(subcopyElement?.textContent?.trim()).not.toBe(FOLLOWUP_RECOMMENDATION_SUBCOPY);
 
     const titleElement = container.querySelector(".mobile-home-primary-card h2");
     expect(titleElement?.textContent?.trim()).toBe("Follow-up job");
@@ -263,10 +264,12 @@ describe("Mobile home page", () => {
     expect(customerLineElement?.textContent?.trim()).toBe("Follow-up customer");
 
     const primaryCta = container.querySelector('[data-testid="mobile-home-primary-cta"]');
-    expect(primaryCta?.textContent?.trim()).toBe("Move on");
+    expect(primaryCta?.textContent?.trim()).toBe("Send message");
     const ctaForm = container.querySelector('[data-testid="mobile-home-primary-cta-form"]');
-    expect(ctaForm).toBeTruthy();
-    expect(primaryCta?.getAttribute("href")).toBeNull();
+    expect(ctaForm).toBeNull();
+    expect(primaryCta?.getAttribute("href")).toBe(
+      "/m/follow-up?jobId=job-followup&workspaceId=workspace-1",
+    );
   });
 
   it("renders the internal working copy when resolver drives Internal.msg", async () => {
@@ -438,6 +441,44 @@ describe("Mobile home page", () => {
 
     scenarioSpy.mockRestore();
     derivedScenarioSpy.mockRestore();
+  });
+
+  it("shows the derived external recommendation once internal progress completes", async () => {
+    const scenarioSpy = vi
+      .spyOn(bobflowScenarioResolver, "resolveBobFlowScenario")
+      .mockReturnValue("Internal.msg");
+    const derivedScenarioSpy = vi
+      .spyOn(deriveNextScenarioModule, "deriveNextScenarioFromFollowupSnapshot")
+      .mockReturnValue("External.msg.followup.quote");
+    const nextInternalScenarioSpy = vi
+      .spyOn(resolveNextInternalScenarioModule, "resolveNextInternalScenario")
+      .mockReturnValue(null);
+    createFollowupSupabaseState();
+    const element = await MobileHomePage({
+      searchParams: Promise.resolve({
+        handoff: "1",
+        jobId: "job-followup",
+        scenario: "Internal.quotes",
+        completed: "1",
+      }),
+    });
+
+    act(() => {
+      root?.render(element);
+    });
+
+    const primaryCards = container.querySelectorAll('[data-testid="mobile-home-recommendation-card"]');
+    expect(primaryCards).toHaveLength(1);
+    const primaryCtaForm = container.querySelector('[data-testid="mobile-home-primary-cta-form"]');
+    expect(primaryCtaForm).toBeNull();
+    const primaryCta = container.querySelector('[data-testid="mobile-home-primary-cta"]');
+    expect(primaryCta?.textContent?.trim()).toBe("Send message");
+    const subcopyElement = container.querySelector(".mobile-home-instruction-subcopy");
+    expect(subcopyElement?.textContent?.trim()).toBe(COMPLETION_HANDOFF_SUBCOPY);
+
+    scenarioSpy.mockRestore();
+    derivedScenarioSpy.mockRestore();
+    nextInternalScenarioSpy.mockRestore();
   });
 
   it("renders only the idle reassurance when no recommendation exists", async () => {

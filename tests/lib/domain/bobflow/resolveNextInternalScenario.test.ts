@@ -51,12 +51,12 @@ describe("resolveNextInternalScenario", () => {
     expect(resolveNextInternalScenario(snapshots)).toBe("Internal.quotes");
   });
 
-  it("returns Internal.msg when Diagnose, Materials, and Quote snapshots are ready", () => {
+  it("returns null when Diagnose, Materials, and Quote snapshots are ready", () => {
     const snapshots = [
       buildSnapshot("job.diagnose", diagnoseSnapshotPayload),
       buildSnapshot("materials.generate", materialsSnapshotPayload),
       buildSnapshot("quote.generate", quoteSnapshotPayload),
     ];
-    expect(resolveNextInternalScenario(snapshots)).toBe("Internal.msg");
+    expect(resolveNextInternalScenario(snapshots)).toBeNull();
   });
 });

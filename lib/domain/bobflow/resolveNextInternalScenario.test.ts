@@ -54,13 +54,13 @@ describe("resolveNextInternalScenario", () => {
     expect(nextScenario).toBe("Internal.quotes");
   });
 
-  it("returns Internal.msg when diagnose, materials, and quote snapshots are all usable", () => {
+  it("returns null when diagnose, materials, and quote snapshots are all usable", () => {
     const snapshots = [
       buildSnapshot("job.diagnose", DIAGNOSE_PAYLOAD),
       buildSnapshot("materials.generate", MATERIALS_PAYLOAD),
       buildSnapshot("quote.generate", QUOTE_PAYLOAD),
     ];
     const nextScenario = resolveNextInternalScenario(snapshots);
-    expect(nextScenario).toBe("Internal.msg");
+    expect(nextScenario).toBeNull();
   });
 });
