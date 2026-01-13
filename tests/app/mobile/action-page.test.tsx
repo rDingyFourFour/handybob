@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { readTrackedLinkButtonEventPayload } from "@/tests/app/mobile/test-helpers";
 import MobileActionExecutionPage from "@/app/m/action/page";
 
 const renderPage = async (params: {
@@ -52,15 +53,25 @@ describe("Mobile action execution page", () => {
     expect(container.querySelector('[data-testid="mobile-action-run-form"]')).toBeNull();
   });
 
-  it("prompts the user when the scenario needs manual intervention", async () => {
+  it("renders a confirmation CTA for External.* scenarios", async () => {
     const container = await renderPage({
       scenario: "External.msg.notification.delay",
       jobId: "job-action",
       workspaceId: "workspace-action",
     });
 
-    expect(container.querySelector('[data-testid="mobile-action-error"]')).toBeTruthy();
-    expect(container.textContent).toContain("requires your intervention");
-    expect(container.querySelector('[data-testid="mobile-action-run-form"]')).toBeNull();
+    const confirmButton = container.querySelector('[data-testid="mobile-action-confirm"]');
+    expect(confirmButton).toBeTruthy();
+    expect(confirmButton?.getAttribute("href")).toBe(
+      "/m?handoff=1&confirmed=1&jobId=job-action&scenario=External.msg.notification.delay",
+    );
+
+    const { payload } = readTrackedLinkButtonEventPayload(container, "mobile-action-confirm");
+    expect(payload).toEqual({
+      jobId: "job-action",
+      workspaceId: "workspace-action",
+      scenario: "External.msg.notification.delay",
+      confirmed: true,
+    });
   });
 });

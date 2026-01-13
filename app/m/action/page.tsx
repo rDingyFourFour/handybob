@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import HbButton from "@/components/ui/hb-button";
 import HbCard from "@/components/ui/hb-card";
+import TrackedLinkButton from "@/components/mobile/TrackedLinkButton";
 import { mobileFlowCopy } from "@/lib/ui/copy/mobileFlowCopy";
 import RunNextStepButton from "./RunNextStepButton";
 import {
@@ -20,7 +21,6 @@ type ActionPageSearchParams = {
 type ValidationState =
   | { type: "missingScenario" }
   | { type: "unknownScenario"; scenario: string }
-  | { type: "notInternal"; scenario: string }
   | { type: "missingJobData" };
 
 const formatScenarioLabel = (value?: string | null): string => {
@@ -49,11 +49,9 @@ const normalizeSearchParam = (value?: string | string[] | undefined): string | n
 const isKnownScenario = (value?: string | null): value is BobFlowScenario =>
   typeof value === "string" && bobFlowScenarioList.includes(value as BobFlowScenario);
 
-const buildValidationState = (params: {
+const buildGeneralValidationState = (params: {
   scenarioParam: string | null;
   scenario: BobFlowScenario | null;
-  jobId: string | null;
-  workspaceId: string | null;
 }): ValidationState | null => {
   if (!params.scenarioParam) {
     return { type: "missingScenario" };
@@ -61,13 +59,34 @@ const buildValidationState = (params: {
   if (!params.scenario) {
     return { type: "unknownScenario", scenario: params.scenarioParam };
   }
-  if (!isInternalScenario(params.scenario)) {
-    return { type: "notInternal", scenario: params.scenario };
-  }
+  return null;
+};
+
+const buildInternalValidationState = (params: {
+  jobId: string | null;
+  workspaceId: string | null;
+}): ValidationState | null => {
   if (!params.jobId || !params.workspaceId) {
     return { type: "missingJobData" };
   }
   return null;
+};
+
+const buildConfirmationHref = (params: {
+  jobId?: string | null;
+  scenario?: BobFlowScenario | null;
+}): string => {
+  const query = new URLSearchParams({
+    handoff: "1",
+    confirmed: "1",
+  });
+  if (params.jobId) {
+    query.set("jobId", params.jobId);
+  }
+  if (params.scenario) {
+    query.set("scenario", params.scenario);
+  }
+  return `/m?${query.toString()}`;
 };
 
 const getValidationCopy = (state: ValidationState) => {
@@ -81,11 +100,6 @@ const getValidationCopy = (state: ValidationState) => {
       return {
         title: "Unsupported scenario",
         body: `The scenario ${state.scenario} isn’t recognized yet. Return to Home and try again.`,
-      };
-    case "notInternal":
-      return {
-        title: "This action requires your intervention",
-        body: "Only internal Bob work can run automatically from here. Head back to Home to continue manually.",
       };
     case "missingJobData":
       return {
@@ -109,15 +123,32 @@ export default async function MobileActionExecutionPage({
   const workspaceId = normalizeSearchParam(resolvedSearchParams.workspaceId);
   const intent = normalizeSearchParam(resolvedSearchParams.intent);
   const scenario = isKnownScenario(scenarioParam) ? scenarioParam : null;
-  const validationState = buildValidationState({
+  const generalValidationState = buildGeneralValidationState({
     scenarioParam,
     scenario,
-    jobId,
-    workspaceId,
   });
+  const isScenarioInternal = Boolean(scenario && isInternalScenario(scenario));
+  const internalValidationState =
+    isScenarioInternal && !generalValidationState
+      ? buildInternalValidationState({ jobId, workspaceId })
+      : null;
+  const errorState = generalValidationState ?? internalValidationState;
   const scenarioLabel = formatScenarioLabel(scenarioParam);
-
-  const errorCopy = validationState ? getValidationCopy(validationState) : null;
+  const errorCopy = errorState ? getValidationCopy(errorState) : null;
+  const shouldShowInternalForm =
+    isScenarioInternal && !generalValidationState && !internalValidationState;
+  const shouldShowExternalConfirmation =
+    Boolean(scenario && !isScenarioInternal && !generalValidationState);
+  const confirmHref = buildConfirmationHref({
+    scenario: shouldShowExternalConfirmation ? scenario : null,
+    jobId,
+  });
+  const confirmEventPayload = {
+    jobId: jobId ?? undefined,
+    workspaceId: workspaceId ?? undefined,
+    scenario: shouldShowExternalConfirmation ? scenario ?? undefined : undefined,
+    confirmed: true,
+  };
 
   return (
     <div data-testid="mobile-action-root" className="space-y-6 pb-8">
@@ -159,7 +190,7 @@ export default async function MobileActionExecutionPage({
               Back to Home
             </HbButton>
           </div>
-        ) : (
+        ) : shouldShowInternalForm ? (
           <form
             action={runInternalScenarioAction}
             className="space-y-4"
@@ -187,7 +218,32 @@ export default async function MobileActionExecutionPage({
               Back to Home
             </HbButton>
           </form>
-        )}
+        ) : shouldShowExternalConfirmation ? (
+          <div className="space-y-4" data-testid="mobile-action-confirm-section">
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              Confirming will return you to Home so we can show the latest reassurance copy.
+            </p>
+            <TrackedLinkButton
+              href={confirmHref}
+              eventName="[mobile-action-confirm-click]"
+              eventPayload={confirmEventPayload}
+              className="w-full justify-center"
+              data-testid="mobile-action-confirm"
+            >
+              Confirm
+            </TrackedLinkButton>
+            <HbButton
+              as={Link}
+              href="/m"
+              variant="secondary"
+              size="md"
+              className="w-full justify-center"
+              data-testid="mobile-action-back"
+            >
+              Back to Home
+            </HbButton>
+          </div>
+        ) : null}
       </HbCard>
     </div>
   );

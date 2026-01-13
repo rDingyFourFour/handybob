@@ -17,6 +17,8 @@ export const INTERNAL_HANDOFF_SUBCOPY = "Done. Ready for the next step.";
 
 export const COMPLETION_HANDOFF_SUBCOPY = "Done — your recommendation is ready.";
 
+export const CONFIRMATION_HANDOFF_SUBCOPY = "Done — saved and ready.";
+
 const INTERNAL_DEFAULT_COPY: HomePrimaryCardCopyTemplate = {
   title: JOB_TITLE_TOKEN,
   subcopy: INTERNAL_REASSURANCE_SUBCOPY,

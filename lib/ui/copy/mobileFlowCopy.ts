@@ -17,6 +17,18 @@ export const mobileFlowCopy = {
   followupPlaceholder: {
     title: "Follow-up draft",
     description: "AskBob is preparing a follow-up for this job. We'll show it here soon.",
+    retryDescription:
+      "AskBob had trouble preparing the draft. Tap Back and try again, or reload.",
+    backButton: "Back to active job",
+    retryButton: "Retry draft",
+  },
+  followupDraft: {
+    title: "Follow-up draft",
+    description:
+      "AskBob drafted a follow-up message for this job. Review the suggested text below before sending it.",
+    messageHeading: "Suggested message",
+    stepsHeading: "Next steps",
+    stepsFallback: "AskBob recommends covering the customer's next steps in your message.",
     backButton: "Back to active job",
   },
 };
@@ -36,5 +48,13 @@ export function validateMobileFlowCopy(): void {
   check(mobileFlowCopy.activeJob.notFoundAction, "activeJob.notFoundAction");
   check(mobileFlowCopy.followupPlaceholder.title, "followupPlaceholder.title");
   check(mobileFlowCopy.followupPlaceholder.description, "followupPlaceholder.description");
+  check(mobileFlowCopy.followupPlaceholder.retryDescription, "followupPlaceholder.retryDescription");
   check(mobileFlowCopy.followupPlaceholder.backButton, "followupPlaceholder.backButton");
+  check(mobileFlowCopy.followupPlaceholder.retryButton, "followupPlaceholder.retryButton");
+  check(mobileFlowCopy.followupDraft.title, "followupDraft.title");
+  check(mobileFlowCopy.followupDraft.description, "followupDraft.description");
+  check(mobileFlowCopy.followupDraft.messageHeading, "followupDraft.messageHeading");
+  check(mobileFlowCopy.followupDraft.stepsHeading, "followupDraft.stepsHeading");
+  check(mobileFlowCopy.followupDraft.stepsFallback, "followupDraft.stepsFallback");
+  check(mobileFlowCopy.followupDraft.backButton, "followupDraft.backButton");
 }

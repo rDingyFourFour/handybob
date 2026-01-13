@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 const useFormStatusMock = vi.hoisted(() =>
   vi.fn(() => ({ pending: false })),
 );
-vi.mock("react", async () => {
-  const actual = await vi.importActual<typeof import("react")>("react");
+vi.mock("react-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-dom")>("react-dom");
   return {
     ...actual,
     useFormStatus: useFormStatusMock,
@@ -37,6 +37,7 @@ describe("MobileHomeSubmitCtaButton", () => {
 
   it("renders the label when idle", () => {
     useFormStatusMock.mockReturnValue({ pending: false });
+    const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     act(() => {
       root?.render(
@@ -55,10 +56,16 @@ describe("MobileHomeSubmitCtaButton", () => {
     expect(button?.textContent).toBe("Move on");
     expect(button?.hasAttribute("disabled")).toBe(false);
     expect(button?.getAttribute("data-event-payload")).toBe("{}");
+    act(() => {
+      button?.click();
+    });
+    expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+    expect(consoleLogSpy).toHaveBeenCalledWith("[home-recommendation-click]", {});
   });
 
   it("shows the pending label and disables while pending", () => {
     useFormStatusMock.mockReturnValue({ pending: true });
+    const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     act(() => {
       root?.render(
@@ -77,5 +84,9 @@ describe("MobileHomeSubmitCtaButton", () => {
     ) as HTMLButtonElement | null;
     expect(button?.textContent).toBe("Processing...");
     expect(button?.hasAttribute("disabled")).toBe(true);
+    act(() => {
+      button?.click();
+    });
+    expect(consoleLogSpy).not.toHaveBeenCalled();
   });
 });

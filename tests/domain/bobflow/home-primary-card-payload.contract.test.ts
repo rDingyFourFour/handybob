@@ -9,6 +9,7 @@ const BASE_JOB_ID = "job-contract";
 const BASE_WORKSPACE_ID = "workspace-contract";
 const BASE_CUSTOMER_NAME = "Contract customer";
 const BASE_TELEMETRY = { contract: true };
+const FALLBACK_HREF = `/m/jobs/${BASE_JOB_ID}`;
 
 describe("BobFlow home primary card payload contract", () => {
   for (const scenario of bobFlowScenarioList) {
@@ -19,7 +20,7 @@ describe("BobFlow home primary card payload contract", () => {
         jobTitle: `${scenario} job`,
         workspaceId: BASE_WORKSPACE_ID,
         telemetryPayload: BASE_TELEMETRY,
-        fallbackHref: `/m/jobs/${BASE_JOB_ID}`,
+        fallbackHref: FALLBACK_HREF,
         customerName: BASE_CUSTOMER_NAME,
       });
       expect(payload).not.toBeNull();
@@ -34,8 +35,16 @@ describe("BobFlow home primary card payload contract", () => {
           throw new Error(`Payload missing href for ${scenario}`);
         }
         const isFollowupScenario = scenario.includes(".followup.");
+        const isNotificationScenario = scenario.includes(".notification.");
         if (isFollowupScenario) {
-          expect(payload.href).toContain("/m/follow-up");
+          expect(payload.href).toContain("/m/action");
+          const [, queryString] = payload.href.split("?");
+          const searchParams = new URLSearchParams(queryString ?? "");
+          expect(searchParams.get("scenario")).toBe(scenario);
+          expect(searchParams.get("jobId")).toBe(BASE_JOB_ID);
+          expect(searchParams.get("workspaceId")).toBe(BASE_WORKSPACE_ID);
+        } else if (isNotificationScenario) {
+          expect(payload.href).toBe(FALLBACK_HREF);
         } else {
           expect(payload.href).toContain("/m/action");
           const [, queryString] = payload.href.split("?");
@@ -62,6 +71,65 @@ describe("BobFlow home primary card payload contract", () => {
     });
   }
 
+  it("uses fallback href for External notification scenarios", () => {
+    for (const scenario of bobFlowScenarioList) {
+      if (!scenario.includes(".notification.")) {
+        continue;
+      }
+      const payload = resolveHomePrimaryCardPayload({
+        scenario,
+        jobId: BASE_JOB_ID,
+        jobTitle: "Notification job",
+        workspaceId: BASE_WORKSPACE_ID,
+        telemetryPayload: BASE_TELEMETRY,
+        fallbackHref: FALLBACK_HREF,
+      });
+      expect(payload?.href).toBe(FALLBACK_HREF);
+      expect(payload?.href).not.toContain("/m/action");
+    }
+  });
+
+  it("returns undefined href when fallback is missing for External notifications", () => {
+    for (const scenario of bobFlowScenarioList) {
+      if (!scenario.includes(".notification.")) {
+        continue;
+      }
+      const payload = resolveHomePrimaryCardPayload({
+        scenario,
+        jobId: BASE_JOB_ID,
+        jobTitle: "Notification job",
+        workspaceId: BASE_WORKSPACE_ID,
+        telemetryPayload: BASE_TELEMETRY,
+      });
+      expect(payload?.href).toBeUndefined();
+    }
+  });
+
+  it("allows External action scenarios to skip href when job or workspace is unavailable", () => {
+    const externalActionScenarios = bobFlowScenarioList.filter(
+      (scenario) =>
+        scenario.startsWith("External.") &&
+        !scenario.includes(".followup.") &&
+        !scenario.includes(".notification."),
+    );
+    for (const scenario of externalActionScenarios) {
+      let payload: ReturnType<typeof resolveHomePrimaryCardPayload> = null;
+      expect(() => {
+        payload = resolveHomePrimaryCardPayload({
+          scenario,
+          jobTitle: `${scenario} job`,
+          telemetryPayload: BASE_TELEMETRY,
+        });
+      }).not.toThrow();
+      expect(payload).not.toBeNull();
+      if (!payload) {
+        continue;
+      }
+      expect(payload.requiresUserIntervention).toBe(true);
+      expect(payload.href).toBeUndefined();
+    }
+  });
+
   it("throws when Internal scenarios lack a customer", () => {
     expect(() =>
       resolveHomePrimaryCardPayload({
@@ -70,7 +138,7 @@ describe("BobFlow home primary card payload contract", () => {
         jobTitle: "Diagnostics job",
         workspaceId: BASE_WORKSPACE_ID,
         telemetryPayload: BASE_TELEMETRY,
-        fallbackHref: `/m/jobs/${BASE_JOB_ID}`,
+        fallbackHref: FALLBACK_HREF,
         customerName: null,
       }),
     ).toThrow(/Internal scenario .* requires a customer name/);
@@ -162,8 +230,12 @@ describe("BobFlow home primary card payload contract", () => {
           telemetryPayload: BASE_TELEMETRY,
         });
         expect(payload?.requiresUserIntervention).toBe(true);
-        if (scenario.includes(".followup.")) {
-          expect(payload?.href).toContain("/m/follow-up");
+        const isFollowupScenario = scenario.includes(".followup.");
+        const isNotificationScenario = scenario.includes(".notification.");
+        if (isFollowupScenario) {
+          expect(payload?.href).toContain("/m/action");
+        } else if (isNotificationScenario) {
+          expect(payload?.href).toBeUndefined();
         } else {
           expect(payload?.href).toContain("/m/action");
         }
@@ -178,6 +250,39 @@ describe("BobFlow home primary card payload contract", () => {
         });
         expect(payload?.requiresUserIntervention).toBe(false);
         expect(payload?.href).toBeUndefined();
+      }
+    }
+  });
+
+  it("enforces CTA routing per scenario", () => {
+    for (const scenario of bobFlowScenarioList) {
+      const payload = resolveHomePrimaryCardPayload({
+        scenario,
+        jobId: BASE_JOB_ID,
+        jobTitle: `${scenario} contract`,
+        workspaceId: BASE_WORKSPACE_ID,
+        telemetryPayload: BASE_TELEMETRY,
+        fallbackHref: FALLBACK_HREF,
+        customerName: scenario.startsWith("Internal.") ? BASE_CUSTOMER_NAME : null,
+      });
+      expect(payload).not.toBeNull();
+      if (!payload) {
+        continue;
+      }
+
+      if (scenario.startsWith("Internal.")) {
+        expect(payload.ctaIntent).toBe("move_on");
+        expect(payload.href).toBeUndefined();
+      } else {
+        expect(payload.ctaIntent).not.toBe("move_on");
+        if (scenario.includes(".followup.")) {
+          expect(payload.href?.startsWith("/m/action")).toBe(true);
+        } else if (scenario.includes(".notification.")) {
+          expect(payload.href).toBe(FALLBACK_HREF);
+          expect(payload.href?.startsWith("/m/action")).toBe(false);
+        } else {
+          expect(payload.href?.startsWith("/m/action")).toBe(true);
+        }
       }
     }
   });

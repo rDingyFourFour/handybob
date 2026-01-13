@@ -18,23 +18,63 @@ type ResolveHomePrimaryCardPayloadArgs = {
   followupSnapshotDriven?: boolean;
 };
 
+const isFollowupScenario = (scenario: BobFlowScenario): boolean =>
+  scenario.includes(".followup.");
+
+const isNotificationScenario = (scenario: BobFlowScenario): boolean =>
+  scenario.includes(".notification.");
+
+const isExternalScenario = (scenario: BobFlowScenario): boolean =>
+  scenario.startsWith("External.");
+
 const assertNever = (value: never): never => {
   throw new Error(`Unhandled scenario: ${String(value)}`);
 };
 
-const buildFollowUpHref = (
-  jobId?: string | null,
-  workspaceId?: string | null,
-  fallbackHref?: string | null,
-): string | undefined => {
-  if (jobId?.trim() && workspaceId?.trim()) {
-    const params = new URLSearchParams({
-      jobId: jobId.trim(),
-      workspaceId: workspaceId.trim(),
-    });
-    return `/m/follow-up?${params.toString()}`;
+const enforceHomeRoutingContract = (payload: HomePrimaryCardPayload): void => {
+  const { scenario, ctaIntent, href } = payload;
+  if (scenario.startsWith("Internal.")) {
+    if (ctaIntent !== "move_on") {
+      throw new Error(
+        `Internal scenario ${scenario} must use move_on CTA intent, got ${ctaIntent}`,
+      );
+    }
+    if (href !== undefined) {
+      throw new Error(`Internal scenario ${scenario} must not expose a navigation href`);
+    }
+    return;
   }
-  return fallbackHref ?? undefined;
+
+  if (!isExternalScenario(scenario)) {
+    return;
+  }
+
+  if (ctaIntent === "move_on") {
+    throw new Error(`External scenario ${scenario} must not use move_on CTA intent`);
+  }
+
+  if (isFollowupScenario(scenario)) {
+    if (href && !href.startsWith("/m/action")) {
+      throw new Error(`Follow-up scenario ${scenario} must route to /m/action`);
+    }
+    return;
+  }
+
+  if (isNotificationScenario(scenario)) {
+    if (href?.startsWith("/m/action")) {
+      throw new Error(`Notification scenario ${scenario} must not route through /m/action`);
+    }
+    return;
+  }
+
+  if (href !== undefined && !href.startsWith("/m/action")) {
+    throw new Error(`External scenario ${scenario} must route to /m/action`);
+  }
+};
+
+const normalizeCustomerLine = (customerName?: string | null): string | undefined => {
+  const trimmedName = customerName?.trim();
+  return trimmedName ? trimmedName : undefined;
 };
 
 const buildActionHref = (
@@ -67,10 +107,8 @@ const buildActionHref = (
   return `/m/action?${params.toString()}`;
 };
 
-const normalizeCustomerLine = (customerName?: string | null): string | undefined => {
-  const trimmedName = customerName?.trim();
-  return trimmedName ? trimmedName : undefined;
-};
+const buildNotificationHref = (fallbackHref?: string | null): string | undefined =>
+  fallbackHref ?? undefined;
 
 const createPayload = (
   scenario: BobFlowScenario,
@@ -126,7 +164,7 @@ const buildExternalFollowupPayload = (
   telemetryPayload: Record<string, unknown>,
   customerLine?: string,
 ): HomePrimaryCardPayload => {
-  const href = buildFollowUpHref(jobId, workspaceId, fallbackHref);
+  const href = buildActionHref(scenario, jobId, workspaceId, fallbackHref);
   return createPayload(
     scenario,
     copy.title,
@@ -148,8 +186,12 @@ const buildExternalActionPayload = (
   workspaceId?: string | null,
   fallbackHref?: string | null,
   telemetryPayload: Record<string, unknown>,
+  hrefResolver?: () => string | undefined,
 ): HomePrimaryCardPayload => {
-  const href = buildActionHref(scenario, jobId, workspaceId, fallbackHref);
+  const href =
+    typeof hrefResolver === "function"
+      ? hrefResolver()
+      : buildActionHref(scenario, jobId, workspaceId, fallbackHref);
   return createPayload(
     scenario,
     copy.title,
@@ -216,12 +258,14 @@ export const resolveHomePrimaryCardPayload = ({
               `Internal scenario ${scenario} requires a customer name; ensure the Mobile Home job query joins the customer record.`,
             );
           }
-          return buildInternalPayload(
+          const payload = buildInternalPayload(
             scenario,
             copy,
             telemetryPayload,
             customerLine,
           );
+          enforceHomeRoutingContract(payload);
+          return payload;
         }
 
     case "External.calls.followup.quote":
@@ -233,106 +277,43 @@ export const resolveHomePrimaryCardPayload = ({
     case "External.email.followup.quote":
     case "External.email.followup.schedule":
     case "External.email.followup.invoice":
-      return buildExternalFollowupPayload(
-        scenario,
-        copy,
-        jobId,
-        workspaceId,
-        fallbackHref,
-        telemetryPayload,
-        normalizedCustomerLine,
-      );
+      {
+        const payload = buildExternalFollowupPayload(
+          scenario,
+          copy,
+          jobId,
+          workspaceId,
+          fallbackHref,
+          telemetryPayload,
+          normalizedCustomerLine,
+        );
+        enforceHomeRoutingContract(payload);
+        return payload;
+      }
 
     case "External.calls.notification.arrival_time":
-      // TODO: replace this placeholder with the /m/calls/arrival screen once that arrival notification flow ships.
-      return buildExternalActionPayload(
-        scenario,
-        copy,
-        jobId,
-        workspaceId,
-        fallbackHref,
-        telemetryPayload,
-      );
     case "External.calls.notification.delay":
-      // TODO: replace this placeholder with the /m/calls/delay screen once that delay notification flow ships.
-      return buildExternalActionPayload(
-        scenario,
-        copy,
-        jobId,
-        workspaceId,
-        fallbackHref,
-        telemetryPayload,
-      );
     case "External.calls.notification.updates":
-      // TODO: replace this placeholder with the /m/calls/updates screen once that update notification flow ships.
-      return buildExternalActionPayload(
-        scenario,
-        copy,
-        jobId,
-        workspaceId,
-        fallbackHref,
-        telemetryPayload,
-      );
     case "External.msg.notification.arrival_time":
-      // TODO: replace this placeholder with the /m/messages/arrival screen once that arrival notification flow ships.
-      return buildExternalActionPayload(
-        scenario,
-        copy,
-        jobId,
-        workspaceId,
-        fallbackHref,
-        telemetryPayload,
-      );
     case "External.msg.notification.delay":
-      // TODO: replace this placeholder with the /m/messages/delay screen once that delay notification flow ships.
-      return buildExternalActionPayload(
-        scenario,
-        copy,
-        jobId,
-        workspaceId,
-        fallbackHref,
-        telemetryPayload,
-      );
     case "External.msg.notification.updates":
-      // TODO: replace this placeholder with the /m/messages/updates screen once that update notification flow ships.
-      return buildExternalActionPayload(
-        scenario,
-        copy,
-        jobId,
-        workspaceId,
-        fallbackHref,
-        telemetryPayload,
-      );
     case "External.email.notification.arrival_time":
-      // TODO: replace this placeholder with the /m/email/notifications/arrival screen once that arrival notification flow ships.
-      return buildExternalActionPayload(
-        scenario,
-        copy,
-        jobId,
-        workspaceId,
-        fallbackHref,
-        telemetryPayload,
-      );
     case "External.email.notification.delay":
-      // TODO: replace this placeholder with the /m/email/notifications/delay screen once that delay notification flow ships.
-      return buildExternalActionPayload(
-        scenario,
-        copy,
-        jobId,
-        workspaceId,
-        fallbackHref,
-        telemetryPayload,
-      );
     case "External.email.notification.updates":
-      // TODO: replace this placeholder with the /m/email/notifications/updates screen once that update notification flow ships.
-      return buildExternalActionPayload(
-        scenario,
-        copy,
-        jobId,
-        workspaceId,
-        fallbackHref,
-        telemetryPayload,
-      );
+      // TODO: replace these placeholders with the real notification screens once shipped.
+      {
+        const payload = buildExternalActionPayload(
+          scenario,
+          copy,
+          jobId,
+          workspaceId,
+          fallbackHref,
+          telemetryPayload,
+          () => buildNotificationHref(fallbackHref),
+        );
+        enforceHomeRoutingContract(payload);
+        return payload;
+      }
 
     default:
       assertNever(scenario);

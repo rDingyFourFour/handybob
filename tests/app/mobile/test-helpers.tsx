@@ -9,6 +9,7 @@ export const mockGetJobAskBobSnapshotsForJob = vi.fn();
 export const mockLoadCallHistoryForJob = vi.fn();
 export const mockGetLatestCallOutcomeForJob = vi.fn();
 export const mockGetInvoiceForJob = vi.fn();
+export const mockDraftAskBobJobFollowupMessageAction = vi.fn();
 
 vi.mock("@/utils/supabase/server", () => ({
   createServerClient: () => createServerClientMock(),
@@ -27,6 +28,12 @@ vi.mock("@/lib/domain/workspaces", async () => {
 vi.mock("@/lib/domain/askbob/service", () => ({
   getJobAskBobSnapshotsForJob: (...args: unknown[]) =>
     mockGetJobAskBobSnapshotsForJob(...args),
+}));
+
+vi.mock("@/app/(app)/askbob/followup-message-draft-actions", () => ({
+  __esModule: true,
+  draftAskBobJobFollowupMessageAction: (...args: unknown[]) =>
+    mockDraftAskBobJobFollowupMessageAction(...args),
 }));
 
 vi.mock("@/lib/domain/askbob/callHistory", () => ({

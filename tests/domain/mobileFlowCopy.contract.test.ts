@@ -21,9 +21,19 @@ describe("mobile flow copy contract", () => {
           "notFoundTitle": "Job not found",
           "viewJobDetails": "View job details",
         },
+        "followupDraft": {
+          "backButton": "Back to active job",
+          "description": "AskBob drafted a follow-up message for this job. Review the suggested text below before sending it.",
+          "messageHeading": "Suggested message",
+          "stepsFallback": "AskBob recommends covering the customer's next steps in your message.",
+          "stepsHeading": "Next steps",
+          "title": "Follow-up draft",
+        },
         "followupPlaceholder": {
           "backButton": "Back to active job",
           "description": "AskBob is preparing a follow-up for this job. We'll show it here soon.",
+          "retryButton": "Retry draft",
+          "retryDescription": "AskBob had trouble preparing the draft. Tap Back and try again, or reload.",
           "title": "Follow-up draft",
         },
         "home": {
@@ -37,5 +47,13 @@ describe("mobile flow copy contract", () => {
         },
       }
     `);
+  });
+
+  it("keeps placeholder and draft descriptions distinct", () => {
+    const placeholderDescription = mobileFlowCopy.followupPlaceholder.description;
+    const draftDescription = mobileFlowCopy.followupDraft.description;
+    expect(placeholderDescription).not.toBe("");
+    expect(draftDescription).not.toBe("");
+    expect(placeholderDescription).not.toBe(draftDescription);
   });
 });

@@ -27,3 +27,6 @@ Rule of thumb:
 If a helper must be mocked to prevent behavior rather than assert behavior, the test must assert that the mock was used.
 
 This pattern is canonical for Home + BobFlow tests and must be followed for any future scenario-stabilization mocks.
+
+- Follow-up draft resilience:
+- `job.after_call.draftMessageBody` is the canonical “draft ready” signal for the mobile messaging path. When `job.followup.shouldSendMessage` is true, `/m/follow-up` must render from that payload (or the follow-up snapshot-derived summary) and otherwise deterministically generate the draft on the server before rendering, using the `jobId`/`workspaceId` query parameters as the source of truth.

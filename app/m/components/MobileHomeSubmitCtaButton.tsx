@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useFormStatus } from "react-dom";
 
 import HbButton from "@/components/ui/hb-button";
 
@@ -21,8 +22,7 @@ export default function MobileHomeSubmitCtaButton({
   eventPayloadJson,
   dataTestId,
 }: MobileHomeSubmitCtaButtonProps) {
-  const formStatusHook = React.useFormStatus ?? (() => ({ pending: false }));
-  const formStatus = formStatusHook();
+  const formStatus = useFormStatus();
   const pending = Boolean(formStatus?.pending);
 
   const telemetryPayload = React.useMemo(() => {
@@ -41,6 +41,9 @@ export default function MobileHomeSubmitCtaButton({
   }, [eventPayloadJson]);
 
   const handleClick = () => {
+    if (pending) {
+      return;
+    }
     console.log(eventName, telemetryPayload);
   };
 

@@ -36,6 +36,7 @@ import {
   getHomePrimaryCardHandoffCopy,
   INTERNAL_HANDOFF_SUBCOPY,
   COMPLETION_HANDOFF_SUBCOPY,
+  CONFIRMATION_HANDOFF_SUBCOPY,
 } from "@/lib/domain/bobflow/homePrimaryCardCopy";
 
 type CustomerRecord = { name: string | null };
@@ -128,6 +129,7 @@ export default async function MobileHomePage({ searchParams }: MobileHomePagePro
   const handoffScenarioParam = normalizeSearchParam(resolvedSearchParams?.scenario);
   const handoffExecutedParam = normalizeSearchParam(resolvedSearchParams?.executed);
   const handoffCompletedParam = normalizeSearchParam(resolvedSearchParams?.completed);
+  const confirmedParam = normalizeSearchParam(resolvedSearchParams?.confirmed);
   const shouldShowHandoffSignal = handoffParam === "1" && handoffExecutedParam === "1";
   const handoffScenarioFromParams =
     handoffScenarioParam && bobFlowScenarioList.includes(handoffScenarioParam as BobFlowScenario)
@@ -300,6 +302,7 @@ export default async function MobileHomePage({ searchParams }: MobileHomePagePro
     : null;
   const scenario =
     nextInternalScenario ?? derivedScenarioForHandoff ?? baseScenario;
+  const isScenarioExternal = Boolean(scenario && !isInternalScenario(scenario));
   const primaryJobId = actionableInstruction?.jobId?.trim() ?? null;
   const jobMatchesHandoff =
     Boolean(handoffJobIdParam && primaryJobId && handoffJobIdParam === primaryJobId);
@@ -318,6 +321,16 @@ export default async function MobileHomePage({ searchParams }: MobileHomePagePro
     handoffScenarioIsValid &&
     Boolean(handoffCopyScenario) &&
     scenario === handoffCopyScenario;
+  const shouldShowConfirmationCopy =
+    handoffParam === "1" &&
+    confirmedParam === "1" &&
+    jobMatchesHandoff &&
+    handoffScenarioIsValid &&
+    Boolean(handoffScenarioFromParams) &&
+    scenario === handoffScenarioFromParams &&
+    isScenarioExternal &&
+    !shouldShowInternalHandoffCopy &&
+    !shouldShowDerivedHandoffCopy;
   const shouldShowCompletionCopy =
     handoffCompleted &&
     jobMatchesHandoff &&
@@ -353,6 +366,12 @@ export default async function MobileHomePage({ searchParams }: MobileHomePagePro
       subcopy: getHomePrimaryCardHandoffCopy(handoffCopyScenario),
     };
   }
+  if (shouldShowConfirmationCopy && primaryCardPayload) {
+    primaryCardPayload = {
+      ...primaryCardPayload,
+      subcopy: CONFIRMATION_HANDOFF_SUBCOPY,
+    };
+  }
   if (shouldShowCompletionCopy && primaryCardPayload) {
     primaryCardPayload = {
       ...primaryCardPayload,
@@ -362,9 +381,32 @@ export default async function MobileHomePage({ searchParams }: MobileHomePagePro
   const primaryCtaTelemetryPayload = primaryCardPayload?.telemetryPayload ?? {};
   const primaryCtaPayloadString =
     JSON.stringify(primaryCtaTelemetryPayload ?? {}) ?? "{}";
-  const isMoveOnPrimaryCta = primaryCardPayload?.ctaIntent === "move_on";
+  const primaryCtaIntent = primaryCardPayload?.ctaIntent ?? null;
+  const primaryCtaLabel = primaryCardPayload?.ctaLabel ?? null;
+  const primaryCtaHref = primaryCardPayload?.href;
+  const trimmedPrimaryCtaHref = primaryCtaHref?.trim() ?? "";
+  const hasPrimaryHref = Boolean(trimmedPrimaryCtaHref);
+  const renderedCtaVariant =
+    primaryCtaIntent === "move_on" ? "form" : hasPrimaryHref ? "link" : "none";
   const actionJobId = actionableJobId ?? "";
   const actionWorkspaceId = workspace?.id ?? "";
+  const debugParam = normalizeSearchParam(resolvedSearchParams?.debug);
+  const debugEnabled = debugParam === "1" || process.env.HB_DEBUG_HOME === "1";
+
+  if (debugEnabled) {
+    console.log("[mobile-home-cta-debug]", {
+      jobId: primaryJobId,
+      workspaceId: workspace?.id ?? null,
+      scenario,
+      ctaIntent: primaryCtaIntent,
+      ctaLabel: primaryCtaLabel,
+      href: hasPrimaryHref ? trimmedPrimaryCtaHref : null,
+      renderedCtaVariant,
+      nextInternalScenario,
+      derivedScenarioForHandoff,
+      followupSnapshotDriven,
+    });
+  }
 
   const metadata = user.user_metadata as { full_name?: string; name?: string } | undefined;
   const displayName = (
@@ -438,8 +480,8 @@ export default async function MobileHomePage({ searchParams }: MobileHomePagePro
                 </p>
               )}
             </div>
-            {primaryCardPayload?.ctaLabel && (
-              isMoveOnPrimaryCta && shouldShowPrimaryCard ? (
+            {primaryCardPayload &&
+              (primaryCtaIntent === "move_on" ? (
                 <form
                   action={runInternalScenarioAction}
                   className="space-y-0"
@@ -450,15 +492,15 @@ export default async function MobileHomePage({ searchParams }: MobileHomePagePro
                   <input type="hidden" name="workspaceId" value={actionWorkspaceId} />
                   <input type="hidden" name="intent" value="move_on" />
                   <MobileHomeSubmitCtaButton
-                    label={primaryCardPayload.ctaLabel}
+                    label={primaryCtaLabel ?? "Move on"}
                     dataTestId="mobile-home-primary-cta"
                     eventName="[home-recommendation-click]"
                     eventPayloadJson={primaryCtaPayloadString}
                   />
                 </form>
-              ) : primaryCardPayload.href ? (
+              ) : hasPrimaryHref ? (
                 <TrackedLinkButton
-                  href={primaryCardPayload.href}
+                  href={trimmedPrimaryCtaHref}
                   eventName="[home-recommendation-click]"
                   eventPayload={primaryCardPayload.telemetryPayload}
                   variant="primary"
@@ -466,10 +508,9 @@ export default async function MobileHomePage({ searchParams }: MobileHomePagePro
                   className="hb-mobile-primary-cta justify-center"
                   data-testid="mobile-home-primary-cta"
                 >
-                  {primaryCardPayload.ctaLabel}
+                  {primaryCtaLabel ?? ""}
                 </TrackedLinkButton>
-              ) : null
-            )}
+              ) : null)}
           </HbCard>
         )}
 
