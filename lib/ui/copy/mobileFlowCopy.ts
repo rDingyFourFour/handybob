@@ -30,6 +30,7 @@ export const mobileFlowCopy = {
     stepsHeading: "Next steps",
     stepsFallback: "AskBob recommends covering the customer's next steps in your message.",
     backButton: "Back to active job",
+    backHomeButton: "Back to Home",
   },
 };
 
@@ -57,4 +58,5 @@ export function validateMobileFlowCopy(): void {
   check(mobileFlowCopy.followupDraft.stepsHeading, "followupDraft.stepsHeading");
   check(mobileFlowCopy.followupDraft.stepsFallback, "followupDraft.stepsFallback");
   check(mobileFlowCopy.followupDraft.backButton, "followupDraft.backButton");
+  check(mobileFlowCopy.followupDraft.backHomeButton, "followupDraft.backHomeButton");
 }

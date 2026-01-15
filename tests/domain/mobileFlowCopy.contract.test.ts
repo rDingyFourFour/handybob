@@ -23,6 +23,7 @@ describe("mobile flow copy contract", () => {
         },
         "followupDraft": {
           "backButton": "Back to active job",
+          "backHomeButton": "Back to Home",
           "description": "AskBob drafted a follow-up message for this job. Review the suggested text below before sending it.",
           "messageHeading": "Suggested message",
           "stepsFallback": "AskBob recommends covering the customer's next steps in your message.",

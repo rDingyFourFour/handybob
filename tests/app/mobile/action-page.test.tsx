@@ -1,14 +1,20 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { readTrackedLinkButtonEventPayload } from "@/tests/app/mobile/test-helpers";
 import MobileActionExecutionPage from "@/app/m/action/page";
+import { bobFlowScenarioList } from "@/lib/domain/bobflow/bobFlowScenario";
+
+vi.mock("next/navigation", () => ({
+  redirect: vi.fn(() => {
+    throw new Error("redirect");
+  }),
+}));
 
 const renderPage = async (params: {
   scenario?: string;
   jobId?: string;
   workspaceId?: string;
-  intent?: string;
 }) => {
   const element = await MobileActionExecutionPage({
     searchParams: Promise.resolve(params),
@@ -20,58 +26,114 @@ const renderPage = async (params: {
 };
 
 describe("Mobile action execution page", () => {
-  it("renders the execution UI for valid Internal scenario with hidden inputs and submit", async () => {
-    const container = await renderPage({
-      scenario: "Internal.msg",
-      jobId: "job-action",
-      workspaceId: "workspace-action",
-      intent: "move_on",
-    });
+  const externalScenarios = bobFlowScenarioList.filter((scenario) =>
+    scenario.startsWith("External."),
+  );
 
-    const runForm = container.querySelector('[data-testid="mobile-action-run-form"]');
-    const runButton = container.querySelector('[data-testid="mobile-action-run-button"]');
-    expect(runForm).toBeTruthy();
-    expect(runButton).toBeTruthy();
-    expect(runButton?.textContent).toBe("Run next step");
-    expect(container.querySelector('[data-testid="mobile-action-error"]')).toBeNull();
-    expect(container.querySelector('input[name="scenario"]')?.getAttribute("value")).toBe("Internal.msg");
-    expect(container.querySelector('input[name="jobId"]')?.getAttribute("value")).toBe("job-action");
-    expect(container.querySelector('input[name="workspaceId"]')?.getAttribute("value")).toBe("workspace-action");
-    expect(container.querySelector('input[name="intent"]')?.getAttribute("value")).toBe("move_on");
-    expect(container.textContent).toContain("Job ID: job-action");
+  it("renders every External.* scenario with deterministic CTAs", async () => {
+    for (const scenario of externalScenarios) {
+      const container = await renderPage({
+        scenario,
+        jobId: "job-action",
+        workspaceId: "workspace-action",
+      });
+
+      const confirmButton = container.querySelector('[data-testid="mobile-action-confirm"]');
+      expect(confirmButton).toBeTruthy();
+      const confirmHref = confirmButton?.getAttribute("href") ?? "";
+      const confirmParams = new URLSearchParams(confirmHref.split("?")[1] ?? "");
+      expect(confirmParams.get("handoff")).toBe("1");
+      expect(confirmParams.get("confirmed")).toBe("1");
+      expect(confirmParams.get("executed")).toBe("0");
+      expect(confirmParams.get("jobId")).toBe("job-action");
+      expect(confirmParams.get("workspaceId")).toBe("workspace-action");
+      expect(confirmParams.get("scenario")).toBe(scenario);
+
+      const { payload: confirmPayload } = readTrackedLinkButtonEventPayload(
+        container,
+        "mobile-action-confirm",
+      );
+      expect(confirmPayload).toEqual({
+        jobId: "job-action",
+        workspaceId: "workspace-action",
+        scenario,
+        confirmed: true,
+      });
+
+      const primaryButton = container.querySelector('[data-testid="mobile-action-primary"]');
+      expect(primaryButton).toBeTruthy();
+      const primaryHref = primaryButton?.getAttribute("href") ?? "";
+      if (scenario.includes(".followup.")) {
+        expect(primaryHref.startsWith("/m/follow-up")).toBe(true);
+        const followupParams = new URLSearchParams(primaryHref.split("?")[1] ?? "");
+        expect(followupParams.get("jobId")).toBe("job-action");
+        expect(followupParams.get("workspaceId")).toBe("workspace-action");
+        expect(followupParams.get("scenario")).toBe(scenario);
+      } else {
+        expect(primaryHref).toBe("/m/jobs/job-action");
+      }
+
+      const { payload: primaryPayload } = readTrackedLinkButtonEventPayload(
+        container,
+        "mobile-action-primary",
+      );
+      expect(primaryPayload).toEqual({
+        jobId: "job-action",
+        workspaceId: "workspace-action",
+        scenario,
+      });
+    }
   });
 
-  it("renders an error when critical parameters are missing", async () => {
-    const container = await renderPage({
-      scenario: "Internal.msg",
-      workspaceId: "workspace-action",
-    });
-
-    const errorCard = container.querySelector('[data-testid="mobile-action-error"]');
-    expect(errorCard).toBeTruthy();
-    expect(container.textContent).toContain("Job context missing");
-    expect(container.querySelector('[data-testid="mobile-action-run-form"]')).toBeNull();
+  it("redirects to /m for internal scenarios", async () => {
+    await expect(
+      MobileActionExecutionPage({
+        searchParams: Promise.resolve({
+          scenario: "Internal.msg",
+          jobId: "job-action",
+          workspaceId: "workspace-action",
+        }),
+      }),
+    ).rejects.toThrow("redirect");
   });
 
-  it("renders a confirmation CTA for External.* scenarios", async () => {
+  it("redirects to /m for unknown scenarios", async () => {
+    await expect(
+      MobileActionExecutionPage({
+        searchParams: Promise.resolve({
+          scenario: "bogus",
+          jobId: "job-action",
+          workspaceId: "workspace-action",
+        }),
+      }),
+    ).rejects.toThrow("redirect");
+  });
+
+  it("renders confirm CTA when jobId and workspaceId are missing", async () => {
     const container = await renderPage({
       scenario: "External.msg.notification.delay",
-      jobId: "job-action",
-      workspaceId: "workspace-action",
     });
 
     const confirmButton = container.querySelector('[data-testid="mobile-action-confirm"]');
     expect(confirmButton).toBeTruthy();
-    expect(confirmButton?.getAttribute("href")).toBe(
-      "/m?handoff=1&confirmed=1&jobId=job-action&scenario=External.msg.notification.delay",
-    );
+    const confirmHref = confirmButton?.getAttribute("href") ?? "";
+    const confirmParams = new URLSearchParams(confirmHref.split("?")[1] ?? "");
+    expect(confirmParams.get("handoff")).toBe("1");
+    expect(confirmParams.get("confirmed")).toBe("1");
+    expect(confirmParams.get("executed")).toBe("0");
+    expect(confirmParams.get("jobId")).toBeNull();
+    expect(confirmParams.get("workspaceId")).toBeNull();
+    expect(confirmParams.get("scenario")).toBe("External.msg.notification.delay");
 
-    const { payload } = readTrackedLinkButtonEventPayload(container, "mobile-action-confirm");
-    expect(payload).toEqual({
-      jobId: "job-action",
-      workspaceId: "workspace-action",
+    const { payload: confirmPayload } = readTrackedLinkButtonEventPayload(
+      container,
+      "mobile-action-confirm",
+    );
+    expect(confirmPayload).toEqual({
       scenario: "External.msg.notification.delay",
       confirmed: true,
     });
+
+    expect(container.querySelector('[data-testid="mobile-action-primary"]')).toBeNull();
   });
 });

@@ -13,6 +13,14 @@ import {
   recordAskBobJobTaskSnapshot,
 } from "@/lib/domain/askbob/service";
 import { buildFollowupSummaryFromSnapshot } from "@/lib/domain/askbob/summary";
+import {
+  deriveNextScenarioFromFollowupSnapshot,
+  type DerivedFollowupScenario,
+} from "@/lib/domain/bobflow/deriveNextScenarioFromFollowupSnapshot";
+import {
+  bobFlowScenarioList,
+  type BobFlowScenario,
+} from "@/lib/domain/bobflow/bobFlowScenario";
 import type {
   AskBobAfterCallSuggestedChannel,
   AskBobAfterCallSnapshotPayload,
@@ -25,6 +33,7 @@ export const dynamic = "force-dynamic";
 type FollowUpPageSearchParams = {
   jobId?: string | string[] | undefined;
   workspaceId?: string | string[] | undefined;
+  scenario?: string | string[] | undefined;
   retry?: string | string[] | undefined;
   debug?: string | string[] | undefined;
 };
@@ -291,7 +300,43 @@ type DraftCardProps = {
   followupSnapshot?: AskBobFollowupSnapshotPayload | null;
   followupSummary?: string | null;
   draftBody: string;
+  confirmScenario: BobFlowScenario;
 };
+
+const FALLBACK_FOLLOWUP_SCENARIO: BobFlowScenario = "External.msg.followup.quote";
+
+const buildFollowupBackHomeHref = ({
+  jobId,
+  workspaceId,
+  scenario,
+}: {
+  jobId: string;
+  workspaceId: string;
+  scenario: BobFlowScenario;
+}) => {
+  const params = new URLSearchParams({
+    handoff: "1",
+    confirmed: "1",
+    executed: "0",
+    scenario,
+    jobId,
+    workspaceId,
+  });
+  return `/m?${params.toString()}`;
+};
+
+const isValidExternalScenarioParam = (value?: string | null): value is BobFlowScenario =>
+  Boolean(value) &&
+  value.startsWith("External.") &&
+  bobFlowScenarioList.includes(value as BobFlowScenario);
+
+const isDerivedFollowupScenario = (
+  value: DerivedFollowupScenario | null,
+): value is BobFlowScenario =>
+  typeof value === "string" &&
+  value !== "Idle" &&
+  value.startsWith("External.") &&
+  value.includes(".followup.");
 
 function renderDraftCard({
   jobId,
@@ -300,6 +345,7 @@ function renderDraftCard({
   followupSnapshot,
   followupSummary,
   draftBody,
+  confirmScenario,
 }: DraftCardProps) {
   const nextSteps = followupSnapshot?.steps ?? [];
   const stepsList =
@@ -367,6 +413,23 @@ function renderDraftCard({
         >
           {mobileFlowCopy.followupDraft.backButton}
         </TrackedLinkButton>
+        <TrackedLinkButton
+          href={buildFollowupBackHomeHref({ jobId, workspaceId, scenario: confirmScenario })}
+          eventName="[mobile-followup-back-home-click]"
+          eventPayload={{
+            jobId,
+            workspaceId,
+            scenario: confirmScenario,
+            confirmed: true,
+            source: "followup_draft",
+          }}
+          variant="secondary"
+          size="md"
+          className="w-full justify-center"
+          data-testid="mobile-followup-back-home"
+        >
+          {mobileFlowCopy.followupDraft.backHomeButton}
+        </TrackedLinkButton>
       </HbCard>
     </div>
   );
@@ -387,8 +450,12 @@ export default async function MobileFollowUpDraftPage({
 
   const rawJobId = normalizeSearchParam(resolvedSearchParams.jobId);
   const rawWorkspaceId = normalizeSearchParam(resolvedSearchParams.workspaceId);
+  const scenarioParam = normalizeSearchParam(resolvedSearchParams.scenario);
   const jobId = isValidJobId(rawJobId) ? rawJobId : null;
   const workspaceId = rawWorkspaceId;
+  const scenarioFromParams = isValidExternalScenarioParam(scenarioParam)
+    ? scenarioParam
+    : null;
 
   const status = {
     jobFound: false,
@@ -573,6 +640,14 @@ export default async function MobileFollowUpDraftPage({
 
   const finalDraftReady = Boolean(draftBody);
   const variant: "draft" | "placeholder" = finalDraftReady ? "draft" : "placeholder";
+  const derivedScenario = hasFollowupSnapshot
+    ? deriveNextScenarioFromFollowupSnapshot(snapshots.followupSnapshot)
+    : null;
+  const scenarioFromSnapshot =
+    hasFollowupSnapshot && isDerivedFollowupScenario(derivedScenario)
+      ? derivedScenario
+      : null;
+  const scenarioForConfirm = scenarioFromParams ?? scenarioFromSnapshot ?? FALLBACK_FOLLOWUP_SCENARIO;
   if (variant === "draft") {
     const backHref = `/m/jobs/${job.id}`;
     // Invariant: once the draft branch runs, placeholder must not be rendered.
@@ -583,6 +658,7 @@ export default async function MobileFollowUpDraftPage({
       followupSnapshot: snapshots.followupSnapshot,
       followupSummary,
       draftBody,
+      confirmScenario: scenarioForConfirm,
     });
   }
 

@@ -51,6 +51,7 @@ const AFTER_CALL_SNAPSHOT: AskBobAfterCallSnapshotPayload = {
 type SearchParams = {
   jobId: string;
   workspaceId: string;
+  scenario?: string;
   retry?: string;
   debug?: string;
 };
@@ -126,8 +127,8 @@ describe("Mobile follow-up draft page", () => {
       afterCallSnapshot: AFTER_CALL_SNAPSHOT,
       postCallEnrichmentSnapshot: null,
     });
-
-    await renderPage();
+    const scenarioOverride = "External.msg.followup.quote";
+    await renderPage({ ...SEARCH_PARAMS, scenario: scenarioOverride });
 
     const message = container.querySelector('[data-testid="mobile-followup-draft-message"]');
     expect(message?.textContent).toContain("Here is the draft message.");
@@ -135,6 +136,17 @@ describe("Mobile follow-up draft page", () => {
     expect(container.querySelector('[data-testid="mobile-followup-draft-card"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="mobile-followup-placeholder-card"]')).toBeNull();
     expectSingleCard({ draftExpected: true });
+    const backHomeButton = container.querySelector('[data-testid="mobile-followup-back-home"]');
+    expect(backHomeButton).toBeTruthy();
+    const backHomeHref = backHomeButton?.getAttribute("href") ?? "";
+    const backHomeParams = new URLSearchParams(backHomeHref.split("?")[1] ?? "");
+    expect(backHomeHref.startsWith("/m?")).toBe(true);
+    expect(backHomeParams.get("handoff")).toBe("1");
+    expect(backHomeParams.get("confirmed")).toBe("1");
+    expect(backHomeParams.get("executed")).toBe("0");
+    expect(backHomeParams.get("jobId")).toBe(JOB_RECORD.id);
+    expect(backHomeParams.get("workspaceId")).toBe(WORKSPACE.id);
+    expect(backHomeParams.get("scenario")).toBe(scenarioOverride);
   });
 
   it("renders the draft card when after-call snapshot uses a legacy result shape", async () => {
@@ -213,6 +225,66 @@ describe("Mobile follow-up draft page", () => {
     expect(message?.textContent).toContain("Here is the draft message.");
     expect(mockDraftAskBobJobFollowupMessageAction).toHaveBeenCalledTimes(1);
     expectSingleCard({ draftExpected: true });
+  });
+
+  it("echoes the scenario query param into the Back to Home action", async () => {
+    setupSupabaseState();
+    mockGetJobAskBobSnapshotsForJob.mockResolvedValue({
+      diagnoseSnapshot: null,
+      materialsSnapshot: null,
+      quoteSnapshot: null,
+      followupSnapshot: FOLLOWUP_SNAPSHOT,
+      afterCallSnapshot: AFTER_CALL_SNAPSHOT,
+      postCallEnrichmentSnapshot: null,
+    });
+
+    const scenarioOverride = "External.calls.followup.quote";
+    await renderPage({ ...SEARCH_PARAMS, scenario: scenarioOverride });
+
+    const homeButton = container.querySelector('[data-testid="mobile-followup-back-home"]');
+    expect(homeButton).toBeTruthy();
+    const params = new URLSearchParams(homeButton?.getAttribute("href")?.split("?")[1] ?? "");
+    expect(params.get("scenario")).toBe(scenarioOverride);
+  });
+
+  it("echoes External.msg.followup.quote into the Back to Home action when provided", async () => {
+    setupSupabaseState();
+    mockGetJobAskBobSnapshotsForJob.mockResolvedValue({
+      diagnoseSnapshot: null,
+      materialsSnapshot: null,
+      quoteSnapshot: null,
+      followupSnapshot: FOLLOWUP_SNAPSHOT,
+      afterCallSnapshot: AFTER_CALL_SNAPSHOT,
+      postCallEnrichmentSnapshot: null,
+    });
+
+    const scenarioOverride = "External.msg.followup.quote";
+    await renderPage({ ...SEARCH_PARAMS, scenario: scenarioOverride });
+
+    const homeButton = container.querySelector('[data-testid="mobile-followup-back-home"]');
+    expect(homeButton).toBeTruthy();
+    const params = new URLSearchParams(homeButton?.getAttribute("href")?.split("?")[1] ?? "");
+    expect(params.get("scenario")).toBe(scenarioOverride);
+  });
+
+  it("falls back to a non-empty scenario when none is supplied", async () => {
+    setupSupabaseState();
+    mockGetJobAskBobSnapshotsForJob.mockResolvedValue({
+      diagnoseSnapshot: null,
+      materialsSnapshot: null,
+      quoteSnapshot: null,
+      followupSnapshot: FOLLOWUP_SNAPSHOT,
+      afterCallSnapshot: AFTER_CALL_SNAPSHOT,
+      postCallEnrichmentSnapshot: null,
+    });
+
+    await renderPage();
+
+    const homeButton = container.querySelector('[data-testid="mobile-followup-back-home"]');
+    expect(homeButton).toBeTruthy();
+    const scenarioValue = new URLSearchParams(homeButton?.getAttribute("href")?.split("?")[1] ?? "").get("scenario");
+    expect(scenarioValue).toBeTruthy();
+    expect(scenarioValue?.startsWith("External.")).toBe(true);
   });
 
   it("does not rerun the runner when a draft snapshot already exists", async () => {
